@@ -137,7 +137,7 @@ internal object PomodoroNotificationScheduler {
   }
 
   fun cancel(context: Context, keepBoundaryAlert: Boolean = false) {
-    // Preserve language from older accepted-phase records before revoking them.
+    // Without configured copy, persist the stored projection's language before removing it.
     if (!store(context).contains(POMODORO_COPY_KEY)) {
       current(context)?.copy?.let { copy -> configureCopy(context, copy) }
     }

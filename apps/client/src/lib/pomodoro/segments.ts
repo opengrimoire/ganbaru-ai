@@ -75,27 +75,23 @@ export function computeTrailingFocusMinutes(segments: PlannedSegment[]): number 
   return 0;
 }
 
-/**
- * Convert planned segments into accent bar bands for rendering.
- * Only break segments produce bands (focus is the default accent fill).
- *
- * @param segments - Output from computePlannedSegments.
- * @param eventDurationMinutes - Total duration of the calendar event in minutes.
- * @param status - Status to assign to all bands (default "planned").
- * @returns Bands representing break positions within the accent bar.
- */
+/** A Pomodoro-enabled Calendar event placed on one day's timeline. */
 export interface TimelineEvent {
   id: string;
   createdAt?: string;
   config: PomodoroConfig;
-  startMs: number; // full event start timestamp
-  endMs: number; // full event end timestamp
-  startMinute: number; // day-clipped minute-of-day
-  endMinute: number; // day-clipped minute-of-day
+  /** Full event start timestamp in epoch milliseconds. */
+  startMs: number;
+  /** Full event end timestamp in epoch milliseconds. */
+  endMs: number;
+  /** Start minute of day, clipped to the rendered day. */
+  startMinute: number;
+  /** End minute of day, clipped to the rendered day. */
+  endMinute: number;
 }
 
 export interface ActivePomodoroState {
-  activeBlockId: string | null;
+  activeOccurrenceId: string | null;
   segments: PersistedSegment[];
   remainingSeconds: number;
   phaseElapsedSeconds?: number;
@@ -122,7 +118,7 @@ export function computeDayTimelineBands(
     && event.startMinute < event.endMinute);
   if (eligible.length === 0) return [];
   const bands: TimelineBand[] = [];
-  const activeEvent = eligible.find((event) => event.id === activeState?.activeBlockId);
+  const activeEvent = eligible.find((event) => event.id === activeState?.activeOccurrenceId);
 
   // Retain recorded evidence even when another event currently owns the same window.
   for (const event of eligible) {
@@ -149,7 +145,7 @@ export function computeDayTimelineBands(
     event,
   }));
   let cursorMs = Math.max(nowMs, Math.min(...candidates.map((event) => event.startMs)));
-  let previousOwnerId = activeState?.activeBlockId ?? null;
+  let previousOwnerId = activeState?.activeOccurrenceId ?? null;
   let inheritedFocusMinutes = 0;
   let inheritedRhythmPosition = 1;
   let firstWindow = true;
@@ -311,8 +307,8 @@ function emitFocusFillBands(
 }
 
 /**
- * Project bands from persisted (active) segments onto minute-of-day coordinates.
- * Outputs both focus fill bands and break bands.
+ * Project the active run's segments onto minute-of-day coordinates.
+ * Outputs focus fill bands, break bands, and projected future breaks.
  */
 function projectActiveSegments(
   segments: PersistedSegment[],
@@ -367,7 +363,6 @@ function projectActiveSegments(
           emitFocusFillBands(startMs, fillEndMs, seg.pauseLog, dayStartMs, ev, "active", bands);
         }
       } else {
-        // Active break
         const startMs = new Date(seg.actualStart!).getTime();
         const endMs = cappedBreakBandEndMs(seg, currentEndMs);
         const topMinute = (startMs - dayStartMs) / 60000;
@@ -425,8 +420,9 @@ function emitProjectedFutureBreakBands(
 }
 
 /**
- * Project bands from persisted segments of past (non-active) events.
- * Only outputs completed focus and break bands (no planned fills).
+ * Project recorded segments outside the active run onto minute-of-day
+ * coordinates. Planned segments and segments without an actual start produce
+ * no bands.
  */
 function projectPersistedSegments(
   segments: PersistedSegment[],

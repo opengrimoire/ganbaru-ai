@@ -22,7 +22,7 @@ Use two unpacked extensions when you want daily blocking and dev testing at the 
 - `extensions/chromium`: the normal Ganbaru AI extension. Register it with the `app` target for daily blocking.
 - `extensions/chromium-dev`: the generated Ganbaru AI dev extension. Register it with the `dev` target for `pnpm tauri dev` integration testing.
 
-The two extensions use different native host names, so registering the dev extension no longer breaks the normal extension. If both app configs exist and no generated launcher target is used, the native host falls back to the normal app config.
+The two extensions use different native host names, so both can be registered at the same time. If both app configs exist and no generated launcher target is used, the native host falls back to the normal app config.
 
 ## First install in a Chromium-based browser
 

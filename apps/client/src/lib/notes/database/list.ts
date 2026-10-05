@@ -72,7 +72,7 @@ export function notesDatabaseListColumns(
   return notesDatabaseTableColumns(dataSource, view);
 }
 
-/** Return properties that can produce compact list groups in this local slice. */
+/** Return properties that can produce compact list groups. */
 export function notesDatabaseListGroupableColumns(
   columns: readonly NotesDatabaseTableColumn[],
 ): NotesDatabaseTableColumn[] {

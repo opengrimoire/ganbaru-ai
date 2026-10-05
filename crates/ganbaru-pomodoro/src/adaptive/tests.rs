@@ -111,7 +111,8 @@ pub(super) fn state_near(actual: StateScores, expected: StateScores) {
     near(actual.confidence, expected.confidence, "confidence");
 }
 
-/// Deserialize the exact checked-in frontend oracle without a second fixture codec.
+/// Deserialize a checked-in parity fixture through the SQLx JSON codec instead of a
+/// separate fixture codec.
 pub(super) async fn fixture<T: serde::de::DeserializeOwned + Send + Unpin + 'static>(
     source: &str,
 ) -> T {

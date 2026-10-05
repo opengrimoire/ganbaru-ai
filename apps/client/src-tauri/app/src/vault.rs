@@ -1,8 +1,7 @@
-//! Ganbaru AI folder filesystem layer.
+//! Vault filesystem layer.
 //!
-//! The Ganbaru AI folder holds portable user data. The Tauri app config
-//! directory stores only the active folder pointer and device-local runtime
-//! files.
+//! The vault holds portable user data. The Tauri app config directory stores
+//! only the active vault pointer and device-local runtime files.
 //!
 //! Writes are atomic: serialize to `.tmp`, fsync, rename. A crash mid-write
 //! leaves either the previous good file or the temp file, which is ignored
@@ -28,7 +27,7 @@ mod config;
 pub(crate) use config::read_active_config_bounded;
 mod documents;
 
-// Keep Tauri commands and their generated wrappers at the existing vault facade.
+// Keep Tauri commands and their generated wrappers at the vault facade.
 pub use config::*;
 pub use documents::*;
 
@@ -39,8 +38,8 @@ pub(crate) mod quiescence;
 pub(crate) mod runtime_lifecycle;
 
 pub const APP_SQLITE_FILE: &str = "ganbaru-ai.sqlite";
-const PRODUCTION_DATA_FOLDER_NAME: &str = "Ganbaru AI";
-const DEVELOPMENT_DATA_FOLDER_NAME: &str = "Ganbaru AI Dev";
+const PRODUCTION_VAULT_NAME: &str = "Ganbaru AI";
+const DEVELOPMENT_VAULT_NAME: &str = "Ganbaru AI Dev";
 const APP_STATE_FILE: &str = "app-state.json";
 const VAULT_MANIFEST_FILE: &str = "vault.json";
 const CONFIG_FILE: &str = "config.json";
@@ -266,7 +265,7 @@ fn display_name_from_path(path: &Path) -> String {
     path.file_name()
         .and_then(|name| name.to_str())
         .filter(|name| !name.trim().is_empty())
-        .unwrap_or(default_data_folder_name())
+        .unwrap_or(default_vault_name())
         .to_string()
 }
 
@@ -274,11 +273,11 @@ fn is_development_build() -> bool {
     cfg!(debug_assertions)
 }
 
-fn default_data_folder_name() -> &'static str {
+fn default_vault_name() -> &'static str {
     if is_development_build() {
-        DEVELOPMENT_DATA_FOLDER_NAME
+        DEVELOPMENT_VAULT_NAME
     } else {
-        PRODUCTION_DATA_FOLDER_NAME
+        PRODUCTION_VAULT_NAME
     }
 }
 
@@ -552,8 +551,8 @@ fn default_data_parent(app: &tauri::AppHandle) -> Result<PathBuf, String> {
         .map_err(|e| format!("find private application data folder: {e}"))
 }
 
-fn default_data_folder_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
-    Ok(default_data_parent(app)?.join(default_data_folder_name()))
+fn default_vault_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    Ok(default_data_parent(app)?.join(default_vault_name()))
 }
 
 fn default_location_from_path(path: PathBuf) -> Result<VaultDefaultLocation, String> {
@@ -563,7 +562,7 @@ fn default_location_from_path(path: PathBuf) -> Result<VaultDefaultLocation, Str
     Ok(VaultDefaultLocation {
         path: path_to_string(&path, "Ganbaru AI folder")?,
         parent_path: path_to_string(parent, "Ganbaru AI folder parent")?,
-        folder_name: default_data_folder_name().to_string(),
+        folder_name: default_vault_name().to_string(),
         development_build: is_development_build(),
     })
 }
@@ -605,12 +604,12 @@ pub fn vault_read_app_state(app: tauri::AppHandle) -> Result<VaultAppStateSummar
 
 #[tauri::command]
 pub fn vault_default_location(app: tauri::AppHandle) -> Result<VaultDefaultLocation, String> {
-    default_location_from_path(default_data_folder_path(&app)?)
+    default_location_from_path(default_vault_path(&app)?)
 }
 
 #[tauri::command]
 pub async fn vault_use_default(app: tauri::AppHandle) -> Result<VaultInfo, String> {
-    let path = default_data_folder_path(&app)?;
+    let path = default_vault_path(&app)?;
     create_and_select_vault(&app, path).await
 }
 
@@ -672,12 +671,12 @@ pub async fn vault_pick_open(app: tauri::AppHandle) -> Result<Option<VaultInfo>,
 
 #[cfg(target_os = "android")]
 fn pick_mobile_vault(app: &tauri::AppHandle) -> Result<Option<VaultInfo>, String> {
-    let target = default_data_folder_path(app)?;
+    let target = default_vault_path(app)?;
     let parent = target
         .parent()
         .ok_or_else(|| "Ganbaru AI folder has no parent directory".to_string())?;
     fs::create_dir_all(parent).map_err(|error| format!("create app data directory: {error}"))?;
-    let staging = parent.join(format!(".{}.import", default_data_folder_name()));
+    let staging = parent.join(format!(".{}.import", default_vault_name()));
     if staging.exists() {
         fs::remove_dir_all(&staging)
             .map_err(|error| format!("remove stale folder import: {error}"))?;
@@ -1000,11 +999,11 @@ mod tests {
     }
 
     #[test]
-    fn default_data_folder_name_tracks_build_mode() {
+    fn default_vault_name_tracks_build_mode() {
         if cfg!(debug_assertions) {
-            assert_eq!(default_data_folder_name(), DEVELOPMENT_DATA_FOLDER_NAME);
+            assert_eq!(default_vault_name(), DEVELOPMENT_VAULT_NAME);
         } else {
-            assert_eq!(default_data_folder_name(), PRODUCTION_DATA_FOLDER_NAME);
+            assert_eq!(default_vault_name(), PRODUCTION_VAULT_NAME);
         }
     }
 

@@ -31,7 +31,7 @@ where
     rx.recv().map_err(|e| e.to_string())?
 }
 
-/// Inhibit screensaver/idle via D-Bus, returns cookie for uninhibit
+/// Inhibit the screensaver and idle state over D-Bus, returning the cookie needed to release it.
 #[cfg(target_os = "linux")]
 fn screensaver_inhibit() -> Option<u32> {
     let stdout = fixed_command_output(

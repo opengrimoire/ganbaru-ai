@@ -6,7 +6,7 @@ use super::select_quiesced_vault;
 use super::{APP_SQLITE_FILE, CONFIG_LOCK, VaultInfo};
 use super::{database_path, vault_info_from_path};
 #[cfg(target_os = "android")]
-use super::{default_data_folder_path, ensure_vault_skeleton, path_to_string};
+use super::{default_vault_path, ensure_vault_skeleton, path_to_string};
 #[cfg(target_os = "android")]
 use crate::db;
 #[cfg(target_os = "android")]
@@ -442,7 +442,7 @@ pub(crate) fn android_handoff_staging_path(
     app: &tauri::AppHandle,
     transfer_id: &str,
 ) -> Result<PathBuf, String> {
-    let target = default_data_folder_path(app)?;
+    let target = default_vault_path(app)?;
     let parent = target
         .parent()
         .ok_or_else(|| "Ganbaru AI folder has no parent directory".to_string())?;
@@ -469,7 +469,7 @@ pub(crate) async fn activate_android_handoff(
     expected_vault_id: &str,
     preserve_previous: bool,
 ) -> Result<VaultInfo, String> {
-    let target = default_data_folder_path(app)?;
+    let target = default_vault_path(app)?;
     activate_handoff_at_path(
         app,
         staging,
@@ -601,7 +601,7 @@ fn recover_interrupted_restore(target: &Path, rollback: &Path) -> Result<(), Str
 
 #[cfg(target_os = "android")]
 pub(crate) fn recover_interrupted_restore_for_app(app: &tauri::AppHandle) -> Result<(), String> {
-    let target = default_data_folder_path(app)?;
+    let target = default_vault_path(app)?;
     let parent = target
         .parent()
         .ok_or_else(|| "Ganbaru AI folder has no parent directory".to_string())?;
@@ -656,7 +656,7 @@ pub async fn vault_pick_and_restore_backup(
     let transfer = unique_transfer_directory(&app, "restore")?;
     let archive_path = transfer.join("selected.ganbaru-backup");
     let result = async {
-        let target = default_data_folder_path(&app)?;
+        let target = default_vault_path(&app)?;
         let preparation_app = app.clone();
         let preparation_target = target.clone();
         let preparation_transition = transition.clone();
@@ -725,7 +725,7 @@ pub async fn vault_pick_and_restore_backup(
     .await;
     let cleanup = tauri::async_runtime::spawn_blocking(move || {
         let _transition = transition;
-        let target = default_data_folder_path(&app)?;
+        let target = default_vault_path(&app)?;
         let parent = target
             .parent()
             .ok_or_else(|| "Ganbaru AI folder has no parent directory".to_string())?;

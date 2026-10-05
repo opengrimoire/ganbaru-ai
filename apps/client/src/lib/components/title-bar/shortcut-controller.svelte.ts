@@ -10,7 +10,7 @@ const RESET_WINDOW_MS = 8_000;
 
 type AppCloseRequestHandler = () => Promise<void>;
 
-/** Coordinates close requests that originate above the desktop shell. */
+/** Route app close requests to the registered shell handler and track its confirmation state. */
 class AppCloseCoordinator {
   confirmationOpen = $state(false);
   private requestHandler: AppCloseRequestHandler | null = null;

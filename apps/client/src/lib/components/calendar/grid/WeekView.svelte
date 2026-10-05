@@ -246,8 +246,8 @@
     //   - US/French: "Equal" key (Shift + = produces +)
     //   - Spanish/German: "BracketRight" key (where + is printed)
     //   - Nordic: "Minus" key (+ is the base character)
-    // Since the Keyboard API may not be available in all WebViews (e.g., Tauri),
-    // we check all known physical key codes where + is commonly located.
+    // The Keyboard API may be unavailable in some WebViews (such as Tauri), so
+    // check every physical key code where + is commonly located.
     const PLUS_KEY_CODES = ["Equal", "BracketRight", "NumpadAdd"];
     const RESET_KEY_CODES = ["Digit0", "Numpad0"];
 
@@ -298,7 +298,6 @@
       const centerOffset = viewportHeight / 2;
       const centerMinute = scrollMinuteFromTop(scrollContainer.scrollTop + centerOffset, previousHourHeight);
 
-      // Apply new zoom
       scrollContainer.style.setProperty("--hour-h", String(nextHourHeight));
 
       // Adjust scrollTop to keep the same center time visible
@@ -354,7 +353,7 @@
 
   function isActiveCalendarEvent(event: CalendarEvent): boolean {
     return eventMatchesActiveOccurrence(event, {
-      blockId: pomodoroStore.activeBlockId,
+      occurrenceId: pomodoroStore.activeOccurrenceId,
     });
   }
 

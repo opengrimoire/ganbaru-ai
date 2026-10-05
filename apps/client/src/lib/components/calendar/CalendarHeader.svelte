@@ -32,10 +32,7 @@
   const { t } = localization;
   const locale = $derived(localization.locale);
 
-  // Calendar account selector state
   let showAccountPicker = $state(false);
-
-  // Mini calendar popover state
   let showMiniCalendar = $state(false);
   let showViewPicker = $state(false);
   let toolbarElement: HTMLDivElement | undefined = $state();
@@ -123,11 +120,10 @@
     });
   });
 
-  // Keyboard shortcuts for view switching and "today". Arrow-key navigation is
-  // owned by CalendarView so target readiness gating and stale-event drops
-  // apply uniformly. Adding a second listener here would let
-  // auto-repeat keydowns bypass the gate and drain the queue for seconds
-  // after the user releases the key.
+  // Keyboard shortcuts for view switching and "today". CalendarView owns arrow-key
+  // navigation so target readiness gating and stale-event drops apply uniformly.
+  // A second listener here would let auto-repeat keydowns bypass the gate and
+  // drain the queue for seconds after the user releases the key.
   onMount(() => {
     const monthYearObserver = typeof ResizeObserver === "undefined"
       ? null

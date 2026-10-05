@@ -260,7 +260,7 @@ pub(super) fn prepare_action(
     {
         return Err("Enable Focus requires a standalone occurrence without Focus configuration and an explicit configuration".into());
     }
-    // End now reviews semantic intent, not a preview's already aging cutoff.
+    // `EndNow` reviews semantic intent, not a preview's already aging cutoff.
     // Source and protection still participate in the final review digest.
     let action_intent = if action == EditAction::EndNow {
         if scope != EditScope::This

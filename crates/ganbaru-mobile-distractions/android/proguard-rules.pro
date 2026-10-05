@@ -1,1 +1,1 @@
-# Ganbaru AI Android Distractions plugin rules.
+# Release builds do not minify this library, so no rules are needed.

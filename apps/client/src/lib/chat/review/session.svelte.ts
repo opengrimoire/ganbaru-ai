@@ -262,7 +262,7 @@ export function reviewSessionScopeToken(scope: ReviewSessionScope): string {
   ].join("\u0000");
 }
 
-/** Select a fallback only for a missing review source, never for unrelated failures. */
+/** Selects a fallback source only when the requested review source is missing, never for unrelated failures. */
 export function reviewSourceFallback(error: unknown, source: ReviewDiffSource): ReviewDiffSource | null {
   if (typeof error !== "object" || error === null || !("code" in error) || error.code !== "not_found"
     || !("details" in error) || typeof error.details !== "object" || error.details === null

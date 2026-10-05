@@ -7,7 +7,7 @@ use crate::calendar::reads::native_window::NativeCalendarWindow;
 use crate::calendar::recurrence::canonical::{EditScope, Window};
 use serde::{Deserialize, Serialize};
 
-/// Existing edit JSON is unchanged, including its durable receipt hash.
+/// Untagged, so edit JSON and its durable receipt hash keep the plain `EditRequest` shape.
 #[derive(Deserialize, Serialize)]
 #[serde(untagged)]
 pub(crate) enum CalendarIntent {

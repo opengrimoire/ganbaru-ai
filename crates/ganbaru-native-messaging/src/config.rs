@@ -155,7 +155,7 @@ pub(super) fn read_config(path: &std::path::Path) -> Option<DistractionsConfig> 
 
 const MAX_CONFIG_BYTES: u64 = 1024 * 1024;
 
-/// Bind derived budget exhaustion to the exact persisted limit branch.
+/// Digests the persisted limits so derived budget exhaustion stays bound to that exact configuration.
 pub(super) fn limit_configuration_digest(root: &Value) -> Option<String> {
     let bytes =
         serde_json::to_vec(root.pointer("/distractions/limits").unwrap_or(&Value::Null)).ok()?;

@@ -44,7 +44,7 @@ pub struct ColumnPresentation {
     pub calculation: Option<Calculation>,
 }
 
-/// Supported localized date presentations.
+/// Supported date display formats.
 #[derive(Clone, Default, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum DateFormat {
@@ -54,7 +54,7 @@ pub enum DateFormat {
     Relative,
 }
 
-/// Supported localized time presentations.
+/// Supported time display formats, including hiding the time.
 #[derive(Clone, Default, Deserialize, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TimeFormat {

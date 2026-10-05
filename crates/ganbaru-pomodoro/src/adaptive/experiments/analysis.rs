@@ -19,7 +19,8 @@ const COMPLETION_IMPROVEMENT: f64 = 0.1;
 const COMPLETION_TOLERANCE: f64 = 0.05;
 const NEXT_DAY_TOLERANCE: f64 = 0.05;
 
-/// Analyze exact, neighboring, pooled, then global evidence in the original order.
+/// Analyze exact, neighboring, pooled, then global evidence, returning the first
+/// scope with enough runs.
 pub fn analyze_experiment(
     lane: ExperimentLane,
     outcomes: &[ExperimentOutcome],

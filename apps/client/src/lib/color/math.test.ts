@@ -341,7 +341,7 @@ describe("shiftPerceptualL", () => {
 
   it("clamps L at 1 when shifting bright canvases positive", () => {
     expect(shiftPerceptualL("#ffffff", +0.5)).toBe("#ffffff");
-    // near-white clamps gracefully instead of wrapping
+    // Near-white clamps gracefully instead of wrapping.
     const shifted = shiftPerceptualL("#f8f8f8", +0.5);
     expect(hexToOklab(shifted)!.L).toBeCloseTo(1, 2);
   });
@@ -530,7 +530,7 @@ describe("pickReadableMuted", () => {
 
   it("pivots to a readable anchor when ink is too close to bg", () => {
     // Dark canvas paired with an almost-identical ink: contrast < target.
-    // Naive impl returned ink unchanged, which vanished into the surface.
+    // Returning ink unchanged would vanish into the surface.
     const muted = pickReadableMuted("#1B1C1F", "#222222");
     expect(contrastRatio("#1B1C1F", muted)).toBeGreaterThanOrEqual(3 - 0.05);
   });

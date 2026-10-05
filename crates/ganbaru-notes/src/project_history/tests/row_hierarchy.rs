@@ -211,7 +211,7 @@ fn database_subitems_history_restores_canonical_edges_and_copies_moved_graphs_in
         .unwrap();
         assert_eq!(restored_parent, parent_id);
 
-        // Moving the owning note outside this project leaves its graph intact, then restore copies it back.
+        // Moving the owning note outside this project leaves its graph intact, so restore inserts a copy with new identities.
         sqlx::query("UPDATE notes_pages SET properties = json_remove(properties, '$.__ganbaru_project_id') WHERE id = ?")
             .bind(PAGE_ID).execute(&pool).await.unwrap();
         restore::restore_version(&pool, PROJECT_ID, &version.id)

@@ -2,7 +2,7 @@ import type { CalendarEvent } from "$lib/calendar/types";
 
 /** Identity published by the native Focus owner, independent of device-day evidence. */
 export interface ActivePomodoroIdentity {
-  blockId: string | null | undefined;
+  occurrenceId: string | null | undefined;
 }
 
 /** Preserve opaque template IDs while removing only a qualified recurrence suffix. */
@@ -27,8 +27,8 @@ export function eventMatchesActiveOccurrence(
   active: ActivePomodoroIdentity | undefined,
   template?: CalendarEvent,
 ): boolean {
-  if (!active?.blockId) return false;
-  return event.id === active.blockId || exactOccurrenceId(event, template) === active.blockId;
+  if (!active?.occurrenceId) return false;
+  return event.id === active.occurrenceId || exactOccurrenceId(event, template) === active.occurrenceId;
 }
 
 /** Compare aliases of one concrete occurrence without interpreting rendered geometry. */

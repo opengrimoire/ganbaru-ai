@@ -25,7 +25,7 @@ pub struct VaultConfigPatch {
     pub value: serde_json::Value,
 }
 
-/// Read active Ganbaru AI folder `config.json` as a string. Returns `"{}"` if
+/// Read the active vault's `config.json` as a string. Returns `"{}"` if
 /// the file is missing so the frontend can treat a reset config as defaults.
 #[tauri::command]
 pub fn vault_read_config(app: tauri::AppHandle) -> Result<String, String> {

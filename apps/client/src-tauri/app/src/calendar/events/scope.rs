@@ -164,7 +164,7 @@ impl ExecutionEvidence {
     }
 
     /// Clock correction cannot place a current edit before already completed
-    /// execution on that exact occurrence, even without a modern owner row.
+    /// execution on that exact occurrence, even when a run has no current occurrence.
     pub(super) fn verify_completed_before(
         &self,
         occurrence_id: &str,

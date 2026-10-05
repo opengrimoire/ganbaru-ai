@@ -35,7 +35,7 @@ describe("computePlannedSegments", () => {
   });
 
   it("produces focus + short break + next focus for sufficient duration", () => {
-    // 90 min: focus 0-40, break 40-45, focus 45-85, clipped focus 85-90
+    // 90 min: focus 0-40, break 40-45, focus 45-85, break 85-90
     const segments = computePlannedSegments(DEFAULT_CONFIG, 90);
     expect(segments).toHaveLength(4);
     expect(segments[0]).toEqual({ rhythmPosition: 1, phase: "focus", startOffsetMinutes: 0, endOffsetMinutes: 40 });
@@ -62,7 +62,7 @@ describe("computePlannedSegments", () => {
   });
 
   it("wraps rhythm position after long break", () => {
-    // Enough for full pattern plus start of next
+    // Enough for the full pattern plus the start of the next cycle.
     const segments = computePlannedSegments(DEFAULT_CONFIG, 230);
     const focusAfterLong = segments.find(
       (s) => s.phase === "focus" && s.startOffsetMinutes >= 185,
@@ -190,13 +190,13 @@ describe("computePlannedSegments", () => {
   });
 
   it("cross-block scenario: Block A trailing rhythm position carries to Block B", () => {
-    // Block A: 80 min, long break after 4 focus periods.
+    // Event A: 80 min, long break after 4 focus periods.
     // Position 1: focus 0-40, short_break 40-45, position 2: focus 45-80 (clipped).
     const blockA = computePlannedSegments(DEFAULT_CONFIG, 80);
     expect(computeTrailingFocusMinutes(blockA)).toBe(35); // 80-45=35 min focus
     expect(computeTrailingRhythmState(DEFAULT_CONFIG, 80).rhythmPosition).toBe(2);
 
-    // Block B: 220 min, inherits 35 min focus at position 2.
+    // Event B: 220 min, inherits 35 min focus at position 2.
     const blockB = computePlannedSegments(DEFAULT_CONFIG, 220, 35, 2);
     // First focus shortened to 5 min (40-35), then short break.
     expect(blockB[0]).toEqual({ rhythmPosition: 2, phase: "focus", startOffsetMinutes: 0, endOffsetMinutes: 5 });
@@ -207,7 +207,7 @@ describe("computePlannedSegments", () => {
       if (s.phase === "short_break") shortBreaksBeforeLong++;
       if (s.phase === "long_break") break;
     }
-    // Block A had 1 short break. Block B should have 2 more before the long break.
+    // Event A had 1 short break, so event B has 2 more before the long break.
     expect(shortBreaksBeforeLong).toBe(2);
   });
 
@@ -218,17 +218,17 @@ describe("computePlannedSegments", () => {
   });
 
   it("stacked event does not affect sequential successor's segments", () => {
-    // Block A: 120 min, Block B: 240 min (sequential, A ends where B starts)
-    // Block C: 120 min, overlapping A and B (starts 20 min before A ends)
-    // Block B should inherit from Block A, not Block C.
+    // Event A: 120 min, event B: 240 min (sequential, A ends where B starts).
+    // Event C: 120 min, overlapping A and B (starts 20 min before A ends).
+    // Event B inherits from event A, not event C.
     const trailingA = computeTrailingRhythmState(DEFAULT_CONFIG, 120);
     const trailingFocusA = trailingA.focusOffsetMinutes;
     const trailingPositionA = trailingA.rhythmPosition;
 
-    // Block B inheriting from Block A (correct predecessor)
+    // Event B inheriting from event A (correct predecessor).
     const blockB = computePlannedSegments(DEFAULT_CONFIG, 240, trailingFocusA, trailingPositionA);
 
-    // Block C inheriting from Block A (stacked event)
+    // Event C inheriting from event A (stacked event).
     const trailingC = computeTrailingRhythmState(
       DEFAULT_CONFIG,
       120,
@@ -238,13 +238,13 @@ describe("computePlannedSegments", () => {
     const trailingFocusC = trailingC.focusOffsetMinutes;
     const trailingPositionC = trailingC.rhythmPosition;
 
-    // Block B inheriting from Block C (wrong predecessor) would differ
+    // Event B inheriting from event C (wrong predecessor) would differ.
     const blockBFromC = computePlannedSegments(DEFAULT_CONFIG, 240, trailingFocusC, trailingPositionC);
 
     // The correct result (from A) should differ from the wrong result (from C)
     // because C's trailing state differs from A's
     expect(trailingFocusA).not.toBe(trailingFocusC);
-    // And Block B from A should be stable regardless of C's existence
+    // Event B from A stays stable regardless of C.
     expect(blockB).toEqual(computePlannedSegments(DEFAULT_CONFIG, 240, trailingFocusA, trailingPositionA));
     expect(blockB).not.toEqual(blockBFromC);
   });
@@ -276,11 +276,9 @@ describe("computeTrailingFocusMinutes", () => {
   });
 });
 
-// computeDayTimelineBands
-
 const CREATIVE_CONFIG: PomodoroConfig = createPresetPomodoroConfig("creative");
 
-/** Helper: create a TimelineEvent from hour ranges on a fixed day */
+/** Creates a TimelineEvent from hour ranges on a fixed day. */
 function makeEvent(
   id: string,
   startHour: number,
@@ -308,7 +306,7 @@ describe("computeDayTimelineBands", () => {
   });
 
   it("returns break bands for a single event", () => {
-    // 2h event with Deep focus (40/5): focus 0-40, break 40-45, focus 45-80, break 80-85, focus 85-120
+    // 2h event with the adaptive preset (40/5): focus 0-40, break 40-45, focus 45-80, break 80-85, focus 85-120
     const ev = makeEvent("A", 10, 12);
     const bands = computeDayTimelineBands([ev], null, DAY_MS, PAST_NOW);
     expect(bands.length).toBe(2);
@@ -351,7 +349,7 @@ describe("computeDayTimelineBands", () => {
   });
 
   it("keeps the projected owner when a later nested event begins", () => {
-    // A: 10:00-12:00 (deep, longer), B: 10:30-11:30 (creative, shorter, contained)
+    // A: 10:00-12:00 (adaptive, longer), B: 10:30-11:30 (creative, shorter, contained)
     const A = makeEvent("A", 10, 12);
     const B = makeEvent("B", 10.5, 11.5, CREATIVE_CONFIG);
     const bands = computeDayTimelineBands([A, B], null, DAY_MS, PAST_NOW);
@@ -377,7 +375,7 @@ describe("computeDayTimelineBands", () => {
   });
 
   it("uses stable identity for equal windows regardless of rhythm or input order", () => {
-    // A: Deep (40min focus), B: Creative (25min focus), both 16:00-20:00
+    // A: adaptive (40 min focus), B: creative (25 min focus), both 16:00-20:00
     const A = makeEvent("A", 16, 20);
     const B = makeEvent("B", 16, 20, CREATIVE_CONFIG);
     const bands = computeDayTimelineBands([A, B], null, DAY_MS, PAST_NOW);
@@ -414,7 +412,7 @@ describe("computeDayTimelineBands", () => {
     const nested = makeEvent("nested", 10, 11, CREATIVE_CONFIG);
     const startedAt = DAY_MS + 10 * 60 * 60_000;
     const active: ActivePomodoroState = {
-      activeBlockId: nested.id,
+      activeOccurrenceId: nested.id,
       remainingSeconds: 10 * 60,
       breakOvertimeSeconds: 0,
       segments: [{
@@ -517,7 +515,7 @@ describe("computeDayTimelineBands", () => {
     const ev = makeEvent("A", 10, 12);
     const segStartMs = DAY_MS + 10 * 3600000; // 10:00
     const activeState: ActivePomodoroState = {
-      activeBlockId: "A",
+      activeOccurrenceId: "A",
       segments: [
         {
           id: "s1", eventId: "A", eventDate: "2026-03-21", runId: "r1",
@@ -583,7 +581,7 @@ describe("computeDayTimelineBands", () => {
     const ev = makeEvent("A", 10, 12, DEFAULT_CONFIG);
     const segStartMs = DAY_MS + 10 * 3600000; // 10:00
     const activeState: ActivePomodoroState = {
-      activeBlockId: "A",
+      activeOccurrenceId: "A",
       currentConfig: CREATIVE_CONFIG,
       phaseElapsedSeconds: 0,
       segments: [
@@ -618,7 +616,7 @@ describe("computeDayTimelineBands", () => {
     const firstRunStartMs = DAY_MS + 10 * 3600000;
     const secondRunStartMs = DAY_MS + 10.75 * 3600000;
     const activeState: ActivePomodoroState = {
-      activeBlockId: "A",
+      activeOccurrenceId: "A",
       segments: [
         {
           id: "current-s1", eventId: "A", eventDate: "2026-03-21", runId: "current-run",
@@ -677,7 +675,7 @@ describe("computeDayTimelineBands", () => {
   });
 
   it("suppresses planned bands from non-active events overlapping the active event", () => {
-    // A: 10:00-14:00 (deep focus, processed first by startMinute)
+    // A: 10:00-14:00 (adaptive preset, processed first by startMinute)
     // B: 10:30-14:30 (active, creative preset)
     const A = makeEvent("A", 10, 14);
     const B: TimelineEvent = {
@@ -691,7 +689,7 @@ describe("computeDayTimelineBands", () => {
 
     const sessionStartMs = DAY_MS + 11 * 3600000; // session started at 11:00
     const activeState: ActivePomodoroState = {
-      activeBlockId: "B",
+      activeOccurrenceId: "B",
       segments: [
         {
           id: "s1", eventId: "B", eventDate: "2026-03-21", runId: "r1",
@@ -765,7 +763,7 @@ describe("computeDayTimelineBands", () => {
     const segStartMs = DAY_MS + 10 * 3600000;
     const plannedDurMs = 40 * 60000;
     const activeState: ActivePomodoroState = {
-      activeBlockId: "A",
+      activeOccurrenceId: "A",
       segments: [
         {
           id: "s1", eventId: "A", eventDate: "2026-03-21", runId: "r1",
@@ -797,7 +795,7 @@ describe("computeDayTimelineBands", () => {
     const segStartMs = DAY_MS + 10 * 3600000;
     const plannedDurMs = 40 * 60000;
     const activeState: ActivePomodoroState = {
-      activeBlockId: "A",
+      activeOccurrenceId: "A",
       segments: [
         {
           id: "s1", eventId: "A", eventDate: "2026-03-21", runId: "r1",
@@ -827,7 +825,7 @@ describe("computeDayTimelineBands", () => {
     const ev = makeEvent("A", 10, 13);
     const segStartMs = DAY_MS + 10 * 3600000;
     const activeState: ActivePomodoroState = {
-      activeBlockId: "A",
+      activeOccurrenceId: "A",
       segments: [
         {
           id: "s1", eventId: "A", eventDate: "2026-03-21", runId: "r1",
@@ -855,7 +853,7 @@ describe("computeDayTimelineBands", () => {
     const ev = makeEvent("A", 17, 20);
     const segStartMs = DAY_MS + (18 * 60 + 50) * 60000;
     const activeState: ActivePomodoroState = {
-      activeBlockId: "A",
+      activeOccurrenceId: "A",
       segments: [
         {
           id: "s1", eventId: "A", eventDate: "2026-03-21", runId: "r1",
@@ -890,7 +888,7 @@ describe("computeDayTimelineBands", () => {
     const ev = makeEvent("A", 10, 12);
     const segStartMs = DAY_MS + 10 * 3600000;
     const activeState: ActivePomodoroState = {
-      activeBlockId: "A",
+      activeOccurrenceId: "A",
       segments: [
         {
           id: "s1", eventId: "A", eventDate: "2026-03-21", runId: "r1",
@@ -932,7 +930,7 @@ describe("computeDayTimelineBands", () => {
     const breakStartMs = DAY_MS + (10 * 60 + 40) * 60000;
     const breakEndMs = breakStartMs + 5 * 60000;
     const activeState: ActivePomodoroState = {
-      activeBlockId: "A",
+      activeOccurrenceId: "A",
       segments: [
         {
           id: "s1", eventId: "A", eventDate: "2026-03-21", runId: "r1",
@@ -965,7 +963,7 @@ describe("computeDayTimelineBands", () => {
     const breakStartMs = DAY_MS + (10 * 60 + 40) * 60000;
     const extendedBreakEndMs = breakStartMs + 8 * 60000;
     const activeState: ActivePomodoroState = {
-      activeBlockId: "A",
+      activeOccurrenceId: "A",
       segments: [
         {
           id: "s1", eventId: "A", eventDate: "2026-03-21", runId: "r1",
@@ -1127,7 +1125,7 @@ describe("computeDayTimelineBands", () => {
     const resumeMs = segStartMs + 15 * 60000; // resumed at 10:15
     const plannedDurMs = 40 * 60000;
     const activeState: ActivePomodoroState = {
-      activeBlockId: "A",
+      activeOccurrenceId: "A",
       segments: [
         {
           id: "s1", eventId: "A", eventDate: "2026-03-21", runId: "r1",
@@ -1193,9 +1191,8 @@ describe("computeDayTimelineBands", () => {
     // First band: 8:00-8:20
     expect(focusBands[0].topMinute).toBe(480);
     expect(focusBands[0].heightMinutes).toBe(20);
-    // Second band: 8:25-9:00 (8:00 + 40min = end at planned)
+    // Second band: 8:25 to the actual end at 8:40 (15 min).
     expect(focusBands[1].topMinute).toBe(505);
-    // The actual_end is 8:40, so second band: 8:25-8:40 = 15 min
     expect(focusBands[1].heightMinutes).toBe(15);
   });
 });

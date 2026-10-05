@@ -63,8 +63,8 @@ export function buildCreateDisplay(
     };
   }
 
-  // Use changes.end if available (panel provides correct cross-midnight end date),
-  // otherwise fall back to the drag preview's same-day end
+  // Prefer changes.end, which carries the panel's cross-midnight end date, over
+  // the drag preview's same-day end.
   const isAllDay = hasChange(changes, "allDay")
     ? changes.allDay === true
     : preview.allDay === true;

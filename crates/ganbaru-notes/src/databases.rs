@@ -103,7 +103,7 @@ pub async fn duplicate_database(
     Ok(created)
 }
 
-/// Execute this database graph mutation in its enclosing editor transaction.
+/// Duplicate a database inside the caller's transaction, optionally recording page history.
 pub(crate) async fn duplicate_database_tx(
     tx: &mut Transaction<'_, Sqlite>,
     request: NoteDatabaseDuplicate,
@@ -404,7 +404,7 @@ pub async fn create_database(
     Ok(created)
 }
 
-/// Execute this database graph mutation in its enclosing editor transaction.
+/// Create a database inside the caller's transaction, optionally recording page history.
 pub(crate) async fn create_database_tx(
     tx: &mut Transaction<'_, Sqlite>,
     request: NoteDatabaseCreate,
@@ -477,7 +477,7 @@ pub async fn create_linked_database_view(
     Ok(created)
 }
 
-/// Execute this database graph mutation in its enclosing editor transaction.
+/// Create a linked database inside the caller's transaction, optionally recording page history.
 pub(crate) async fn create_linked_database_view_tx(
     tx: &mut Transaction<'_, Sqlite>,
     request: NoteLinkedDatabaseCreate,

@@ -36,7 +36,7 @@ struct FolderSelectionReceipt {
     filesystem_identity: String,
 }
 
-/// Retain bounded, device-local native selections until settings explicitly applies them.
+/// Bounded, device-local native selections retained until settings explicitly applies them.
 #[derive(Default)]
 pub struct ProjectWorkingFolderSelections(Mutex<VecDeque<FolderSelectionReceipt>>);
 

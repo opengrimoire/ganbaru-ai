@@ -48,7 +48,6 @@
   }
 </script>
 
-    <!-- Theme toggle -->
     {#if showTheme}
       <button
         onclick={onToggleTheme}
@@ -74,7 +73,6 @@
       </button>
     {/if}
 
-    <!-- Diagnostics monitor -->
     {#if showPerformance}
       <div class="relative">
         <button
@@ -90,7 +88,6 @@
       </div>
     {/if}
 
-    <!-- Settings -->
     {#if showSettings}
       <button
         onclick={onOpenSettings}

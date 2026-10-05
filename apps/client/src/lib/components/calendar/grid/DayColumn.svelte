@@ -111,8 +111,8 @@
       };
     }
 
-    // Exclude dragged and replaced preview events so the preview block is
-    // laid out in the same column slot the saved block will use.
+    // Exclude dragged and replaced preview events so the preview is laid out
+    // in the same column slot the saved event will use.
     const previewEventIds = new Set(previewEvents.map((event) => event.id));
     const baseEvents = draggingEventId
       ? dayEvents.filter(e => e.id !== draggingEventId && !previewEventIds.has(e.id))
@@ -169,7 +169,6 @@
     });
   });
 
-  // Centralized pomodoro timeline
   const pomodoro = getPomodoro();
   const calendarZoom = getCalendarZoom();
   const railWidth = 6;
@@ -258,7 +257,7 @@
     }
 
     return computeDayTimelineBands(pomodoroEvents, {
-      activeBlockId: pomodoro.activeBlockId,
+      activeOccurrenceId: pomodoro.activeOccurrenceId,
       segments: pomodoro.segments,
       remainingSeconds: pomodoro.remainingSeconds,
       phaseElapsedSeconds: pomodoro.phaseElapsedSeconds,
@@ -276,7 +275,7 @@
   let lastClientX: number | null = null;
   let lastClientY: number | null = null;
   let scrollProximityRaf = 0;
-  // Track when mouse is near a block's resize edge (top or bottom)
+  // Event whose top or bottom resize edge is under the pointer.
   let hoverResizeEventId: string | null = $state(null);
 
   $effect(() => {
@@ -285,7 +284,7 @@
     }
   });
 
-  // Re-check resize proximity when block layout changes (e.g. new block saved)
+  // Re-check resize proximity when the event layout changes, such as after a new event is saved.
   $effect(() => {
     void renderedPositioned;
     if (lastClientX === null || lastClientY === null || !columnEl) return;
@@ -379,17 +378,17 @@
     const hourHeight = getRenderedHourHeight();
     const threshold = getResizeThreshold();
 
-    // Blocks are positioned inside a container offset by railWidth + 4
+    // Events are positioned inside a container offset by railWidth + 4
     const eventAreaLeft = railWidth + 4;
     const eventAreaWidth = colWidth - eventAreaLeft;
 
-    // First pass: find the block that strictly contains the mouse (standard bounding box)
-    // At boundaries, blocks are [top, bottom) so only one block contains any given point
+    // Find the event that strictly contains the pointer. Events span [top, bottom),
+    // so only one event contains any given point at a boundary.
     for (const pos of renderedPositioned) {
       if (pos.event.id === "__create__") continue;
       if (panelOpen && pos.event.id !== editingId) continue;
 
-      // Don't subtract gap for hit detection to avoid dead zones between stacked blocks
+      // Don't subtract the gap for hit detection to avoid dead zones between stacked events
       const eventLeftPx = eventAreaLeft + (pos.left / 100) * eventAreaWidth;
       const eventRightPx = eventAreaLeft + ((pos.left + pos.width) / 100) * eventAreaWidth;
       if (offsetX < eventLeftPx || offsetX > eventRightPx) continue;
@@ -399,7 +398,7 @@
 
       // Strict containment: [top, bottom)
       if (offsetY >= eventTopY && offsetY < eventBottomY) {
-        // Mouse is inside this block. Check if near an edge.
+        // The pointer is inside this event. Check whether it is near an edge.
         if (!pos.isClippedTop && Math.abs(offsetY - eventTopY) < threshold) {
           return canResizeEdge(pos, "resize-top")
             ? { kind: "edge", eventId: pos.event.id, edge: "resize-top" }
@@ -410,12 +409,11 @@
             ? { kind: "edge", eventId: pos.event.id, edge: "resize-bottom" }
             : { kind: "body", eventId: pos.event.id };
         }
-        // Inside block but not near edge
         return { kind: "body", eventId: pos.event.id };
       }
     }
 
-    // Mouse is not inside any block, allow event creation
+    // No event contains the pointer, so creation is allowed
     return null;
   }
 
@@ -451,7 +449,7 @@
     }
   }
 
-  // Get resize edge for a specific block from click coordinates
+  /** Resize edge of the given event under the pointer, if any. */
   function getEventEdgeFromClick(eventId: string, e: PointerEvent): "resize-top" | "resize-bottom" | undefined {
     if (mobileLayout) return undefined;
     if (!columnEl) return undefined;
@@ -468,13 +466,12 @@
   function handleColumnAreaPointerDown(e: PointerEvent) {
     if (!allowPointerEditing || e.button !== 0 || draggingEventId) return;
 
-    // Calculate position from actual click coordinates
     if (!columnEl) return;
     const colRect = columnEl.getBoundingClientRect();
     const colOffsetX = e.clientX - colRect.left;
     const colOffsetY = e.clientY - colRect.top;
 
-    // Check proximity to existing block edges for resize
+    // Resize when the pointer is near an existing event edge
     const nearby = findNearbyEventEdge(colOffsetX, colOffsetY, colRect.width);
     if (nearby) {
       onDragStart(nearby.eventId, e, nearby.edge);
@@ -484,7 +481,6 @@
     // No event creation when panel is open
     if (panelOpen) return;
 
-    // Calculate minute from actual click position
     const timing = getCreateTimingFromOffset(colOffsetY);
 
     onCreateStart(dateStr, timing, e);
@@ -633,7 +629,7 @@
     />
   {/each}
 
-  <!-- Drag previews replace the original block at the target position, layout-aware. -->
+  <!-- Drag previews replace the original event at the target position, layout-aware. -->
   {#each layoutedPreviews as previewPosition (previewPosition.event.id)}
     {@const previewEvent = previewPosition.event}
     {@const dragBase = getEventColor(previewEvent.color, theme)}
@@ -692,7 +688,7 @@
     </div>
   {/each}
 
-  <!-- Create preview (new block being drawn, layout-aware) -->
+  <!-- Create preview (new event being drawn, layout-aware) -->
   {#if createPreview && layoutedCreatePreview}
     {@const previewPosition = layoutedCreatePreview}
     {@const createBase = getEventColor(undefined, theme)}

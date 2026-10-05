@@ -1,7 +1,7 @@
 /**
- * Live RAM time-series for the perf panel chart.
+ * Live RAM time series for the performance popover chart.
  *
- * Samples are pushed by the polling effect in `TitleBar.svelte` once every
+ * Samples are pushed by the polling effect in `PerformancePopover.svelte` once every
  * `SAMPLE_INTERVAL_MS`. The chart and the CSV exporter both read from the
  * same buffer so what the user copies matches what they see.
  */

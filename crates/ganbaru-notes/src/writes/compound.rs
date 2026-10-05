@@ -95,7 +95,7 @@ pub enum NoteEditOperation {
     },
 }
 
-/// An immutable request can be retried after an uncertain response or restart.
+/// One atomic editor action, immutable per operation ID so it can be retried after an uncertain response or restart.
 #[derive(Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct NoteCompoundEdit {
@@ -455,7 +455,7 @@ pub async fn apply_compound_edit(
             }
         }
     }
-    // Include known parents/anchors whose placement or child-presence revision changed.
+    // Include known parents and anchors whose placement or child-presence revision changed.
     changed.extend(request.expected_blocks.keys().cloned());
     if changed.len() > MAX_GRAPH_BLOCKS as usize {
         return Err("Notes edit result exceeds its block limit".to_string());
@@ -505,7 +505,7 @@ pub async fn apply_compound_edit(
     Ok(result)
 }
 
-/// Foreign revisions are limited to the reviewed roots and destinations of explicit page moves.
+/// Collect affected pages and foreign revisions, limited to the reviewed roots and destinations of explicit page moves.
 fn explicit_page_moves(
     request: &NoteCompoundEdit,
 ) -> Result<(BTreeSet<String>, BTreeMap<String, String>), String> {

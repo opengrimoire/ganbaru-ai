@@ -62,7 +62,7 @@ function readSignature(assetName) {
 }
 
 /**
- * Reads generated release notes when the workflow provides them.
+ * Reads generated release notes from the workflow, falling back to the default notes.
  *
  * @returns {string} Updater release notes.
  */
@@ -75,7 +75,7 @@ function releaseNotes() {
 }
 
 /**
- * Sorts Windows updater assets by preferred installer type.
+ * Compares Windows updater assets so `.exe` installers sort before other types.
  *
  * @param {string} left First file name.
  * @param {string} right Second file name.

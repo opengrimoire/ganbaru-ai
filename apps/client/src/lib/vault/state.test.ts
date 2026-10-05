@@ -15,7 +15,7 @@ beforeEach(() => {
   invokeMock.mockReset();
 });
 
-describe("data folder state api", () => {
+describe("vault state api", () => {
   it("formats non-empty default folder errors with default-specific guidance", async () => {
     const { formatVaultError } = await loadModule();
 
@@ -87,7 +87,7 @@ describe("data folder state api", () => {
     });
   });
 
-  it("accepts complete data folder info responses", async () => {
+  it("accepts complete vault info responses", async () => {
     invokeMock.mockResolvedValue({
       path: "/home/user/Documents/Ganbaru AI",
       configPath: "/home/user/Documents/Ganbaru AI/config.json",
@@ -115,7 +115,7 @@ describe("data folder state api", () => {
     });
   });
 
-  it("rejects incomplete data folder info responses", async () => {
+  it("rejects incomplete vault info responses", async () => {
     invokeMock.mockResolvedValue({
       path: "/home/user/Documents/Ganbaru AI",
       configPath: "/home/user/Documents/Ganbaru AI/config.json",
@@ -124,10 +124,10 @@ describe("data folder state api", () => {
     });
     const { getActiveVaultInfo } = await loadModule();
 
-    await expect(getActiveVaultInfo()).rejects.toThrow("data folder response is incomplete");
+    await expect(getActiveVaultInfo()).rejects.toThrow("vault info response is incomplete");
   });
 
-  it("reads the default data folder location", async () => {
+  it("reads the default vault location", async () => {
     invokeMock.mockResolvedValue({
       path: "/home/user/Documents/Ganbaru AI",
       parentPath: "/home/user/Documents",

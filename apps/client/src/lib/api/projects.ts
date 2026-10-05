@@ -1134,7 +1134,7 @@ export interface ProjectTaskBulkRequest {
   change: ProjectTaskBulkChange;
 }
 
-/** Reuse the operation ID and payload to recover the committed result after a lost response. */
+/** Apply one bulk task change. Retrying with the same operation ID and payload recovers the committed result after a lost response. */
 export async function applyProjectTaskBulk(request: ProjectTaskBulkRequest): Promise<ProjectMutation> {
   const dbUrl = await ensureDbUrl();
   const response = await invoke<unknown>("projects_apply_task_bulk", { dbUrl, request });
@@ -1153,7 +1153,7 @@ export interface ProjectReorderRequest {
   item: ProjectReorderItem;
 }
 
-/** Move within native siblings and reconcile only the validated committed result. */
+/** Move one item among its siblings and return only the validated committed result. */
 export async function reorderProjectItem(request: ProjectReorderRequest): Promise<ProjectMutation> {
   const dbUrl = await ensureDbUrl();
   const response = await invoke<unknown>("projects_reorder_item", { dbUrl, request });

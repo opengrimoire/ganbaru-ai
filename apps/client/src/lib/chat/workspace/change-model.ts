@@ -54,7 +54,7 @@ export function workspacePathAfterRenames(
   return current;
 }
 
-/** Describes how an immutable selected file should react to a workspace batch. */
+/** Describes how the selected file view should react to a workspace batch. */
 export function workspacePreviewImpact(
   batch: ChatWorkspaceChangeBatch,
   selectedPath: string,

@@ -43,7 +43,7 @@ fn gsettings_set(schema: &str, key: &str, value: &str) -> Result<(), String> {
 pub(super) struct SavedShortcuts {
     pub(super) overlay_key: String,
     pub(super) dock_hotkeys: String,
-    /// (schema, key, original_value) for every keybinding that was disabled
+    /// `(schema, key, original_value)` for every disabled keybinding.
     pub(super) disabled: Vec<(String, String, String)>,
 }
 

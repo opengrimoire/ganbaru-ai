@@ -102,14 +102,14 @@ function parseVaultAppState(value: unknown): VaultAppState {
 }
 
 function parseVaultInfo(value: unknown): VaultInfo {
-  if (!isRecord(value)) throw new Error("data folder response is not an object");
+  if (!isRecord(value)) throw new Error("vault info response is not an object");
   const path = readString(value.path);
   const configPath = readString(value.configPath);
   const databasePath = readString(value.databasePath);
   const vaultId = readString(value.vaultId);
   const displayName = readString(value.displayName);
   if (!path || !configPath || !databasePath || !vaultId || !displayName) {
-    throw new Error("data folder response is incomplete");
+    throw new Error("vault info response is incomplete");
   }
   return { path, configPath, databasePath, vaultId, displayName };
 }

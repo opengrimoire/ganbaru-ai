@@ -145,7 +145,7 @@ fn existing_downloads_directory(app: &tauri::AppHandle) -> Option<PathBuf> {
     app.path().download_dir().ok().filter(|path| path.is_dir())
 }
 
-/// Hard cap on the number of entries we will inspect inside a single zip.
+/// Hard cap on the number of entries inspected inside a single zip.
 /// 1024 is well above the realistic count for an export from Google
 /// Calendar (one .ics per calendar a user owns or subscribes to is usually
 /// < 50) and protects against pathological inputs that could DoS the read
@@ -230,10 +230,11 @@ pub struct IcsZipEntry {
 ///
 /// Safety contract:
 ///
-/// - Path must be absolute (matching every other `vault_*` helper).
+/// - `path` comes from a native picker, never from IPC, and must have a
+///   `.zip` extension.
 /// - Entry paths are validated through `enclosed_name`, which rejects any
 ///   entry that tries to escape (zip-slip via `..` or absolute paths).
-/// - Encrypted entries are refused; we only ship the deflate feature.
+/// - Encrypted entries are refused; only the deflate feature is enabled.
 /// - Per-entry and aggregate decompressed-size caps reject decompression
 ///   bombs even if the zip header lies about uncompressed size (the read
 ///   itself is wrapped in a `Take` adapter so the cap holds at I/O level).
@@ -268,8 +269,8 @@ fn read_ics_zip_entries_from_path(path: &Path) -> Result<Vec<IcsZipEntry>, Strin
         }
 
         // `enclosed_name` returns `None` for any entry whose path escapes
-        // the archive root (zip-slip protection). Treat that as fatal so we
-        // never silently import from a tampered bundle.
+        // the archive root (zip-slip protection). Treat that as fatal so a
+        // tampered bundle is never silently imported.
         let enclosed = match entry.enclosed_name() {
             Some(name) => name,
             None => {
@@ -316,8 +317,8 @@ fn read_ics_zip_entries_from_path(path: &Path) -> Result<Vec<IcsZipEntry>, Strin
         drop(enclosed);
 
         // The `Take` adapter is the real defense against a lying header:
-        // even if `entry.size()` claims a small value, we still stop after
-        // one byte past the cap and reject the entry.
+        // even if `entry.size()` claims a small value, reading stops one
+        // byte past the cap and the entry is rejected.
         let mut contents = String::new();
         let mut limited = entry.by_ref().take(ICS_ZIP_MAX_ENTRY_BYTES + 1);
         limited

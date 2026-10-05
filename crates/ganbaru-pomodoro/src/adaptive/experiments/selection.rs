@@ -39,7 +39,7 @@ pub fn select_run_start_assignment(
     if recent.len() >= WEEKLY_CONTEXT_BUDGET {
         return Ok(None);
     }
-    // Preserve the first assignment for equal timestamps, as in the source policy.
+    // Keep the first assignment when timestamps are equal.
     let latest = recent
         .iter()
         .fold(None, |latest: Option<&(_, i64)>, entry| {

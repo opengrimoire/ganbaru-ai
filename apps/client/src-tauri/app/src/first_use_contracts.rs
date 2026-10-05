@@ -63,10 +63,10 @@ impl FirstUseContractMetrics {
     }
 }
 
-// Test-only async owner for the SQLite trace registration. Callers must use
-// `finish` before dropping it. Cancellation intentionally leaves the raw Arc
-// reference live because SQLite may still hold the callback context; leaking in
-// that exceptional test path is safer than reclaiming a potentially live pointer.
+/// Test-only async owner for the SQLite trace registration. Callers must use
+/// `finish` before dropping it. Cancellation intentionally leaves the raw Arc
+/// reference live because SQLite may still hold the callback context; leaking in
+/// that exceptional test path is safer than reclaiming a potentially live pointer.
 struct SqlTrace {
     pool: SqlitePool,
     state: Arc<Mutex<SqlTraceState>>,

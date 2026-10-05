@@ -1,4 +1,4 @@
-//! Isolated CPU diagnostics matching the documented pre-cutover fixture.
+//! Isolated CPU diagnostics for the fixture in `docs/performance/calendar-migration.md`.
 //! Run explicitly with one Cargo job and test thread; these are not UI timings.
 
 use super::fixtures::{in_memory_pool, insert_test_event_at};

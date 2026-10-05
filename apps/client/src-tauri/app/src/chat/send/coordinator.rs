@@ -1,4 +1,4 @@
-//! Readable send-turn coordinator across validation, persistence, and runtime launch.
+//! Send-turn coordinator across validation, persistence, and runtime launch.
 
 use super::checkpoints::ensure_pre_turn_checkpoint;
 use super::persistence::{

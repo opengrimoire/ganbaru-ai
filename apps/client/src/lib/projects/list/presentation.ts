@@ -79,7 +79,7 @@ export function parseProjectListPresentation(value: unknown, fields: readonly Pr
   return result;
 }
 
-/** Restore one project's presentation, tolerating malformed older preferences. */
+/** Restore one project's presentation, falling back to defaults when the stored value is malformed. */
 export function projectListPresentationForProject(preferences: readonly ProjectViewPreference[], projectId: string | null, fields: readonly ProjectCustomField[]): ProjectListPresentation {
   const preference = preferences.find((entry) => entry.projectId === projectId && entry.viewId === "list" && entry.preferenceKey === PROJECT_LIST_PRESENTATION_KEY);
   if (!preference) return defaultProjectListPresentation();

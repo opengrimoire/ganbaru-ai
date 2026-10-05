@@ -3,7 +3,7 @@ use crate::adaptive::models::{FeatureVector, StateScores};
 const STATE_DECAY: f64 = 0.55;
 const HIGH_PRESSURE_THRESHOLD: f64 = 0.58;
 
-/// Convert canonical behavior into the existing bounded adaptive state scores.
+/// Convert canonical behavior into bounded adaptive state scores.
 pub fn derive_adaptive_state(
     features: &FeatureVector,
     previous: Option<StateScores>,
@@ -24,7 +24,7 @@ pub fn derive_adaptive_state(
     }
 }
 
-/// Stable reason order is retained for persisted explanations and parity fixtures.
+/// Reason order is stable because persisted explanations and parity fixtures depend on it.
 pub fn reason_codes_for_state(state: StateScores) -> Vec<String> {
     let mut reasons = Vec::new();
     if state.strain >= HIGH_PRESSURE_THRESHOLD {

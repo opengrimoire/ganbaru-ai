@@ -75,8 +75,8 @@
       === "mobile",
   );
 
-  // When the user opens a theme in the floating editor, step out of the way
-  // so the modal backdrop does not block clicking through to the app.
+  // Close Settings while a theme is open in the floating editor so the modal
+  // backdrop does not block interaction with the app.
   $effect(() => {
     if (!mobilePresentation && themeEditor.editingId) requestSettingsClose();
   });
@@ -369,7 +369,7 @@
         requestSettingsClose();
         return;
       }
-      // Keep the modal from leaking shortcuts to underlying panels
+      // Keep the modal from leaking shortcuts to underlying panels.
       e.stopPropagation();
     }
     window.addEventListener("keydown", handleKeydown, true);
@@ -586,7 +586,6 @@
         </button>
       </header>
     {:else}
-      <!-- Sidebar -->
       <aside
         class={cn(
           "flex shrink-0 flex-col gap-3 bg-background/40 dark:bg-black/20",
@@ -638,7 +637,6 @@
     {/if}
 
     <div class="relative min-h-0 flex-1">
-      <!-- Content -->
       <section
         bind:this={settingsScrollEl}
         data-settings-content

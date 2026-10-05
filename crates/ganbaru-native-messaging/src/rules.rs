@@ -37,7 +37,7 @@ impl HostDecision {
         }
     }
 
-    /// Preserves the labels consumed by the extension and historical rule snapshots.
+    /// Returns the stable labels consumed by the extension and stored rule snapshots.
     pub(super) fn matched_rule_name(&self) -> Option<String> {
         match self {
             Self::Allowed => None,

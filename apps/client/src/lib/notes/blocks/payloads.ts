@@ -43,7 +43,7 @@ export interface NotesTextPayloadOptions {
   open?: boolean;
 }
 
-/** Create the minimum public Notion text rich text object Ganbaru edits today. */
+/** Create the minimum public Notion text rich text object Ganbaru edits. */
 export function createRichText(content: string): NotesRichText {
   return createTextRichText(content);
 }

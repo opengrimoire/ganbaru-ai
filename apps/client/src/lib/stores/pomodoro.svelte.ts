@@ -110,7 +110,7 @@ export function getPomodoro() {
     get pausedPulseFrame() { return projection?.snapshot?.mode === "manual_pause" ? Math.floor(visualNow / VISUAL_INTERVAL_MS) % PAUSE_PULSE.length : null; },
     get pausedPulseAmount() { return projection?.snapshot?.mode === "manual_pause" ? PAUSE_PULSE[Math.floor(visualNow / VISUAL_INTERVAL_MS) % PAUSE_PULSE.length] : 0; },
     get formattedTime() { const seconds = remainingSeconds(); return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`; },
-    get activeBlockId() { return isActive() ? projection?.snapshot?.run?.occurrenceId ?? null : null; },
+    get activeOccurrenceId() { return isActive() ? projection?.snapshot?.run?.occurrenceId ?? null : null; },
     get activeRunId() { return isActive() ? projection?.snapshot?.run?.id ?? null : null; },
     get dismissedBlockId() { return projection?.snapshot?.dismissedOccurrenceId ?? null; },
     get autoStartSuppressed() { return projection?.snapshot?.automaticAdmissionSuppressed ?? false; },

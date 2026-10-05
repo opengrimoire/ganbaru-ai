@@ -36,7 +36,7 @@ impl ManagedImageKind {
         }
     }
 
-    /// Resolve a supported MIME type, ignoring optional HTTP parameters.
+    /// Resolve a supported MIME type, ignoring MIME parameters such as `charset`.
     pub fn from_mime_type(value: &str) -> Option<Self> {
         let value = value.split(';').next()?.trim();
         if value.eq_ignore_ascii_case("image/png") {

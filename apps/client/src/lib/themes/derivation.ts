@@ -43,7 +43,7 @@ const DERIVED_APP_TOKEN_KEYS: readonly string[] = Object.freeze([
  *
  * - card / popover / accent / secondary / muted lift upward
  * - sidebar recedes below canvas so the title bar frames the app (the
- *   "contrarian" step that made the dark built-in read as layered)
+ *   "contrarian" step that makes the dark built-in read as layered)
  * - event panel sits just above canvas, and event-panel-contrast sits
  *   just below, keeping the panel's recessed band visible on any canvas
  *
@@ -141,8 +141,8 @@ const CALENDAR_FRACTIONS = {
  * BASE.dark uses.
  *
  * Built-in themes carry no `sources` field and never reach this function
- * at resolve time; it is called only for user themes that have opted into
- * the source-driven workflow.
+ * at resolve time; user themes call it when sources are edited, rebaked, or
+ * cloned.
  */
 export function deriveAppTokens(
   sources: ThemeSources,
@@ -246,8 +246,7 @@ export function deriveAppTokens(
  *
  * Gridlines are parked just above a minimum-visibility contrast against
  * `--cal-bg`. The target is intentionally subtle (1.4:1) to match how the
- * dark built-in renders its
- * grid: a 3:1 target produces gridlines noticeably more prominent than
+ * dark built-in renders its grid: a 3:1 target produces gridlines noticeably more prominent than
  * the built-in's curated hex, which users read as "uglier" on clones.
  *
  * The semantic marker tokens (current time, timeline break, timeline

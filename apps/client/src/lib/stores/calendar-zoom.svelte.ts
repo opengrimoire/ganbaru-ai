@@ -6,7 +6,7 @@ const ZOOM_LEVELS: readonly number[] = CALENDAR_ZOOM_PERCENT_LEVELS.map(
   (percent) => (DEFAULT_HOUR_HEIGHT * percent) / 100,
 );
 const DEFAULT_INDEX = CALENDAR_ZOOM_PERCENT_LEVELS.indexOf(100);
-const ANIMATION_DURATION_MS = 150; // ms for smooth zoom animation
+const ANIMATION_DURATION_MS = 150;
 
 function findClosestIndex(height: number): number {
   let best = 0;
@@ -48,7 +48,6 @@ function easeOutCubic(t: number): number {
 let levelIndex = findClosestIndex(loadSaved());
 let hourHeight = $state(ZOOM_LEVELS[levelIndex]);
 
-// Zoom state
 let scrollRef: HTMLElement | null = null;
 let stickyHeaderHeight = 0;
 let zoomRaf = 0;
@@ -108,17 +107,14 @@ function startOrRetargetAnimation(toHeight: number) {
   const viewportHeight = scrollContainer.clientHeight;
   const centerOffset = (viewportHeight - stickyHeaderHeight) / 2;
 
-  // Get current state (either mid-animation or static)
+  // Start from the rendered height, which may be mid-animation.
   const fromHeight = getRenderedHourHeight(scrollContainer);
   const fromScroll = scrollContainer.scrollTop;
 
-  // Compute center time at current state
+  // Keep the minute at the viewport center fixed across the zoom.
   const centerMinute = (fromScroll + centerOffset) / fromHeight * 60;
-
-  // Compute target scroll for target H
   const toScroll = computeScrollForHeight(toHeight, centerMinute, viewportHeight);
 
-  // Start animation
   animFromHeight = fromHeight;
   animToHeight = toHeight;
   animFromScroll = fromScroll;
@@ -134,7 +130,6 @@ function startOrRetargetAnimation(toHeight: number) {
 function commitZoom() {
   commitTimer = 0;
 
-  // If still animating, wait for it to finish
   if (animating) {
     commitTimer = window.setTimeout(commitZoom, 30);
     return;
@@ -144,16 +139,15 @@ function commitZoom() {
   const scrollContainer = scrollRef;
   const finalHeight = ZOOM_LEVELS[levelIndex];
 
-  // Ensure final state is exact
+  // Snap to the exact level in case the last frame landed short of it.
   if (scrollContainer) {
     scrollContainer.style.setProperty("--hour-h", String(finalHeight));
     scrollContainer.dispatchEvent(new CustomEvent(CALENDAR_ZOOM_FRAME_EVENT));
   }
 
-  // Update Svelte state (triggers reactivity)
   hourHeight = finalHeight;
 
-  // Dispatch custom event for components that need to update after zoom
+  // Notify components that update only after a zoom settles.
   if (scrollContainer) {
     scrollContainer.dispatchEvent(new CustomEvent("zoomcommit", { bubbles: true }));
   }

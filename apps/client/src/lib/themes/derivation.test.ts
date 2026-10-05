@@ -21,7 +21,7 @@ import {
  * Source palettes fitted from the built-in light and dark themes.
  *
  * The light theme defines canvas / ink / primary / destructive explicitly
- * in `BASE_APP_TOKENS`. Calendar canvas is no longer a source: it
+ * in `BASE_APP_TOKENS`. Calendar canvas is not a source: it
  * auto-derives from the app canvas via a direction-aware OKLab ΔL offset.
  *
  * The dark theme reuses its `--foreground` color as `--primary`, which is
@@ -436,7 +436,7 @@ describe("deriveCalendarTokens", () => {
 
   it("derives cal-bg from the app canvas", () => {
     const light = deriveCalendarTokens(LIGHT_SOURCES);
-    // cal-bg is no longer a source: on a light canvas it lifts slightly
+    // cal-bg is not a source: on a light canvas it lifts slightly
     // above canvas, so the two should diverge but stay close.
     expect(light["--cal-bg"]).not.toBe(LIGHT_SOURCES.canvas);
   });
@@ -476,9 +476,9 @@ describe("deriveCalendarTokens", () => {
     const sources = base === "light" ? LIGHT_SOURCES : DARK_SOURCES;
 
     it(`gridline sits at or above 1.4:1 against the calendar canvas (${base})`, () => {
-      // Gridline target was lowered from 3 to 1.4 so cloned themes
-      // inherit the built-in's subtle gridline style (~1.5:1) instead
-      // of the previous prominent 3:1 lines.
+      // The 1.4 gridline target lets cloned themes inherit the
+      // built-in's subtle gridline style (~1.5:1) instead of
+      // prominent 3:1 lines.
       const tokens = deriveCalendarTokens(sources);
       const ratio = contrastRatio(tokens["--cal-gridline"], tokens["--cal-bg"]);
       expect(ratio).toBeGreaterThanOrEqual(1.4);

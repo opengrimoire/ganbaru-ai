@@ -1,9 +1,9 @@
 /**
  * Cross-component launcher for the Settings modal.
  *
- * The modal itself is mounted once in `TitleBar.svelte`; any component (the
- * calendar header, the calendar sidebar popover, future feature surfaces)
- * can request that it open targeted at a specific section instead of having
+ * The modal itself is mounted once in `TitleBarOverlayHost.svelte`; any
+ * component (the calendar header, the calendar sidebar popover, other feature
+ * surfaces) can request that it open targeted at a specific section instead of having
  * to reach back into the title bar for state.
  *
  * The store deliberately exposes a tiny API: callers say `open("calendars")`

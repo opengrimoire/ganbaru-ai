@@ -693,7 +693,7 @@ pub struct NoteLinkedDatabaseCreate {
     pub replace_block_id: Option<String>,
 }
 
-/// Copy a database graph into a caller-reserved block identity.
+/// Request to copy a database graph into a caller-reserved block identity.
 #[derive(Deserialize, Serialize)]
 pub struct NoteDatabaseDuplicate {
     pub source_block_id: String,

@@ -1,4 +1,4 @@
-//! Claude permission callbacks, structured questions, and pending request state.
+//! Claude inbound message routing, permission callbacks, structured questions, and pending request state.
 
 use super::normalizer::{ClaudeEventNormalizer, ClaudeRouteState};
 use super::protocol::{control_success, protocol_error};

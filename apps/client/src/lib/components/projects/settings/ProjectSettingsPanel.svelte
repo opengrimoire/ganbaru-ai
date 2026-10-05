@@ -846,7 +846,7 @@
     }
   }
 
-  /** Finish pending native selection and row moves before committing the settings snapshot. */
+  /** Report whether working-folder operations or row moves are pending, which blocks committing the settings snapshot. */
   function settingsOperationsBusy(): boolean {
     return workingFoldersBusy || statusReorder.pending || priorityReorder.pending || tagReorder.pending
       || customFieldReorder.pending || customFieldOptionReorder.pending;

@@ -228,7 +228,7 @@
     });
   }
 
-  /** Populate relation targets when a contextual addition cached schema before its first editor open. */
+  /** Load relation target sources when the schema was cached by a header addition before the editor first opened. */
   async function loadSourceMetadata(request: number): Promise<void> {
     loading = true;
     try {

@@ -92,7 +92,7 @@ pub struct CodexAccount {
     #[serde(rename = "type")]
     pub account_type: String,
     pub email: Option<String>,
-    // Deserialized to preserve account wire compatibility for future UI use.
+    // Deserialized to validate the provider's advertised account wire shape.
     #[allow(dead_code)]
     pub plan_type: Option<String>,
 }

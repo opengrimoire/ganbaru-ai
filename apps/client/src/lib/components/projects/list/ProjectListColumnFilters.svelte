@@ -22,7 +22,7 @@
     query.customFieldFilters = [...query.customFieldFilters.filter((entry) => entry.fieldId !== field.id), ...(filter ? [filter] : [])];
   }
 
-  /** Translate the existing domain filters without inventing unsupported predicates. */
+  /** Return the localized label for a supported due-date filter. */
   function dueLabel(value: ProjectTaskDueFilter): string {
     if (value === "all") return t("projects.filters.allDueDates");
     if (value === "overdue") return t("projects.filters.overdue");

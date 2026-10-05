@@ -46,7 +46,7 @@ export function projectedAgentRunId(message: RichReply): string | null {
     : null;
 }
 
-/** Keeps distinct semantic agent updates visually attributable in a reply thread. */
+/** Groups same-author replies within five minutes, keeping agent updates separately attributable. */
 export function shouldGroupReplyMessages(
   previous: ChatMessageRead | null,
   current: ChatMessageRead,

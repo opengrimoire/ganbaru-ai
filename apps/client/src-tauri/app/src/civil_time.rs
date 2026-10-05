@@ -82,7 +82,8 @@ pub(crate) fn generated_instant(
     Ok(Some(resolved.timestamp().as_millisecond()))
 }
 
-/// Supply the exact local date/hour and English Date.toDateString seed spelling.
+/// Map each instant to its local date key, hour, and an English date string in
+/// JavaScript `Date.toDateString` format, used as a seed.
 #[cfg(any(not(target_os = "android"), test))]
 pub(crate) fn local_time_facts(
     instants: &[i64],

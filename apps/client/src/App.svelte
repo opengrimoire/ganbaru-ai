@@ -187,7 +187,6 @@
     }
     try {
       await calendar.load();
-      // Calendar startup marks are still produced for normal boots.
     } catch (e) {
       console.error("Failed to load calendar:", e);
     }
@@ -423,10 +422,10 @@
     document.addEventListener("keydown", markKeyboardFocus, { capture: true });
     window.addEventListener("hashchange", navigateToNotesHash);
 
-    // Track device timezone changes (travel, OS-level update). On change,
-    // reload calendar events so wall-clock strings reflect the new zone.
-    // Re-resolves on visibility change and window focus after suspend or
-    // device travel. Those same lifecycle events catch every scheduler up.
+    // Track device time zone changes (travel, OS-level update) and reload
+    // Calendar events so wall-clock strings reflect the new zone. The zone is
+    // re-resolved on visibility change and window focus, which also catch
+    // every scheduler up after suspend.
     let knownZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
     const checkZone = () => {
       const current = Intl.DateTimeFormat().resolvedOptions().timeZone;

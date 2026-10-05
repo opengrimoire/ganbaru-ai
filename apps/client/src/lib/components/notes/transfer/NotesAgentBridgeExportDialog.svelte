@@ -107,7 +107,7 @@
       dialogEl?.focus();
     });
     void projects.ensureLoaded().catch(() => {
-      // The project store exposes loadError for this dialog.
+      // The project store records the failure in loadError, which this dialog renders.
     });
   });
 

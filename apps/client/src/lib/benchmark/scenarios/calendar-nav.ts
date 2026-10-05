@@ -103,10 +103,8 @@ export const calendarNavScenario: BenchmarkScenario = {
   },
 
   async cleanup(_seedHandle: { calendarId: string }): Promise<void> {
-    // The whole benchmark DB file is deleted on summary close, so
-    // per-calendar deletion would just be an extra round-trip against a DB
-    // that is about to disappear. The parameter stays in the signature for
-    // scenarios that need finer-grained cleanup.
+    // The isolated benchmark DB file is deleted on summary close, so
+    // per-calendar deletion is unnecessary.
   },
 };
 

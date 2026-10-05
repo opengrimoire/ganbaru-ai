@@ -21,7 +21,7 @@ const CADENCE_MINIMUM: i64 = 2;
 const CADENCE_MAXIMUM: i64 = 5;
 
 /// Choose the deterministic base rhythm before experiment and replay evidence.
-/// Branch order is policy meaning and matches the prior TypeScript implementation.
+/// Branch order is policy meaning.
 pub fn select_adaptive_rhythm(
     current: CountRhythm,
     features: &FeatureVector,

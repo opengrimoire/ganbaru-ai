@@ -866,7 +866,7 @@ function calendarEventBaseFromComponent(
 	}
 
 	// In-memory wall-clock is anchored to the device zone (matching `mapRow`
-	// in the calendar store). The home zone is preserved in `event.timezone`
+	// in `db-rows.ts`). The home zone is preserved in `event.timezone`
 	// for recurrence anchoring; the serializer reverses through `deviceZone`
 	// so the round trip is lossless.
 	const start = isAllDay ? `${startDate} 00:00` : utcIsoToWallClock(startUtc, deviceZone);

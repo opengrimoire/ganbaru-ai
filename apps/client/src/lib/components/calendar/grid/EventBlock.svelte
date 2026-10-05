@@ -150,7 +150,6 @@
     ></div>
   {/if}
 
-  <!-- Content -->
   <div class="relative z-10 min-w-0 flex-1 overflow-hidden px-1 py-0.5">
     {#if hasIcons}
       <div class="event-icons absolute right-1 flex items-center gap-0.5" style="top: 5px; color: {iconColor};">

@@ -1,4 +1,4 @@
-//! Native persistence envelopes preserve the established feature and value schema.
+//! Native persistence envelopes for adaptive features, values, and decisions.
 
 use crate::adaptive::decision::{AdaptiveDecision, ExperimentUpdate};
 use crate::adaptive::experiments::models::ExperimentAssignment;

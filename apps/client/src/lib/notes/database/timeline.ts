@@ -97,7 +97,7 @@ export function notesDatabaseTimelineDateColumns(
   return columns.filter((column) => column.type === "date");
 }
 
-/** Return properties that can group timeline lanes in this local slice. */
+/** Return properties that can group timeline lanes. */
 export function notesDatabaseTimelineGroupableColumns(
   columns: readonly NotesDatabaseTableColumn[],
 ): NotesDatabaseTableColumn[] {

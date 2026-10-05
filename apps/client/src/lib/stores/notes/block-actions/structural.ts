@@ -83,7 +83,7 @@ interface NotesStructuralBlockActionsContext {
 }
 
 export interface NotesStructuralBlockActions {
-  /** Keep the inline placeholder active and defer database reads until creation commits. */
+  /** True while the block's database is still being created; callers keep the placeholder and defer database reads. */
   isDatabaseCreationPending: (blockId: string) => boolean;
   convertBlock: (blockId: string, type: NotesBlockType, clearText?: boolean, selection?: NotesTextSelection) => Promise<void>;
   toggleTodo: (blockId: string, checked: boolean) => Promise<void>;
@@ -126,7 +126,7 @@ export function createNotesStructuralBlockActions(
       .catch((error: unknown) => console.warn("Notes block update persistence failed", error));
   }
 
-  /** Convert a block while optionally retaining a specific caret through the undo snapshot. */
+  /** Convert a block to another type; `selection` places the caret after an in-place conversion. */
   async function convertBlock(
     blockId: string,
     type: NotesBlockType,
@@ -185,7 +185,7 @@ export function createNotesStructuralBlockActions(
     recordUndoAfter("convert", before, blockId);
   }
 
-  /** Reserve the database surface before saving earlier typing or creating native objects. */
+  /** Show the database placeholder immediately, then create the database after earlier queued edits. */
   function createDatabaseFromBlock(blockId: string, clearText: boolean): Promise<void> {
     const selectedPageId = context.readSelectedPageId();
     const block = context.blockById(blockId);

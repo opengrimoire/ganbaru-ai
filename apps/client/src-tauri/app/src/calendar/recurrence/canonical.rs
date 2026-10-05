@@ -155,7 +155,7 @@ pub(crate) fn stored_time(
         let epoch_ms = instant.timestamp_millis();
         return Ok((civil_time::instant_to_local(epoch_ms, home_zone)?, epoch_ms));
     }
-    // Older local wall-clock rows retain their stored home-zone meaning.
+    // Offset-free wall-clock values (kept for civil times in a gap) resolve in the home zone.
     let civil = parse_civil(value)?;
     Ok((civil, civil_time::explicit_instant(civil, home_zone)?))
 }

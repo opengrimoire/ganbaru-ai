@@ -192,7 +192,6 @@
     readOnly && allowPomodoroWhenReadOnly && !parked && timedSectionsVisible,
   );
 
-  // ─── Inline delete confirmation ────────────────────────────────
   // Two-step delete: first click arms, second click confirms. Any other
   // click inside the panel disarms (see panel-root onclick below).
   const deleteAction = $derived(deletionOutcome ?? "mixed");
@@ -313,7 +312,6 @@
     }
   }
 
-  // ─── Tab system ─────────────────────────────────────────────────
   type Section = "meeting" | "pomodoro" | "notifications" | "repeat" | "music";
   let openSection: Section | null = $state(null);
   let mobileNotificationStatus = $state<MobileCalendarNotificationStatus | null>(null);
@@ -361,7 +359,7 @@
     const enabled = isSectionEnabled(s);
     if (enabled) {
       // Disable: keep the meeting data in memory so a misclick is recoverable.
-      // Save is what actually commits the erasure (buildSaveData gates on the flag).
+      // Save is what actually commits the erasure (session.saveData() gates on the flag).
       if (s === "meeting") session.meetingEnabled = false;
       if (s === "pomodoro") session.pomodoroEnabled = false;
       if (s === "notifications") {
@@ -509,14 +507,12 @@
     geometry.updateSectionPin(opening);
   }
 
-  // ─── Panel positioning & drag ───────────────────────────────────
   let titleInput: HTMLInputElement | undefined = $state();
 
   const isRecurring = $derived(
     mode === "edit" && recurringScopeEnabled,
   );
 
-  // ─── Initialization ─────────────────────────────────────────────
   // Edit mode normally receives a full event row preloaded by CalendarView,
   // so the panel paints meeting details, visibility, and description in its
   // first stable render. The async `loadFullEvent` path remains as a fallback
@@ -602,8 +598,8 @@
     }
   });
 
-  // Heavy-field init: runs once per fullEvent arrival. The setInitialChanges
-  // pattern merges these keys into both `changes` and `baseline` on the
+  // Heavy-field init runs once per fullEvent arrival. The initial sync
+  // (setInitialChanges on the edit session) merges these keys into both `changes` and `baseline` on the
   // session, so a subsequent emitChange that re-emits the same heavy values
   // does not flip dirty. Since the heavy sections are gated on `fullEvent`,
   // the user cannot have edited any of them before this runs, so overwriting
@@ -646,7 +642,7 @@
     });
   });
 
-  // Sync date/time from event prop when block is dragged/resized externally.
+  // Sync date and time from the event prop when the event is dragged or resized externally.
   // Only updates time fields, not title/description/etc. which the user may
   // have edited in the panel. The session's diff-based dirty tracking handles
   // revert-to-original automatically.
@@ -659,7 +655,6 @@
     }
   });
 
-  // ─── Dirty tracking ────────────────────────────────────────────
   // Save is always available in create mode (even with default values).
   // In edit mode it tracks the session's diff-based dirty flag so that
   // reverting all edits back to the original values disables the button
@@ -670,23 +665,6 @@
   );
   const isBodyConstrained = $derived(mobileLayout || geometry.isBodyConstrained);
 
-  // ─── Emit changes ───────────────────────────────────────────────
-  /**
-   * Build the full normalized patch the session tracks as "changes".
-   * Shared by the initial-sync emit (establishes baseline) and every
-   * subsequent emitChange (user edits). Keeping the shape identical is
-   * what lets the session compare the two sides field-by-field and
-   * detect revert-to-original without false positives.
-   */
-  /**
-   * Initial sync payload restricted to the keys that arrive with the full
-   * event row. The heavy sections are gated on `fullEvent`, so by the time
-   * this fires the user has not been able to edit any of these fields in
-   * the panel; merging them straight into `changes` and `baseline` won't
-   * flip dirty. Slim keys are deliberately omitted so they don't overwrite
-   * an in-progress slim edit that happened during the load window.
-   */
-  // ─── Panel position ─────────────────────────────────────────────
   // When a section is expanded, the panel's bottom edge is pinned at
   // its pre-expansion position so it only grows upward. Otherwise the
   // top is pinned and the panel grows downward, nudging up only if
@@ -718,7 +696,6 @@
     return dt.toLocaleDateString(locale, { weekday: "short", month: "short", day: "numeric" });
   });
 
-  // ─── Build data and handlers ────────────────────────────────────
   async function handleSave() {
     if (!canRunEventPanelSave({
       parked,

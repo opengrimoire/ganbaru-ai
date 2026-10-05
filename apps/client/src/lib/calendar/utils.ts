@@ -52,9 +52,8 @@ export function formatDatePart(date: Date): string {
 
 /**
  * Detect that a stored datetime string is already in UTC ISO 8601 form
- * (ends with Z, with or without seconds and millis). Used by the io
- * round-trip to preserve wall-clock-shaped values from malformed or
- * hand-edited rows.
+ * (ends with Z, with or without seconds and millis). Row mapping uses it to
+ * keep wall-clock-shaped values from malformed or hand-edited rows as text.
  */
 export function isUtcIso(value: string): boolean {
   return typeof value === "string" && value.endsWith("Z") && value.includes("T");
@@ -108,12 +107,10 @@ export function utcIsoToWallClock(utcIso: string, zone: string): string {
 export function sanitizeCalendarTime(str: string): string | null {
   if (typeof str !== "string" || !str.trim()) return null;
 
-  // Try to parse the date part
   const parts = str.trim().split(" ");
   const datePart = parts[0];
   const timePart = parts[1] ?? "00:00";
 
-  // Validate date part format
   const dateMatch = datePart.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (!dateMatch) return null;
 
@@ -125,7 +122,6 @@ export function sanitizeCalendarTime(str: string): string | null {
   let minute = parseFloat(timeParts[1]);
   let second = timeParts[2] !== undefined ? parseFloat(timeParts[2]) : null;
 
-  // Handle NaN
   if (isNaN(hour)) hour = 0;
   if (isNaN(minute)) minute = 0;
   if (second !== null && isNaN(second)) second = 0;
@@ -140,7 +136,6 @@ export function sanitizeCalendarTime(str: string): string | null {
     return roundedSecond === null ? `${nextDatePart} 00:00` : `${nextDatePart} 00:00:00`;
   }
 
-  // Round and clamp
   hour = Math.max(0, Math.min(23, Math.round(hour)));
   minute = Math.max(0, Math.min(59, roundedMinute));
   if (second !== null) second = Math.max(0, Math.min(59, roundedSecond ?? 0));
@@ -601,7 +596,6 @@ export function layoutAllDayEventsForWeek(
       break;
     }
 
-    // Mark occupied
     for (let c = startCol; c <= endCol; c++) {
       rows[row][c] = true;
     }
@@ -758,8 +752,8 @@ const DARK_TEXT_ALT = "#e3e3e3";
 // Luminance flip thresholds tuned against the 32-color built-in palette.
 // Light-mode bgs brighter than LIGHT_FLIP_ABOVE cannot carry white text;
 // dark-mode bgs darker than DARK_FLIP_BELOW cannot carry near-black text.
-// Themes with palettes outside the tuned range may need custom thresholds;
-// for now these are shared across themes of a given base.
+// Every theme shares these thresholds for its light or dark calendar canvas;
+// palettes outside the tuned range may need custom thresholds.
 const LIGHT_FLIP_ABOVE = 0.65;
 const DARK_FLIP_BELOW = 0.35;
 
@@ -773,11 +767,11 @@ const DARK_FLIP_BELOW = 0.35;
  *
  * The `darkCalendar` flag is resolved from the calendar canvas's
  * luminance (via `isThemeCalendarDark`), not from the theme's cosmetic
- * `base` label, so swapping the base label no longer changes tile text.
+ * `base` label, so the base label does not affect tile text.
  *
  * @deprecated Use `pickReadableForeground` from `$lib/color/math`
- * for new code. Kept because the event palette was calibrated against the
- * threshold constants above.
+ * for new code. This remains because the event palette is calibrated
+ * against the threshold constants above.
  */
 function pickContrastText(bg: string, darkCalendar: boolean): string {
   const r = parseInt(bg.slice(1, 3), 16);
@@ -790,10 +784,10 @@ function pickContrastText(bg: string, darkCalendar: boolean): string {
   return luminance > LIGHT_FLIP_ABOVE ? LIGHT_TEXT_ALT : LIGHT_TEXT;
 }
 
-// Cache of resolved palettes keyed on the Theme object reference. Every
-// `updateTheme` call produces a fresh object (via `mergeThemePatch`), so a
-// WeakMap lookup naturally misses on edits and rebuilds the palette; old
-// Theme objects get GC'd with their cache entries.
+// Cache of resolved palettes keyed on the Theme object reference. Theme
+// edits produce a fresh object (see `mergeThemePatch`), so a WeakMap lookup
+// misses on edits and rebuilds the palette; old Theme objects get GC'd with
+// their cache entries.
 const resolvedPaletteCache = new WeakMap<Theme, ColorEntry[]>();
 
 function resolvePalette(theme: Theme): ColorEntry[] {

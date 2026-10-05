@@ -171,7 +171,7 @@
 
   // Cancel rolls the session back to its pre-edit state and returns to the
   // Settings list. Save keeps the edits as the committed state. Both close
-  // the panel through the same callback into TitleBar.
+  // the panel through `onBackToList`.
   async function onCancel() {
     await themeEditor.cancel();
     onBackToList();
@@ -235,7 +235,6 @@
     role="dialog"
     aria-label={t("settings.theme.editor.dialogLabel")}
   >
-    <!-- Draggable header -->
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <header
       class={cn(
@@ -281,7 +280,6 @@
       <ThemeEditor theme={editing} />
     </div>
 
-    <!-- Sticky footer -->
     <footer
       class="theme-editor-footer flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-border/70 bg-sidebar px-3 py-2"
     >

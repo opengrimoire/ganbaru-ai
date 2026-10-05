@@ -187,10 +187,10 @@ export function requestedNotesTextControls(
 /**
  * Owns the DOM-sensitive lifecycle shared by every Notes text control.
  *
- * The controller below owns domain command routing while this DOM runtime owns
- * selection reconciliation, toolbar geometry, composition state, and lazy
- * control loading. Keeping those concerns adjacent prevents delayed component
- * loads from stealing focus or restoring a stale selection.
+ * `NotesTextEditorController` owns command routing while this runtime owns
+ * selection reconciliation, composition state, and lazy control loading.
+ * Keeping those concerns together prevents delayed component loads from
+ * stealing focus or restoring a stale selection.
  */
 export class NotesTextEditorRuntime {
   editor: HTMLDivElement | null = $state(null);
@@ -309,7 +309,7 @@ export function createNotesTextEditorRuntime(
 
 const NOTES_LINK_HOVER_CLOSE_DELAY_MS = 150;
 
-/** Owns all stateful editing, command routing, and DOM reconciliation for one text block. */
+/** Owns editing state and command routing for one text block on top of its DOM runtime. */
 export class NotesTextEditorController {
   readonly runtime: NotesTextEditorRuntime;
   #rightClickSelection: NotesTextSelection | null = null;

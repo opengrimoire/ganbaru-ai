@@ -1,6 +1,6 @@
 import type { MobileThemeEditorComponent } from "./mobile-editor-loader-contracts";
 
-/** Desktop Settings use the title-bar-owned floating theme editor host. */
+/** Reject on desktop, where Settings use the title-bar-owned floating theme editor host. */
 export function loadMobileThemeEditor(): Promise<MobileThemeEditorComponent> {
   return Promise.reject(new Error("The mobile theme editor host is unavailable on desktop."));
 }

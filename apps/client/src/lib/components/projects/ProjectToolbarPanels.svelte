@@ -176,7 +176,7 @@
   let panelStyle = $state("");
   let panelGeometryFrame: number | null = null;
 
-  /** Resolve the toolbar configuration title. */
+  /** Return the localized heading for a toolbar panel. */
   function panelTitle(currentPanel: ProjectToolbarPanel): string {
     if (currentPanel === "settings") return t("projects.settings.title");
     if (currentPanel === "group") return t("projects.toolbar.group");
@@ -191,7 +191,7 @@
     return document.querySelector<HTMLElement>(`[data-project-toolbar-trigger="${currentPanel}"]`);
   }
 
-  /** Position the project draft editor independently from immediate view preferences. */
+  /** Position the project settings draft editor beside its toolbar trigger, or inset fullscreen on mobile. */
   function refreshPanelGeometry(): void {
     panelGeometryFrame = null;
     if (panel !== "settings") return;

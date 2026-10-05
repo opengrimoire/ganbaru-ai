@@ -13,23 +13,23 @@ describe("native occurrence presentation identity", () => {
   it("does not invent occurrence provenance from a draft's displayed date", () => {
     const draft = occurrence({ id: "draft", recurrenceDate: undefined });
     expect(exactOccurrenceId(draft)).toBe("draft");
-    expect(eventMatchesActiveOccurrence(draft, { blockId: "source::2026-06-01" })).toBe(false);
+    expect(eventMatchesActiveOccurrence(draft, { occurrenceId: "source::2026-06-01" })).toBe(false);
   });
 
   it("matches a moved occurrence by its accepted original identity and rejects displayed-day substitutes", () => {
     const event = occurrence();
     expect(exactOccurrenceId(event)).toBe("source::2026-05-20");
-    expect(eventMatchesActiveOccurrence(event, { blockId: "source::2026-05-20" })).toBe(true);
-    expect(eventMatchesActiveOccurrence(event, { blockId: "source::2026-06-01" })).toBe(false);
+    expect(eventMatchesActiveOccurrence(event, { occurrenceId: "source::2026-05-20" })).toBe(true);
+    expect(eventMatchesActiveOccurrence(event, { occurrenceId: "source::2026-06-01" })).toBe(false);
     expect(eventMatchesActiveOccurrence(event, undefined)).toBe(false);
   });
 
   it("keeps an unqualified accepted anchor distinct from later members of its family", () => {
     const anchor = occurrence({ id: "source", recurrenceDate: "2026-05-01",
       recurrence: { frequency: "daily", interval: 1, end: { type: "never" } } });
-    expect(eventMatchesActiveOccurrence(anchor, { blockId: "source" })).toBe(true);
-    expect(eventMatchesActiveOccurrence(anchor, { blockId: "source::2026-05-01" })).toBe(true);
-    expect(eventMatchesActiveOccurrence(occurrence(), { blockId: "source" })).toBe(false);
+    expect(eventMatchesActiveOccurrence(anchor, { occurrenceId: "source" })).toBe(true);
+    expect(eventMatchesActiveOccurrence(anchor, { occurrenceId: "source::2026-05-01" })).toBe(true);
+    expect(eventMatchesActiveOccurrence(occurrence(), { occurrenceId: "source" })).toBe(false);
   });
 
   it("compares first-occurrence aliases using home provenance rather than their rendered dates", () => {

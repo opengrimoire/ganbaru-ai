@@ -728,7 +728,7 @@
 
 {#if desktopQrAvailable && platform === "desktop" && qrDialogVisible && presentation === "settings"}
   {#await import("./PairingQrDialog.svelte")}
-    <!-- Keep the panel immediate while its desktop-only implementation finishes loading. -->
+    <!-- Show the dialog frame immediately while the desktop-only QR dialog module loads. -->
     <!-- svelte-ignore a11y_click_events_have_key_events -->
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div class="fixed inset-0 z-90 flex items-center justify-center p-4" onclick={() => { qrDialogVisible = false; }}>

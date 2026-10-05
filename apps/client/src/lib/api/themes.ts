@@ -2,8 +2,8 @@
  * SQLite bridge for user themes.
  *
  * Built-in light and dark themes stay code-pinned (in `themes/definitions.ts`)
- * and are never inserted here; the `themes.id` CHECK constraint blocks the
- * shadow at the SQL level too.
+ * and are never inserted here; the `themes.id` CHECK constraint also rejects
+ * their IDs at the SQL level.
  *
  * Tokens live as one row per (theme_id, kind, key) in `theme_tokens`:
  *   kind='source'   keys are bare names (canvas, ink, primary, ...)
@@ -16,8 +16,8 @@
  * `theme_seed_tokens` mirrors the same shape; per-row reset and
  * "Reset all" copy from seed back to live.
  *
- * Note on atomicity: durable theme writes go through Rust commands backed
- * by sqlx. Multi-row mutations use one transaction.
+ * Durable theme writes go through sqlx-backed Rust commands, and multi-row
+ * mutations commit in one transaction.
  */
 
 import { invoke } from "@tauri-apps/api/core";
@@ -64,10 +64,10 @@ export interface DismissalRow {
 }
 
 /**
- * Snapshot a user theme as raw row groups suitable for an `insertTheme`
- * call. The store builds one of these from the in-memory `UserTheme`
- * before writing; keeping the DB layer in this shape lets the store
- * stay framework-agnostic.
+ * A user theme as raw row groups for `insertTheme` and
+ * `replaceThemeContent`. The store builds one from its in-memory
+ * `UserTheme` before writing, so this layer stays independent of the
+ * store's types.
  */
 export interface UserThemeWrite {
   id: string;
@@ -158,7 +158,7 @@ export async function deleteTheme(id: string): Promise<void> {
  * commit path so a single Save flushes the in-memory buffer to disk in
  * one shot, and by the JSON-paste replace path.
  *
- * Children rows are wiped and re-inserted because the buffer can shift
+ * Child rows are wiped and re-inserted because the buffer can shift
  * any row's value or isolated flag arbitrarily; reconciling row-by-row
  * would not be cheaper. The parent themes row is updated in place so
  * created_at_ms survives and dismissals are not cascaded.

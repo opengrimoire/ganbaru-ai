@@ -1,1 +1,1 @@
-# Ganbaru AI Android Distractions plugin consumer rules.
+# No consumer ProGuard rules are required.

@@ -49,7 +49,7 @@
     try {
       defaultLocation = await getDefaultVaultLocation();
     } catch (cause) {
-      console.warn("Could not load the default data folder:", cause);
+      console.warn("Could not load the default vault location:", cause);
       setupError = { raw: cause, action: "general" };
     }
   }
@@ -66,7 +66,7 @@
           : await pickOpenVault();
       if (info) onReady(info);
     } catch (cause) {
-      console.warn(`Could not ${mode} the data folder:`, cause);
+      console.warn(`Could not ${mode} the vault:`, cause);
       setupError = { raw: cause, action: mode };
     } finally {
       busy = null;

@@ -72,8 +72,8 @@ function nowIso(): string {
 
 /**
  * Convert a deterministic benchmark draft into a full event ready for
- * `bulkImport`. The source UID lets re-seeds land as updates instead of
- * warning and skipping.
+ * `calendar_bulk_import`. The source UID doubles as the event id, so
+ * re-seeds land as updates instead of duplicates.
  */
 export function draftToEvent(
   draft: BenchmarkEventDraft,

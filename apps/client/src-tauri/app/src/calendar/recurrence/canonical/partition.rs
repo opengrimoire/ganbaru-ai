@@ -188,7 +188,7 @@ impl Template {
         if civil_time::explicit_instant(civil, &self.home_zone)? != epoch_ms {
             return Err("Calendar partition cannot preserve its endpoint's civil intent".into());
         }
-        // Legacy explicit wall-clock anchors may lie in a gap. Preserve their
+        // Offset-free wall-clock anchors may lie in a gap. Preserve their
         // civil components instead of changing the future recurrence's time.
         Ok(civil.format("%Y-%m-%dT%H:%M:%S%.f").to_string())
     }

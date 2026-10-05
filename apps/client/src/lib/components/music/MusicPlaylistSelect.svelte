@@ -58,7 +58,7 @@
       || systemMusicPlaylistName(playlist.id, playlist.name, t).toLocaleLowerCase().includes(query));
   });
 
-  /** Open the playlist chooser without triggering music playback. */
+  /** Toggle the playlist chooser without triggering music playback. */
   async function toggle(): Promise<void> {
     if (disabled || loading) return;
     if (open) {
@@ -107,7 +107,7 @@
     });
   }
 
-  /** Render the bounded floating geometry after its content is measured. */
+  /** Build the popover position style; it stays hidden until its content is measured. */
   function popoverStyle(): string {
     if (!geometry) return "visibility:hidden;top:0;left:0";
     return `top:${geometry.top}px;left:${geometry.left}px;width:${geometry.width ?? PLAYLIST_POPOVER_WIDTH_PX}px;max-width:${geometry.maxWidth}px;max-height:${Math.min(geometry.maxHeight, PLAYLIST_POPOVER_MAX_HEIGHT_PX)}px`;

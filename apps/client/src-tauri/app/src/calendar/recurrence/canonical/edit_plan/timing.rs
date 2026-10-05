@@ -75,8 +75,8 @@ impl Template {
                 serialize_endpoint(end_date.and_time(end.time()), &zone, resolved.all_day)?
             };
         } else if zone_changed && !self.all_day {
-            // Zone-only edits retain explicit instants, including legacy civil
-            // endpoints that would otherwise be reinterpreted in the new zone.
+            // Zone-only edits retain explicit instants, including offset-free
+            // civil endpoints that would otherwise be reinterpreted in the new zone.
             fields.start_time =
                 instant(stored_time(&fields.start_time, &self.home_zone, false)?.1)?;
             fields.end_time = instant(stored_time(&fields.end_time, &self.home_zone, false)?.1)?;

@@ -126,7 +126,7 @@ export function focusProjectionIsCurrent(previous: FocusProjection | null, next:
     || (next.snapshot.revision === previous.snapshot.revision && next.snapshot.observedAtMs >= previous.snapshot.observedAtMs);
 }
 
-/** Interpolate opportunity for display while preserving the accepted event boundary. */
+/** Interpolate the remaining time for display without passing the accepted event end. */
 export function focusDisplayRemainingSeconds(snapshot: FocusSnapshot, visualElapsedMs: number): number {
   const elapsed = Math.max(0, visualElapsedMs);
   const phaseRemaining = snapshot.remainingMs - (snapshot.mode === "running" ? elapsed : 0);

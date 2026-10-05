@@ -384,7 +384,7 @@ export function createTeammateEditorController(options: TeammateEditorOptions) {
     options.closeAccessPicker();
   }
 
-  /** Loads the selected teammate without resetting a draft preserved across our own refresh. */
+  /** Loads the selected teammate without resetting a draft preserved across this editor's own refresh. */
   async function initializeSelectedTeammate(teammate: ChatAiTeammateRead): Promise<void> {
     if (preserveStudioDraftForId === teammate.participant.id) {
       preserveStudioDraftForId = null;

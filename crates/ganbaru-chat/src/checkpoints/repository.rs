@@ -38,7 +38,7 @@ pub(super) async fn latest_checkpoint_oid(
     .map_err(persistence_error)
 }
 
-/// Stores the checkpoint row and its turn association in one transaction.
+/// Inputs for storing a checkpoint row and its turn association in one transaction.
 pub(super) struct StoreCheckpointRequest<'a> {
     pub captured: &'a CapturedCheckpoint,
     pub thread_id: &'a ChatThreadId,

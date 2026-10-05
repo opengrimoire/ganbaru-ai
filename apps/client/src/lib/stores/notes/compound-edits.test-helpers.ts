@@ -10,7 +10,7 @@ interface NotesEditTestAdapters {
   createNotesLinkedDatabaseView?: (request: NotesLinkedDatabaseCreateRequest) => Promise<unknown>;
 }
 
-/** Adapt existing delayed storage fixtures to the new single-command frontend boundary. */
+/** Adapt per-operation delayed storage fixtures to the single-command compound edit boundary. */
 export function createNotesCompoundTestAdapter(adapters: NotesEditTestAdapters, readBlocks: () => readonly NotesBlock[] = () => [], restoreBlocks?: (blocks: readonly NotesBlock[]) => void) {
   const receipts = new Map<string, NotesCompoundEditResult>();
   return async (request: NotesCompoundEdit): Promise<NotesCompoundEditResult> => {

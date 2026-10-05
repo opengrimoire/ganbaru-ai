@@ -69,7 +69,7 @@ export async function getNotesDatabaseReference(blockId: string): Promise<NotesD
   return parseDatabaseReference(value);
 }
 
-/** Persist shell-local protection from accidental structural changes. */
+/** Lock or unlock structural edits for one database shell. */
 export async function setNotesDatabaseEditingLock(databaseId: string, locked: boolean): Promise<NotesDatabaseReference> {
   const dbUrl = await ensureDbUrl();
   return parseDatabaseReference(await invokeNotesMutation("notes_set_database_editing_lock", { dbUrl, databaseId, locked }));

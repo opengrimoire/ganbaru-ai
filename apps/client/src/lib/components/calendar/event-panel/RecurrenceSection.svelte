@@ -263,7 +263,6 @@
     panelInputKeydown(e);
   }
 
-  // ─── End date picker ──────────────────────────────────────────
   let pickerOpen = $state(false);
   let endDateInput: HTMLInputElement | undefined = $state();
   let dateText = $state("");

@@ -463,7 +463,7 @@
     lastSelectedId = null;
   }
 
-  /** Gives YouTube previews immediate feedback while the review queue is prepared. */
+  /** Toggle review playback, marking YouTube items as starting so the preview gives feedback while the review queue is prepared. */
   async function toggleReviewPlayback(): Promise<void> {
     if (!detail || reviewStartItemId === detail.item.id || (reviewPlayerReady && player.youtubePlaybackStarting)) return;
     if (reviewPlayerReady) {

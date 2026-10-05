@@ -331,7 +331,7 @@ export function parseFocusPauseNotificationIntervalMinutes(
 
 /**
  * Normalize persisted title bar visibility. Unknown keys are ignored and
- * missing values stay visible, so newly added controls remain reachable.
+ * missing or invalid values take their `DEFAULT_TITLE_BAR_VISIBILITY` entry.
  */
 export function parseTitleBarVisibility(value: unknown): TitleBarVisibility {
   const visibility: TitleBarVisibility = { ...DEFAULT_TITLE_BAR_VISIBILITY };

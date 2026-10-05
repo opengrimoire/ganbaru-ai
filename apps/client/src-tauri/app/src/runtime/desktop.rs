@@ -113,7 +113,7 @@ fn force_quit(
 }
 
 /// Delete database files (main, WAL, SHM) and quit the app.
-/// Used to reset structured data without deleting the Ganbaru AI folder.
+/// Resets structured data without deleting the vault.
 #[tauri::command]
 async fn reset_database(app: tauri::AppHandle) -> Result<(), String> {
     let writable_vault = vault::active_writable_vault_path(&app)?;

@@ -76,9 +76,8 @@
 
   /**
    * Per-cell ordering: all-day events first, sorted by title then start;
-   * timed events second, sorted by start. Reproduces the contract of the
-   * old `allEventsForDay` helper, but on the pre-bucketed day slice instead
-   * of scanning the full visible-event array per cell.
+   * timed events second, sorted by start. Works on the pre-bucketed day slice
+   * so cells never scan the full visible-event array.
    */
   function sortDayCellEvents(dayEvents: CalendarEvent[]): CalendarEvent[] {
     if (dayEvents.length === 0) return dayEvents;

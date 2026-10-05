@@ -367,7 +367,7 @@ const DARK_VARIANTS: Partial<Record<ChatFileIconId, ChatFileIconId>> = {
  * suffixes and ordinary extensions. The comparison is case-insensitive.
  *
  * @param filePath Workspace-relative or absolute file path.
- * @returns Local sprite icon identifiers for the active color mode.
+ * @returns Local icon identifiers for the active color mode.
  */
 export function chatFilePresentation(filePath: string): ChatFilePresentation {
   const normalizedPath = filePath.replaceAll("\\", "/").toLowerCase();

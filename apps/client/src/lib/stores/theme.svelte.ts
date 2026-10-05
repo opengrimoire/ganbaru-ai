@@ -95,8 +95,8 @@ const freshThemes = new Set<ThemeId>();
 
 /**
  * Dismissals queued during an editor session for a fresh theme. The
- * `theme_upgrade_dismissals` table FKs back to `themes.id`, so we cannot
- * call `recordDismissal` until the parent row exists. `persistThemeToDb`
+ * `theme_upgrade_dismissals` table FKs back to `themes.id`, so
+ * `recordDismissal` cannot run until the parent row exists. `persistThemeToDb`
  * drains this map after the INSERT lands. For non-fresh themes the
  * dismissal goes straight to disk and never enters this map.
  */
@@ -222,8 +222,9 @@ function initThemeSync(): void {
  * Boot-time hydration: load user themes from SQLite, resolve the active theme
  * from config, and paint the first frame.
  *
- * Idempotent. main.ts awaits this between `ensureConfigLoaded` and the App
- * import so first paint matches what the user has on disk (no FOUC).
+ * Idempotent. The platform bootstraps await this after `ensureConfigLoaded`
+ * and before mounting the app so first paint matches what the user has on
+ * disk (no FOUC).
  */
 export async function hydrateUserThemes(): Promise<void> {
   if (hydrated) return;
@@ -732,7 +733,8 @@ function updateSourceValue(
 
 /**
  * Pin a token against future derivations. The stored hex stays unchanged
- * (it already equals the current derived value); only the flag flips.
+ * (it already equals the current derived value); only the key joins the
+ * isolated set.
  */
 function isolateToken(
   id: ThemeId,
@@ -756,7 +758,7 @@ function isolateToken(
 
 /**
  * Re-run the current derivation for a token, write the result back, and
- * flip `isolated` to 0. Used by the "Link back" affordance.
+ * remove the key from the isolated set. Used by the "Link back" affordance.
  */
 function relinkToken(
   id: ThemeId,

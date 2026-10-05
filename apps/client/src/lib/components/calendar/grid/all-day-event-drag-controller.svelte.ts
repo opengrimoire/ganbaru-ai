@@ -46,8 +46,6 @@ export function createAllDayEventDragController(config: AllDayEventDragControlle
   let _didDrag = $state(false);
   const touchHold = new CalendarTouchHoldArbiter();
 
-  // Helpers
-
   function columnFromX(clientX: number, bounds: DOMRect[]): number {
     for (let i = 0; i < bounds.length; i++) {
       if (clientX >= bounds[i].left && clientX < bounds[i].left + bounds[i].width) return i;
@@ -68,8 +66,6 @@ export function createAllDayEventDragController(config: AllDayEventDragControlle
     date.setDate(date.getDate() + daysDelta);
     return formatDatePart(date);
   }
-
-  // Existing event drag (move / resize)
 
   function canStartDrag(eventId: string): boolean {
     if (config.canDrag && !config.canDrag(eventId)) return false;
@@ -114,7 +110,6 @@ export function createAllDayEventDragController(config: AllDayEventDragControlle
     if (startCol < 0 || endCol < 0) return false;
     const spanCols = endCol - startCol + 1;
 
-    // Find current row from layout
     const positioned = config.getPositionedEvents();
     const currentPos = positioned.find((p) => p.event.id === eventId);
     const originRow = currentPos?.row ?? 0;
@@ -142,7 +137,7 @@ export function createAllDayEventDragController(config: AllDayEventDragControlle
       columnBounds: bounds,
     };
 
-    draggingEventId = null; // not committed to drag yet (click threshold)
+    draggingEventId = null; // Not a drag until the pointer passes the click threshold
     grabbingId = eventId; // Show contour immediately on grab
 
     window.addEventListener("pointermove", handleDragMove);
@@ -233,8 +228,8 @@ export function createAllDayEventDragController(config: AllDayEventDragControlle
       return;
     }
 
-    // Always notify parent that drag ended (sets lastDragEndTime to prevent panel close).
-    // The parent checks if position actually changed before doing DB update.
+    // Always notify the parent so it records lastDragEndTime and keeps the panel
+    // open. The parent decides whether the position changed enough to persist.
     const visibleStartDate = dateStrForCol(preview.startCol);
     const visibleEndDate = dateStrForCol(preview.startCol + preview.spanCols - 1);
     const eventStartDate = event.start.split(" ")[0];

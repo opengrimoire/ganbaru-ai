@@ -181,7 +181,7 @@ pub fn decide_boundary(
     })
 }
 
-/// Apply all seven experiment guardrails in the established order, then explore.
+/// Apply all seven experiment guardrails in `ExperimentLane::SELECTION_ORDER`, then explore.
 pub fn decide_run_start(
     input: &AdaptiveDecisionInput,
     facts: &LocalTimeFacts,
@@ -233,7 +233,7 @@ pub fn decide_run_start(
             {
                 decision.selected_rhythm.short_break_minutes = 7;
             }
-            // The existing bundle wins a pending update even if a scalar was settled.
+            // The focus support bundle always replaces a pending experiment update.
             decision.experiment_update =
                 Some(experiment_update(lane, &input.started_at, "completed"));
         } else {

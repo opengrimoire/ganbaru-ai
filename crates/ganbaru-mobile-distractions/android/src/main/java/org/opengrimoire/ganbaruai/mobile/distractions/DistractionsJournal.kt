@@ -438,7 +438,7 @@ internal class DistractionsJournal(context: Context) : SQLiteOpenHelper(
   }
 }
 
-/** Preserve every second in compacted evidence or a local day longer than 24 hours. */
+/** Splits a usage total into parts of at most one day so compacted evidence and days longer than 24 hours keep every second. */
 internal fun compactedUsageParts(totalSeconds: Long): List<Int> {
   require(totalSeconds >= 0 && totalSeconds <= 2_000L * 86_400L) {
     "Compacted Distractions usage is outside its bound"

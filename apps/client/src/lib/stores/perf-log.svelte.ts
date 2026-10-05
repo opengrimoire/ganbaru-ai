@@ -3,7 +3,7 @@
  *
  * Capped, in-memory log of timing marks. The diagnostics panel reads
  * `entries` reactively and renders the most recent slice; the copy button
- * serializes the buffer to clipboard so users on a release `.deb` (where
+ * serializes the buffer to clipboard so users on release builds (where
  * DevTools is disabled) can capture traces without a terminal.
  *
  * Boot marks (tags starting with `boot.`) are always recorded, but only

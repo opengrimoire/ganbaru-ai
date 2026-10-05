@@ -736,7 +736,7 @@ pub(super) fn strip_trash_metadata(value: &mut Value) {
     }
 }
 
-/// Imported title-only database placeholders have no local graph to duplicate.
+/// Return whether a database block references a local graph; imported title-only placeholders do not.
 pub(crate) fn has_database_graph(block: &NoteBlockRow) -> Result<bool, String> {
     let payload: Value = serde_json::from_str(&block.payload)
         .map_err(|e| format!("parse database copy reference: {e}"))?;

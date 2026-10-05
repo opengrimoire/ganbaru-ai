@@ -67,7 +67,7 @@ pub struct GuardrailComparison {
     pub breached: bool,
 }
 
-/// Preserve JavaScript Math.round tie behavior, including negative halves.
+/// Round like JavaScript `Math.round`: halves, including negative ones, round up.
 pub fn js_round(value: f64) -> f64 {
     (value + 0.5).floor()
 }
@@ -103,7 +103,7 @@ pub fn estimate_rate(successes: f64, trials: f64, confidence_z: f64) -> RateEsti
     }
 }
 
-/// Estimate a mean from its aggregate, retaining the original count rounding.
+/// Estimate a mean from its aggregate, rounding the count like JavaScript `Math.round`.
 pub fn estimate_mean(total: f64, count: f64) -> MeanEstimate {
     let count = js_round(count).max(0.0);
     let total = if total.is_finite() { total } else { 0.0 };
@@ -155,7 +155,7 @@ pub fn estimate_mean_with_variance(
     }
 }
 
-/// Compare interval improvement, preserving equality at the policy threshold.
+/// Compare interval improvement; an improvement equal to the minimum is meaningful.
 pub fn compare_point_estimates(
     control_point: f64,
     treatment_point: f64,

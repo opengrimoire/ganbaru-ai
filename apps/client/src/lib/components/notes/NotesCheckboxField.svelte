@@ -13,7 +13,7 @@
     label: string;
     showLabel?: boolean;
     disabled?: boolean;
-    /** Called when the parent owns the checked state. */
+    /** Receives the next checked state instead of toggling the bound value, for parent-owned state. */
     onChange?: (checked: boolean) => void;
   } = $props();
 </script>

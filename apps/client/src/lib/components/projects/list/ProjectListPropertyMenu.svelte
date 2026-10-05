@@ -70,7 +70,7 @@
     });
   });
 
-  /** Persist one presentation edit while keeping stable property identities. */
+  /** Toggle text wrapping for this column in the saved list presentation. */
   function toggleWrap(): void {
     if (!query) return;
     void query.savePresentation({ ...query.listPresentation, wrappedColumns: wrapped
@@ -85,7 +85,7 @@
     query.sortDirection = direction;
   }
 
-  /** Keep schema drafts available when the native write fails. */
+  /** Rename the property, keeping the name draft when validation or the native write fails. */
   async function saveName(): Promise<void> {
     if (!field || editSaving) return;
     const target = field;

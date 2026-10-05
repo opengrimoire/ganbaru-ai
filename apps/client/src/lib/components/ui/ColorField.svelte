@@ -135,9 +135,9 @@
     open = true;
   }
 
-  // External value can change (theme switch, reset). Sync local state when
-  // the popover is closed, or when the incoming value differs from the hex
-  // we currently emit, so the picker stays in lockstep with the model.
+  // The external value can change (theme switch, reset). Sync local state
+  // when the popover is closed, or when the incoming value differs from the
+  // hex this field emits, so the picker stays in lockstep with the model.
   $effect(() => {
     const normalized = normalizeHex(value);
     if (!normalized) return;

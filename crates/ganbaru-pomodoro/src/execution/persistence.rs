@@ -471,9 +471,10 @@ pub(super) async fn load_snapshot(
     })
 }
 
-/// Read a consistent committed projection without mutating or advancing execution.
-/// Read current execution in the caller's authorized transaction. A historical
-/// command receipt is separate from this projection and cannot replace it.
+/// Read current execution in the caller's authorized transaction without mutating
+/// or advancing it.
+///
+/// A historical command receipt is separate from this projection and cannot replace it.
 pub async fn focus_read_execution_snapshot_tx(
     tx: &mut Transaction<'_, Sqlite>,
     now_ms: i64,

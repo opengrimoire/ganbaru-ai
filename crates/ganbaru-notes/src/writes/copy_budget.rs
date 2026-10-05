@@ -13,7 +13,7 @@ pub(crate) struct CopyContext<'a> {
     pub(crate) budget: &'a mut CopyBudget,
 }
 
-/// Shared by every nested page, database, and block copied by one operation.
+/// Source-data budget shared by every nested page, database, and block copied by one operation.
 ///
 /// Charges source rows before their variable-size values are loaded or parsed.
 /// Identity allocation has its own bound because schema properties also need IDs.

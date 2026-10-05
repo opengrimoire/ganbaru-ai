@@ -8,11 +8,11 @@ use tauri::Manager;
 pub(crate) mod memory;
 pub(crate) mod seed;
 
-/// Path to the persisted benchmark state file. Lives in `app_config_dir`,
-/// not the user's Ganbaru AI folder, so a `reset_database` call (which only deletes the
-/// SQLite files) does not blow it away mid-run, and the file never pollutes
-/// the folder users back up. Used by the in-app benchmark harness to
-/// hand state across the Phase A -> restart -> Phase B boundary.
+/// Path to the persisted benchmark state file. It lives in `app_config_dir`,
+/// not the vault, so `reset_database` (which deletes only the SQLite files)
+/// cannot remove it mid-run and vault backups never include it. The in-app
+/// benchmark harness uses it to carry state from Phase A across the restart
+/// into Phase B.
 fn benchmark_state_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     let mut path = app.path().app_config_dir().map_err(|e| e.to_string())?;
     path.push("benchmark-state.json");
@@ -54,8 +54,8 @@ pub(crate) async fn prepare_benchmark_db(app: tauri::AppHandle) -> Result<(), St
     delete_benchmark_db_files(&app)
 }
 
-/// Same operation as `prepare_benchmark_db`. Separate command for intent
-/// clarity at the call site (run-finished cleanup vs run-starting cleanup).
+/// Same operation as `prepare_benchmark_db`, exposed separately so callers
+/// distinguish run-finished cleanup from run-starting cleanup.
 #[tauri::command]
 pub(crate) async fn teardown_benchmark_db(app: tauri::AppHandle) -> Result<(), String> {
     db::close_sqlite_pool(&app, db::BENCHMARK_SQLITE_URL).await?;

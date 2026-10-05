@@ -25,7 +25,7 @@ export function modelDefaultReasoning(model: ProviderModel | null): string | nul
   return definition.options.find((option) => option.value === definition.defaultValue)?.label ?? definition.defaultValue;
 }
 
-/** Resolves the visible model identity for one historical Chat turn. */
+/** Resolves the visible model identity for a provider family and model, falling back when the catalog lacks the model. */
 export function chatModelParticipant(
   providerFamilyId: ProviderFamilyId,
   modelId: ModelId | null,

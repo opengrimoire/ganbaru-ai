@@ -70,7 +70,7 @@ function tableRemoveIndex(index: number, width: number): number {
   return Math.max(0, Math.min(Math.max(0, width - 1), Math.trunc(index)));
 }
 
-/** Create database-table row, cell, and column mutations. */
+/** Create row, cell, and column mutations for table blocks. */
 export function createNotesTableBlockActions(
   context: NotesTableBlockActionsContext,
 ): NotesTableBlockActions {

@@ -28,7 +28,7 @@ const nullable = <T>(check: Validator<T>): Validator<T | null> => (value): value
 const optional = <T>(check: Validator<T>): Validator<T | undefined> => (value): value is T | undefined => value === undefined || check(value);
 const array = <T>(check: Validator<T>): Validator<T[]> => (value): value is T[] => Array.isArray(value) && value.every(check);
 
-/** Validate every field consumed by the existing full-event hydrator. */
+/** Build a validator that checks every schema field of a plain object. */
 function record<T>(schema: Schema<T>): Validator<T> {
   return (value): value is T => {
     if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
@@ -76,7 +76,7 @@ const override = record<DbFullOverride>({
   icalendar_component_id: nullableText, icalendar_raw_jcal: nullableText,
 });
 
-/** Preserved values remain inert JSON; the existing codec owns iCalendar semantics. */
+/** Preserved values remain inert JSON; the iCalendar codec owns their semantics. */
 function json(value: unknown, depth = 0): boolean {
   if (depth > 96) return false;
   if (value === null || text(value) || boolean(value) || number(value)) return true;

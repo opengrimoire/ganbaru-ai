@@ -66,8 +66,8 @@
   let highlightIndex = $state(0);
   let searchHydrated = $state(false);
 
-  // Custom scrollbar metrics. We hide the native scrollbar on `.tz-results`
-  // and render a thumb sibling that overlays the right edge of the list.
+  // Custom scrollbar metrics. The native scrollbar on `.tz-results` is hidden,
+  // and a thumb sibling overlays the right edge of the list.
   let scrollTop = $state(0);
   let scrollHeight = $state(0);
   let clientHeight = $state(0);
@@ -314,8 +314,8 @@
   });
 
   // Track the result list's scroll metrics for the custom scrollbar thumb.
-  // We refresh on scroll, on the list resizing, and whenever the filtered
-  // set changes (rows added/removed alter scrollHeight).
+  // Refresh on scroll, when the list resizes, and whenever the filtered set
+  // changes, since adding or removing rows alters scrollHeight.
   $effect(() => {
     if (!open || !listEl) return;
     syncScrollMetrics();

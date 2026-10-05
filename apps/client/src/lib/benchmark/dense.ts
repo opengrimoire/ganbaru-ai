@@ -338,7 +338,7 @@ function buildDenseAllDayEvent(
 
 /**
  * Generate a deterministic slice of a dense dataset. `offset` and `count`
- * let seeding stream the 10-year dataset in chunks without allocating every
+ * let seeding stream large datasets in chunks without allocating every
  * event in the browser at once.
  */
 export function generateDenseCalendarEvents(opts: {

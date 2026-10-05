@@ -133,12 +133,27 @@ export function buildEventPanelPomodoroConfig(
   }, input.idleTimeoutMinutes);
 }
 
+/**
+ * Build the full normalized patch the session tracks as "changes".
+ * Shared by the initial-sync emit (establishes baseline) and every
+ * subsequent emitChange (user edits). Keeping the shape identical is
+ * what lets the session compare the two sides field by field and
+ * detect revert-to-original without false positives.
+ */
 export function buildEventPanelChangesPayload(
   input: EventPanelPayloadInput,
 ): Partial<CalendarEvent> {
   return buildPayload(input);
 }
 
+/**
+ * Initial sync payload restricted to the keys that arrive with the full
+ * event row. The heavy sections are gated on `fullEvent`, so by the time
+ * this fires the user has not been able to edit any of these fields in
+ * the panel; merging them straight into `changes` and `baseline` won't
+ * flip dirty. Slim keys are deliberately omitted so they don't overwrite
+ * an in-progress slim edit that happened during the load window.
+ */
 export function buildEventPanelHeavyInitPayload(
   input: EventPanelPayloadInput,
 ): Partial<CalendarEvent> {

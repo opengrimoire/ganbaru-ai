@@ -31,7 +31,6 @@ function unlockCursor() {
   document.body.style.cursor = "";
 }
 
-// Auto-scroll constants
 const AUTO_SCROLL_ZONE = 48; // px from edge to start scrolling
 const AUTO_SCROLL_MAX_SPEED = 12; // px per frame at the very edge
 const DEFAULT_CLICK_EVENT_MINUTES = 60;
@@ -250,9 +249,9 @@ export function createTimedEventDragController(config: TimedEventDragControllerC
         const relY = e.clientY - rect.top;
         const clippedTop = eventEl.hasAttribute("data-clipped-top");
         const clippedBottom = eventEl.hasAttribute("data-clipped-bottom");
-        // Match the resize handle's visible zone (6px inside block after overflow clipping)
-        // Top handle: visible from y=0 to y<6 (6 pixels)
-        // Bottom handle: visible from y>H-6 to y<H (6 pixels, where H is block height)
+        // Match the resize handle's visible zone, 6px inside the event after overflow clipping.
+        // Top handle: visible from y=0 to y<6.
+        // Bottom handle: visible from y>H-6 to y<H, where H is the event height.
         if (relY < 6 && !clippedTop) {
           dragState.type = "resize-top";
         } else if (relY >= rect.height - 6 && !clippedBottom) {
@@ -307,7 +306,7 @@ export function createTimedEventDragController(config: TimedEventDragControllerC
     let targetDate = dragState.originDate;
 
     if (dragState.type === "move") {
-      // Compute column delta to handle dragging from continuation blocks
+      // Compute the column delta to handle dragging from continuation segments
       const currentColumnDate = config.getColumnDate(pointerEvent.clientX);
       const startCol = parseCalendarDate(`${dragState.startColumnDate} 00:00`);
       const currentCol = parseCalendarDate(`${currentColumnDate} 00:00`);
@@ -456,8 +455,8 @@ export function createTimedEventDragController(config: TimedEventDragControllerC
     finishTouchEditing();
 
     if (dragPreview && state) {
-      // Always notify parent that drag ended (sets lastDragEndTime to prevent panel close).
-      // The parent checks if position actually changed before doing DB update.
+      // Always notify the parent so it records lastDragEndTime and keeps the panel open.
+      // The parent decides whether the position changed enough to persist.
       await config.onEventUpdate(dragPreview.event);
     }
 

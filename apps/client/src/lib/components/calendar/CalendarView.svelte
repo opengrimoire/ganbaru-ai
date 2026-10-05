@@ -180,7 +180,6 @@
     };
   }
 
-  // Edit session (replaces panelState, panelDirty, lastPanelChanges, etc.)
   const session = createEditSession(getFocusIdleDefaults);
 
   $effect(() => {
@@ -189,9 +188,9 @@
     }
   });
 
-  // Display events (pure overlay, no store mutation)
-  // When saving edits, suppress preview computation to prevent flash
-  // (store updates before session closes, so preview would briefly conflict)
+  // Display events are a pure overlay with no store mutation. While edits are
+  // saving, preview computation is suppressed to prevent a flash: the store
+  // updates before the session closes, so the preview would briefly conflict.
   let suppressEditPreview = $state(false);
   let panelCommitHidden = $state(false);
   let saveDisplayFreeze = $state<CalendarEvent[] | null>(null);
@@ -387,7 +386,7 @@
     isRecurring,
     isActivePomodoroEvent: (event) => !isRecurring(event)
       && pomodoro.isActive
-      && pomodoro.activeBlockId === event.id,
+      && pomodoro.activeOccurrenceId === event.id,
     panelAnchor: panelAnchorFromRenderedEvent,
     loadPanel: () => panelLifecycle.load(),
     confirmDiscard: (action) => {
@@ -624,7 +623,7 @@
   }
 
   function isSelectedActivePomodoroOccurrence(editState: Extract<EditSessionState, { mode: "edit" }>): boolean {
-    return pomodoro.isActive && editState.instanceEvent.id === pomodoro.activeBlockId;
+    return pomodoro.isActive && editState.instanceEvent.id === pomodoro.activeOccurrenceId;
   }
 
   function isSelectedActiveCalendarOccurrence(editState: Extract<EditSessionState, { mode: "edit" }>): boolean {
@@ -662,9 +661,9 @@
     return isSelectedEndableActiveOccurrence(editState) ? "this" : requested ?? session.scope;
   }
 
-  /** Would this save remove the active pomodoro or move it out of the current time window? */
+  /** Whether this save removes the active pomodoro or moves it out of the current time window. */
   function wouldSaveStopSession(data: PanelSaveData, _scope?: RecurringScope): boolean {
-    if (!pomodoro.isActive || !pomodoro.activeBlockId || session.state.mode !== "edit") return false;
+    if (!pomodoro.isActive || !pomodoro.activeOccurrenceId || session.state.mode !== "edit") return false;
 
     const editState = session.state;
     // Active recurring occurrences are isolated to this occurrence. Future
@@ -1011,7 +1010,7 @@
     if (event.id === PENDING_CREATE_ID || event.id.startsWith(PENDING_CREATE_ID + "::")) return;
 
     // Already editing this exact event. A clean panel is just a peek and can
-    // be toggled closed. Dirty edits stay open so the block click does not
+    // be toggled closed. Dirty edits stay open so the event click does not
     // trigger discard confirmation.
     if (session.state.mode === "edit" && (
       session.state.originalEvent.id === event.id || editingId === event.id

@@ -329,7 +329,7 @@ let panelController: NativeCalendarEditController | null = null;
 let directController: NativeCalendarEditController | null = null;
 let deleteController: NativeCalendarEditController | null = null;
 
-/** Retain at most one uncertain panel and drag Save across Calendar view remounts. */
+/** Keep one controller per kind (panel, direct drag, deletion) so uncertain Saves survive Calendar view remounts. */
 export function getNativeCalendarEditController(
   context: () => CalendarEditContext | null,
   kind: "panel" | "direct" | "delete" = "panel",

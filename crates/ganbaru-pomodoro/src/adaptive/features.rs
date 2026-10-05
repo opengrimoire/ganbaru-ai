@@ -10,7 +10,7 @@ const EXPLICIT_EVENT_MATCH_TOLERANCE_MS: i64 = 1500;
 const BLOCK_BURST_WINDOW_MS: i64 = 600_000;
 const BLOCK_BURST_MIN_ATTEMPTS: usize = 3;
 
-/// Extract the original deterministic features from bounded canonical evidence.
+/// Extract deterministic adaptive features from bounded canonical evidence.
 pub fn extract_adaptive_features(input: &FeatureInput) -> FeatureVector {
     let mut totals = FeatureVector::default();
     for flag in &input.data_quality_flags {
@@ -77,7 +77,8 @@ pub fn extract_adaptive_features(input: &FeatureInput) -> FeatureVector {
     totals
 }
 
-/// The platform supplies the historical local hour, avoiding implicit UTC conversion.
+/// Bucket a decision context. The platform supplies the local hour so no implicit UTC
+/// conversion happens.
 pub fn derive_context_bucket(
     hour: u8,
     planned_event_minutes: f64,

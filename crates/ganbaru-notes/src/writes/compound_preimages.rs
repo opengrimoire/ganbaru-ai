@@ -5,7 +5,7 @@ use crate::models::{NoteBlockDto, NoteBlockRow, NoteParent};
 use sqlx::{Sqlite, Transaction};
 use std::collections::{BTreeMap, BTreeSet};
 
-/// Existing rows are captured once, before their first change in the transaction.
+/// Block preimages, each captured once before the row's first change in the transaction.
 #[derive(Default)]
 pub(super) struct Preimages {
     rows: BTreeMap<String, (NoteBlockRow, Option<NoteEditPlacement>)>,

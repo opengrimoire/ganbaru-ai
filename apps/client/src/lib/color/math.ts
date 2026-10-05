@@ -200,10 +200,9 @@ export function hsvToHex(h: number, s: number, v: number): string {
  * fraction of `a` in the result (0..1), the rest is `b`. Invalid inputs
  * fall back to `a`.
  *
- * Note: sRGB-space blending is not perceptually uniform, but it matches
- * the existing derivation weights used by `themes.ts` and the event palette
- * darkening in `calendar/utils.ts`. For perceptual lightness walks use
- * the OKLab pickers below instead.
+ * Note: sRGB-space blending is not perceptually uniform, but the event
+ * palette dimming weights in `calendar/utils.ts` are calibrated against it.
+ * For perceptual lightness walks use the OKLab pickers below instead.
  */
 export function blendHex(a: string, b: string, weightA: number): string {
   const ra = hexToRgba(a);
@@ -220,9 +219,9 @@ export function blendHex(a: string, b: string, weightA: number): string {
 
 /**
  * Gamma-decode an sRGB channel (0..1) to linear-light (0..1). Uses the
- * sRGB 2.1 standard 0.04045 threshold; WCAG 2.1 cites 0.03928, but
- * either threshold lands within a sub-integer luminance of the other
- * so contrast math is indistinguishable.
+ * 0.04045 threshold from the sRGB standard (IEC 61966-2-1); WCAG 2.1 cites
+ * 0.03928, but the two thresholds give indistinguishable contrast results
+ * for 8-bit channels.
  */
 function sRgbToLinear(c: number): number {
   return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);

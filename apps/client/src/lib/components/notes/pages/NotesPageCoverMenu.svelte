@@ -120,7 +120,7 @@
     return { left, top, width, height, right: left + width, bottom: top + height };
   }
 
-  /** Position this panel and the optional per-design color panel like Add icon. */
+  /** Position this panel and the optional per-design color panel like the icon picker. */
   function placePanel(): void {
     if (!trigger) return;
     panelPlacement = iconPickerPanelPlacement({
@@ -154,7 +154,7 @@
       if (!(target instanceof Node) || panelElement?.contains(target) || colorChoiceElement?.contains(target) || trigger?.contains(target)) return;
       close();
     }
-    /** Match Add icon's Escape dismissal and keyboard focus restoration. */
+    /** Match the icon picker's Escape dismissal and keyboard focus restoration. */
     function keydown(event: KeyboardEvent): void {
       isKeyboardInteraction = true;
       if (event.key === "Escape") { event.preventDefault(); close(); }
@@ -195,7 +195,7 @@
     return t(keys[pattern]);
   }
 
-  /** Label Automatic and palette slots using the same vocabulary as Add icon. */
+  /** Label Automatic and palette slots using the same vocabulary as the icon picker. */
   function colorLabel(value: NotesCoverColor): string {
     return value === "default" ? t("projects.iconPicker.automaticColor") : t("notes.pageCoverColor", value + 1);
   }
@@ -236,7 +236,7 @@
     } else void selectCover(createNotesDesignCover(pattern, color));
   }
 
-  /** Move between source tabs using the same keyboard convention as Add icon. */
+  /** Move between source tabs using the same keyboard convention as the icon picker. */
   function tabKeydown(event: KeyboardEvent, index: number): void {
     if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
     if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;

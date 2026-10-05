@@ -68,9 +68,9 @@
   let expandedBenchmarkSuites = $state<string[]>([]);
 
   const displayReport = $derived.by<MemoryReport | null>(() => {
-    // While the user is hovering the live trend chart, the per-process panel
-    // mirrors the hovered sample so we do not have to draw a duplicate
-    // tooltip below the plot. Falls back to live or startup snapshot otherwise.
+    // While the live trend chart is hovered, the per-process panel mirrors the
+    // hovered sample instead of a duplicate tooltip below the plot. Otherwise
+    // it shows the live report or the startup snapshot.
     if (perfLive && chartHoverSample && liveReport) {
       return {
         processes: chartHoverSample.processes.map((p) => ({ name: p.name, mb: p.mb })),
@@ -84,8 +84,8 @@
   });
   const memoryRows = $derived.by<MemoryDisplayRow[]>(() => memoryDisplayRows(displayReport));
 
-  // Recolor the numbers while hovering so the user can tell at a glance the
-  // panel is reflecting a past sample instead of the live reading.
+  // Recolor the numbers while hovering to mark that the panel shows a past
+  // sample instead of the live reading.
   const showingHoveredSample = $derived(perfLive && chartHoverSample !== null);
 
   $effect(() => {
@@ -121,8 +121,8 @@
    * X ms." The synthetic `shell-startup` row at the top covers the gap
    * between process spawn and `boot.script-start`. `boot.script-start`
    * itself is the anchor and is omitted: its delta would be 0 by definition.
-   * `boot.rawblocks-set` is also omitted because the only work between it
-   * and the previous mark is one assignment plus a sync `invalidate()`.
+   * `boot.rawblocks-set` is also omitted because it fires immediately after
+   * `boot.sql-children-done`, so its delta carries no information.
    */
   type BootRow = { label: string; deltaMs: number };
   const HIDDEN_BOOT_TAGS = new Set(["boot.rawblocks-set"]);
@@ -463,9 +463,8 @@
 </script>
 
 <!--
-  Stop wheel propagation so scrolling the diagnostics list (or any future
-  scrollable region inside the perf popover) does not bubble up to the title
-  bar's tab-wheel handler.
+  Stop wheel propagation so scrolling inside the popover does not reach the
+  title bar's tab-wheel handler.
 -->
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div

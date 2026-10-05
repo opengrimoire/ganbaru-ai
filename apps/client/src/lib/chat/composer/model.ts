@@ -72,7 +72,7 @@ export function availableProvidersInDefaultOrder(
     .map(({ provider }) => provider);
 }
 
-/** Selects the strongest visible built-in model exposed by one provider. */
+/** Selects the provider's `default` model, otherwise its strongest visible built-in model. */
 export function recommendedProviderModel(
   provider: ProviderInstanceRead,
   candidates: readonly ProviderModel[] = configuredVisibleModels(provider),
@@ -188,7 +188,7 @@ export function resolveDefaultProviderModel(
   };
 }
 
-/** Lists non-deprecated models allowed by the provider visibility setting, without keeping a hidden current selection. */
+/** Lists non-deprecated models allowed by the provider visibility setting; an empty setting allows all. */
 function configuredVisibleModels(provider: ProviderInstanceRead): ProviderModel[] {
   const visibleIds = provider.configuration.visibleModelIds;
   return provider.modelCatalog?.models.filter((model) => (

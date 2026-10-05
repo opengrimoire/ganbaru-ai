@@ -64,14 +64,13 @@
     theme.kind === "user" ? (theme as UserTheme) : undefined,
   );
   const viewTheme = $derived.by(() => toUserThemeSnapshot(theme));
-  // The iconLabel icon is purely decorative ("was this for me to use on day
-  // or night?"). It does not drive the runtime `.dark` class or palette
-  // pick. Built-ins peg the icon to their pinned iconLabel; user themes
-  // can flip it.
+  // The iconLabel icon only labels a theme as meant for day or night use. It
+  // does not drive the runtime `.dark` class or palette choice. Built-ins pin
+  // their iconLabel; user themes can flip it.
   const BaseIcon = $derived(theme.iconLabel === "dark" ? Moon : Sun);
-  // The rebake banner appears when the saved theme's engine version trails
-  // the current code constant AND the user hasn't dismissed an upgrade
-  // prompt for that pair.
+  // The rebake banner appears when the saved theme's derivation engine
+  // version trails the current one and the upgrade prompt for the current
+  // version has not been dismissed.
   const offerRebake = $derived(
     userTheme ? themeStore.shouldOfferRebake(userTheme) : false,
   );
@@ -80,9 +79,8 @@
   let scrollContent: HTMLDivElement | undefined = $state();
   let navigation: ThemeEditorNavigation | undefined = $state();
 
-  // Collapse state is ephemeral (not persisted across sessions). Every
-  // multi-row group is collapsible; single-row source groups still render
-  // their row as a peer of the header.
+  // Collapse state is not persisted. Multi-row groups start collapsed;
+  // single-row source groups render their row as a peer of the header.
   let collapsed = $state<Record<string, boolean>>(
     untrack(() =>
       Object.fromEntries(
@@ -98,9 +96,9 @@
     collapsed[id] = !collapsed[id];
   }
 
-  // The JSON drawer mirrors the theme's serialized form. We only refresh it
-  // from props while the user has not yet typed anything, otherwise their
-  // pending edits would be wiped every time a form field updates the store.
+  // The JSON drawer mirrors the theme's serialized form. It refreshes from the
+  // store only while the draft is clean, so pending JSON edits survive form
+  // field updates.
   const json = new ThemeJsonController({
     store: themeStore,
     themeId: () => theme.id,
@@ -657,7 +655,6 @@
           {/if}
         {/each}
 
-        <!-- JSON -->
         <div class="flex flex-col gap-2">
           {@render sectionHeader("json")}
           <ThemeJsonSection

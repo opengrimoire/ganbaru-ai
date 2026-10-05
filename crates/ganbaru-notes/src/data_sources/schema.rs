@@ -154,7 +154,7 @@ pub async fn update_data_source_schema(
     Ok(dto)
 }
 
-/// Apply the existing schema invariants and view reconciliation in a caller's transaction.
+/// Apply schema invariants and view reconciliation in a caller's transaction.
 pub(crate) async fn update_data_source_schema_tx(
     tx: &mut Transaction<'_, Sqlite>,
     data_source_id: &str,

@@ -7,7 +7,7 @@ function unavailableDetail(kind: SettingsDetailKind): Promise<LoadedSettingsDeta
 
 let distractionsLimitLoaded = false;
 
-/** Reject desktop-only settings detail surfaces without importing their component graphs. */
+/** Load the Distractions limit editor and reject desktop-only detail surfaces without importing their component graphs. */
 export function loadSettingsDetail(kind: SettingsDetailKind): Promise<LoadedSettingsDetail> {
   if (kind === "distractions-limit") {
     return import("$lib/components/settings/distractions/DistractionsLimitEditor.svelte").then((module) => ({
@@ -21,12 +21,12 @@ export function loadSettingsDetail(kind: SettingsDetailKind): Promise<LoadedSett
   return unavailableDetail(kind);
 }
 
-/** Reject retries for settings detail surfaces that have no mobile implementation. */
+/** Retry a detail import; desktop-only surfaces reject again. */
 export function retrySettingsDetail(kind: SettingsDetailKind): Promise<LoadedSettingsDetail> {
   return loadSettingsDetail(kind);
 }
 
-/** Mobile settings never cache a desktop-only detail surface. */
+/** Report whether the Distractions limit editor has loaded; desktop-only surfaces never load on mobile. */
 export function settingsDetailHasLoaded(kind: SettingsDetailKind): boolean {
   return kind === "distractions-limit" && distractionsLimitLoaded;
 }

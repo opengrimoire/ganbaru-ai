@@ -27,19 +27,19 @@ export function preloadChatLocalExecutionUi(): void {
   void loadChatCodeEditorRuntime().catch(() => undefined);
 }
 
-/** Subscribe the desktop shell to native Chat runtime changes. */
+/** Subscribes the desktop shell to native Chat runtime changes. */
 export function listenForChatChanges(
   onPayload: (payload: unknown) => void,
 ): Promise<StopChatChangeListener> {
   return listen<unknown>("chat://change", (event) => onPayload(event.payload));
 }
 
-/** Open Chat in a detached desktop window. */
+/** Opens Chat in a detached desktop window. */
 export function openDetachedChatWindow(): Promise<void> {
   return openDetachedViewWindow("chat");
 }
 
-/** Lazily load the desktop private scratch inspector. */
+/** Lazily loads the desktop private scratch inspector. */
 export function loadChatScratchManager(): Promise<ChatScratchManagerComponent> {
   return import("$lib/components/settings/chat/ChatScratchManager.svelte")
     .then((module) => module.default);

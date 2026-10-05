@@ -69,7 +69,7 @@ const PROGRESS_MAX_FALLBACK = 1;
 const BROWSER_OBSERVATION_MS = 1_000;
 const initialPlayerSettings = loadMusicPlayerSettings();
 
-/** Presentation and browser mechanisms above one native session owner. */
+/** Presents the native Music session and runs the browser playback it delegates. */
 class MusicPlayerStore {
   sourceInput = $state("");
   currentSource = $state<MusicSource | null>(null);

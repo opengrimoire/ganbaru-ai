@@ -200,7 +200,10 @@ export function createProjectStoreActions(context: ProjectStoreActionContext) {
     }
   }
 
-  /** Absence from a paginated view is not deletion evidence. */
+  /**
+   * Drop receipt rows whose project, field, or option was explicitly removed while the intent
+   * was pending. Absence from a paginated view is not deletion evidence.
+   */
   function filterRemovedReceiptRows(mutation: ProjectMutation, pending: PendingProjectOperation): ProjectMutation {
     const tasks = mutation.changed.tasks.filter((task) => !pending.removedProjects.has(task.projectId));
     const taskIds = new Set(tasks.map((task) => task.id));
@@ -893,7 +896,7 @@ export function createProjectStoreActions(context: ProjectStoreActionContext) {
     await reorderTask(task, "section", direction);
   }
 
-  /** Native sibling selection includes rows outside the loaded view. */
+  /** Reorder natively, since sibling selection must include rows outside the loaded view. */
   async function reorderTask(task: ProjectTask, axis: "section" | "status", direction: -1 | 1): Promise<void> {
     await reorderItem(task.projectId, {
       kind: "task", id: task.id, axis, parentTaskId: task.parentTaskId ?? null,
@@ -902,7 +905,7 @@ export function createProjectStoreActions(context: ProjectStoreActionContext) {
     }, direction);
   }
 
-  /** Preserve the accepted intent's identity until an uncertain response is recovered. */
+  /** Reorder one item, reusing the intent's operation id until a response is accepted. */
   async function reorderItem(projectId: string, item: ProjectReorderItem, direction: -1 | 1): Promise<void> {
     const loadGeneration = readLoadGeneration();
     if (bulkLoadGeneration !== loadGeneration) {

@@ -1,4 +1,4 @@
-//! Dependency-independent OpenCode protocol tests.
+//! OpenCode protocol tests that use fixtures and fake executables instead of an installed OpenCode.
 
 use super::cli::*;
 use super::config::*;
@@ -619,8 +619,8 @@ fn owned_server_fixture_stops_its_process_tree() {
             .expect("fixture process-group ID must be negatable");
         let deadline = std::time::Instant::now() + Duration::from_secs(2);
         loop {
-            // SAFETY: `target` is the checked negative form of the group ID greater
-            // than one created for this fixture. It cannot be zero or the broad -1
+            // SAFETY: `target` is the checked negative form of this fixture's group
+            // ID, which is greater than one. It cannot be zero or the broad -1
             // selector, and signal zero only probes existence.
             let result = unsafe { libc::kill(target, 0) };
             let error = std::io::Error::last_os_error();

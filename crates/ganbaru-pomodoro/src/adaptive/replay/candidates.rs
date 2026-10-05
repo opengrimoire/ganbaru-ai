@@ -4,7 +4,7 @@ use crate::adaptive::decision::{AdaptiveDecision, AdaptiveDecisionInput, decide_
 use crate::adaptive::models::{CountRhythm, LocalTimeFacts};
 use crate::adaptive::replay::models::BoundedCandidate;
 
-/// The established offline candidates, in deterministic tie-breaking order.
+/// Default offline replay candidates, in deterministic tie-breaking order.
 pub fn default_candidates() -> Vec<BoundedCandidate> {
     vec![
         BoundedCandidate {
@@ -161,7 +161,7 @@ fn adjusted_rhythm(rhythm: CountRhythm, candidate: &BoundedCandidate) -> CountRh
             let raw = exact
                 .filter(|v| v.is_finite())
                 .unwrap_or(value as f64 + delta.filter(|v| v.is_finite()).unwrap_or(0.0));
-            // Math.round resolves negative halves toward positive infinity.
+            // Round like JavaScript Math.round, so negative halves round toward positive infinity.
             ((raw + 0.5).floor().clamp(min as f64, max as f64)) as i64
         })
         .collect::<Vec<_>>();

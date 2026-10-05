@@ -1,11 +1,11 @@
 /**
  * Cross-component runner state for the in-app benchmark harness.
  *
- * Mounted once in `TitleBar.svelte` (the same place as the floating theme
- * editor and settings modal). Settings panels call `request()` to ask for
- * a run; the overlay reacts to status transitions.
+ * `App.svelte` mounts the benchmark overlay and resumes pending runs at boot.
+ * Settings panels call `request()` to ask for a run; the overlay reacts to
+ * status transitions.
  *
- * Current flow (cold-cold against an isolated benchmark DB):
+ * Flow (cold-cold against an isolated benchmark DB):
  *
  *   idle
  *     -> user clicks Run
@@ -235,9 +235,9 @@ class BenchmarkRunnerStore {
       console.error("benchmark clear state failed", e);
     }
     this.#reset();
-    // Restart so the next boot opens the user DB. Without this the SQL
-    // plugin keeps the now-deleted benchmark DB connection alive for the
-    // rest of the session.
+    // Restart so the next boot opens the user DB. The database URL is
+    // resolved once per process, so this session would otherwise keep
+    // targeting the deleted benchmark DB.
     restartApp();
   }
 
@@ -284,8 +284,8 @@ class BenchmarkRunnerStore {
     // `loadPersistedState` already wipes the benchmark DB and clears state
     // on TTL, version mismatch, or an interrupted `*-running` stage.
     // Anything that reaches here has a fresh state file pointing at a valid
-    // pending stage; we still defend against a scenario that has been
-    // removed and against a `phase-b-pending` state that is missing the data
+    // pending stage. Still guard against an unregistered scenario and
+    // against a `phase-b-pending` state that is missing the data
     // needed to run it.
     const scenarioMetadata = getScenarioMetadataById(state.scenarioId);
     if (!scenarioMetadata) {

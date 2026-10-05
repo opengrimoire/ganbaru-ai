@@ -199,16 +199,16 @@ function synthesizeSourcesFromResolved(
   };
 }
 
-/**
- * Merge a small subset of fields onto a user theme. Most patches now go
- * through targeted store mutators (updateSourceValue, isolateToken, etc.);
- * this helper survives only for fields that don't fit the targeted paths:
- * displayName rename, eventPalette replacement, blendCanvas pin.
- */
 type UserThemePatch = Partial<
   Pick<UserTheme, "displayName" | "eventPalette" | "blendCanvas">
 >;
 
+/**
+ * Merge a small subset of fields onto a user theme. Token and source edits
+ * go through targeted store mutators (`updateSourceValue`, `isolateToken`);
+ * this helper covers the fields outside those paths: display name,
+ * event palette, and blend canvas.
+ */
 export function mergeThemePatch(
   current: UserTheme,
   patch: UserThemePatch,

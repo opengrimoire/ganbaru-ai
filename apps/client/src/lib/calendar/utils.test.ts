@@ -1220,7 +1220,7 @@ describe("searchTimezones", () => {
 
   it("finds zones by Intl long-name match", () => {
     // "Iran Standard Time" matches Asia/Tehran via long name; the
-    // deprecated "Iran" IANA alias has been filtered out so this can
+    // deprecated "Iran" IANA alias is filtered out, so this can
     // only succeed via the long-name tier.
     expect(searchTimezones("iran", [])).toContain("Asia/Tehran");
   });

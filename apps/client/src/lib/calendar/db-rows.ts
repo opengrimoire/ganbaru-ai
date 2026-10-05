@@ -23,8 +23,8 @@ import {
 } from "./json-fields";
 
 /**
- * Row shape returned by the boot SELECT in `calendar.svelte.ts:load()`.
- * Only the columns the slim in-memory `CalendarEvent` reads. Heavy columns
+ * Event row shape returned by native calendar window reads. It carries only
+ * the columns the slim in-memory `CalendarEvent` reads. Heavy columns
  * (description, organizer, geo, extendedProperties, categories, priority,
  * sequence, sourceUid, visibility, guest_can_*) stay in the DB and are loaded
  * on demand by `loadFullEvent` for the EventPanel or a native snapshot for export.

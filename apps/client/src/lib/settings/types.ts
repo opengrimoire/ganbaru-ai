@@ -1,7 +1,7 @@
 /**
- * Shared types for the Settings modal. Lives alongside `SettingsModal.svelte`
- * so external launchers (the calendar header, future feature surfaces) can
- * type their requests against the same identifier set.
+ * Shared types for the Settings modal. Kept outside the component so external
+ * launchers, such as the title bar and the Settings launcher store, type their requests against the
+ * same identifier set.
  */
 export const SETTINGS_SECTION_IDS = [
   "appearance",

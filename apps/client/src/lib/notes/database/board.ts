@@ -80,7 +80,7 @@ export function notesDatabaseBoardColumns(
   return notesDatabaseTableColumns(dataSource, view);
 }
 
-/** Return properties that can produce board groups in this local slice. */
+/** Return properties that can produce board groups. */
 export function notesDatabaseBoardGroupableColumns(
   columns: readonly NotesDatabaseTableColumn[],
 ): NotesDatabaseTableColumn[] {
@@ -155,7 +155,7 @@ export function notesDatabaseBoardCardTitle(
   return title || fallback;
 }
 
-/** Return true when dragging into a group can be persisted by this board slice. */
+/** Return true when dragging into a group can be persisted. */
 export function notesDatabaseBoardCanMoveCards(
   groupColumn: NotesDatabaseTableColumn | null,
 ): boolean {

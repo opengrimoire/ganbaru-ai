@@ -64,7 +64,7 @@ pub(super) fn policy_gate(candidate: &str, contexts: Vec<ContextGate>) -> Policy
 
 pub(super) fn observed_gate(candidate: &str, options: &GateOptions) -> ObservedGate {
     let empty = OutcomeScore::default();
-    // Existing Map construction takes the final score if a candidate repeats.
+    // The last score wins when a candidate repeats.
     let score = options
         .observed_candidate_outcome_scores
         .iter()

@@ -6,7 +6,7 @@ use crate::{databases, page_history, project_history};
 use serde_json::Value;
 use sqlx::{Sqlite, SqlitePool, Transaction};
 
-/// Read the optional flag on older shells as unlocked.
+/// Read the shell editing lock, treating an absent flag as unlocked.
 pub(crate) fn is_editing_locked(payload: &Value) -> Result<bool, String> {
     match payload.get("editing_locked") {
         None => Ok(false),

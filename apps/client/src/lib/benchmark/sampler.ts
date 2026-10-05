@@ -1,8 +1,8 @@
 /**
- * Memory + boot-mark sampling for the benchmark harness.
+ * Memory and boot-mark sampling for the benchmark harness.
  *
  * Wraps `memory_report` (Tauri command in `src-tauri/app/src/benchmark/memory.rs`) and the
- * `lib/stores/perflog.svelte.ts` ring buffer. Scenarios never call this
+ * `lib/stores/perf-log.svelte.ts` ring buffer. Scenarios never call this
  * directly: the runner orchestrates the post-state memory observation
  * schedule after `runWorkload`.
  */
@@ -45,7 +45,7 @@ function clearSampleTimeout(id: TimeoutId): void {
 /**
  * Read one memory snapshot from the backend. Maps the Rust report into the
  * `SamplePoint` shape (backend / frontend / network split). Process names
- * come from `lib.rs`, while category mapping is shared with the live
+ * come from `benchmark/memory.rs`, while category mapping is shared with the live
  * diagnostics panel so both surfaces agree.
  */
 export async function readMemorySample(
@@ -164,7 +164,7 @@ const BOOT_MARKS_OF_INTEREST = new Set<string>([
 /**
  * Lift the boot marks from the perflog snapshot, expressed as ms relative
  * to `boot.script-start` (the first mark fired in `App.svelte`). If
- * `boot.script-start` is missing (very rare), falls back to the first mark
+ * `boot.script-start` is missing, falls back to the first mark
  * in the buffer so deltas stay consistent within the run.
  */
 export function captureBootTimings(): BootTimings {

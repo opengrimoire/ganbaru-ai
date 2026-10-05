@@ -1,6 +1,7 @@
 /**
  * Stable ID identifying a theme. Built-in IDs are "light" and "dark".
- * Custom themes added later should use slugs or UUIDs to avoid collisions.
+ * User themes use generated slug IDs (see `generateThemeId`) to avoid
+ * collisions.
  */
 export type ThemeId = string;
 
@@ -26,8 +27,8 @@ export type ThemeId = string;
  *   the confirm button (save, active scope pill) and accepted attendance
  *   status as one semantic pair.
  * - **warning / warningText:** caution background and text. These drive
- *   the tentative attendance status today and future warning surfaces as
- *   one semantic pair.
+ *   the tentative attendance status and other warning surfaces as one
+ *   semantic pair.
  *
  * Themes without `sources` fall back to the base CSS tokens unchanged;
  * sources exist purely to let a small number of color choices drive a
@@ -332,9 +333,9 @@ export function getThemeById(
 
 /**
  * App-shell CSS custom properties a user theme is allowed to override.
- * Limited to hex-color tokens for now: the in-house color picker emits hex
- * only, and tokens that ship as rgba (border alpha) or oklch (charts) are
- * intentionally excluded until the picker grows wider format support.
+ * Limited to hex-color tokens because the in-house color picker emits hex
+ * only; tokens that ship as rgba (border alpha) or oklch (charts) are
+ * excluded.
  */
 export const APP_TOKEN_KEYS = Object.freeze([
   "--background",
@@ -438,10 +439,10 @@ const SEMANTIC_SIGNAL_APP_TOKEN_KEY_SET: ReadonlySet<string> = new Set(
 );
 
 /**
- * The semantic signal families are no longer independently pinnable app
- * tokens. They are aliases of the visible background/text source pairs, so
- * old isolated flags for these tokens are dropped during load/import/clone
- * and ignored during source cascades.
+ * The semantic signal families are not independently pinnable app tokens.
+ * They are aliases of the visible background/text source pairs, so isolated
+ * flags for these tokens are dropped during load, import, and clone, and
+ * ignored during source cascades.
  */
 export function normalizeSemanticSignalAppIsolated(
   set: ReadonlySet<string>,

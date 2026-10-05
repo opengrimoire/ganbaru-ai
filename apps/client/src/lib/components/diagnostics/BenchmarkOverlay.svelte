@@ -24,8 +24,7 @@
     return buildBenchmarkSuitePreview(runner.results, {});
   });
 
-  // Materialize the markdown lazily so the overlay does not recompute every
-  // render while the user is just looking at it.
+  // Build the summary markdown only once the run reaches the summary state.
   const summaryMarkdown = $derived.by(() => {
     if (runner.status !== "summary" || runner.results.length === 0) return "";
     return formatBenchmarkSuiteMarkdown(runner.results, {});

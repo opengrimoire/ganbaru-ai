@@ -45,7 +45,7 @@ export function openChatReviewSingleFlight(
   return entry.promise;
 }
 
-/** Starts speculative review work only when another speculative request is not active. */
+/** Starts speculative review work only when no review request is in flight. */
 export function prefetchChatReview(request: OpenChatReviewRequest): void {
   if (cachedRequest?.settledAt === null) return;
   void openChatReviewSingleFlight(request).catch(() => undefined);

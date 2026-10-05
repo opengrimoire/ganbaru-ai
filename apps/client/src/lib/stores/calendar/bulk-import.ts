@@ -1,7 +1,7 @@
 /**
- * Pure helpers for calendar bulk import payloads. ICS parsing stays in
- * TypeScript for now, but durable database application is handled by the
- * Rust `calendar_bulk_import` command.
+ * Pure helpers for calendar bulk import payloads. ICS parsing runs in
+ * TypeScript, and the Rust `calendar_bulk_import` command applies the
+ * payload to the database.
  */
 import type {
   CalendarEvent,

@@ -442,7 +442,7 @@ pub async fn music_library_remove_snooze(
     super::writes::remove_snooze(&pool, request).await
 }
 
-// Parsing and serialization run on one bounded native worker, never on a WebView thread.
+/// Parsing and serialization run on one bounded native worker, never on a WebView thread.
 static MUSIC_TRANSFER_WORKERS: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(1);
 
 fn ensure_active_vault(app: &tauri::AppHandle, expected_id: &str) -> MusicLibraryResult<()> {

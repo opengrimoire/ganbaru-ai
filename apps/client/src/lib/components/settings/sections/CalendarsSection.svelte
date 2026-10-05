@@ -48,14 +48,14 @@
   let pendingDelete = $state<Calendar | undefined>(undefined);
   let counts = $state<Record<string, number>>({});
   let importWarnings = $state<string[]>([]);
+  let isImporting = $state(false);
 
   /**
-   * Live progress reporter for `.ics.zip` imports. `total` is set once
-   * the archive entry list resolves; `current` increments before each
-   * entry begins. Plain single-file imports leave this undefined and
-   * rely on the spinner-only button state.
+   * Live import progress. `total` is set once the picked entry list
+   * resolves (one entry for a plain `.ics`, every `.ics` entry for a
+   * `.zip`); `current` increments before each entry begins. It stays
+   * undefined while the picker is open, leaving the spinner-only state.
    */
-  let isImporting = $state(false);
   let importProgress = $state<
     { current: number; total: number; label: string } | undefined
   >(undefined);
@@ -130,7 +130,7 @@
   /**
    * Parse a single `.ics` payload, upsert into a calendar grouping keyed by
    * `groupingFilename`, and fold the result into `totals`. Same code path
-   * for plain `.ics` files and individual entries inside `.ics.zip` bundles.
+   * for plain `.ics` files and individual entries inside `.zip` bundles.
    */
   async function importIcsText(
     text: string,

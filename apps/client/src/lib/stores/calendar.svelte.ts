@@ -87,8 +87,9 @@ let foregroundWindowIdleWaiters: Array<() => void> = [];
 /**
  * Reactivity token. `eventsInWindow` reads it so any `$derived` / `$effect`
  * that depends on the visible-event set re-runs after a mutation. Bumped
- * from `invalidate()`. External callers that need to react to mutations
- * without forcing an expansion subscribe via `void indexVersion`.
+ * by `invalidate()` and the other mutation paths. External callers that
+ * need to react to mutations without forcing an expansion subscribe via
+ * `void indexVersion`.
  */
 let indexVersion = $state(0);
 
@@ -505,7 +506,7 @@ export function getCalendar() {
       return sourceEvents;
     },
 
-    /** Unsupported native projections retain source rows and explicit diagnostics. */
+    /** Diagnostics for source events the native projection could not expand; their source rows stay loaded. */
     get expansionDiagnostics(): readonly CalendarExpansionDiagnostic[] {
       return expansionDiagnostics;
     },

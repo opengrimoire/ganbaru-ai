@@ -5,13 +5,15 @@ import {
   type ThemeEditorSessionState,
 } from "$lib/themes/editor-session";
 
-// One active editor session at a time. Edits during the session live in
-// the theme store's in-memory `$state` only; SQLite is not touched until
-// `commit` calls `persistThemeToDb`. The snapshot (when present) is the
-// serialized theme at session open and lets `cancel` roll back the
-// in-memory edits without ever writing to disk. For themes minted for
-// this session (`createdFresh` = true), cancel discards the in-memory
-// row entirely so backing out leaves no orphan behind.
+/**
+ * The single active theme editor session. Edits during the session live in
+ * the theme store's in-memory `$state` only; SQLite is not touched until
+ * `commit` calls `persistThemeToDb`. The snapshot (when present) is the
+ * serialized theme at session open and lets `cancel` roll back the
+ * in-memory edits without writing to disk. For themes created for this
+ * session (`createdFresh` is true), cancel discards the in-memory theme
+ * entirely so backing out leaves no orphan behind.
+ */
 type EditorSession = ThemeEditorSessionState;
 
 let session = $state<EditorSession | undefined>(undefined);
@@ -44,8 +46,7 @@ export function getThemeEditor() {
         previousActiveId: options.previousActiveId,
       };
     },
-    // Commit the session: flush the in-memory edits to SQLite and clear
-    // state. The edited theme stays active.
+    /** Flush the in-memory edits to SQLite and end the session. The edited theme stays active. */
     async commit(): Promise<void> {
       if (!session) return;
       const committingSession = session;
@@ -53,10 +54,12 @@ export function getThemeEditor() {
       await getTheme().persistThemeToDb(editingId);
       if (session === committingSession) session = undefined;
     },
-    // Roll the session back. Built-in previews pass no snapshot so there
-    // is nothing to restore. Fresh themes are dropped from memory and the
-    // previous active theme is reinstated. Existing themes get their
-    // pre-edit JSON snapshot replayed in memory only.
+    /**
+     * Roll the session back and reinstate the previously active theme. Fresh
+     * themes are dropped from memory. Existing themes get their pre-edit JSON
+     * snapshot replayed in memory only; built-in previews pass no snapshot, so
+     * there is nothing to restore.
+     */
     async cancel(): Promise<void> {
       if (!session) return;
       const themeStore = getTheme();
@@ -74,9 +77,10 @@ export function getThemeEditor() {
         }
       }
     },
-    // Used by the settings modal effect to force-close without touching the
-    // theme store. Reserved for the rare case where the caller already knows
-    // the session is defunct (e.g. the theme was deleted elsewhere).
+    /**
+     * End the session without touching the theme store, for callers that
+     * know it is defunct (for example, the theme was deleted elsewhere).
+     */
     forgetSession(): void {
       session = undefined;
     },
