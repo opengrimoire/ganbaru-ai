@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { applyProjectDependencyCascade, type ProjectDependencyCascadePreview } from "$lib/api/project-cascade";
-import { applyProjectTaskBulk, createProjectPriority, createProjectStatus, createProjectTag, deleteProjectCustomField, linkProjectTaskEvent, reorderProjectItem, updateProjectTask } from "$lib/api/projects";
+import { applyProjectTaskBulk, createProjectCustomField, createProjectPriority, createProjectStatus, createProjectTag, deleteProjectCustomField, linkProjectTaskEvent, reorderProjectItem, updateProjectTask } from "$lib/api/projects";
 import { createProjectStoreActions } from "./actions";
 import { createProjectStoreSelectors } from "./selectors";
 import actionSource from "./actions.ts?raw";
@@ -15,6 +15,7 @@ vi.mock("$lib/api/projects", async (importOriginal) => ({
   ...await importOriginal<typeof import("$lib/api/projects")>(),
   updateProjectTask: vi.fn(),
   applyProjectTaskBulk: vi.fn(),
+  createProjectCustomField: vi.fn(),
   reorderProjectItem: vi.fn(),
   deleteProjectCustomField: vi.fn(),
   linkProjectTaskEvent: vi.fn(),
@@ -181,6 +182,15 @@ describe("createProjectStoreActions", () => {
     vi.mocked(reorderProjectItem).mockResolvedValue({ changed: { ...emptySnapshot(), customFields: [{ ...field, sortOrder: 2000, revision: 1 }] }, removals: [], calendarEventProjectAssignments: [] });
     await context.actions.moveCustomField(field, 1);
     expect(vi.mocked(reorderProjectItem).mock.calls[1][0]).toEqual(first);
+    expect(context.readSnapshot().customFields).toEqual([]);
+  });
+
+  it("skips duplicating a property when the new name is blank", async () => {
+    const field = { id: "field-1", projectId: "project-1", name: "Field", fieldType: "text" as const,
+      sortOrder: 1000, revision: 0, createdAt: "created", updatedAt: "updated" };
+    const context = setup();
+    await expect(context.actions.duplicateCustomField(field, "   ")).resolves.toBeUndefined();
+    expect(createProjectCustomField).not.toHaveBeenCalled();
     expect(context.readSnapshot().customFields).toEqual([]);
   });
 

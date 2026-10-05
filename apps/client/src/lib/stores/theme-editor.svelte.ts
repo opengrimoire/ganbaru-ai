@@ -77,12 +77,5 @@ export function getThemeEditor() {
         }
       }
     },
-    /**
-     * End the session without touching the theme store, for callers that
-     * know it is defunct (for example, the theme was deleted elsewhere).
-     */
-    forgetSession(): void {
-      session = undefined;
-    },
   };
 }

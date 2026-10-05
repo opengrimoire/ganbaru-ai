@@ -509,10 +509,6 @@ const notesShellContract = evaluateStaticModuleContract(
   baseline.notesShell,
   "Notes shell",
 );
-const notesEmptyEditorContract = evaluateStaticModuleContract(
-  baseline.notesParagraphEditor,
-  "Notes empty editor",
-);
 const notesParagraphEditorContract = evaluateStaticModuleContract(
   baseline.notesParagraphEditor,
   "Notes paragraph editor",
@@ -654,12 +650,6 @@ console.log(JSON.stringify({
   notesParagraphEditor: {
     chunks: notesParagraphEditorContract.closure.map((chunk) => chunk.fileName),
     sourceModules: [...notesParagraphEditorContract.modules]
-      .filter((moduleId) => moduleId.startsWith("src/")).length,
-    forbiddenModules: baseline.notesParagraphEditor.forbiddenModules,
-  },
-  notesEmptyEditor: {
-    chunks: notesEmptyEditorContract.closure.map((chunk) => chunk.fileName),
-    sourceModules: [...notesEmptyEditorContract.modules]
       .filter((moduleId) => moduleId.startsWith("src/")).length,
     forbiddenModules: baseline.notesParagraphEditor.forbiddenModules,
   },

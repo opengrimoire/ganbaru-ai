@@ -30,6 +30,7 @@
     ProjectWorkingFolderPathRead,
   } from "$lib/chat/contracts";
   import { ChatComposerEditor, type ChatComposerEditorChange } from "$lib/chat/composer/editor";
+  import { CHAT_IMAGE_LIMIT } from "$lib/chat/composer/model";
   import {
     chatComposerDocumentFromText,
     chatComposerDocumentVersioned,
@@ -860,7 +861,7 @@
         ?.workingFolder.id;
     if (!workingFolderId) return;
     addMenuOpen = false;
-    const available = Math.max(0, 8 - attachmentIds.length);
+    const available = Math.max(0, CHAT_IMAGE_LIMIT - attachmentIds.length);
     if (available === 0) return;
     const imported = await chatApi.pickChatImages(
       workingFolderId,

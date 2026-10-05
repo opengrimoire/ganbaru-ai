@@ -17,7 +17,7 @@ const configDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(configDir, "../..");
 const appVersion = readAppVersion();
 const buildRef = `${appVersion}+${readGitCommit()}${isGitDirty() ? "-dirty" : ""}`;
-const githubRepository = process.env.GANBARU_AI_RELEASE_REPOSITORY ?? "opengrimoire/ganbaru-ai";
+const githubRepository = process.env.GANBARU_AI_RELEASE_REPOSITORY?.trim() || "opengrimoire/ganbaru-ai";
 const buildPlatform = resolveTauriBuildPlatform(process.env.TAURI_ENV_PLATFORM);
 const isMobileBuild = buildPlatform === "android" || buildPlatform === "ios";
 const isAndroidBuild = buildPlatform === "android";

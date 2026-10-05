@@ -41,6 +41,40 @@ fn mcp_status_without_task_uses_standalone_app_server() {
 }
 
 #[test]
+fn rejected_turn_start_releases_the_active_turn() {
+    crate::test_block_on(async {
+        let workspace = TestDirectory::new("driver-turn-rejected");
+        let (mut driver, _fixture) =
+            fixture_driver(workspace.path(), FixtureScenario::TurnNotInProgress);
+        let sink: Arc<dyn ProviderEventSink> = Arc::new(RecordingSink::default());
+        let snapshot = driver
+            .start_session(start_request(workspace.path()), sink, &context("start"))
+            .await
+            .unwrap();
+
+        let error = driver
+            .send_turn(
+                fixture_turn(&snapshot.session_id, "build"),
+                &context("send"),
+            )
+            .await
+            .unwrap_err();
+        assert_eq!(error.code, ChatErrorCode::Protocol);
+
+        driver
+            .compact_context(
+                CompactContextRequest {
+                    session_id: snapshot.session_id.clone(),
+                    turn_id: identifier("chat-turn-compact", ChatTurnId::new),
+                },
+                &context("compact"),
+            )
+            .await
+            .unwrap();
+    });
+}
+
+#[test]
 fn driver_fixture_covers_fresh_plan_interrupt_and_shutdown() {
     crate::test_block_on(async {
         let workspace = TestDirectory::new("driver-fresh");

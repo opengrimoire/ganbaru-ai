@@ -14,6 +14,7 @@ export function createNotesSearchController() {
   let includeResolvedComments = $state(false);
   let activeQuery = "";
   let activePageSize = 20;
+  let activeIncludeResolved = false;
   let requestId = 0;
 
   async function search(
@@ -33,6 +34,7 @@ export function createNotesSearchController() {
     loading = true;
     activeQuery = trimmed;
     activePageSize = pageSize;
+    activeIncludeResolved = includeResolved;
     error = null;
     try {
       const window = await searchNotes(trimmed, pageSize, includeResolved);
@@ -57,7 +59,7 @@ export function createNotesSearchController() {
       const window = await searchNotes(
         activeQuery,
         activePageSize,
-        includeResolvedComments,
+        activeIncludeResolved,
         cursor,
       );
       if (currentRequestId !== requestId) return;

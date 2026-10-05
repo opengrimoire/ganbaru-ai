@@ -187,6 +187,7 @@ export class ChatCommunicationController {
     if (!replyThreadId || this.replyThreadLoading || !currentPage?.previousCursor) return;
     const request = ++this.replyThreadRequest;
     this.replyThreadLoading = true;
+    this.replyThreadError = null;
     try {
       const page = await chatApi.readChatReplyThreadPage(replyThreadId, currentPage.previousCursor);
       if (!this.isCurrentReplyThreadRequest(request, replyThreadId)) return;
@@ -194,6 +195,10 @@ export class ChatCommunicationController {
       this.replyThreadPages = [page, ...this.replyThreadPages].slice(0, MAX_PAGES_PER_CONVERSATION);
       this.replyThread = mergeReplyThreadPages(this.replyThreadPages);
       this.replyThreadCache.set(replyThreadId, this.replyThreadPages);
+    } catch (error: unknown) {
+      if (request !== this.replyThreadRequest) return;
+      this.replyThreadError = chatErrorMessage(error, "Older reply thread history could not be loaded");
+      throw error;
     } finally {
       if (request === this.replyThreadRequest) this.replyThreadLoading = false;
     }

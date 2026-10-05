@@ -113,7 +113,7 @@ fn run() -> Result<NativeResponse, String> {
     if request.message_type == "decide_url" {
         if let Some(host) = normalized_request_host(&request) {
             response.host = Some(host.clone());
-            let regular_rules_active = should_enforce(&snapshot, &mut response);
+            let regular_rules_active = should_enforce(&snapshot, &response);
             let decision = decide_url_with_limits(
                 &host,
                 request.url.as_deref(),

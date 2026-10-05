@@ -6,6 +6,7 @@ import {
   type ChatComposerSnapshot,
 } from "$lib/chat/composer/controller";
 import {
+  CHAT_IMAGE_LIMIT,
   composerModelSelection,
   queuedFollowupDispatchReady,
   readComposerModelSelection,
@@ -287,16 +288,21 @@ export class ChatComposerRuntimeController {
     } finally {
       this.pendingUserMessage = null;
     }
-    await chatApi.rememberChatComposerSelection({
-      workingFolderId,
-      providerInstanceId,
-      modelId: model.modelId,
-      providerManagedModel: model.providerManaged,
-      modelOptions: model.options,
-      safetyMode,
-      interactionMode,
-    });
-    this.options.setSettings(await chatApi.readChatSettings());
+    // The turn is already sent, so preference bookkeeping must not report a send failure.
+    try {
+      await chatApi.rememberChatComposerSelection({
+        workingFolderId,
+        providerInstanceId,
+        modelId: model.modelId,
+        providerManagedModel: model.providerManaged,
+        modelOptions: model.options,
+        safetyMode,
+        interactionMode,
+      });
+      this.options.setSettings(await chatApi.readChatSettings());
+    } catch (error: unknown) {
+      console.error("Chat composer selection could not be remembered after sending", error);
+    }
     await this.refreshInteraction(result.thread.id);
   }
 
@@ -429,6 +435,9 @@ export class ChatComposerRuntimeController {
   async importImages(files: File[]): Promise<void> {
     const workingFolderId = this.composer.workingFolderId;
     if (!workingFolderId) throw new Error("Choose a project working folder before attaching images");
+    if (this.attachments.length + files.length > CHAT_IMAGE_LIMIT) {
+      throw new Error(`Attach up to ${CHAT_IMAGE_LIMIT} Chat images`);
+    }
     for (const file of files) {
       const attachment = await chatApi.importChatImage(
         workingFolderId,
@@ -444,8 +453,8 @@ export class ChatComposerRuntimeController {
   async pickImages(title: string): Promise<void> {
     const workingFolderId = this.composer.workingFolderId;
     if (!workingFolderId) throw new Error("Choose a project working folder before attaching images");
-    const available = Math.max(0, 8 - this.attachments.length);
-    if (available === 0) throw new Error("Attach up to eight Chat images");
+    const available = Math.max(0, CHAT_IMAGE_LIMIT - this.attachments.length);
+    if (available === 0) throw new Error(`Attach up to ${CHAT_IMAGE_LIMIT} Chat images`);
     const imported = await chatApi.pickChatImages(
       workingFolderId,
       Array.from({ length: available }, () => crypto.randomUUID()),

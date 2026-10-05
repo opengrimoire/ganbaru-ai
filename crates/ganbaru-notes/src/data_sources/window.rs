@@ -604,12 +604,12 @@ fn push_cursor_condition(
         query.push(" AND ");
     }
     query
-        .push("(lower(page.title) > lower(")
+        .push("(page.title COLLATE NOCASE > ")
         .push_bind(cursor.title.clone())
-        .push(") OR (lower(page.title) = lower(");
+        .push(" OR (page.title COLLATE NOCASE = ");
     query.push_bind(cursor.title.clone());
     query
-        .push(") AND page.id > ")
+        .push(" AND page.id > ")
         .push_bind(cursor.id.clone())
         .push("))");
     query.push(")");

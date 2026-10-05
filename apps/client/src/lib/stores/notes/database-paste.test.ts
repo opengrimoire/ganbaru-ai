@@ -1,6 +1,7 @@
+// @vitest-environment jsdom
+
 import { createNotesCompoundTestAdapter } from "./compound-edits.test-helpers";
 import type { NotesCompoundEdit } from "$lib/api/notes/compound-edits";
-// @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { applyBlockUpdate, blockEditableRichText, blockPlainText, blockWithRichText, createBlockWrite } from "$lib/notes/blocks/factory";
 import { applyNotesPostMutationToTree, type NotesPostMutationResult } from "$lib/notes/post-mutation";
@@ -140,5 +141,20 @@ describe("Notes database paste choices", () => {
     expect(h.controller.error).toBeNull();
     expect(h.controller.prompt).toBeNull();
     expect(h.recordUndo).toHaveBeenCalledOnce();
+  });
+
+  it("releases pending linked views and copies when their queued writes are abandoned", async () => {
+    api.createNotesLinkedDatabaseView.mockRejectedValueOnce(new Error("Unavailable"));
+    const h = harness([model(createBlockWrite("text", "paragraph", LINK))]);
+    await h.controller.inspectLink("text", 0, LINK.length, LINK);
+    await h.controller.linkedView();
+    expect(h.controller.error).toBe("Unavailable");
+    const [databaseId] = h.read().childIdsByParentId[PAGE];
+    h.controller.beginCopies({ copy: SOURCE });
+    expect(h.controller.isCreating(databaseId)).toBe(true);
+    expect(h.controller.isCreating("copy")).toBe(true);
+    h.controller.discardPendingCreations();
+    expect(h.controller.isCreating(databaseId)).toBe(false);
+    expect(h.controller.isCreating("copy")).toBe(false);
   });
 });

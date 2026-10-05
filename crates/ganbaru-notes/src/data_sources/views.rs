@@ -322,7 +322,7 @@ pub(crate) fn canonical_sorts(
     view_kind: &str,
 ) -> Result<Value, String> {
     if sorts.len() > MAX_SORTS {
-        return Err(format!("{view_kind} sorts are limited to 5"));
+        return Err(format!("{view_kind} sorts are limited to {MAX_SORTS}"));
     }
     let mut seen = HashSet::new();
     let mut canonical = Vec::new();

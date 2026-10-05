@@ -23,6 +23,7 @@ export const calendar = {
     durationHours: (hours: string, singular: boolean) => `${hours} ${singular ? "hr" : "hrs"}`,
   },
   moreEvents: (count: string) => `+${count} more`,
+  moreEventsCompact: (count: string) => `+${count}`,
   recurrence: {
     daily: "Daily",
     weekly: "Weekly",

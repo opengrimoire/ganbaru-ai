@@ -209,7 +209,7 @@ class MobileUpdateStore {
       case "available":
         return this.latestVersion
           ? t("updates.versionAvailable", this.latestVersion)
-          : t("updates.versionAvailable", "unknown");
+          : t("updates.updateAvailable");
       case "current":
         return t("updates.current");
       case "error":

@@ -58,10 +58,10 @@
     }, 2000);
   }
 
-  function runningDatasetLabel(phase: "A" | "B", datasetLabel: string | undefined): string {
+  function runningDatasetLabel(phase: "A" | "B", datasetId: string | undefined): string {
     return phase === "A"
       ? t("benchmark.datasetBase")
-      : datasetLabel ?? t("benchmark.datasetDenseFallback");
+      : datasetId ?? t("benchmark.datasetDenseFallback");
   }
 
   function scalarRowsUseUnitColumn(rows: BenchmarkScalarMetricRow[]): boolean {
@@ -248,7 +248,7 @@
         {/if}
         {t(
           "benchmark.dataset",
-          runningDatasetLabel(runner.running.phase, runner.running.datasetLabel),
+          runningDatasetLabel(runner.running.phase, runner.running.datasetId),
         )} {localizedRunningStep(runner.running.step)}
         {#if runner.running.curve}
           <span class="text-muted-foreground"

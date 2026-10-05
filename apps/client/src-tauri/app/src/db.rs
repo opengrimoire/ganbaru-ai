@@ -83,7 +83,7 @@ pub(crate) async fn connect_active_vault_read_only<R: Runtime>(
         resolve_sqlite_path(&path_app, &format!("sqlite:{}", vault::APP_SQLITE_FILE))
     })
     .await
-    .map_err(|error| format!("Calendar read-only database path worker: {error}"))??;
+    .map_err(|error| format!("Read-only vault database path worker: {error}"))??;
     app.state::<DatabaseState>()
         .inner()
         .clone()

@@ -60,8 +60,13 @@ export function chatVirtualRange(
 ): ChatVirtualRange {
   const count = Math.max(0, Math.floor(itemCount));
   const size = Math.max(1, itemSize);
-  const start = Math.max(0, Math.floor(Math.max(0, scrollOffset) / size) - overscan);
   const visibleCount = Math.max(1, Math.ceil(Math.max(size, viewportSize) / size));
+  // A stale offset past the content, such as after rows shrink, keeps the final rows rendered.
+  const lastStart = Math.max(0, count - visibleCount - overscan);
+  const start = Math.min(
+    lastStart,
+    Math.max(0, Math.floor(Math.max(0, scrollOffset) / size) - overscan),
+  );
   const end = Math.min(count, start + visibleCount + overscan * 2);
   return {
     start,

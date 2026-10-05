@@ -285,17 +285,17 @@ where
     .bind(event_date)
     .fetch_all(&mut **tx)
     .await
-    .map_err(|e| format!("load adaptive next-day runs: {e}"))?;
+    .map_err(|e| format!("load adaptive daily outcome runs: {e}"))?;
     for row in rows {
         let run_id: String = row
             .try_get("id")
-            .map_err(|e| format!("read next-day run id: {e}"))?;
+            .map_err(|e| format!("read daily outcome run id: {e}"))?;
         let ended_at: String = row
             .try_get("ended_at")
-            .map_err(|e| format!("read next-day run ended_at: {e}"))?;
+            .map_err(|e| format!("read daily outcome run ended_at: {e}"))?;
         let end_reason: Option<String> = row
             .try_get("end_reason")
-            .map_err(|e| format!("read next-day run end_reason: {e}"))?;
+            .map_err(|e| format!("read daily outcome run end_reason: {e}"))?;
         let run_summary = load_adaptive_run_outcome_summary(tx, &run_id, &ended_at).await?;
 
         summary.add_run_outcome(end_reason.as_deref(), &run_summary);

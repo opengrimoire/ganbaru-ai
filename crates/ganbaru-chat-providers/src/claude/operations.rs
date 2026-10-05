@@ -2,6 +2,7 @@
 
 use super::driver::*;
 use super::home::resolve_claude_home;
+use super::normalizer::ClaudeRouteState;
 use super::protocol::*;
 use super::session::*;
 use super::support::*;
@@ -12,7 +13,7 @@ use crate::{
     ProviderEventSink,
 };
 use serde_json::{Value, json};
-use std::sync::{Arc, atomic::Ordering};
+use std::sync::{Arc, Mutex, atomic::Ordering};
 use std::time::Duration;
 
 impl ProviderDriver for ClaudeProviderDriver {
@@ -243,12 +244,12 @@ impl ProviderDriver for ClaudeProviderDriver {
                     }),
                 )?
             };
-            live.sink.emit(event).await?;
+            if let Err(error) = live.sink.emit(event).await {
+                release_active_turn(&live.route);
+                return Err(error);
+            }
             if let Err(error) = client.send(message).await {
-                if let Ok(mut state) = live.route.lock() {
-                    state.active_chat_turn_id = None;
-                    state.session_state = ProviderSessionState::Ready;
-                }
+                release_active_turn(&live.route);
                 return Err(error.to_chat_error("turn dispatch"));
             }
             Ok(TurnDispatchReceipt {
@@ -296,17 +297,11 @@ impl ProviderDriver for ClaudeProviderDriver {
                 )?
             };
             if let Err(error) = live.sink.emit(started).await {
-                if let Ok(mut state) = live.route.lock() {
-                    state.active_chat_turn_id = None;
-                    state.session_state = ProviderSessionState::Ready;
-                }
+                release_active_turn(&live.route);
                 return Err(error);
             }
             if let Err(error) = live.connection.client().send(message).await {
-                if let Ok(mut state) = live.route.lock() {
-                    state.active_chat_turn_id = None;
-                    state.session_state = ProviderSessionState::Ready;
-                }
+                release_active_turn(&live.route);
                 return Err(error.to_chat_error("context compaction"));
             }
             Ok(operation_receipt(
@@ -523,5 +518,15 @@ impl ProviderDriver for ClaudeProviderDriver {
                 "Claude session stopped",
             ))
         })
+    }
+}
+
+/// Clears the active turn claim after a turn fails before the provider accepted it.
+///
+/// A poisoned route lock is left untouched because the session is already unusable.
+fn release_active_turn(route: &Mutex<ClaudeRouteState>) {
+    if let Ok(mut state) = route.lock() {
+        state.active_chat_turn_id = None;
+        state.session_state = ProviderSessionState::Ready;
     }
 }

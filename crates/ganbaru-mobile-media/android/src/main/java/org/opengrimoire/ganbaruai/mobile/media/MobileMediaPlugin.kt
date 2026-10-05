@@ -21,7 +21,6 @@ import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
 
 private const val MAX_SCANNED_ENTRIES = 20_000
-private const val SAF_LOCATOR_PREFIX = "ganbaru-saf:"
 private const val EXTERNAL_STORAGE_DOCUMENTS_AUTHORITY = "com.android.externalstorage.documents"
 
 @InvokeArg
@@ -484,24 +483,6 @@ class MobileMediaPlugin(private val activity: Activity) : Plugin(activity) {
     else -> null
   }
 
-  private fun resolveMediaUri(locator: String): Uri {
-    val direct = Uri.parse(locator)
-    if (direct.scheme == "content") return direct
-    require(locator.startsWith(SAF_LOCATOR_PREFIX)) { "Android media must come from a selected document" }
-    val encoded = locator.removePrefix(SAF_LOCATOR_PREFIX)
-    val separator = encoded.indexOf('#')
-    require(separator > 0 && separator < encoded.lastIndex) { "Android media locator is invalid" }
-    val treeUri = Uri.parse(Uri.decode(encoded.substring(0, separator)))
-    val relativePath = Uri.decode(encoded.substring(separator + 1))
-    require(treeUri.scheme == "content") { "Android music folder locator is invalid" }
-    require(hasPersistedReadPermission(treeUri)) { "Music folder access needs to be selected again" }
-    var documentId = DocumentsContract.getTreeDocumentId(treeUri)
-    for (segment in relativePath.split('/').filter { it.isNotBlank() }) {
-      val child = queryDocumentChildren(treeUri, documentId)
-        .firstOrNull { it.displayName == segment }
-        ?: throw IllegalStateException("The selected media file has moved or was removed")
-      documentId = child.documentId
-    }
-    return DocumentsContract.buildDocumentUriUsingTree(treeUri, documentId)
-  }
+  /** Uses the playback session parser so metadata reads accept exactly the locators playback accepts. */
+  private fun resolveMediaUri(locator: String): Uri = NativeMusicSession.resolveUri(activity, locator)
 }

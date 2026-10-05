@@ -621,36 +621,52 @@ impl ProviderDriver for CodexProviderDriver {
             let response = match client.request("turn/start", params, context).await {
                 Ok(response) => response,
                 Err(error) => {
-                    if let Ok(mut state) = live.route.lock() {
-                        state.active_chat_turn_id = None;
-                    }
+                    clear_codex_command_route(live);
                     return Err(error.to_chat_error("turn start"));
                 }
             };
-            let response: TurnStartResponse = decode_response(response, "turn start response")
-                .map_err(|error| error.to_chat_error("turn start"))?;
-            let provider_turn_id = ProviderTurnId::new(response.turn.id.clone())
-                .map_err(|_| protocol_identifier_error("provider turn"))?;
+            let response: TurnStartResponse = match decode_response(response, "turn start response")
+            {
+                Ok(response) => response,
+                Err(error) => {
+                    clear_codex_command_route(live);
+                    return Err(error.to_chat_error("turn start"));
+                }
+            };
+            let provider_turn_id = match ProviderTurnId::new(response.turn.id.clone()) {
+                Ok(provider_turn_id) => provider_turn_id,
+                Err(_) => {
+                    clear_codex_command_route(live);
+                    return Err(protocol_identifier_error("provider turn"));
+                }
+            };
             if response.turn.status != "inProgress" {
+                clear_codex_command_route(live);
                 return Err(ChatError::new(
                     ChatErrorCode::Protocol,
                     "Codex did not accept the turn as in progress",
                     true,
                 ));
             }
-            {
+            let observed_mismatch = {
                 let mut state = live.route.lock().map_err(|_| driver_state_error())?;
-                if let Some(observed) = state.active_provider_turn_id.as_deref() {
-                    if observed != provider_turn_id.as_str() {
-                        return Err(ChatError::new(
-                            ChatErrorCode::Protocol,
-                            "Codex turn notification did not match the response",
-                            false,
-                        ));
-                    }
+                let mismatch = state
+                    .active_provider_turn_id
+                    .as_deref()
+                    .is_some_and(|observed| observed != provider_turn_id.as_str());
+                if !mismatch {
+                    state.active_provider_turn_id = Some(provider_turn_id.as_str().to_string());
+                    state.session_state = ProviderSessionState::Active;
                 }
-                state.active_provider_turn_id = Some(provider_turn_id.as_str().to_string());
-                state.session_state = ProviderSessionState::Active;
+                mismatch
+            };
+            if observed_mismatch {
+                clear_codex_command_route(live);
+                return Err(ChatError::new(
+                    ChatErrorCode::Protocol,
+                    "Codex turn notification did not match the response",
+                    false,
+                ));
             }
             if let Some(model) = request.model_id.as_ref() {
                 live.effective_model = model.as_str().to_string();

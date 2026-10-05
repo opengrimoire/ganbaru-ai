@@ -10,6 +10,7 @@
   } from "$lib/calendar/utils";
   import { createTimelineWheelScroll } from "$lib/calendar/timeline-scroll";
   import TimeGutter from "./TimeGutter.svelte";
+  import { calendarZoomKeyAction } from "./zoom-keys";
   import DayColumn from "./DayColumn.svelte";
   import HourGridlines from "./HourGridlines.svelte";
   import TimezoneSelector from "./TimezoneSelector.svelte";
@@ -241,34 +242,16 @@
       ready = true;
     }
 
-    // Keyboard shortcuts: Shift + +/- and Shift + 0 for internal calendar zoom.
-    // The physical key that produces "+" varies by keyboard layout:
-    //   - US/French: "Equal" key (Shift + = produces +)
-    //   - Spanish/German: "BracketRight" key (where + is printed)
-    //   - Nordic: "Minus" key (+ is the base character)
-    // The Keyboard API may be unavailable in some WebViews (such as Tauri), so
-    // check every physical key code where + is commonly located.
-    const PLUS_KEY_CODES = ["Equal", "BracketRight", "NumpadAdd"];
-    const RESET_KEY_CODES = ["Digit0", "Numpad0"];
-
+    // Keyboard shortcuts for internal calendar zoom; layout handling lives in zoom-keys.ts.
     function handleKeyDown(e: KeyboardEvent) {
-      if (e.ctrlKey || e.metaKey) return; // Reserved for app-level zoom
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || (e.target as HTMLElement)?.isContentEditable) return;
 
-      const resetZoom = e.shiftKey && (e.key === "0" || RESET_KEY_CODES.includes(e.code));
-      const zoomIn = e.key === "+" || (e.shiftKey && PLUS_KEY_CODES.includes(e.code));
-
-      if (resetZoom) {
-        e.preventDefault();
-        calendarZoom.reset();
-      } else if (zoomIn) {
-        e.preventDefault();
-        calendarZoom.zoomStep(1);
-      } else if (e.key === "-" || e.key === "_") {
-        e.preventDefault();
-        calendarZoom.zoomStep(-1);
-      }
+      const action = calendarZoomKeyAction(e);
+      if (!action) return;
+      e.preventDefault();
+      if (action === "reset") calendarZoom.reset();
+      else calendarZoom.zoomStep(action === "in" ? 1 : -1);
     }
     window.addEventListener("keydown", handleKeyDown);
 

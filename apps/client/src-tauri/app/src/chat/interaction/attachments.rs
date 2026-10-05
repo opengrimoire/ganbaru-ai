@@ -16,7 +16,7 @@ use std::path::{Component, Path, PathBuf};
 use tauri_plugin_dialog::{DialogExt, FilePath};
 
 const MAX_IMAGE_BYTES: usize = 20 * 1024 * 1024;
-pub(super) const MAX_IMAGE_COUNT: usize = 8;
+pub(crate) const MAX_IMAGE_COUNT: usize = 8;
 
 pub(crate) async fn import_image(
     app: tauri::AppHandle,

@@ -56,7 +56,7 @@ function updaterEndpoint() {
   }
 
   const repository =
-    process.env.GANBARU_AI_RELEASE_REPOSITORY?.trim() ??
+    process.env.GANBARU_AI_RELEASE_REPOSITORY?.trim() ||
     process.env.GITHUB_REPOSITORY?.trim();
   if (!repository || !GITHUB_REPOSITORY_PATTERN.test(repository)) {
     throw new Error("GANBARU_AI_RELEASE_REPOSITORY must be an owner/name repository");

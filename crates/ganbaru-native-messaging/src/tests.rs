@@ -985,11 +985,11 @@ fn enforces_short_and_long_break_settings_independently() {
         runtime: None,
         limit_state: None,
     };
-    let mut short_break = response_for_phase("short_break");
-    let mut long_break = response_for_phase("long_break");
+    let short_break = response_for_phase("short_break");
+    let long_break = response_for_phase("long_break");
 
-    assert!(should_enforce(&snapshot, &mut short_break));
-    assert!(!should_enforce(&snapshot, &mut long_break));
+    assert!(should_enforce(&snapshot, &short_break));
+    assert!(!should_enforce(&snapshot, &long_break));
 }
 
 #[test]
@@ -1004,11 +1004,11 @@ fn enforces_focus_independently_from_break_toggles() {
         runtime: None,
         limit_state: None,
     };
-    let mut focus = response_for_phase("focus");
-    let mut short_break = response_for_phase("short_break");
+    let focus = response_for_phase("focus");
+    let short_break = response_for_phase("short_break");
 
-    assert!(!should_enforce(&snapshot, &mut focus));
-    assert!(should_enforce(&snapshot, &mut short_break));
+    assert!(!should_enforce(&snapshot, &focus));
+    assert!(should_enforce(&snapshot, &short_break));
 }
 
 #[test]
@@ -1020,9 +1020,9 @@ fn skips_paused_focus_when_pause_setting_enabled() {
         runtime: Some(runtime_for_phase("focus", true)),
         limit_state: None,
     };
-    let mut focus = response_for_phase("focus");
+    let focus = response_for_phase("focus");
 
-    assert!(!should_enforce(&snapshot, &mut focus));
+    assert!(!should_enforce(&snapshot, &focus));
 }
 
 #[test]
@@ -1036,9 +1036,9 @@ fn keeps_enforcing_idle_paused_focus() {
         runtime: Some(runtime),
         limit_state: None,
     };
-    let mut focus = response_for_phase("focus");
+    let focus = response_for_phase("focus");
 
-    assert!(should_enforce(&snapshot, &mut focus));
+    assert!(should_enforce(&snapshot, &focus));
 }
 
 #[test]
@@ -1052,9 +1052,9 @@ fn keeps_enforcing_suspend_paused_focus() {
         runtime: Some(runtime),
         limit_state: None,
     };
-    let mut focus = response_for_phase("focus");
+    let focus = response_for_phase("focus");
 
-    assert!(should_enforce(&snapshot, &mut focus));
+    assert!(should_enforce(&snapshot, &focus));
 }
 
 #[test]
@@ -1068,9 +1068,9 @@ fn treats_missing_pause_reason_as_regular_pause() {
         runtime: Some(runtime),
         limit_state: None,
     };
-    let mut focus = response_for_phase("focus");
+    let focus = response_for_phase("focus");
 
-    assert!(!should_enforce(&snapshot, &mut focus));
+    assert!(!should_enforce(&snapshot, &focus));
 }
 
 #[test]
@@ -1084,9 +1084,9 @@ fn enforces_paused_focus_when_pause_setting_disabled() {
         runtime: Some(runtime_for_phase("focus", true)),
         limit_state: None,
     };
-    let mut focus = response_for_phase("focus");
+    let focus = response_for_phase("focus");
 
-    assert!(should_enforce(&snapshot, &mut focus));
+    assert!(should_enforce(&snapshot, &focus));
 }
 
 #[test]

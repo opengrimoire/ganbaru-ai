@@ -85,6 +85,8 @@ interface NotesStructuralBlockActionsContext {
 export interface NotesStructuralBlockActions {
   /** True while the block's database is still being created; callers keep the placeholder and defer database reads. */
   isDatabaseCreationPending: (blockId: string) => boolean;
+  /** Forget reserved database creations after their queued writes were abandoned and will never retry. */
+  discardPendingDatabaseCreations: () => void;
   convertBlock: (blockId: string, type: NotesBlockType, clearText?: boolean, selection?: NotesTextSelection) => Promise<void>;
   toggleTodo: (blockId: string, checked: boolean) => Promise<void>;
   updateCodeLanguage: (blockId: string, language: string) => Promise<void>;
@@ -453,6 +455,7 @@ export function createNotesStructuralBlockActions(
 
   return {
     isDatabaseCreationPending: (blockId) => pendingDatabaseCreations.has(blockId),
+    discardPendingDatabaseCreations: () => pendingDatabaseCreations.clear(),
     convertBlock,
     toggleTodo,
     updateCodeLanguage,

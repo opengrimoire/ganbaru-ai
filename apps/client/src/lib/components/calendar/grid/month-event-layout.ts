@@ -41,9 +41,19 @@ export interface MonthDayLayout {
   rowCount: number;
 }
 
+/** Width variant of the overflow chip label. `compact` drops words so it fits narrow cells. */
+export type MonthMoreLabelVariant = "full" | "compact";
+
+/** Formats the localized overflow chip label for a hidden event count. */
+export type MonthMoreLabelFormatter = (hiddenCount: number, variant: MonthMoreLabelVariant) => string;
+
 export interface MonthDayLayoutOptions {
   cellWidthPx: number;
   availableHeightPx: number;
+  /** Localized overflow label, measured so the chip width matches the rendered text. */
+  formatMoreLabel: MonthMoreLabelFormatter;
+  /** Localized fallback shown for untitled events, measured so chip widths match the rendered text. */
+  untitledLabel: string;
   chipHeightPx?: number;
   rowGapPx?: number;
   horizontalGapPx?: number;
@@ -56,6 +66,8 @@ export interface MonthDayLayoutOptions {
 
 interface NormalizedMonthDayLayoutOptions {
   cellWidthPx: number;
+  formatMoreLabel: MonthMoreLabelFormatter;
+  untitledLabel: string;
   chipHeightPx: number;
   rowGapPx: number;
   horizontalGapPx: number;
@@ -94,6 +106,8 @@ function normalizeOptions(options: MonthDayLayoutOptions): NormalizedMonthDayLay
   const cellWidthPx = Math.max(0, Number.isFinite(options.cellWidthPx) ? options.cellWidthPx : 0);
   return {
     cellWidthPx,
+    formatMoreLabel: options.formatMoreLabel,
+    untitledLabel: options.untitledLabel,
     chipHeightPx: finitePositive(options.chipHeightPx, MONTH_EVENT_CHIP_HEIGHT_PX),
     rowGapPx: Math.max(0, finitePositive(options.rowGapPx, MONTH_EVENT_ROW_GAP_PX)),
     horizontalGapPx: Math.max(0, finitePositive(options.horizontalGapPx, DEFAULT_HORIZONTAL_GAP_PX)),
@@ -113,9 +127,9 @@ function rowCountForHeight(availableHeightPx: number, chipHeightPx: number, rowG
   return Math.max(0, Math.floor((availableHeightPx + rowGapPx) / (chipHeightPx + rowGapPx)));
 }
 
-function visibleTitle(event: CalendarEvent): string {
+function visibleTitle(event: CalendarEvent, untitledLabel: string): string {
   const title = event.title.trim();
-  return title.length > 0 ? title : "(No title)";
+  return title.length > 0 ? title : untitledLabel;
 }
 
 function characterWidth(char: string, avgCharWidthPx: number): number {
@@ -160,7 +174,7 @@ function estimateEventWidths(
   if (options.cellWidthPx <= 0) return { compactWidthPx: 0, desiredWidthPx: 0 };
   const minWidth = Math.min(options.cellWidthPx, options.minEventWidthPx);
   const maxPackedWidth = maxPackedEventWidth(options, minWidth);
-  const naturalWidth = textWidth(visibleTitle(event), options)
+  const naturalWidth = textWidth(visibleTitle(event, options.untitledLabel), options)
     + options.horizontalPaddingPx
     + meetingIndicatorWidth(event);
   const compactWidthPx = roundPx(
@@ -175,10 +189,6 @@ function estimateEventWidths(
   return { compactWidthPx, desiredWidthPx };
 }
 
-function moreLabel(hiddenCount: number, variant: "full" | "compact"): string {
-  return variant === "full" ? `+${hiddenCount} more` : `+${hiddenCount}`;
-}
-
 function labelWidth(label: string, options: NormalizedMonthDayLayoutOptions): number {
   return textWidth(label, options)
     + options.horizontalPaddingPx
@@ -189,9 +199,9 @@ function estimateMoreChip(
   hiddenCount: number,
   options: NormalizedMonthDayLayoutOptions,
 ): MonthDayMoreChipEstimate {
-  if (options.cellWidthPx <= 0) return { widthPx: 0, label: moreLabel(hiddenCount, "compact") };
+  if (options.cellWidthPx <= 0) return { widthPx: 0, label: options.formatMoreLabel(hiddenCount, "compact") };
   const minWidth = Math.min(options.cellWidthPx, options.minMoreWidthPx);
-  const fullLabel = moreLabel(hiddenCount, "full");
+  const fullLabel = options.formatMoreLabel(hiddenCount, "full");
   const fullWidth = labelWidth(fullLabel, options);
   if (fullWidth <= options.cellWidthPx) {
     return {
@@ -200,7 +210,7 @@ function estimateMoreChip(
     };
   }
 
-  const compactLabel = moreLabel(hiddenCount, "compact");
+  const compactLabel = options.formatMoreLabel(hiddenCount, "compact");
   const compactWidth = labelWidth(compactLabel, options);
   return {
     widthPx: roundPx(Math.min(options.cellWidthPx, Math.max(minWidth, compactWidth))),

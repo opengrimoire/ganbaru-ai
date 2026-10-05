@@ -39,7 +39,9 @@ Recorded at `2026-10-04T03:20:35.134751598Z` with Rust `1.98.0 (88d9e12ae 2026-0
 
 The native preview costs more CPU than the former TypeScript preview because it performs full protection and metadata preparation that the cached frontend calculation skipped. Compiler profiles and result shapes also differ.
 
-| Source under `apps/client/src-tauri/app/src/` | SHA-256 |
+The hashes pin the measured sources at record time, so they are intentionally not refreshed. The surviving modules now live under `apps/client/src-tauri/app/src/calendar/` (`recurrence/` and `events/`, with the diagnostic in `events/tests/migration_measurements.rs`) and have changed since; a rerun produces a new record rather than updating this one.
+
+| Source at record time under `apps/client/src-tauri/app/src/` | SHA-256 |
 | --- | --- |
 | `recurrence/canonical.rs` | `21733d637d5dcf0b386eef14176c87c759736664b11c9f6c8edd4cf0699f0968` |
 | `recurrence/engine.rs` | `c1b7179e329910d552de3f42c552e68018c9c4550f2e483af7317be179a7bea6` |

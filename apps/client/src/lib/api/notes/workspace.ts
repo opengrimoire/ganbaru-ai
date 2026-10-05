@@ -34,7 +34,7 @@ export async function loadNotesWorkspaceShell(
 ): Promise<NotesWorkspaceShell> {
   const dbUrl = await ensureDbUrl();
   const value = await invoke<unknown>("notes_load_workspace_shell", { dbUrl, request });
-  const record = notesWorkspaceShellRecord(value);
+  const record = notesWorkspaceShellRecord(value, "notes_load_workspace_shell response");
   if (!Array.isArray(record.pages) || !Array.isArray(record.folders) || !Array.isArray(record.navigation_databases)) {
     throw new Error("notes_load_workspace_shell returned invalid collections");
   }
@@ -141,7 +141,7 @@ export async function listArchivedNotesPages(
 }
 
 function mapPageSummaryWindow(value: unknown, command: string): NotesPageSummaryWindow {
-  const record = notesWorkspaceShellRecord(value);
+  const record = notesWorkspaceShellRecord(value, `${command} response`);
   if (!Array.isArray(record.pages)) throw new Error(`${command} returned invalid pages`);
   return {
     pages: record.pages.map(mapPageSummary),
@@ -156,6 +156,7 @@ export async function listNotesSidebarPages(
   const dbUrl = await ensureDbUrl();
   const record = notesWorkspaceShellRecord(
     await invoke<unknown>("notes_list_sidebar_pages", { dbUrl, request }),
+    "notes_list_sidebar_pages response",
   );
   if (!Array.isArray(record.pages)) {
     throw new Error("notes_list_sidebar_pages returned invalid pages");

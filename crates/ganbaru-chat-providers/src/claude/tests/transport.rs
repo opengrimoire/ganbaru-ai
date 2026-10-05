@@ -365,6 +365,105 @@ fn driver_starts_dispatches_and_stops_a_native_session() {
 }
 
 #[test]
+fn failed_turn_started_emit_releases_the_active_turn() {
+    struct RejectFirstTurnStartSink {
+        rejected: std::sync::atomic::AtomicBool,
+    }
+
+    impl crate::ProviderEventSink for RejectFirstTurnStartSink {
+        fn emit<'a>(
+            &'a self,
+            event: crate::events::CanonicalRuntimeEvent,
+        ) -> crate::DriverFuture<'a, ()> {
+            Box::pin(async move {
+                if matches!(event.event, CanonicalEvent::TurnStarted(_))
+                    && !self
+                        .rejected
+                        .swap(true, std::sync::atomic::Ordering::SeqCst)
+                {
+                    return Err(ChatError::new(
+                        ChatErrorCode::Conflict,
+                        "test sink rejected turn start",
+                        true,
+                    ));
+                }
+                Ok(())
+            })
+        }
+    }
+
+    crate::test_block_on(async {
+        let home = TestDirectory::new("emit-failure-home");
+        let workspace = TestDirectory::new("emit-failure-workspace");
+        let mut driver = ClaudeProviderDriver::new(configuration(home.path())).unwrap();
+        let pair = Arc::new(Mutex::new(Some(native_fixture_connection(
+            home.path().to_path_buf(),
+        ))));
+        driver.set_connection_factory(Arc::new(move |_| {
+            pair.lock().unwrap().take().ok_or_else(|| {
+                ChatError::new(
+                    ChatErrorCode::Conflict,
+                    "test connection already consumed",
+                    false,
+                )
+            })
+        }));
+        let sink = Arc::new(RejectFirstTurnStartSink {
+            rejected: std::sync::atomic::AtomicBool::new(false),
+        });
+        let snapshot = driver
+            .start_session(
+                StartSessionRequest {
+                    thread_id: ChatThreadId::new("thread-1".to_string()).unwrap(),
+                    workspace: VerifiedWorkspaceContext {
+                        working_folder_id: ProjectWorkingFolderId::new("workspace-1".to_string())
+                            .unwrap(),
+                        canonical_path: workspace.path().to_string_lossy().into_owned(),
+                        repository_kind: RepositoryKind::None,
+                        repository_identity: None,
+                    },
+                    provider_instance_id: ProviderInstanceId::new("claude-instance-1".to_string())
+                        .unwrap(),
+                    modes: modes(SafetyMode::AskForApproval, InteractionMode::Build),
+                    model_id: Some(ModelId::new("claude-sonnet-4-5".to_string()).unwrap()),
+                    model_options: Vec::new(),
+                },
+                sink,
+                &context("start"),
+            )
+            .await
+            .unwrap();
+        let turn = |turn_id: &str| SendTurnRequest {
+            command: ChatCommandContext {
+                client_command_id: ChatCommandId::new(format!("command-{turn_id}")).unwrap(),
+                expected_thread_revision: None,
+            },
+            session_id: snapshot.session_id.clone(),
+            turn_id: ChatTurnId::new(turn_id.to_string()).unwrap(),
+            prompt: "Respond with the fixture".to_string(),
+            attachments: Vec::new(),
+            mentions: Vec::new(),
+            model_id: Some(ModelId::new("claude-sonnet-4-5".to_string()).unwrap()),
+            model_options: Vec::new(),
+            modes: modes(SafetyMode::AskForApproval, InteractionMode::Build),
+            developer_instructions: None,
+        };
+
+        let rejected = driver
+            .send_turn(turn("turn-1"), &context("turn-1"))
+            .await
+            .unwrap_err();
+        assert_eq!(rejected.code, ChatErrorCode::Conflict);
+
+        let receipt = driver
+            .send_turn(turn("turn-2"), &context("turn-2"))
+            .await
+            .unwrap();
+        assert_eq!(receipt.state, ChatTurnState::Active);
+    });
+}
+
+#[test]
 fn healthy_probe_exposes_the_native_model_catalog() {
     crate::test_block_on(async {
         let home = TestDirectory::new("probe-model-catalog-home");

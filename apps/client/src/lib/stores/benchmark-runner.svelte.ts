@@ -95,7 +95,7 @@ export interface BenchmarkRunProgress {
   /** Short user-facing label for the current step. */
   step: string;
   /** Current dataset id when phase B is running. */
-  datasetLabel?: string;
+  datasetId?: string;
   /** Set during memory observation so the overlay can show progress. */
   curve?: { done: number; total: number; label: SampleLabel };
 }
@@ -461,7 +461,7 @@ class BenchmarkRunnerStore {
         ? { index: state.suite.index, total: state.suite.scenarioIds.length }
         : undefined,
       step: "Setting up",
-      datasetLabel: seedHandle.datasetId,
+      datasetId: seedHandle.datasetId,
     };
     this.#abort = new AbortController();
     const calendarStore = getCalendar();

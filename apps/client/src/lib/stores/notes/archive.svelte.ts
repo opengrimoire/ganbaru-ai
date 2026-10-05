@@ -97,7 +97,7 @@ export function createNotesArchiveController() {
     if (!current.nextCursor || current.loading) return;
     const requestId = current.requestId + 1;
     const cursor = current.nextCursor;
-    write(kind, { ...current, loading: true, requestId });
+    write(kind, { ...current, loading: true, error: null, requestId });
     try {
       const window = await list(kind, cursor, current.query);
       if (read(kind).requestId !== requestId) return;
@@ -107,6 +107,9 @@ export function createNotesArchiveController() {
         ).values(),
       ];
       write(kind, { ...read(kind), pages, nextCursor: window.next_cursor });
+    } catch (error) {
+      // Report the failure like a reload while keeping the pages and cursor already loaded.
+      if (read(kind).requestId === requestId) write(kind, { ...read(kind), error: errorMessage(error) });
     } finally {
       if (read(kind).requestId === requestId) {
         write(kind, { ...read(kind), loading: false });

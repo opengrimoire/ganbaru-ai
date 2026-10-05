@@ -13,7 +13,8 @@ let localDate = $state("");
 let weekStartLocalDate = $state("");
 let totals = $state<DistractionsBudgetTotal[]>([]);
 let foregroundStatus = $state<DistractionsForegroundDesktopAppStatus>(unavailableStatus());
-let refreshRunning = false;
+/** Generation of the in-flight refresh, so a vault change admits a new refresh at once. */
+let runningRefreshGeneration: number | null = null;
 let generation = 0;
 
 function unavailableStatus(): DistractionsForegroundDesktopAppStatus {
@@ -30,9 +31,9 @@ onActiveVaultIdentityChange(() => {
 
 /** Refresh settings presentation. Native execution continues independently of this reader. */
 async function refreshUsage(context?: SchedulerRunContext): Promise<void> {
-  if (refreshRunning) return;
-  refreshRunning = true;
+  if (runningRefreshGeneration === generation) return;
   const expectedGeneration = generation;
+  runningRefreshGeneration = expectedGeneration;
   try {
     const expectedVault = requireActiveVaultIdentity();
     const projection = await loadDistractionsUsageProjection();
@@ -48,7 +49,7 @@ async function refreshUsage(context?: SchedulerRunContext): Promise<void> {
     foregroundStatus = unavailableStatus();
     console.warn("Failed to refresh distraction usage limits:", error);
   } finally {
-    refreshRunning = false;
+    if (runningRefreshGeneration === expectedGeneration) runningRefreshGeneration = null;
   }
 }
 

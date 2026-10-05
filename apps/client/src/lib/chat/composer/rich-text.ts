@@ -48,13 +48,12 @@ export function chatComposerPlainText(document: ChatComposerDocument): string {
 /** Serializes supported visual marks to provider-facing Markdown. */
 export function chatComposerMarkdown(document: ChatComposerDocument): string {
   return normalizeChatComposerDocument(document).lines.map((line) => line.runs.map((run) => {
-    const escaped = escapeMarkedText(run.text);
-    const bold = run.marks.includes("bold");
-    const italic = run.marks.includes("italic");
-    if (bold && italic) return `**_${escaped}_**`;
-    if (bold) return `**${escaped}**`;
-    if (italic) return `_${escaped}_`;
-    return run.text;
+    const layout = markdownRunLayout(run);
+    return layout.leading
+      + layout.prefix
+      + markdownCoreText(run, layout.core)
+      + layout.suffix
+      + layout.trailing;
   }).join("")).join("\n");
 }
 
@@ -72,21 +71,27 @@ export function chatComposerMarkdownOffset(
   for (let lineIndex = 0; lineIndex < normalized.lines.length; lineIndex += 1) {
     const line = normalized.lines[lineIndex]!;
     for (const run of line.runs) {
-      const prefix = markdownRunPrefix(run);
-      const suffix = markdownRunSuffix(run);
-      const serialized = markdownRunText(run);
+      const layout = markdownRunLayout(run);
+      const coreStart = visibleCursor + layout.leading.length;
+      const coreEnd = coreStart + layout.core.length;
       const runEnd = visibleCursor + run.text.length;
+      const opened = markdownCursor + layout.leading.length + layout.prefix.length;
+      const coreClosed = opened + markdownCoreText(run, layout.core).length;
+      const closed = coreClosed + layout.suffix.length;
       if (target < runEnd) {
-        return markdownCursor + prefix.length + markdownRunText({
-          ...run,
-          text: run.text.slice(0, target - visibleCursor),
-        }).length;
+        if (target < coreStart) return markdownCursor + (target - visibleCursor);
+        if (target < coreEnd) {
+          return opened + markdownCoreText(run, layout.core.slice(0, target - coreStart)).length;
+        }
+        return closed + (target - coreEnd);
       }
       if (target === runEnd && affinity === "backward") {
-        return markdownCursor + prefix.length + serialized.length;
+        return layout.trailing.length > 0 || layout.core.length === 0
+          ? closed + layout.trailing.length
+          : coreClosed;
       }
       visibleCursor = runEnd;
-      markdownCursor += prefix.length + serialized.length + suffix.length;
+      markdownCursor = closed + layout.trailing.length;
     }
     if (lineIndex < normalized.lines.length - 1) {
       if (target === visibleCursor) return markdownCursor;
@@ -317,26 +322,44 @@ function escapeMarkedText(text: string): string {
   return text.replace(/([\\*_])/gu, "\\$1");
 }
 
-function markdownRunPrefix(run: ChatComposerTextRun): string {
-  const bold = run.marks.includes("bold");
-  const italic = run.marks.includes("italic");
-  if (bold && italic) return "**_";
-  if (bold) return "**";
-  if (italic) return "_";
-  return "";
+interface MarkdownRunLayout {
+  leading: string;
+  prefix: string;
+  core: string;
+  suffix: string;
+  trailing: string;
 }
 
-function markdownRunSuffix(run: ChatComposerTextRun): string {
+/**
+ * Splits a run into visible text and emphasis delimiters.
+ *
+ * CommonMark only treats a delimiter as emphasis when it touches non-whitespace text, so
+ * edge whitespace of a marked run stays outside the delimiters and a whitespace-only run
+ * is emitted without them. Emphasis always uses `*` because CommonMark rejects `_`
+ * inside words; combined marks use the `***` form CommonMark reads as emphasis around
+ * strong emphasis.
+ */
+function markdownRunLayout(run: ChatComposerTextRun): MarkdownRunLayout {
   const bold = run.marks.includes("bold");
   const italic = run.marks.includes("italic");
-  if (bold && italic) return "_**";
-  if (bold) return "**";
-  if (italic) return "_";
-  return "";
+  const delimiters: readonly [string, string] | null = bold && italic
+    ? ["***", "***"]
+    : bold ? ["**", "**"] : italic ? ["*", "*"] : null;
+  if (!delimiters) return { leading: "", prefix: "", core: run.text, suffix: "", trailing: "" };
+  const core = run.text.trim();
+  if (core.length === 0) return { leading: run.text, prefix: "", core: "", suffix: "", trailing: "" };
+  const leadingLength = run.text.length - run.text.trimStart().length;
+  return {
+    leading: run.text.slice(0, leadingLength),
+    prefix: delimiters[0],
+    core,
+    suffix: delimiters[1],
+    trailing: run.text.slice(leadingLength + core.length),
+  };
 }
 
-function markdownRunText(run: ChatComposerTextRun): string {
-  return run.marks.length > 0 ? escapeMarkedText(run.text) : run.text;
+function markdownCoreText(run: ChatComposerTextRun, text: string): string {
+  return run.marks.length > 0 ? escapeMarkedText(text) : text;
 }
 
 function normalizeMarks(marks: readonly ChatComposerMark[]): ChatComposerMark[] {

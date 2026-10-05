@@ -24,7 +24,9 @@
     MONTH_EVENT_CHIP_HEIGHT_PX,
     MONTH_EVENT_ROW_GAP_PX,
     type MonthDayLayoutItem,
+    type MonthMoreLabelFormatter,
   } from "./month-event-layout";
+  import { formatNumber } from "$lib/i18n/formatters";
   import { getMeetingIndicatorState } from "./event-indicators";
   import Video from "@lucide/svelte/icons/video";
   import MapPin from "@lucide/svelte/icons/map-pin";
@@ -179,6 +181,16 @@
     return () => observer.disconnect();
   });
 
+  const formatMoreLabel: MonthMoreLabelFormatter = $derived.by(() => {
+    const currentLocale = locale;
+    return (hiddenCount, variant) => {
+      const count = formatNumber(currentLocale, hiddenCount);
+      return variant === "full" ? t("calendar.moreEvents", count) : t("calendar.moreEventsCompact", count);
+    };
+  });
+
+  const untitledLabel = $derived(t("calendar.event.noTitle"));
+
   const monthLayoutOptionsByColumn = $derived.by(() => {
     const cellHeightPx = monthGridHeight > 0 && weeks.length > 0
       ? monthGridHeight / weeks.length
@@ -206,6 +218,8 @@
         availableHeightPx,
         chipHeightPx: MONTH_EVENT_CHIP_HEIGHT_PX,
         rowGapPx: MONTH_EVENT_ROW_GAP_PX,
+        formatMoreLabel,
+        untitledLabel,
       };
     });
   });
@@ -215,6 +229,8 @@
     availableHeightPx: 0,
     chipHeightPx: MONTH_EVENT_CHIP_HEIGHT_PX,
     rowGapPx: MONTH_EVENT_ROW_GAP_PX,
+    formatMoreLabel,
+    untitledLabel,
   });
 
   function monthLayoutOptionsForColumn(columnIndex: number) {
@@ -227,7 +243,7 @@
 
   function displayEventTitle(event: CalendarEvent): string {
     const title = event.title.trim();
-    return title.length > 0 ? title : t("calendar.event.noTitle");
+    return title.length > 0 ? title : untitledLabel;
   }
 
   function eventTimeRangeLabel(event: CalendarEvent): string {

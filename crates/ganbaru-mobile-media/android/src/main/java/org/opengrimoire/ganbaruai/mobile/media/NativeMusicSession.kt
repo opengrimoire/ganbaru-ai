@@ -11,6 +11,9 @@ import app.tauri.plugin.Channel
 import app.tauri.plugin.JSObject
 import org.json.JSONObject
 
+/** Prefix of selected-tree media locators produced by the Rust Music queue. */
+private const val SAF_LOCATOR_PREFIX = "ganbaru-saf:"
+
 /** Typed interruption context for the native session owner. */
 internal enum class NativeMusicInterruption(val wireValue: String) {
   ServiceStopped("service-stopped"),
@@ -108,12 +111,15 @@ object NativeMusicSession {
   /** A destroyed service cannot create a replacement worker around stalled provider IO. */
   internal fun resolveSource(action: () -> Unit) { sourceWorker.execute(action) }
 
-  /** Resolves selected-tree paths through the application ContentResolver. */
+  /**
+   * Resolves direct document URIs and selected-tree locators through the ContentResolver.
+   * This is the single validated locator parser for playback and metadata reads.
+   */
   fun resolveUri(context: Context, locator: String): Uri {
     val direct = Uri.parse(locator)
     if (direct.scheme == "content") return direct
-    require(locator.startsWith("ganbaru-saf:")) { "Android media requires a selected document" }
-    val encoded = locator.removePrefix("ganbaru-saf:")
+    require(locator.startsWith(SAF_LOCATOR_PREFIX)) { "Android media requires a selected document" }
+    val encoded = locator.removePrefix(SAF_LOCATOR_PREFIX)
     val separator = encoded.indexOf('#')
     require(separator > 0 && separator < encoded.lastIndex) { "Android media locator is invalid" }
     val tree = Uri.parse(Uri.decode(encoded.substring(0, separator)))

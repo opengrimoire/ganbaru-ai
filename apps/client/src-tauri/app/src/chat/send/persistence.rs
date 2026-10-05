@@ -2,6 +2,7 @@
 
 use super::support::{corrupt_data_error, i64_value, json_error, persistence_error};
 use super::validation::{prompt_preview, prompt_title, wire_interaction, wire_safety};
+use crate::chat::interaction::MAX_IMAGE_COUNT;
 use crate::chat::send_commands::{SendChatTurnCommand, SendChatTurnResult, SteerChatTurnCommand};
 use crate::vault;
 use ganbaru_chat::agent_runs::{StartingAgentRun, TurnOrigin};
@@ -95,7 +96,7 @@ pub(super) async fn read_attachment_references(
     working_folder_id: Option<&ProjectWorkingFolderId>,
     attachment_ids: &[ChatAttachmentId],
 ) -> ChatResult<Vec<PromptAttachmentReference>> {
-    if attachment_ids.len() > 8 {
+    if attachment_ids.len() > MAX_IMAGE_COUNT {
         return Err(ChatError::validation(
             "attachments",
             "Too many Chat attachments",

@@ -138,6 +138,7 @@ enum FixtureScenario {
     MalformedInitialize,
     CommandApproval,
     StructuredQuestion,
+    TurnNotInProgress,
 }
 
 #[derive(Default)]
@@ -493,6 +494,16 @@ async fn run_app_server_fixture<R, W>(
             }
             "config/mcpServer/reload" => {
                 write_fixture_message(&mut writer, json!({ "id": id, "result": {} })).await;
+            }
+            "turn/start" if scenario == FixtureScenario::TurnNotInProgress => {
+                write_fixture_message(
+                    &mut writer,
+                    json!({
+                        "id": id,
+                        "result": { "turn": { "id": "fixture-provider-turn", "status": "completed" } }
+                    }),
+                )
+                .await;
             }
             "turn/start" => {
                 write_fixture_message(

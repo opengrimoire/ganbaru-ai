@@ -202,7 +202,9 @@ export function createProjectStoreActions(context: ProjectStoreActionContext) {
 
   /**
    * Drop receipt rows whose project, field, or option was explicitly removed while the intent
-   * was pending. Absence from a paginated view is not deletion evidence.
+   * was pending. Absence from a paginated view is not deletion evidence. Options carry no project
+   * id, but every pending intent is scoped to one project, so its receipt options belong to fields
+   * of `pending.projectId`.
    */
   function filterRemovedReceiptRows(mutation: ProjectMutation, pending: PendingProjectOperation): ProjectMutation {
     const tasks = mutation.changed.tasks.filter((task) => !pending.removedProjects.has(task.projectId));
@@ -720,10 +722,15 @@ export function createProjectStoreActions(context: ProjectStoreActionContext) {
   }
 
   /** Duplicate a property's schema and options with fresh identities and empty task values. */
-  async function duplicateCustomField(field: ProjectCustomField, name: string): Promise<ProjectCustomField> {
+  async function duplicateCustomField(
+    field: ProjectCustomField,
+    name: string,
+  ): Promise<ProjectCustomField | undefined> {
+    const displayName = normalizeProjectName(name);
+    if (!displayName) return undefined;
     const fieldId = crypto.randomUUID();
     const mutation = await commitMutation(`field:${fieldId}`, () => createProjectCustomField({
-      id: fieldId, projectId: field.projectId, name: normalizeProjectName(name), fieldType: field.fieldType,
+      id: fieldId, projectId: field.projectId, name: displayName, fieldType: field.fieldType,
       sortOrder: selectors.nextCustomFieldSortOrder(field.projectId), duplicateSourceId: field.id,
     }));
     return changedById(mutation.changed.customFields, fieldId, "duplicated custom field");

@@ -170,7 +170,7 @@
       itemCount: EVENT_COLOR_OPTIONS.length,
       key: e.key,
       orientation: "grid",
-      columns: 4,
+      columns: mobileLayout ? MOBILE_PALETTE_COLUMNS : PALETTE_COLUMNS,
     });
     if (nextIndex === index) return;
     e.preventDefault();

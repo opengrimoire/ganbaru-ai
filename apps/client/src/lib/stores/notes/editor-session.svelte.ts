@@ -395,7 +395,7 @@ export function createNotesEditorStore(navigation: NotesEditorNavigation, restor
   }
 
   function queueDescendantHydration(
-    pageId: string = pageSession.selectedPageId ?? "",
+    pageId: string | null = pageSession.selectedPageId,
     generation: number = pageSession.generation,
   ): void {
     hydrationController.queueDescendantHydration(pageId, generation);
@@ -933,7 +933,7 @@ export function createNotesEditorStore(navigation: NotesEditorNavigation, restor
     scheduleBlockSave: queueBlockSave,
     flushBlockSave,
     flushPendingBlockSaves,
-    discardPendingEditorWrites,
+    discardPendingEditorWrites: discardQueuedEditorWrites,
   } = createNotesBlockPersistence({
     reconcileCanonicalBlocks: (blocks) => undoController.reconcileCanonicalBlocks(blocks),
     readBlock: (blockId) => treeProjection.blocksById[blockId],
@@ -948,6 +948,12 @@ export function createNotesEditorStore(navigation: NotesEditorNavigation, restor
   function enqueueEditorMutation(mutation: () => Promise<void>): Promise<void> {
     pageCreationController.markChanged(pageSession.selectedPageId);
     return queueEditorMutation(mutation);
+  }
+
+  /** Abandon queued writes together with the database reservations that only those writes could complete. */
+  function discardPendingEditorWrites(): void {
+    discardQueuedEditorWrites();
+    blockActions.discardPendingDatabaseCreations();
   }
 
   /** Reconcile an acknowledged database rename without another write or replacing its identity. */

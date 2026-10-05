@@ -511,5 +511,9 @@ export function createNotesBlockActions(context: NotesBlockActionsContext): Note
     ...movementActions,
     ...templateActions,
     isDatabaseCreationPending: (id) => structuralActions.isDatabaseCreationPending(id) || databasePaste.isCreating(id),
+    discardPendingDatabaseCreations: () => {
+      structuralActions.discardPendingDatabaseCreations();
+      databasePaste.discardPendingCreations();
+    },
   };
 }

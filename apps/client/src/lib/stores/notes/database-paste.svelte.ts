@@ -197,9 +197,14 @@ export function createNotesDatabasePasteController(context: DatabasePasteContext
     } finally { busy = false; }
   }
 
+  /** Forget pending database copies after their queued writes were abandoned and will never retry. */
+  function discardPendingCreations(): void {
+    creating.clear();
+  }
+
   return {
     get prompt() { return prompt; }, get busy() { return busy; }, get error() { return error; }, get started() { return started; },
-    isCreating: (id: string) => creating.has(id), beginCopies, acceptCopy, inspectLink, dismiss, mention, linkedView,
+    isCreating: (id: string) => creating.has(id), beginCopies, acceptCopy, inspectLink, dismiss, mention, linkedView, discardPendingCreations,
   };
 }
 

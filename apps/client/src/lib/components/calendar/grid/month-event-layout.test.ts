@@ -4,7 +4,31 @@ import {
   layoutMonthDayEvents,
   MONTH_EVENT_CHIP_HEIGHT_PX,
   MONTH_EVENT_ROW_GAP_PX,
+  type MonthDayLayoutOptions,
+  type MonthMoreLabelFormatter,
 } from "./month-event-layout";
+import { calendar as enCalendar } from "$lib/i18n/messages/en/calendar";
+import { calendar as esCalendar } from "$lib/i18n/messages/es/calendar";
+
+function catalogMoreLabel(catalog: typeof enCalendar | typeof esCalendar): MonthMoreLabelFormatter {
+  return (hiddenCount, variant) => variant === "full"
+    ? catalog.moreEvents(String(hiddenCount))
+    : catalog.moreEventsCompact(String(hiddenCount));
+}
+
+/** Layout options whose defaults come from the English catalog. */
+type CatalogLayoutOption = "formatMoreLabel" | "untitledLabel";
+
+function layoutDay(
+  events: readonly CalendarEvent[],
+  options: Omit<MonthDayLayoutOptions, CatalogLayoutOption> & Partial<Pick<MonthDayLayoutOptions, CatalogLayoutOption>>,
+) {
+  return layoutMonthDayEvents(events, {
+    formatMoreLabel: catalogMoreLabel(enCalendar),
+    untitledLabel: enCalendar.event.noTitle,
+    ...options,
+  });
+}
 
 function evt(id: string, title: string, overrides: Partial<CalendarEvent> = {}): CalendarEvent {
   return {
@@ -24,7 +48,7 @@ function eventItemByTitle(layoutItems: ReturnType<typeof layoutMonthDayEvents>["
 
 describe("layoutMonthDayEvents", () => {
   it("packs short events into the same row when they fit", () => {
-    const layout = layoutMonthDayEvents([
+    const layout = layoutDay([
       evt("1", "Sleep"),
       evt("2", "Breakfast"),
     ], {
@@ -39,7 +63,7 @@ describe("layoutMonthDayEvents", () => {
   });
 
   it("expands the last event in each row to the row edge", () => {
-    const layout = layoutMonthDayEvents([
+    const layout = layoutDay([
       evt("1", "Sleep"),
       evt("2", "Breakfast"),
     ], {
@@ -53,7 +77,7 @@ describe("layoutMonthDayEvents", () => {
   });
 
   it("uses spare row width on earlier readable labels before expanding the last event", () => {
-    const layout = layoutMonthDayEvents([
+    const layout = layoutDay([
       evt("1", "Dormir"),
       evt("2", "Desayuno"),
       evt("3", "Ejercicio"),
@@ -76,7 +100,7 @@ describe("layoutMonthDayEvents", () => {
   });
 
   it("uses full-width rows when every event fits vertically", () => {
-    const layout = layoutMonthDayEvents([
+    const layout = layoutDay([
       evt("1", "A"),
       evt("2", "B"),
       evt("3", "C"),
@@ -93,14 +117,14 @@ describe("layoutMonthDayEvents", () => {
   });
 
   it("reserves month chip width for meeting detail icons", () => {
-    const plain = layoutMonthDayEvents([
+    const plain = layoutDay([
       evt("1", "Meet"),
       evt("2", "Next"),
     ], {
       cellWidthPx: 130,
       availableHeightPx: MONTH_EVENT_CHIP_HEIGHT_PX,
     });
-    const withMeetingIcons = layoutMonthDayEvents([
+    const withMeetingIcons = layoutDay([
       evt("1", "Meet", { hasCallLink: true, location: "Room A" }),
       evt("2", "Next"),
     ], {
@@ -119,14 +143,14 @@ describe("layoutMonthDayEvents", () => {
   });
 
   it("does not reserve month chip width for repeat alone", () => {
-    const plain = layoutMonthDayEvents([
+    const plain = layoutDay([
       evt("1", "Repeat"),
       evt("2", "Next"),
     ], {
       cellWidthPx: 100,
       availableHeightPx: MONTH_EVENT_CHIP_HEIGHT_PX,
     });
-    const recurring = layoutMonthDayEvents([
+    const recurring = layoutDay([
       evt("1", "Repeat", {
         recurrence: { frequency: "daily", interval: 1, end: { type: "never" } },
       }),
@@ -147,7 +171,7 @@ describe("layoutMonthDayEvents", () => {
   });
 
   it("moves a long event to the next row when the current row is full", () => {
-    const layout = layoutMonthDayEvents([
+    const layout = layoutDay([
       evt("1", "Sleep"),
       evt("2", "Breakfast"),
       evt("3", "Deep planning review"),
@@ -162,7 +186,7 @@ describe("layoutMonthDayEvents", () => {
   });
 
   it("uses the half-row cap for packing before expanding the last event", () => {
-    const layout = layoutMonthDayEvents([
+    const layout = layoutDay([
       evt("1", "This is a very long event title that cannot fit naturally"),
       evt("2", "Another very long event title that still shares a row"),
     ], {
@@ -176,7 +200,7 @@ describe("layoutMonthDayEvents", () => {
   });
 
   it("uses available height to limit rows without shrinking chips", () => {
-    const layout = layoutMonthDayEvents([
+    const layout = layoutDay([
       evt("1", "Sleep"),
       evt("2", "Breakfast"),
       evt("3", "Meditate"),
@@ -193,7 +217,7 @@ describe("layoutMonthDayEvents", () => {
   });
 
   it("adds a more chip when events overflow", () => {
-    const layout = layoutMonthDayEvents([
+    const layout = layoutDay([
       evt("1", "Sleep"),
       evt("2", "Breakfast"),
       evt("3", "Meditate"),
@@ -210,7 +234,7 @@ describe("layoutMonthDayEvents", () => {
   });
 
   it("uses the compact more label when the full label cannot fit", () => {
-    const layout = layoutMonthDayEvents([
+    const layout = layoutDay([
       evt("1", "A"),
       evt("2", "B"),
       evt("3", "C"),
@@ -225,8 +249,51 @@ describe("layoutMonthDayEvents", () => {
     expect(more?.label).toBe("+3");
   });
 
+  it("renders the localized more label from the catalog", () => {
+    const layout = layoutDay([
+      evt("1", "Sleep"),
+      evt("2", "Breakfast"),
+      evt("3", "Meditate"),
+      evt("4", "Review"),
+    ], {
+      cellWidthPx: 100,
+      availableHeightPx: MONTH_EVENT_CHIP_HEIGHT_PX,
+      formatMoreLabel: catalogMoreLabel(esCalendar),
+    });
+
+    const more = layout.items.find((item) => item.kind === "more");
+    expect(more?.label).toBe("+3 más");
+  });
+
+  it("measures the formatted label when choosing between full and compact variants", () => {
+    const events = [evt("1", "Sleep"), evt("2", "Breakfast"), evt("3", "Meditate"), evt("4", "Review")];
+    const options = { cellWidthPx: 100, availableHeightPx: MONTH_EVENT_CHIP_HEIGHT_PX };
+    const longLabel: MonthMoreLabelFormatter = (count, variant) =>
+      variant === "full" ? `+${count} more events are hidden here` : `+${count}`;
+
+    const short = layoutDay(events, options).items.find((item) => item.kind === "more");
+    const long = layoutDay(events, { ...options, formatMoreLabel: longLabel })
+      .items.find((item) => item.kind === "more");
+
+    expect(short?.kind === "more" && short.label).toBe("+3 more");
+    expect(long?.kind === "more" && long.label).toMatch(/^\+\d+$/u);
+  });
+
+  it("measures untitled events with the localized fallback label", () => {
+    const options = { cellWidthPx: 200, availableHeightPx: MONTH_EVENT_CHIP_HEIGHT_PX };
+    const untitled = layoutDay([evt("1", "  "), evt("2", "Next")], {
+      ...options,
+      untitledLabel: esCalendar.event.noTitle,
+    });
+    const titled = layoutDay([evt("1", esCalendar.event.noTitle), evt("2", "Next")], options);
+    const shortFallback = layoutDay([evt("1", "  "), evt("2", "Next")], { ...options, untitledLabel: "-" });
+
+    expect(untitled.items[0].widthPx).toBe(titled.items[0].widthPx);
+    expect(untitled.items[0].widthPx).toBeGreaterThan(shortFallback.items[0].widthPx);
+  });
+
   it("keeps the more chip compact while expanding the previous event", () => {
-    const layout = layoutMonthDayEvents([
+    const layout = layoutDay([
       evt("1", "A"),
       evt("2", "B"),
       evt("3", "C"),
@@ -248,7 +315,7 @@ describe("layoutMonthDayEvents", () => {
   });
 
   it("keeps readable events before the more chip when the row has enough space", () => {
-    const layout = layoutMonthDayEvents([
+    const layout = layoutDay([
       evt("1", "Compras"),
       evt("2", "Comer"),
       evt("3", "Cenar"),
@@ -273,7 +340,7 @@ describe("layoutMonthDayEvents", () => {
   });
 
   it("hides another event before leaving earlier labels compressed beside the more chip", () => {
-    const layout = layoutMonthDayEvents([
+    const layout = layoutDay([
       evt("1", "Compras"),
       evt("2", "Comer"),
       evt("3", "Cenar"),
@@ -294,7 +361,7 @@ describe("layoutMonthDayEvents", () => {
   });
 
   it("replaces visible chips until the more chip fits", () => {
-    const layout = layoutMonthDayEvents([
+    const layout = layoutDay([
       evt("1", "A"),
       evt("2", "B"),
       evt("3", "C"),
@@ -309,7 +376,7 @@ describe("layoutMonthDayEvents", () => {
   });
 
   it("returns no visible items when no legible row fits", () => {
-    const layout = layoutMonthDayEvents([
+    const layout = layoutDay([
       evt("1", "Sleep"),
     ], {
       cellWidthPx: 100,
@@ -322,7 +389,7 @@ describe("layoutMonthDayEvents", () => {
   });
 
   it("clamps chip width inside very narrow cells", () => {
-    const layout = layoutMonthDayEvents([
+    const layout = layoutDay([
       evt("1", "Sleep"),
     ], {
       cellWidthPx: 20,

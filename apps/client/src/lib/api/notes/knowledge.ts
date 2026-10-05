@@ -116,11 +116,11 @@ export async function searchNotes(
     includeResolvedComments,
     cursor,
   });
-  const record = notesWorkspaceShellRecord(rows);
+  const record = notesWorkspaceShellRecord(rows, "notes_search response");
   if (!Array.isArray(record.results)) throw new Error("notes_search returned invalid results");
   return {
     results: record.results.map((value) => {
-    const record = notesWorkspaceShellRecord(value);
+    const record = notesWorkspaceShellRecord(value, "notes_search result");
     return mapNotesSearchResultDto({ ...record, page: mapPageSummary(record.page) });
     }),
     next_cursor: shellNullableString(record.next_cursor, "notes_search.next_cursor"),

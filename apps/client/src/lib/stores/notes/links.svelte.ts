@@ -12,6 +12,7 @@ import type {
   NotesPage,
   NotesPageAlias,
   NotesUnresolvedLink,
+  NotesWorkspaceShell,
 } from "$lib/notes/types";
 
 interface NotesLinksControllerContext {
@@ -84,7 +85,14 @@ export function createNotesLinksController(context: NotesLinksControllerContext)
     if (!cursor) return;
     const requestId = ++destinationsRequestId;
     const projectId = context.readSelectedProjectId();
-    const result = await listNotesDestinationCandidates(projectId, cursor, destinationQuery);
+    let result: NotesWorkspaceShell;
+    try {
+      result = await listNotesDestinationCandidates(projectId, cursor, destinationQuery);
+    } catch (error) {
+      // Keep the loaded candidates and cursor so the same page can be requested again.
+      console.warn("Notes destination page load failed", error);
+      return;
+    }
     if (requestId !== destinationsRequestId || projectId !== context.readSelectedProjectId()) return;
     destinations = currentDestinationPages([
       ...new Map([...destinations, ...result.pages].map((page) => [page.id, page])).values(),

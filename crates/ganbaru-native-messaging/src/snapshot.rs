@@ -283,7 +283,7 @@ pub(super) fn runtime_status_at(
     )
 }
 
-pub(super) fn should_enforce(snapshot: &StateSnapshot, response: &mut NativeResponse) -> bool {
+pub(super) fn should_enforce(snapshot: &StateSnapshot, response: &NativeResponse) -> bool {
     if !response.active {
         return false;
     }

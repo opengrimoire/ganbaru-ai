@@ -9,7 +9,8 @@ mod support;
 mod workspace_mentions;
 
 pub(crate) use attachments::{
-    attachment_data_url, import_image, import_text_snippet, pick_images, read_attachments,
+    MAX_IMAGE_COUNT, attachment_data_url, import_image, import_text_snippet, pick_images,
+    read_attachments,
 };
 pub(crate) use drafts::{read_user_input_draft, save_user_input_draft};
 pub(crate) use followups::{

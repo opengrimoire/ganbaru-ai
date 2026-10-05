@@ -139,7 +139,7 @@
           value={statusCategoryDraftValue(status)}
           options={statusCategoryOptions}
           onChange={(value) => setStatusCategory(status.id, value)}
-          ariaLabel={t("projects.settings.statusName")}
+          ariaLabel={t("projects.settings.statusCategory")}
           class="w-32"
         />
         <button
@@ -185,7 +185,7 @@
       value={newStatusCategory}
       options={statusCategoryOptions}
       onChange={setNewStatusCategory}
-      ariaLabel={t("projects.settings.statusName")}
+      ariaLabel={t("projects.settings.statusCategory")}
       class="w-32"
     />
     <button

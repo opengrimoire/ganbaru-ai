@@ -15,22 +15,23 @@ export class ChatThreadCollectionController {
   archivedThreads = $state<ChatThreadShellRead[]>([]);
   archivedThreadsLoading = $state(false);
 
+  private generation = 0;
   private archivedThreadsPromise: Promise<void> | null = null;
   private archivedThreadsLoaded = false;
 
   constructor(private readonly options: ChatThreadCollectionControllerOptions) {}
 
   reset(): void {
+    this.resetWindow();
+  }
+
+  /** Clears loaded windows and invalidates any in-flight archive load. */
+  resetWindow(): void {
+    this.generation += 1;
     this.activeThreads = [];
     this.archivedThreads = [];
     this.archivedThreadsLoading = false;
     this.archivedThreadsPromise = null;
-    this.archivedThreadsLoaded = false;
-  }
-
-  resetWindow(): void {
-    this.activeThreads = [];
-    this.archivedThreads = [];
     this.archivedThreadsLoaded = false;
   }
 
@@ -41,7 +42,9 @@ export class ChatThreadCollectionController {
 
   async ensureArchived(): Promise<void> {
     if (this.archivedThreadsLoaded) return;
-    this.archivedThreadsPromise ??= (async () => {
+    if (this.archivedThreadsPromise) return this.archivedThreadsPromise;
+    const generation = this.generation;
+    const load = (async () => {
       this.archivedThreadsLoading = true;
       try {
         const threads = await chatApi.listChatThreadWindow(
@@ -49,6 +52,7 @@ export class ChatThreadCollectionController {
           true,
           RECENT_THREAD_WINDOW,
         );
+        if (generation !== this.generation) return;
         const threadsById = new Map(this.archivedThreads.map((thread) => [thread.id, thread]));
         for (const thread of threads) threadsById.set(thread.id, thread);
         this.archivedThreads = [...threadsById.values()].sort((left, right) => (
@@ -56,11 +60,14 @@ export class ChatThreadCollectionController {
         ));
         this.archivedThreadsLoaded = true;
       } finally {
-        this.archivedThreadsLoading = false;
-        this.archivedThreadsPromise = null;
+        if (generation === this.generation) {
+          this.archivedThreadsLoading = false;
+          this.archivedThreadsPromise = null;
+        }
       }
     })();
-    await this.archivedThreadsPromise;
+    this.archivedThreadsPromise = load;
+    await load;
   }
 
   async rename(thread: ChatThreadShellRead, title: string): Promise<void> {

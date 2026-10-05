@@ -56,6 +56,17 @@ describe("native background playback projection", () => {
     expect(api.startSoundscape).not.toHaveBeenCalled();
   });
 
+  it("reports a multi-sound selection as an error when multiple sounds are disabled", async () => {
+    api.getMusicSoundscapeState.mockResolvedValue({ ...state, activeIds: ["noise", "rain"], automaticIntent: false, desiredPlaying: false });
+    const { getSoundscapeStore } = await import("$lib/stores/soundscape.svelte");
+    const store = getSoundscapeStore();
+    await store.initialize();
+    await expect(store.togglePlayback()).resolves.toBeUndefined();
+    expect(store.error).toBe("Multiple background sounds are disabled.");
+    expect(store.playbackPending).toBe(false);
+    expect(api.startSoundscape).not.toHaveBeenCalled();
+  });
+
   it("drops an old native read after a vault switch and leaves output shutdown with the native owner", async () => {
     const { getSoundscapeStore } = await import("$lib/stores/soundscape.svelte");
     const store = getSoundscapeStore();

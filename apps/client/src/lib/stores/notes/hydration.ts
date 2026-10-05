@@ -138,9 +138,10 @@ export function createNotesHydrationController(context: NotesHydrationController
   }
 
   async function loadDescendantFrontiers(
-    pageId = context.readSelectedPageId() ?? "",
+    pageId = context.readSelectedPageId(),
     generation = context.readPageGeneration(),
   ): Promise<void> {
+    if (!pageId) return;
     let frontier = Object.values(context.readBlocksById())
       .filter((block) => block.has_children && block.type !== "child_page")
       .map((block) => block.id);
@@ -164,9 +165,10 @@ export function createNotesHydrationController(context: NotesHydrationController
   }
 
   function queueDescendantHydration(
-    pageId = context.readSelectedPageId() ?? "",
+    pageId = context.readSelectedPageId(),
     generation = context.readPageGeneration(),
   ): void {
+    if (!pageId) return;
     void loadDescendantFrontiers(pageId, generation).catch((error) => {
       if (generation === context.readPageGeneration() && pageId === context.readSelectedPageId()) {
         context.setLoadError(errorMessage(error));

@@ -88,4 +88,21 @@ describe("Distractions native totals presentation", () => {
     await usage.refresh();
     expect(usage.totals).toEqual(projection().totals);
   });
+
+  it("admits a refresh for the new vault while an old vault read is still in flight", async () => {
+    const { getDistractionsUsage } = await import("./distractions-usage.svelte");
+    const { setActiveVaultIdentity } = await import("$lib/vault/active-vault");
+    const usage = getDistractionsUsage();
+    let resolveOld!: (value: ReturnType<typeof projection>) => void;
+    vi.mocked(invoke).mockReturnValueOnce(new Promise((accept) => { resolveOld = accept; }));
+    const oldRefresh = usage.refresh();
+    setActiveVaultIdentity("different-vault");
+    vi.mocked(invoke).mockResolvedValueOnce({ ...projection(), vaultId: "different-vault" });
+    await usage.refresh();
+    expect(invoke).toHaveBeenCalledTimes(2);
+    expect(usage.totals).toEqual(projection().totals);
+    resolveOld(projection());
+    await oldRefresh;
+    expect(usage.totals).toEqual(projection().totals);
+  });
 });

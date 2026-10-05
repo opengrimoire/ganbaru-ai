@@ -6,8 +6,8 @@ import {
   snapshot as perfSnapshot,
   type PerfLogEntry,
 } from "$lib/stores/perf-log.svelte";
+import { requireScenarioMetadata } from "../registry";
 import {
-  DEFAULT_BENCHMARK_DATASET,
   PANEL_ACTION_RUNS,
   type BenchmarkDatasetProfile,
   type BenchmarkMetric,
@@ -103,19 +103,7 @@ function metric(label: string, samples: number[]): BenchmarkMetric {
 }
 
 export const calendarPanelLatencyScenario: BenchmarkScenario = {
-  id: "calendar-panel-latency",
-  label: "Calendar panel latency",
-  description:
-    "Measures the two calendar panel open actions with 50 runs each: clicking varied existing events and clicking deterministic time slots for create.",
-  workload: {
-    kind: "interaction-latency",
-    question: "How quickly does the calendar panel open from user actions?",
-    label: "scripted calendar panel open actions",
-    durationMs: 0,
-    memoryMode: "none",
-  },
-  defaultDataset: DEFAULT_BENCHMARK_DATASET,
-  runMode: "dense-only",
+  ...requireScenarioMetadata("calendar-panel-latency"),
 
   async setup(context: BenchmarkScenarioContext): Promise<void> {
     const handle = getCalendarNavHandle();

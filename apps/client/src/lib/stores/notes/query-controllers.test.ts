@@ -10,11 +10,14 @@ import type {
 
 const backend = vi.hoisted(() => {
   function queue<T>() {
-    const resolvers: Array<(value: T) => void> = [];
+    const pending: Array<{ resolve: (value: T) => void; reject: (error: Error) => void }> = [];
     return {
-      next: vi.fn(() => new Promise<T>((resolve) => resolvers.push(resolve))),
+      next: vi.fn(() => new Promise<T>((resolve, reject) => pending.push({ resolve, reject }))),
       resolve(index: number, value: T): void {
-        resolvers[index]?.(value);
+        pending[index]?.resolve(value);
+      },
+      reject(index: number, error: Error): void {
+        pending[index]?.reject(error);
       },
     };
   }
@@ -115,6 +118,60 @@ describe("Notes query controllers", () => {
     await more;
   });
 
+  it("loads later search pages with the resolved-comment filter of the original search", async () => {
+    const { createNotesSearchController } = await import("./search.svelte");
+    const controller = createNotesSearchController();
+    const first = controller.search("tasks", 10, true);
+    backend.search.resolve(backend.search.next.mock.calls.length - 1, { results: [], next_cursor: "next" });
+    await first;
+
+    const more = controller.loadMoreSearchResults();
+    expect(backend.search.next).toHaveBeenLastCalledWith("tasks", 10, true, "next");
+    backend.search.resolve(backend.search.next.mock.calls.length - 1, { results: [], next_cursor: null });
+    await more;
+  });
+
+  it("reports a failed archive page load without discarding loaded pages", async () => {
+    const { createNotesArchiveController } = await import("./archive.svelte");
+    const controller = createNotesArchiveController();
+    const page = destinationPage("archived", null);
+    const reload = controller.reloadArchivedPages();
+    backend.archive.resolve(backend.archive.next.mock.calls.length - 1, { pages: [page], next_cursor: "next", total_count: 2 });
+    await reload;
+
+    const more = controller.loadMoreArchivedPages();
+    backend.archive.reject(backend.archive.next.mock.calls.length - 1, new Error("Storage unavailable"));
+    await expect(more).resolves.toBeUndefined();
+    expect(controller.archiveError).toBe("Storage unavailable");
+    expect(controller.archiveLoading).toBe(false);
+    expect(controller.archivedPages).toEqual([page]);
+    expect(controller.archiveHasMore).toBe(true);
+  });
+
+  it("keeps destination candidates and their cursor when a later page fails", async () => {
+    const { createNotesLinksController } = await import("./links.svelte");
+    const page = destinationPage("page-a", null);
+    const controller = createNotesLinksController({
+      readSelectedPageId: () => null,
+      readSelectedProjectId: () => "project-a",
+      readAllPages: () => [page],
+      reloadSelectedPage: async () => undefined,
+      scheduleVisibleMetadataRefresh: () => undefined,
+    });
+    const reload = controller.reloadLinkResolutionPages();
+    backend.destinations.resolve(backend.destinations.next.mock.calls.length - 1, { ...destinationShell([page]), next_page_cursor: "next" });
+    await reload;
+
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const more = controller.loadMoreDestinationCandidates();
+    backend.destinations.reject(backend.destinations.next.mock.calls.length - 1, new Error("Storage unavailable"));
+    await expect(more).resolves.toBeUndefined();
+    expect(controller.destinations).toEqual([page]);
+    expect(controller.destinationHasMore).toBe(true);
+    expect(warn).toHaveBeenCalledOnce();
+    warn.mockRestore();
+  });
+
   it("keeps changed and removed pages current when a destination read finishes late", async () => {
     const { createNotesLinksController } = await import("./links.svelte");
     const stale = destinationPage("page-a", "old-folder");
@@ -132,7 +189,7 @@ describe("Notes query controllers", () => {
     const pending = controller.reloadLinkResolutionPages();
     workspacePages = [current];
     controller.reconcileDestinationPages([current], []);
-    backend.destinations.resolve(0, destinationShell([stale, extra]));
+    backend.destinations.resolve(backend.destinations.next.mock.calls.length - 1, destinationShell([stale, extra]));
     await pending;
     expect(controller.destinations).toEqual([current, extra]);
 
@@ -145,7 +202,7 @@ describe("Notes query controllers", () => {
     controller.reconcileDestinationPages([], [current.id]);
     expect(controller.destinations).toEqual([extra]);
     const late = controller.reloadLinkResolutionPages();
-    backend.destinations.resolve(1, destinationShell([stale, extra]));
+    backend.destinations.resolve(backend.destinations.next.mock.calls.length - 1, destinationShell([stale, extra]));
     await late;
     expect(controller.destinations).toEqual([extra]);
   });

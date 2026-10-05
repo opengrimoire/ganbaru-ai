@@ -1,6 +1,7 @@
+// @vitest-environment jsdom
+
 import { createNotesCompoundTestAdapter } from "./compound-edits.test-helpers";
 import type { NotesCompoundEdit } from "$lib/api/notes/compound-edits";
-// @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { applyBlockUpdate, blockIndent, blockEditableRichText, blockPlainText, blockUpdateWithIndent, createBlockUpdate, createBlockWrite } from "$lib/notes/blocks/factory";
 import { buildNotesChildIdsByParent, flattenNotesBlockTree, notesIndentationContextIds } from "$lib/notes/blocks/tree";
@@ -286,6 +287,21 @@ describe("Notes editing with delayed persistence", () => {
     expect(h.actions.isDatabaseCreationPending(firstId)).toBe(false);
     expect(h.stored.get(firstId)).toMatchObject({ child_database: { title: "" } });
     expect(h.error).toHaveBeenLastCalledWith(null);
+  });
+
+  it("releases a failed database reservation when its queued writes are abandoned", async () => {
+    const h = editor([fromWrite(createBlockWrite(firstId, "paragraph", "/datab"))]);
+    api.createNotesDatabase.mockRejectedValueOnce(new Error("Storage unavailable"));
+    const creation = h.actions.convertBlock(firstId, "child_database", true);
+    h.release();
+    await expect(creation).rejects.toThrow("Storage unavailable");
+    h.persistence.discardPendingEditorWrites();
+    h.actions.discardPendingDatabaseCreations();
+    expect(h.actions.isDatabaseCreationPending(firstId)).toBe(false);
+    h.projection.replaceBlock(h.stored.get(firstId)!);
+    await h.actions.convertBlock(firstId, "child_database", true);
+    expect(api.createNotesDatabase).toHaveBeenCalledTimes(2);
+    expect(h.actions.isDatabaseCreationPending(firstId)).toBe(false);
   });
 
   it.each(["previous", "next"] as const)("inserts a writable paragraph %s to an only note without changing its identity", async (direction) => {
