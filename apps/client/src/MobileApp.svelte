@@ -900,7 +900,7 @@
         presentation="mobile"
         mobilePlayerPanelStyle={musicPanelStyle}
         mobilePlaylistPanelStyle={musicPlaylistPanelStyle}
-        onclose={closeMusic}
+        onClose={closeMusic}
       />
     </div>
   {:else if showMusic}
@@ -940,7 +940,7 @@
 
   {#if showQuickNotes && QuickNotesSurface}
     <div inert={suspendDecisionOpen} aria-hidden={suspendDecisionOpen ? "true" : undefined}>
-      <QuickNotesSurface mobileLayout mobilePanelStyle={quickNotesPanelStyle} onclose={closeQuickNotes} />
+      <QuickNotesSurface mobileLayout mobilePanelStyle={quickNotesPanelStyle} onClose={closeQuickNotes} />
     </div>
   {:else if showQuickNotes}
     <div

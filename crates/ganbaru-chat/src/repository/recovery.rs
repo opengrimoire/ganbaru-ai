@@ -38,7 +38,7 @@ pub async fn recover_orphaned_turns(
             turn_id.as_str(),
             last_sequence + 1
         ))
-        .map_err(|_| corrupt_data())?;
+        .map_err(|_| corrupt_data_error())?;
         append_canonical_event(
             pool,
             AppendCanonicalEventRequest {
@@ -110,7 +110,7 @@ stored_identifier!(ProviderFamilyId);
 stored_identifier!(ProviderInstanceId);
 
 fn id<T: StoredIdentifier>(row: &sqlx::sqlite::SqliteRow, column: &str) -> ChatResult<T> {
-    T::parse(row.try_get(column).map_err(persistence_error)?).map_err(|_| corrupt_data())
+    T::parse(row.try_get(column).map_err(persistence_error)?).map_err(|_| corrupt_data_error())
 }
 fn persistence_error<T>(_error: T) -> ChatError {
     ChatError::new(
@@ -119,7 +119,7 @@ fn persistence_error<T>(_error: T) -> ChatError {
         true,
     )
 }
-fn corrupt_data() -> ChatError {
+fn corrupt_data_error() -> ChatError {
     ChatError::new(
         ChatErrorCode::Persistence,
         "Stored Chat recovery data is invalid",

@@ -378,14 +378,14 @@
       console.error("calendar boot failed:", e),
     );
     appWindow.isMaximized().then((v) => (isMaximized = v));
-    invoke<number>("get_startup_elapsed_ms").then((ms) => {
+    invoke<number>("startup_elapsed_ms").then((ms) => {
       const scriptStartMs = firstMarkTime("boot.script-start") ?? 0;
       const nextShellStartupMs = Math.max(0, Math.round(ms - performance.now() + scriptStartMs));
       shellStartupMs = nextShellStartupMs;
       setShellStartupMs(nextShellStartupMs);
     });
     const startupMemoryTimerId = setTimeout(() => {
-      invoke<MemoryReport>("get_memory_report")
+      invoke<MemoryReport>("memory_report")
         .then((report) => {
           startupMemorySnapshot = { status: "ready", report };
         })

@@ -126,11 +126,11 @@ pub fn resolve_executable(
         }
         path
     } else {
-        find_on_path(configured, environment).ok_or_else(executable_missing)?
+        find_on_path(configured, environment).ok_or_else(executable_missing_error)?
     };
-    let executable = fs::canonicalize(candidate).map_err(|_| executable_missing())?;
+    let executable = fs::canonicalize(candidate).map_err(|_| executable_missing_error())?;
     if !executable.is_file() || !is_executable(&executable) {
-        return Err(executable_missing());
+        return Err(executable_missing_error());
     }
     if matches!(
         executable.extension().and_then(OsStr::to_str),
@@ -168,7 +168,7 @@ pub async fn run_command(
                 true,
             )
         })?
-        .map_err(|_| executable_missing())?;
+        .map_err(|_| executable_missing_error())?;
     if output.stdout.len() > MAX_COMMAND_OUTPUT_BYTES
         || output.stderr.len() > MAX_COMMAND_OUTPUT_BYTES
     {
@@ -207,17 +207,17 @@ pub fn ensure_supported_version(version: OpenCodeVersion) -> ChatResult<()> {
     Ok(())
 }
 
-pub fn parse_models_cli_output(value: &[u8]) -> ChatResult<Vec<OpenCodeCatalogModel>> {
-    if value.len() > MAX_COMMAND_OUTPUT_BYTES {
+pub fn parse_models_cli_output(output: &[u8]) -> ChatResult<Vec<OpenCodeCatalogModel>> {
+    if output.len() > MAX_COMMAND_OUTPUT_BYTES {
         return Err(protocol_error("model catalog is oversized"));
     }
-    let value = String::from_utf8_lossy(value);
+    let output = String::from_utf8_lossy(output);
     let mut models = Vec::new();
     let mut slug: Option<&str> = None;
     let mut json_lines = Vec::new();
-    for line in value.lines() {
+    for line in output.lines() {
         let trimmed = line.trim_end_matches('\r');
-        if valid_model_slug(trimmed) {
+        if is_valid_model_slug(trimmed) {
             flush_model(slug.take(), &mut json_lines, &mut models)?;
             slug = Some(trimmed);
         } else if slug.is_some() {
@@ -239,13 +239,13 @@ pub fn parse_models_cli_output(value: &[u8]) -> ChatResult<Vec<OpenCodeCatalogMo
     Ok(models)
 }
 
-pub fn parse_agents_cli_output(value: &[u8]) -> ChatResult<Vec<OpenCodeAgent>> {
-    if value.len() > MAX_COMMAND_OUTPUT_BYTES {
+pub fn parse_agents_cli_output(output: &[u8]) -> ChatResult<Vec<OpenCodeAgent>> {
+    if output.len() > MAX_COMMAND_OUTPUT_BYTES {
         return Err(protocol_error("agent catalog is oversized"));
     }
-    let value = String::from_utf8_lossy(value);
+    let output = String::from_utf8_lossy(output);
     let mut agents = Vec::new();
-    for line in value.lines() {
+    for line in output.lines() {
         let trimmed = line.trim_end_matches('\r').trim();
         let Some((name, mode)) = parse_agent_header(trimmed) else {
             continue;
@@ -349,7 +349,8 @@ pub fn parse_provider_inventory(value: &Value) -> ChatResult<Vec<OpenCodeCatalog
         let Some(provider) = provider.as_object() else {
             continue;
         };
-        let Some(provider_id) = text(provider, "id").filter(|value| valid_identifier(value)) else {
+        let Some(provider_id) = text(provider, "id").filter(|value| is_valid_identifier(value))
+        else {
             continue;
         };
         let Some(provider_models) = provider.get("models").and_then(Value::as_object) else {
@@ -363,10 +364,10 @@ pub fn parse_provider_inventory(value: &Value) -> ChatResult<Vec<OpenCodeCatalog
                 continue;
             };
             let model_id = text(model, "id").unwrap_or(key);
-            if !valid_identifier(model_id) {
+            if !is_valid_identifier(model_id) {
                 continue;
             }
-            let Some(name) = text(model, "name").filter(|value| valid_label(value)) else {
+            let Some(name) = text(model, "name").filter(|value| is_valid_label(value)) else {
                 continue;
             };
             models.push(OpenCodeCatalogModel {
@@ -410,7 +411,7 @@ pub fn parse_agent_inventory(value: &Value) -> ChatResult<Vec<OpenCodeAgent>> {
         .iter()
         .filter_map(Value::as_object)
         .filter_map(|agent| {
-            let name = text(agent, "name").filter(|value| valid_label(value))?;
+            let name = text(agent, "name").filter(|value| is_valid_label(value))?;
             let mode = text(agent, "mode")?;
             if !matches!(mode, "primary" | "subagent" | "all") {
                 return None;
@@ -453,7 +454,7 @@ fn flush_model(
     if text(object, "providerID") != Some(provider_id) || text(object, "id") != Some(model_id) {
         return Ok(());
     }
-    let Some(name) = text(object, "name").filter(|name| valid_label(name)) else {
+    let Some(name) = text(object, "name").filter(|name| is_valid_label(name)) else {
         return Ok(());
     };
     let variants = parse_variants(object.get("variants"));
@@ -485,7 +486,7 @@ fn parse_variants(value: Option<&Value>) -> Vec<String> {
         .map(|variants| {
             variants
                 .keys()
-                .filter(|key| valid_identifier(key))
+                .filter(|key| is_valid_identifier(key))
                 .cloned()
                 .collect::<Vec<_>>()
         })
@@ -495,23 +496,23 @@ fn parse_variants(value: Option<&Value>) -> Vec<String> {
     variants
 }
 
-fn valid_model_slug(value: &str) -> bool {
-    value
-        .split_once('/')
-        .is_some_and(|(provider, model)| valid_identifier(provider) && valid_identifier(model))
+fn is_valid_model_slug(value: &str) -> bool {
+    value.split_once('/').is_some_and(|(provider, model)| {
+        is_valid_identifier(provider) && is_valid_identifier(model)
+    })
 }
 
 fn parse_agent_header(value: &str) -> Option<(&str, &str)> {
     let prefix = value.strip_suffix(')')?;
     let (name, mode) = prefix.rsplit_once(" (")?;
     let name = name.trim();
-    if !valid_label(name) || !matches!(mode, "primary" | "subagent" | "all") {
+    if !is_valid_label(name) || !matches!(mode, "primary" | "subagent" | "all") {
         return None;
     }
     Some((name, mode))
 }
 
-fn valid_identifier(value: &str) -> bool {
+fn is_valid_identifier(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= MAX_IDENTIFIER_BYTES
         && !value.chars().any(|character| {
@@ -519,7 +520,7 @@ fn valid_identifier(value: &str) -> bool {
         })
 }
 
-fn valid_label(value: &str) -> bool {
+fn is_valid_label(value: &str) -> bool {
     !value.trim().is_empty()
         && value.len() <= MAX_LABEL_BYTES
         && !value.chars().any(|character| character.is_control())
@@ -642,7 +643,7 @@ fn inherited_environment_names() -> &'static [&'static str] {
     }
 }
 
-fn executable_missing() -> ChatError {
+fn executable_missing_error() -> ChatError {
     ChatError::new(
         ChatErrorCode::ExecutableMissing,
         "OpenCode executable is unavailable",

@@ -945,12 +945,12 @@ async fn admit_policy_experiments(
     connection: &mut sqlx::SqliteConnection,
     policy_id: &str,
 ) -> Result<(), String> {
-    let experiments: i64 = sqlx::query_scalar(
+    let experiment_count: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM (SELECT 1 FROM pomodoro_adaptive_experiments WHERE policy_id = ? LIMIT ?)",
     ).bind(policy_id).bind(MAX_ADAPTIVE_EVIDENCE_ROWS as i64 + 1)
         .fetch_one(&mut *connection).await
         .map_err(|error| format!("admit adaptive policy experiments: {error}"))?;
-    validate_evidence_rows(experiments as usize, "policy experiment")
+    validate_evidence_rows(experiment_count as usize, "policy experiment")
 }
 
 async fn load_adaptive_experiment_outcomes(

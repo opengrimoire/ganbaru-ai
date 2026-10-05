@@ -5,6 +5,9 @@ export function cn(...inputs: ClassValue[]) {
 	return twMerge(clsx(inputs));
 }
 
+/** A callback result that may be returned directly or through a promise. */
+export type MaybePromise<T = void> = T | Promise<T>;
+
 export function isEditableKeyboardTarget(target: EventTarget | null): boolean {
 	if (!(target instanceof Element)) return false;
 	return target.closest("input, textarea, select, [contenteditable='true'], [contenteditable='plaintext-only']") !== null;

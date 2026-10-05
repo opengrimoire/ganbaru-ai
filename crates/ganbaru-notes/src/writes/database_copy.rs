@@ -23,7 +23,7 @@ pub(crate) async fn load_reference_source(
         .and_then(Value::as_str)
         .ok_or("template database has no canonical block id")?;
     crate::validation::require_uuid(id, "template database id")?;
-    let block = super::block_tree::load_block_row_in_tx(tx, id, false).await?;
+    let block = super::block_tree::load_block_row_tx(tx, id, false).await?;
     if block.block_type != "child_database" {
         return Err("template database source not found".to_string());
     }

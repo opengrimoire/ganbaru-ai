@@ -17,9 +17,9 @@
 
   const { t } = getLocalization();
   const projects = getProjects();
-  const panelWidth = 288;
-  const panelGap = 4;
-  const panelMargin = 8;
+  const panelWidthPx = 288;
+  const panelGapPx = 4;
+  const panelMarginPx = 8;
   const iconStrokeWidth = 1.6;
   let open = $state(false);
   let triggerEl = $state<HTMLButtonElement | undefined>();
@@ -79,10 +79,10 @@
 
   function panelBounds(): { left: number; right: number; top: number; bottom: number } {
     const viewportBounds = {
-      left: panelMargin,
-      right: window.innerWidth - panelMargin,
-      top: panelMargin,
-      bottom: window.innerHeight - panelMargin,
+      left: panelMarginPx,
+      right: window.innerWidth - panelMarginPx,
+      top: panelMarginPx,
+      bottom: window.innerHeight - panelMarginPx,
     };
     const contentElement =
       triggerEl?.closest<HTMLElement>("[data-settings-content]")
@@ -101,19 +101,19 @@
     if (!triggerEl) return;
     const triggerRect = triggerEl.getBoundingClientRect();
     const bounds = panelBounds();
-    const width = Math.min(panelWidth, Math.max(0, bounds.right - bounds.left));
+    const width = Math.min(panelWidthPx, Math.max(0, bounds.right - bounds.left));
     const left = Math.min(
       Math.max(triggerRect.left, bounds.left),
       Math.max(bounds.left, bounds.right - width),
     );
     const availableHeight = Math.max(0, bounds.bottom - bounds.top);
     const height = Math.min(panelHeight || availableHeight, availableHeight);
-    const spaceBelow = bounds.bottom - triggerRect.bottom - panelGap;
-    const spaceAbove = triggerRect.top - bounds.top - panelGap;
-    const openAbove = spaceBelow < height && spaceAbove > spaceBelow;
-    const top = openAbove
-      ? Math.max(bounds.top, triggerRect.top - panelGap - height)
-      : Math.min(triggerRect.bottom + panelGap, Math.max(bounds.top, bounds.bottom - height));
+    const spaceBelow = bounds.bottom - triggerRect.bottom - panelGapPx;
+    const spaceAbove = triggerRect.top - bounds.top - panelGapPx;
+    const shouldOpenAbove = spaceBelow < height && spaceAbove > spaceBelow;
+    const top = shouldOpenAbove
+      ? Math.max(bounds.top, triggerRect.top - panelGapPx - height)
+      : Math.min(triggerRect.bottom + panelGapPx, Math.max(bounds.top, bounds.bottom - height));
 
     panelMaxHeight = availableHeight;
     panelStyle = [

@@ -367,7 +367,7 @@ pub async fn music_library_context_assignments(
     let pool = connect_sqlite(app, db_url)
         .await
         .map_err(connection_error)?;
-    crate::music::assignments::assignments(&pool, owner_kind, &owner_id).await
+    crate::music::assignments::load_assignments(&pool, owner_kind, &owner_id).await
 }
 
 #[tauri::command]
@@ -445,9 +445,9 @@ pub async fn music_library_remove_snooze(
 // Parsing and serialization run on one bounded native worker, never on a WebView thread.
 static MUSIC_TRANSFER_WORKERS: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(1);
 
-fn transfer_vault(app: &tauri::AppHandle, expected: &str) -> MusicLibraryResult<()> {
-    let actual = crate::vault::active_vault_id(app).map_err(connection_error)?;
-    if actual != expected {
+fn ensure_active_vault(app: &tauri::AppHandle, expected_id: &str) -> MusicLibraryResult<()> {
+    let active_vault_id = crate::vault::active_vault_id(app).map_err(connection_error)?;
+    if active_vault_id != expected_id {
         return Err(MusicLibraryError::conflict(
             "The active vault changed during Music transfer",
         ));
@@ -465,13 +465,13 @@ pub async fn music_library_preview_transfer(
     let permit = MUSIC_TRANSFER_WORKERS
         .try_acquire()
         .map_err(|_| MusicLibraryError::conflict("Another Music transfer is being prepared"))?;
-    transfer_vault(&app, &vault_id)?;
+    ensure_active_vault(&app, &vault_id)?;
     let pool = connect_sqlite(app.clone(), db_url)
         .await
         .map_err(connection_error)?;
     tauri::async_runtime::spawn_blocking(move || {
         let _permit = permit;
-        transfer_vault(&app, &vault_id)?;
+        ensure_active_vault(&app, &vault_id)?;
         let bindings = super::transfer::bindings(&app)?;
         tauri::async_runtime::block_on(super::transfer::preview(&pool, &source, &bindings))
     })
@@ -489,13 +489,13 @@ pub async fn music_library_commit_transfer(
     let permit = MUSIC_TRANSFER_WORKERS
         .try_acquire()
         .map_err(|_| MusicLibraryError::conflict("Another Music transfer is being prepared"))?;
-    transfer_vault(&app, &vault_id)?;
+    ensure_active_vault(&app, &vault_id)?;
     let pool = connect_sqlite(app.clone(), db_url)
         .await
         .map_err(connection_error)?;
     tauri::async_runtime::spawn_blocking(move || {
         let _permit = permit;
-        transfer_vault(&app, &vault_id)?;
+        ensure_active_vault(&app, &vault_id)?;
         let bindings = super::transfer::bindings(&app)?;
         tauri::async_runtime::block_on(super::transfer::commit(&pool, request, &bindings))
     })
@@ -513,7 +513,7 @@ pub async fn music_library_export_transfer(
     let permit = MUSIC_TRANSFER_WORKERS
         .try_acquire()
         .map_err(|_| MusicLibraryError::conflict("Another Music transfer is being prepared"))?;
-    transfer_vault(&app, &vault_id)?;
+    ensure_active_vault(&app, &vault_id)?;
     let pool = connect_sqlite(app.clone(), db_url)
         .await
         .map_err(connection_error)?;
@@ -521,7 +521,7 @@ pub async fn music_library_export_transfer(
     let worker_app = app.clone();
     let contents = tauri::async_runtime::spawn_blocking(move || {
         let _permit = permit;
-        transfer_vault(&worker_app, &vault_id)?;
+        ensure_active_vault(&worker_app, &vault_id)?;
         let bindings = super::transfer::bindings(&worker_app)?;
         tauri::async_runtime::block_on(super::transfer::export(&pool, &request, &bindings))
     })

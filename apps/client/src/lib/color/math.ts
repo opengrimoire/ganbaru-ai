@@ -500,8 +500,8 @@ export function pickReadableBorder(
   let anchorLab = inkLab;
   if (contrastRatio(bg, ink) < target) {
     const fallback = bestEndpoint(bg);
-    const fLab = hexToOklab(fallback);
-    if (fLab) anchorLab = fLab;
+    const fallbackLab = hexToOklab(fallback);
+    if (fallbackLab) anchorLab = fallbackLab;
   }
   const direction = anchorLab.L >= bgLab.L ? 1 : -1;
   const step = 0.02;

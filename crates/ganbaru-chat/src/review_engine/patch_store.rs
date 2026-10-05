@@ -5,7 +5,7 @@ use super::contracts::{ReviewDiffSource, ReviewFilePatchRead, ReviewHunkRead, Re
 use super::material::deterministic_diff_arguments;
 use super::patch_parser::{parse_hunk_header, parse_patch};
 use super::registry::{ReviewFileInternal, ReviewSnapshot};
-use super::{MAX_PATCH_PAGE_BYTES, corrupt_data, git_text, review_error};
+use super::{MAX_PATCH_PAGE_BYTES, corrupt_data_error, git_text, review_error};
 use crate::git;
 use sha2::{Digest, Sha256};
 use std::fs;
@@ -17,7 +17,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 const MAX_PATCH_HUNKS_PER_RESPONSE: usize = 2_048;
 const MAX_PATCH_SPOOL_BYTES: usize = 512 * 1024 * 1024;
 const MAX_REVIEW_OBJECT_BYTES: u64 = 512 * 1024 * 1024;
-static REVIEW_TEMP_SEQUENCE: AtomicU64 = AtomicU64::new(1);
+static REVIEW_TEMPORARY_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Clone)]
 pub struct ParsedHunk {
@@ -284,8 +284,8 @@ fn index_spooled_patch(
         }
         let line_start = position;
         position = position
-            .checked_add(u64::try_from(read).map_err(|_| corrupt_data())?)
-            .ok_or_else(corrupt_data)?;
+            .checked_add(u64::try_from(read).map_err(|_| corrupt_data_error())?)
+            .ok_or_else(corrupt_data_error)?;
         let text = std::str::from_utf8(&line)
             .map_err(|_| review_error("Git diff output is not valid UTF-8"))?;
         if text.starts_with("@@ ") {
@@ -453,7 +453,7 @@ fn read_spooled_patch_page(
 }
 
 fn read_spool_range(path: &Path, start: u64, end: u64) -> ChatResult<String> {
-    let length = usize::try_from(end.saturating_sub(start)).map_err(|_| corrupt_data())?;
+    let length = usize::try_from(end.saturating_sub(start)).map_err(|_| corrupt_data_error())?;
     if length > MAX_PATCH_PAGE_BYTES {
         return Err(review_error(
             "Review patch page exceeds the supported limit",
@@ -486,7 +486,7 @@ impl ReviewObjectStore {
         if !alternate_objects.is_absolute() || !alternate_objects.is_dir() {
             return Err(review_error("Git object directory is unavailable"));
         }
-        let root = create_review_temp_directory("objects")?;
+        let root = create_review_temporary_directory("objects")?;
         let objects = root.join("objects");
         if fs::create_dir(&objects).is_err() {
             let _ = fs::remove_dir_all(&root);
@@ -537,7 +537,7 @@ impl Drop for ReviewObjectStore {
 
 impl ReviewTemporaryFile {
     fn new(kind: &str) -> ChatResult<Self> {
-        let root = create_review_temp_directory(kind)?;
+        let root = create_review_temporary_directory(kind)?;
         Ok(Self {
             path: root.join("content"),
             root,
@@ -555,9 +555,9 @@ impl Drop for ReviewTemporaryFile {
     }
 }
 
-fn create_review_temp_directory(kind: &str) -> ChatResult<PathBuf> {
+fn create_review_temporary_directory(kind: &str) -> ChatResult<PathBuf> {
     for _ in 0..32 {
-        let sequence = REVIEW_TEMP_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+        let sequence = REVIEW_TEMPORARY_SEQUENCE.fetch_add(1, Ordering::Relaxed);
         let path = std::env::temp_dir().join(format!(
             "ganbaru-chat-review-{kind}-{}-{sequence}",
             std::process::id()

@@ -187,7 +187,7 @@ pub async fn create_comment(
         let thread = load_thread_row(&mut tx, &thread_id).await?;
         collaboration_operations::record_tx(
             &mut tx,
-            collaboration_operations::NotesCollaborationOperation {
+            collaboration_operations::CollaborationOperation {
                 entity_type: "comment_thread",
                 entity_id: &thread.id,
                 operation_type: "comment_thread_create",
@@ -229,7 +229,7 @@ pub async fn create_comment(
     let thread = load_thread_row(&mut tx, &thread_id).await?;
     collaboration_operations::record_tx(
         &mut tx,
-        collaboration_operations::NotesCollaborationOperation {
+        collaboration_operations::CollaborationOperation {
             entity_type: "comment",
             entity_id: &comment.id,
             operation_type: "comment_create",
@@ -325,7 +325,7 @@ pub async fn update_comment(
     }
     collaboration_operations::record_tx(
         &mut tx,
-        collaboration_operations::NotesCollaborationOperation {
+        collaboration_operations::CollaborationOperation {
             entity_type: "comment",
             entity_id: &updated.id,
             operation_type: "comment_update",
@@ -385,10 +385,10 @@ pub async fn delete_comment(
     .await
     .map_err(|e| format!("delete notes comment: {e}"))?;
     assets::sync_comment_asset_references_tx(&mut tx, &thread.page_id, comment_id, &[]).await?;
-    let deleted = load_comment_row_any(&mut tx, comment_id).await?;
+    let deleted = load_comment_row_including_deleted(&mut tx, comment_id).await?;
     collaboration_operations::record_tx(
         &mut tx,
-        collaboration_operations::NotesCollaborationOperation {
+        collaboration_operations::CollaborationOperation {
             entity_type: "comment",
             entity_id: &deleted.id,
             operation_type: "comment_delete",
@@ -461,7 +461,7 @@ pub async fn resolve_comment_thread(
     let updated_thread = load_thread_row(&mut tx, discussion_id).await?;
     collaboration_operations::record_tx(
         &mut tx,
-        collaboration_operations::NotesCollaborationOperation {
+        collaboration_operations::CollaborationOperation {
             entity_type: "comment_thread",
             entity_id: &updated_thread.id,
             operation_type: if resolved {
@@ -821,7 +821,7 @@ async fn load_comment_row(
     .ok_or_else(|| "notes comment not found".to_string())
 }
 
-async fn load_comment_row_any(
+async fn load_comment_row_including_deleted(
     tx: &mut Transaction<'_, Sqlite>,
     comment_id: &str,
 ) -> Result<NoteCommentRow, String> {

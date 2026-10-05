@@ -15,7 +15,7 @@
   } = $props();
 
   const SCROLLBAR_VISIBILITY_THRESHOLD_PX = 2;
-  const MIN_THUMB_WIDTH_PX = 24;
+  const MIN_THUMB_SIZE_PX = 24;
   const TRACK_EDGE_INSET_PX = 8;
   const TRACK_GUTTER_PX = 8;
 
@@ -54,7 +54,7 @@
 
     const trackWidth = horizontalTrackEl.clientWidth;
     const ratio = clientWidth / (clientWidth + scrollRange);
-    const thumbWidth = Math.min(trackWidth, Math.max(ratio * trackWidth, MIN_THUMB_WIDTH_PX));
+    const thumbWidth = Math.min(trackWidth, Math.max(ratio * trackWidth, MIN_THUMB_SIZE_PX));
     horizontalThumbWidth = thumbWidth;
     horizontalThumbLeft = scrollRange > 0
       ? (Math.min(scrollLeft, scrollRange) / scrollRange) * (trackWidth - thumbWidth)
@@ -74,7 +74,7 @@
 
     const trackHeight = verticalTrackEl.clientHeight;
     const ratio = clientHeight / scrollHeight;
-    const thumbHeight = Math.min(trackHeight, Math.max(ratio * trackHeight, MIN_THUMB_WIDTH_PX));
+    const thumbHeight = Math.min(trackHeight, Math.max(ratio * trackHeight, MIN_THUMB_SIZE_PX));
     verticalThumbHeight = thumbHeight;
     verticalThumbTop = scrollRange > 0
       ? (scrollTop / scrollRange) * (trackHeight - thumbHeight)

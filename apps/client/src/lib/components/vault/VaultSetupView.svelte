@@ -18,14 +18,14 @@
   } from "$lib/i18n/pre-vault-language";
   import { ensureConfigLoaded, flushConfig } from "$lib/vault/config";
   import {
-    formatDataFolderError,
-    getDefaultDataFolderLocation,
-    importDataFolder,
-    pickDataFolderLocation,
-    useDefaultDataFolder,
-    type DataFolderErrorAction,
-    type DataFolderDefaultLocation,
-    type DataFolderInfo,
+    formatVaultError,
+    getDefaultVaultLocation,
+    pickOpenVault,
+    pickCreateVault,
+    useDefaultVault,
+    type VaultErrorAction,
+    type VaultDefaultLocation,
+    type VaultInfo,
   } from "$lib/vault/state";
   import VaultSetupContent from "./VaultSetupContent.svelte";
   import VaultWelcomeContent from "./VaultWelcomeContent.svelte";
@@ -36,7 +36,7 @@
     onReady,
   }: {
     initialError?: string | null;
-    onReady: (info: DataFolderInfo, preparation: Promise<void>) => void | Promise<void>;
+    onReady: (info: VaultInfo, preparation: Promise<void>) => void | Promise<void>;
   } = $props();
 
   const appWindow = getCurrentWindow();
@@ -45,15 +45,15 @@
   const fallbackDefaultPath = import.meta.env.DEV
     ? "Documents/Ganbaru AI Dev"
     : "Documents/Ganbaru AI";
-  type SetupError = { raw: unknown; action: DataFolderErrorAction };
+  type SetupError = { raw: unknown; action: VaultErrorAction };
 
-  let defaultLocation = $state<DataFolderDefaultLocation | null>(null);
+  let defaultLocation = $state<VaultDefaultLocation | null>(null);
   let busy = $state<"default" | "change" | "import" | null>(null);
   let setupError = $state<SetupError | null>(null);
   let isMaximized = $state(true);
   let welcomeComplete = $state(false);
   const error = $derived(
-    setupError ? formatDataFolderError(setupError.raw, setupError.action, t) : null,
+    setupError ? formatVaultError(setupError.raw, setupError.action, t) : null,
   );
 
   function safeStorage(): Storage | undefined {
@@ -108,7 +108,7 @@
 
   async function loadDefaultLocation(): Promise<void> {
     try {
-      defaultLocation = await getDefaultDataFolderLocation();
+      defaultLocation = await getDefaultVaultLocation();
     } catch (err) {
       console.warn("Could not load the default data folder:", err);
       setupError = { raw: err, action: "general" };
@@ -130,16 +130,16 @@
     }
   }
 
-  async function chooseDataFolder(mode: "default" | "change" | "import"): Promise<void> {
+  async function chooseVault(mode: "default" | "change" | "import"): Promise<void> {
     if (busy) return;
     busy = mode;
     try {
       const info =
         mode === "default"
-          ? await useDefaultDataFolder()
+          ? await useDefaultVault()
           : mode === "change"
-            ? await pickDataFolderLocation()
-            : await importDataFolder();
+            ? await pickCreateVault()
+            : await pickOpenVault();
       if (info) {
         const preparation = persistPreVaultLanguagePreference();
         void preparation.catch(() => undefined);
@@ -159,7 +159,7 @@
     <button
       use:onboardingPrimaryAction
       type="button"
-      onclick={() => void chooseDataFolder("default")}
+      onclick={() => void chooseVault("default")}
       disabled={busy !== null}
       class="flex min-h-11 w-full items-center justify-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
     >
@@ -174,7 +174,7 @@
     <div class="grid gap-2 min-[560px]:grid-cols-2">
       <button
         type="button"
-        onclick={() => void chooseDataFolder("change")}
+        onclick={() => void chooseVault("change")}
         disabled={busy !== null}
         class="flex min-h-11 w-full items-center justify-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
       >
@@ -188,7 +188,7 @@
 
       <button
         type="button"
-        onclick={() => void chooseDataFolder("import")}
+        onclick={() => void chooseVault("import")}
         disabled={busy !== null}
         class="flex min-h-11 w-full items-center justify-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
       >

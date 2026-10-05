@@ -804,9 +804,9 @@ async fn cancel_pending(live: &CursorLiveSession) {
     }
 }
 
-fn operation_receipt(command_id: &str, detail: &str) -> DriverOperationReceipt {
+fn operation_receipt(operation_id: &str, detail: &str) -> DriverOperationReceipt {
     DriverOperationReceipt {
-        operation_id: command_id.to_string(),
+        operation_id: operation_id.to_string(),
         accepted: true,
         detail: Some(detail.to_string()),
     }

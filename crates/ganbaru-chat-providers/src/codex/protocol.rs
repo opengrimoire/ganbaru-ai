@@ -172,7 +172,7 @@ pub fn custom_safety_settings(
         .ok_or_else(|| codex_protocol_error("Codex config response"))?;
     let approval_policy = match config.get("approval_policy") {
         None | Some(Value::Null) => Value::String("on-request".to_string()),
-        Some(value) if valid_approval_policy(value) => value.clone(),
+        Some(value) if is_valid_approval_policy(value) => value.clone(),
         Some(_) => return Err(codex_protocol_error("Codex approval policy")),
     };
     let approvals_reviewer = match config.get("approvals_reviewer") {
@@ -223,7 +223,7 @@ pub fn custom_safety_settings(
     })
 }
 
-fn valid_approval_policy(value: &Value) -> bool {
+fn is_valid_approval_policy(value: &Value) -> bool {
     value
         .as_str()
         .is_some_and(|value| matches!(value, "untrusted" | "on-request" | "never"))
@@ -743,8 +743,8 @@ fn validate_model_id(value: &str) -> ChatResult<()> {
     Ok(())
 }
 
-fn validate_optional_text(value: Option<&str>, maximum: usize, field: &str) -> ChatResult<()> {
-    if value.is_some_and(|value| value.len() > maximum || value.contains('\0')) {
+fn validate_optional_text(value: Option<&str>, max_bytes: usize, field: &str) -> ChatResult<()> {
+    if value.is_some_and(|value| value.len() > max_bytes || value.contains('\0')) {
         return Err(ChatError::validation(
             field,
             "Codex text configuration exceeds the supported limit",

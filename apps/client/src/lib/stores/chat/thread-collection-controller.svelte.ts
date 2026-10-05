@@ -49,9 +49,9 @@ export class ChatThreadCollectionController {
           true,
           RECENT_THREAD_WINDOW,
         );
-        const existing = new Map(this.archivedThreads.map((thread) => [thread.id, thread]));
-        for (const thread of threads) existing.set(thread.id, thread);
-        this.archivedThreads = [...existing.values()].sort((left, right) => (
+        const threadsById = new Map(this.archivedThreads.map((thread) => [thread.id, thread]));
+        for (const thread of threads) threadsById.set(thread.id, thread);
+        this.archivedThreads = [...threadsById.values()].sort((left, right) => (
           right.lastActivityAt.localeCompare(left.lastActivityAt)
         ));
         this.archivedThreadsLoaded = true;

@@ -86,7 +86,7 @@ async fn store_single_bundle_tx(
     hash: &str,
     kind: &str,
     raw: &[u8],
-    json_payload: bool,
+    is_json: bool,
 ) -> Result<(), String> {
     let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
     encoder
@@ -97,7 +97,7 @@ async fn store_single_bundle_tx(
         .map_err(|e| format!("finish Notes history bundle compression: {e}"))?;
     let (encoding, payload) = if compressed.len() < raw.len() {
         (
-            if json_payload {
+            if is_json {
                 "zlib-json-v1"
             } else {
                 "zlib-bytes-v1"
@@ -106,7 +106,7 @@ async fn store_single_bundle_tx(
         )
     } else {
         (
-            if json_payload {
+            if is_json {
                 "raw-json-v1"
             } else {
                 "raw-bytes-v1"

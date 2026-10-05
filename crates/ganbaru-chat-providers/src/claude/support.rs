@@ -68,7 +68,7 @@ impl SessionOpenInput {
         matches!(self, Self::Resume(_))
     }
 
-    pub(super) fn cursor(
+    pub(super) fn resume_cursor(
         &self,
         instance_id: &ProviderInstanceId,
     ) -> ChatResult<ClaudeResumeCursor> {
@@ -286,7 +286,7 @@ pub(super) fn diagnostic_confirms_resume_not_found(value: &str) -> bool {
         .any(|fragment| value.contains(fragment))
 }
 
-pub(super) fn resume_not_found(diagnostic: &str) -> ChatError {
+pub(super) fn resume_not_found_error(diagnostic: &str) -> ChatError {
     let mut error = ChatError::new(
         ChatErrorCode::ResumeNotFound,
         "Claude continuation was not found; fork the thread to start a fresh native session",

@@ -6,12 +6,10 @@
   import Save from "@lucide/svelte/icons/save";
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import { getLocalization } from "$lib/i18n/translator.svelte";
-  import type { ProjectChecklistItem, ProjectTask } from "$lib/projects/types";
-  import { cn } from "$lib/utils";
+  import type { MoveDirection, ProjectChecklistItem, ProjectTask } from "$lib/projects/types";
+  import { cn, type MaybePromise } from "$lib/utils";
   import ProjectSettingsSectionHeading from "$lib/components/projects/settings/ProjectSettingsSectionHeading.svelte";
 
-  type ActionResult = void | Promise<void>;
-  type SortDirection = -1 | 1;
 
   let {
     task,
@@ -32,11 +30,11 @@
     draft: string;
     onTitleDraftChange: (itemId: string, value: string) => void;
     onDraftChange: (value: string) => void;
-    onToggleCompleted: (item: ProjectChecklistItem, completed: boolean) => ActionResult;
-    onSaveItem: (item: ProjectChecklistItem) => ActionResult;
-    onMoveItem: (item: ProjectChecklistItem, direction: SortDirection) => ActionResult;
-    onDeleteItem: (item: ProjectChecklistItem) => ActionResult;
-    onSubmitItem: (task: ProjectTask) => ActionResult;
+    onToggleCompleted: (item: ProjectChecklistItem, completed: boolean) => MaybePromise;
+    onSaveItem: (item: ProjectChecklistItem) => MaybePromise;
+    onMoveItem: (item: ProjectChecklistItem, direction: MoveDirection) => MaybePromise;
+    onDeleteItem: (item: ProjectChecklistItem) => MaybePromise;
+    onSubmitItem: (task: ProjectTask) => MaybePromise;
   } = $props();
 
   const { t } = getLocalization();
@@ -51,7 +49,7 @@
 
   function adjacentChecklistItem(
     item: ProjectChecklistItem,
-    direction: SortDirection,
+    direction: MoveDirection,
   ): ProjectChecklistItem | undefined {
     const index = items.findIndex((entry) => entry.id === item.id);
     if (index < 0) return undefined;

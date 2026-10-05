@@ -23,7 +23,7 @@
   let {
     color,
     theme,
-    onselect,
+    onSelect,
     ariaLabel,
     displayLabel = false,
     mobileLayout = false,
@@ -32,7 +32,7 @@
   }: {
     color: EventColor | undefined;
     theme: Theme;
-    onselect: (color: EventColor | undefined) => void;
+    onSelect: (color: EventColor | undefined) => void;
     ariaLabel?: string;
     displayLabel?: boolean;
     mobileLayout?: boolean;
@@ -136,7 +136,7 @@
   }
 
   function selectColor(nextColor: EventColor, source: "keyboard" | "pointer"): void {
-    if (color !== nextColor) onselect(nextColor);
+    if (color !== nextColor) onSelect(nextColor);
     if (source === "keyboard" || mobileLayout) closePalette(source);
   }
 
@@ -303,20 +303,20 @@
       aria-label={ariaLabel ?? t("calendar.color.eventColor")}
       tabindex="-1"
     >
-      {#each EVENT_COLOR_OPTIONS as c, index}
-        {@const entry = getEventColor(c, theme)}
+      {#each EVENT_COLOR_OPTIONS as option, index}
+        {@const entry = getEventColor(option, theme)}
         <button
           type="button"
           data-color-index={index}
           aria-label={ariaLabel ? `${ariaLabel} ${index + 1}` : t("calendar.color.selectEventColor", index + 1)}
           tabindex={activeIndex === index ? 0 : -1}
-          onclick={() => { selectColor(c, "pointer"); }}
+          onclick={() => { selectColor(option, "pointer"); }}
           onfocus={() => { activeIndex = index; }}
-          onkeydown={(e) => handleSwatchKeydown(e, index, c)}
+          onkeydown={(e) => handleSwatchKeydown(e, index, option)}
           class={mobileLayout
             ? "calendar-color-swatch min-h-12 min-w-12 rounded-xl"
             : "calendar-color-swatch size-5.5 rounded-[3px]"}
-          class:swatch-selected={selectedColor === c}
+          class:swatch-selected={selectedColor === option}
           style={swatchStyle(entry.bg)}
           data-app-tooltip-disabled="true"
           data-app-tooltip-focus-disabled="true"

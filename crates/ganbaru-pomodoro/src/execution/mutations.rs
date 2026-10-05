@@ -62,13 +62,13 @@ impl Session {
             .ok_or_else(|| invalid_state("There is no active Focus phase"))
     }
 
-    pub fn changed(&mut self, id: &str) {
+    pub fn mark_changed(&mut self, id: &str) {
         if !self.changed_segments.iter().any(|existing| existing == id) {
             self.changed_segments.push(id.to_owned());
         }
     }
 
-    pub async fn event(
+    pub async fn record_event(
         &self,
         tx: &mut Transaction<'_, Sqlite>,
         event_type: &str,
@@ -77,7 +77,7 @@ impl Session {
         duration_ms: Option<i64>,
     ) -> Result<(), FocusExecutionError> {
         let run = self.live_run()?;
-        let occurred_at = timestamp(at_ms)?;
+        let occurred_at = format_timestamp(at_ms)?;
         writes::insert_run_event_tx(
             tx,
             writes::RunEventInsert {
@@ -123,9 +123,9 @@ impl Session {
             .min(detected_at_ms.max(lower_bound));
         let id = segment.id.clone();
         sqlx::query("INSERT INTO pomodoro_pauses (id, segment_id, started_at, ended_at, reason, detected_at) VALUES (lower(hex(randomblob(16))), ?, ?, NULL, ?, ?)")
-            .bind(&id).bind(timestamp(start_ms)?).bind(reason).bind(timestamp(detected_at_ms.max(start_ms))?)
+            .bind(&id).bind(format_timestamp(start_ms)?).bind(reason).bind(format_timestamp(detected_at_ms.max(start_ms))?)
             .execute(&mut **tx).await.map_err(|error| format!("Start Focus pause: {error}"))?;
-        self.event(tx, "pause_start", start_ms, Some(reason), None)
+        self.record_event(tx, "pause_start", start_ms, Some(reason), None)
             .await?;
         self.segment
             .as_mut()
@@ -136,7 +136,7 @@ impl Session {
                 ended_at_ms: None,
                 reason: reason.to_owned(),
             });
-        self.changed(&id);
+        self.mark_changed(&id);
         Ok(start_ms)
     }
 
@@ -162,12 +162,12 @@ impl Session {
         sqlx::query(
             "UPDATE pomodoro_pauses SET ended_at = ? WHERE segment_id = ? AND ended_at IS NULL",
         )
-        .bind(timestamp(end_ms)?)
+        .bind(format_timestamp(end_ms)?)
         .bind(&id)
         .execute(&mut **tx)
         .await
         .map_err(|error| format!("Close Focus pause: {error}"))?;
-        self.event(
+        self.record_event(
             tx,
             "pause_end",
             end_ms,
@@ -185,7 +185,7 @@ impl Session {
                 pause.ended_at_ms = Some(end_ms);
             }
         }
-        self.changed(&id);
+        self.mark_changed(&id);
         Ok(())
     }
 
@@ -207,9 +207,9 @@ impl Session {
         let id = segment.id.clone();
         self.close_pause(tx, end_ms).await?;
         sqlx::query("UPDATE pomodoro_segments SET actual_end = ?, status = ?, end_reason = ? WHERE id = ? AND status = 'active' AND actual_end IS NULL")
-            .bind(timestamp(end_ms)?).bind(status).bind(reason).bind(&id).execute(&mut **tx).await
+            .bind(format_timestamp(end_ms)?).bind(status).bind(reason).bind(&id).execute(&mut **tx).await
             .map_err(|error| format!("Close Focus phase: {error}"))?;
-        self.event(
+        self.record_event(
             tx,
             if reason == "focus_failed" {
                 "focus_failed"
@@ -228,7 +228,7 @@ impl Session {
         segment.actual_end_ms = Some(end_ms);
         segment.status = status.to_owned();
         segment.end_reason = Some(reason.to_owned());
-        self.changed(&id);
+        self.mark_changed(&id);
         Ok(())
     }
 
@@ -243,31 +243,31 @@ impl Session {
     ) -> Result<(), FocusExecutionError> {
         let run = self.live_run()?;
         let id = run.id.clone();
-        let ended_at = at_ms.max(run.started_at_ms);
+        let ended_at_ms = at_ms.max(run.started_at_ms);
         if self
             .segment
             .as_ref()
             .is_some_and(|segment| segment.status == "active")
         {
             let segment = self.active_segment()?;
-            let phase_end = if self.state.mode == FocusMode::Running
+            let phase_end_ms = if self.state.mode == FocusMode::Running
                 && !segment
                     .pauses
                     .iter()
                     .any(|pause| pause.ended_at_ms.is_none())
             {
-                ended_at.min(segment.planned_end_ms)
+                ended_at_ms.min(segment.planned_end_ms)
             } else {
-                ended_at
+                ended_at_ms
             };
-            self.close_segment(tx, phase_end, "interrupted", segment_reason)
+            self.close_segment(tx, phase_end_ms, "interrupted", segment_reason)
                 .await?;
         }
         writes::close_run_tx(
             tx,
             &PomodoroRunClosure {
                 run_id: id,
-                ended_at: timestamp(ended_at)?,
+                ended_at: format_timestamp(ended_at_ms)?,
                 end_reason: reason.to_owned(),
                 segment_status: "interrupted".to_owned(),
                 segment_end_reason: segment_reason.to_owned(),
@@ -278,9 +278,9 @@ impl Session {
         self.run
             .as_mut()
             .ok_or_else(|| invalid_state("Focus run disappeared"))?
-            .ended_at_ms = Some(ended_at);
+            .ended_at_ms = Some(ended_at_ms);
         self.state.mode = mode;
-        self.state.last_transition_at_ms = ended_at;
+        self.state.last_transition_at_ms = ended_at_ms;
         self.clear_waits();
         Ok(())
     }
@@ -303,16 +303,16 @@ impl Session {
     ) -> Result<(), FocusExecutionError> {
         let run = self.live_run()?;
         let segment = self.active_segment()?;
-        let elapsed = segment_elapsed_ms(segment, now_ms)?;
+        let elapsed_ms = segment_elapsed_ms(segment, now_ms)?;
         let end_ms = now_ms
-            .saturating_add(segment.chosen_duration_ms.saturating_sub(elapsed).max(0))
+            .saturating_add(segment.chosen_duration_ms.saturating_sub(elapsed_ms).max(0))
             .min(run.planned_end_ms)
             .max(segment.planned_start_ms);
         let id = segment.id.clone();
         sqlx::query(
             "UPDATE pomodoro_segments SET planned_end = ?, chosen_duration_ms = ? WHERE id = ?",
         )
-        .bind(timestamp(end_ms)?)
+        .bind(format_timestamp(end_ms)?)
         .bind(segment.chosen_duration_ms)
         .bind(&id)
         .execute(&mut **tx)
@@ -322,7 +322,7 @@ impl Session {
             .as_mut()
             .ok_or_else(|| invalid_state("Focus phase disappeared"))?
             .planned_end_ms = end_ms;
-        self.changed(&id);
+        self.mark_changed(&id);
         Ok(())
     }
 
@@ -357,11 +357,11 @@ impl Session {
             phase
         };
         let duration_ms = phase_duration_ms(&run.configuration, phase, position);
-        let segment = segment_write(tx, &run, phase, position, now_ms, duration_ms).await?;
+        let segment = build_segment_write(tx, &run, phase, position, now_ms, duration_ms).await?;
         writes::insert_segment_tx(tx, &segment).await?;
         if let Some(decision) = &decision {
             let ids = self.adaptive_snapshot_ids(tx, &run.id, &segment.id).await?;
-            let envelope = super::super::adaptive::snapshots::boundary(
+            let envelope = super::super::adaptive::snapshots::decision_envelope(
                 decision,
                 ids,
                 if phase == FocusPhase::Focus {
@@ -384,12 +384,13 @@ impl Session {
         self.state.segment_id = Some(segment.id.clone());
         self.segment = Some(load_segment(tx, &segment.id).await?);
         self.run = Some(run);
-        self.changed(&segment.id);
+        self.mark_changed(&segment.id);
         self.state.mode = FocusMode::Running;
         self.state.focus_extension_used = false;
         self.state.break_extension_ms = 0;
         self.clear_waits();
-        self.event(tx, "phase_start", now_ms, None, None).await?;
+        self.record_event(tx, "phase_start", now_ms, None, None)
+            .await?;
         Ok(())
     }
 
@@ -440,7 +441,7 @@ impl Session {
                 "The inherited break has already ended and requires explicit return",
             ));
         }
-        let run_id = identity(tx).await?;
+        let run_id = allocate_id(tx).await?;
         let run = FocusRunSnapshot {
             id: run_id.clone(),
             event_id: Some(commitment.event_id.clone()),
@@ -455,11 +456,11 @@ impl Session {
             inherited_phase_ms: continuation.phase_elapsed_ms,
             configuration,
         };
-        let segment = segment_write(tx, &run, phase, position, now_ms, duration_ms).await?;
+        let segment = build_segment_write(tx, &run, phase, position, now_ms, duration_ms).await?;
         let adaptive_snapshot = match &decision {
             Some(decision) => {
                 let ids = self.adaptive_snapshot_ids(tx, &run.id, &segment.id).await?;
-                Some(super::super::adaptive::snapshots::run_start(
+                Some(super::super::adaptive::snapshots::run_start_snapshot(
                     decision,
                     ids,
                     self.planned_blocks.clone(),
@@ -471,9 +472,9 @@ impl Session {
             id: run_id.clone(),
             event_id: commitment.occurrence_id.clone(),
             event_date: commitment.event_date.clone(),
-            planned_start: timestamp(commitment.start_ms)?,
-            planned_end: timestamp(commitment.end_ms)?,
-            started_at: timestamp(now_ms)?,
+            planned_start: format_timestamp(commitment.start_ms)?,
+            planned_end: format_timestamp(commitment.end_ms)?,
+            started_at: format_timestamp(now_ms)?,
             rhythm: run.configuration.rhythm.clone(),
             rhythm_source: commitment.configuration.rhythm_source.clone(),
             preset_key: commitment.configuration.preset_key.clone(),
@@ -506,7 +507,7 @@ impl Session {
         self.clear_waits();
         self.run = Some(run);
         self.segment = Some(load_segment(tx, &segment.id).await?);
-        self.changed(&segment.id);
+        self.mark_changed(&segment.id);
         Ok(())
     }
 }
@@ -531,7 +532,7 @@ impl Default for Continuation {
     }
 }
 
-async fn segment_write(
+async fn build_segment_write(
     tx: &mut Transaction<'_, Sqlite>,
     run: &FocusRunSnapshot,
     phase: FocusPhase,
@@ -540,15 +541,15 @@ async fn segment_write(
     duration_ms: i64,
 ) -> Result<PomodoroSegmentWrite, FocusExecutionError> {
     Ok(PomodoroSegmentWrite {
-        id: identity(tx).await?,
+        id: allocate_id(tx).await?,
         event_id: run.occurrence_id.clone(),
         event_date: run.event_date.clone(),
         run_id: run.id.clone(),
         rhythm_position: position,
         phase: phase.as_str().to_owned(),
-        planned_start: timestamp(now_ms)?,
-        planned_end: timestamp(now_ms.saturating_add(duration_ms).min(run.planned_end_ms))?,
-        actual_start: Some(timestamp(now_ms)?),
+        planned_start: format_timestamp(now_ms)?,
+        planned_end: format_timestamp(now_ms.saturating_add(duration_ms).min(run.planned_end_ms))?,
+        actual_start: Some(format_timestamp(now_ms)?),
         actual_end: None,
         pauses: Vec::new(),
         status: "active".to_owned(),

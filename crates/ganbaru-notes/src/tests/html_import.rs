@@ -108,7 +108,7 @@ fn html_import_creates_canonical_blocks_rich_text_tables_media_and_toggles() {
         );
 
         let toggle_id = blocks[9]["id"].as_str().unwrap();
-        let toggle_children = reads::get_block_children(&pool, toggle_id, None, Some(10))
+        let toggle_children = reads::block_children(&pool, toggle_id, None, Some(10))
             .await
             .unwrap();
         let toggle_children_json = serde_json::to_value(toggle_children).unwrap();
@@ -118,7 +118,7 @@ fn html_import_creates_canonical_blocks_rich_text_tables_media_and_toggles() {
         );
 
         let table_id = blocks[11]["id"].as_str().unwrap();
-        let rows = reads::get_block_children(&pool, table_id, None, Some(10))
+        let rows = reads::block_children(&pool, table_id, None, Some(10))
             .await
             .unwrap();
         let rows_json = serde_json::to_value(rows).unwrap();

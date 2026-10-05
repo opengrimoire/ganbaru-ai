@@ -24,8 +24,8 @@ import type {
   ChatThreadId,
   ProjectWorkingFolderId,
   GitStatusRead,
-  PreviewBounds,
-  PreviewTabRead,
+  BrowserTabBounds,
+  BrowserTabRead,
   HostedChangeRequestRead,
   CreateHostedChangeRequest,
   HostedSourceControlRead,
@@ -47,8 +47,8 @@ import {
   parseChatRestorePreview,
   parseChatRestoreResult,
   parseGitStatus,
-  parsePreviewTabRead,
-  parsePreviewTabs,
+  parseBrowserTabRead,
+  parseBrowserTabs,
   parseHostedSourceControls,
   parseHostedChangeRequest,
   parseHostedChangeRequests,
@@ -224,8 +224,8 @@ export async function removeBitbucketCredential(repositorySlug: string): Promise
   return invoke<boolean>("chat_remove_bitbucket_credential", { repositorySlug });
 }
 
-export async function readPreviewStatus(threadId: ChatThreadId): Promise<PreviewTabRead[]> {
-  return parsePreviewTabs(await invoke<unknown>("chat_preview_status", {
+export async function readBrowserStatus(threadId: ChatThreadId): Promise<BrowserTabRead[]> {
+  return parseBrowserTabs(await invoke<unknown>("chat_browser_status", {
     dbUrl: await ensureDbUrl(), threadId,
   }));
 }
@@ -236,7 +236,7 @@ export interface DiscoveredPreviewServer {
 }
 
 export async function discoverPreviewServers(threadId: ChatThreadId): Promise<DiscoveredPreviewServer[]> {
-  const value = await invoke<unknown>("chat_preview_discover_servers", {
+  const value = await invoke<unknown>("chat_browser_discover_servers", {
     dbUrl: await ensureDbUrl(), threadId,
   });
   if (!Array.isArray(value)) throw new Error("Invalid preview server list");
@@ -250,59 +250,59 @@ export async function discoverPreviewServers(threadId: ChatThreadId): Promise<Di
   });
 }
 
-export async function openPreview(request: {
+export async function openBrowserTab(request: {
   threadId: ChatThreadId;
   tabId: string;
   url: string;
-  bounds: PreviewBounds;
+  bounds: BrowserTabBounds;
   externalNavigationConfirmed: boolean;
-}): Promise<PreviewTabRead> {
-  return parsePreviewTabRead(await invoke<unknown>("chat_preview_open", {
+}): Promise<BrowserTabRead> {
+  return parseBrowserTabRead(await invoke<unknown>("chat_browser_open", {
     dbUrl: await ensureDbUrl(), request,
   }));
 }
 
-export async function navigatePreview(
+export async function navigateBrowserTab(
   threadId: ChatThreadId,
   tabId: string,
   url: string,
   externalNavigationConfirmed: boolean,
-): Promise<PreviewTabRead> {
-  return parsePreviewTabRead(await invoke<unknown>("chat_preview_navigate", {
+): Promise<BrowserTabRead> {
+  return parseBrowserTabRead(await invoke<unknown>("chat_browser_navigate", {
     dbUrl: await ensureDbUrl(), threadId, tabId, url, externalNavigationConfirmed,
   }));
 }
 
-export async function resizePreview(
+export async function resizeBrowserTab(
   threadId: ChatThreadId,
   tabId: string,
-  bounds: PreviewBounds,
-): Promise<PreviewTabRead> {
-  return parsePreviewTabRead(await invoke<unknown>("chat_preview_resize", {
+  bounds: BrowserTabBounds,
+): Promise<BrowserTabRead> {
+  return parseBrowserTabRead(await invoke<unknown>("chat_browser_resize", {
     dbUrl: await ensureDbUrl(), threadId, tabId, bounds,
   }));
 }
 
-export async function setPreviewVisible(
+export async function setBrowserTabVisible(
   threadId: ChatThreadId,
   tabId: string,
   visible: boolean,
-): Promise<PreviewTabRead> {
-  return parsePreviewTabRead(await invoke<unknown>("chat_preview_set_visible", {
+): Promise<BrowserTabRead> {
+  return parseBrowserTabRead(await invoke<unknown>("chat_browser_set_visible", {
     dbUrl: await ensureDbUrl(), threadId, tabId, visible,
   }));
 }
 
-export async function previewBack(threadId: ChatThreadId, tabId: string): Promise<void> {
-  await invoke("chat_preview_back", { threadId, tabId });
+export async function browserBack(threadId: ChatThreadId, tabId: string): Promise<void> {
+  await invoke("chat_browser_back", { threadId, tabId });
 }
 
-export async function previewForward(threadId: ChatThreadId, tabId: string): Promise<void> {
-  await invoke("chat_preview_forward", { threadId, tabId });
+export async function browserForward(threadId: ChatThreadId, tabId: string): Promise<void> {
+  await invoke("chat_browser_forward", { threadId, tabId });
 }
 
-export async function refreshPreview(threadId: ChatThreadId, tabId: string): Promise<void> {
-  await invoke("chat_preview_refresh", { threadId, tabId });
+export async function refreshBrowserTab(threadId: ChatThreadId, tabId: string): Promise<void> {
+  await invoke("chat_browser_refresh", { threadId, tabId });
 }
 
 export interface BrowserArtifactRead {
@@ -330,24 +330,24 @@ function parseBrowserArtifactRead(value: unknown): BrowserArtifactRead {
   };
 }
 
-export async function capturePreviewScreenshot(threadId: ChatThreadId, tabId: string): Promise<BrowserArtifactRead> {
-  return parseBrowserArtifactRead(await invoke<unknown>("chat_preview_screenshot", {
+export async function captureBrowserScreenshot(threadId: ChatThreadId, tabId: string): Promise<BrowserArtifactRead> {
+  return parseBrowserArtifactRead(await invoke<unknown>("chat_browser_screenshot", {
     dbUrl: await ensureDbUrl(), threadId, tabId,
   }));
 }
 
-export async function startPreviewRecording(threadId: ChatThreadId, tabId: string): Promise<void> {
-  await invoke("chat_preview_recording_start", { threadId, tabId, approved: true });
+export async function startBrowserRecording(threadId: ChatThreadId, tabId: string): Promise<void> {
+  await invoke("chat_browser_recording_start", { threadId, tabId, approved: true });
 }
 
-export async function stopPreviewRecording(threadId: ChatThreadId, tabId: string): Promise<BrowserArtifactRead> {
-  return parseBrowserArtifactRead(await invoke<unknown>("chat_preview_recording_stop", {
+export async function stopBrowserRecording(threadId: ChatThreadId, tabId: string): Promise<BrowserArtifactRead> {
+  return parseBrowserArtifactRead(await invoke<unknown>("chat_browser_recording_stop", {
     dbUrl: await ensureDbUrl(), threadId, tabId,
   }));
 }
 
-export async function closePreview(threadId: ChatThreadId, tabId: string): Promise<void> {
-  await invoke("chat_preview_close", { dbUrl: await ensureDbUrl(), threadId, tabId });
+export async function closeBrowserTab(threadId: ChatThreadId, tabId: string): Promise<void> {
+  await invoke("chat_browser_close", { dbUrl: await ensureDbUrl(), threadId, tabId });
 }
 
 export async function readGitStatus(workingFolderId: ProjectWorkingFolderId, executionEnvironmentId: string | null = null): Promise<GitStatusRead> {
@@ -485,7 +485,7 @@ export async function listProjectWorkingFolderDirectory(
   includeIgnored = false,
   executionEnvironmentId: string | null = null,
 ): Promise<ProjectWorkingFolderDirectoryRead> {
-  return parseProjectWorkingFolderDirectory(await invoke<unknown>("project_list_working_folder_directory", {
+  return parseProjectWorkingFolderDirectory(await invoke<unknown>("projects_list_working_folder_directory", {
     dbUrl: await ensureDbUrl(),
     workingFolderId,
     relativePath,
@@ -499,7 +499,7 @@ export async function previewProjectWorkingFolderFile(
   relativePath: string,
   executionEnvironmentId: string | null = null,
 ): Promise<ProjectWorkingFolderFilePreview> {
-  return parseProjectWorkingFolderFilePreview(await invoke<unknown>("project_preview_working_folder_file", {
+  return parseProjectWorkingFolderFilePreview(await invoke<unknown>("projects_preview_working_folder_file", {
     dbUrl: await ensureDbUrl(),
     workingFolderId,
     relativePath,
@@ -514,7 +514,7 @@ export async function saveProjectWorkingFolderFile(request: {
   expectedRevision: string;
   executionEnvironmentId?: string | null;
 }): Promise<ProjectWorkingFolderFilePreview> {
-  return parseProjectWorkingFolderFilePreview(await invoke<unknown>("project_save_working_folder_file", {
+  return parseProjectWorkingFolderFilePreview(await invoke<unknown>("projects_save_working_folder_file", {
     dbUrl: await ensureDbUrl(),
     request,
   }));
@@ -527,7 +527,7 @@ export async function saveProjectWorkingFolderFileCopy(request: {
   contents: string;
   executionEnvironmentId?: string | null;
 }): Promise<ProjectWorkingFolderFilePreview> {
-  return parseProjectWorkingFolderFilePreview(await invoke<unknown>("project_save_working_folder_file_copy", {
+  return parseProjectWorkingFolderFilePreview(await invoke<unknown>("projects_save_working_folder_file_copy", {
     dbUrl: await ensureDbUrl(),
     request,
   }));
@@ -540,7 +540,7 @@ export async function recreateProjectWorkingFolderFile(request: {
   confirmed: boolean;
   executionEnvironmentId?: string | null;
 }): Promise<ProjectWorkingFolderFilePreview> {
-  return parseProjectWorkingFolderFilePreview(await invoke<unknown>("project_recreate_working_folder_file", {
+  return parseProjectWorkingFolderFilePreview(await invoke<unknown>("projects_recreate_working_folder_file", {
     dbUrl: await ensureDbUrl(),
     request,
   }));
@@ -551,7 +551,7 @@ export async function openProjectWorkingFolderFile(
   relativePath: string,
   executionEnvironmentId: string | null = null,
 ): Promise<void> {
-  await invoke("project_open_working_folder_file", { dbUrl: await ensureDbUrl(), workingFolderId, relativePath, executionEnvironmentId });
+  await invoke("projects_open_working_folder_file", { dbUrl: await ensureDbUrl(), workingFolderId, relativePath, executionEnvironmentId });
 }
 
 export async function listChatTerminals(

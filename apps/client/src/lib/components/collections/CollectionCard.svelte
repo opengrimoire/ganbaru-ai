@@ -1,9 +1,9 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
   import { cn } from "$lib/utils";
-  let { title, onopen, leading, actions, cover, children, selected = false, muted = false, compact = false }: {
+  let { title, onOpen, leading, actions, cover, children, selected = false, muted = false, compact = false }: {
     title: string;
-    onopen: () => void;
+    onOpen: () => void;
     leading?: Snippet;
     actions?: Snippet;
     cover?: Snippet;
@@ -19,7 +19,7 @@
   <div class={compact ? "p-1.5" : "p-3"}>
     <div class="flex min-w-0 items-start gap-1.5">
       {@render leading?.()}
-      <button type="button" class={cn("min-w-0 flex-1 rounded-sm text-left text-[0.866667rem] font-medium outline-none hover:text-primary focus-visible:bg-accent", compact ? "min-h-6" : "min-h-8")} onclick={onopen}><span class="line-clamp-3 wrap-anywhere">{title}</span></button>
+      <button type="button" class={cn("min-w-0 flex-1 rounded-sm text-left text-[0.866667rem] font-medium outline-none hover:text-primary focus-visible:bg-accent", compact ? "min-h-6" : "min-h-8")} onclick={onOpen}><span class="line-clamp-3 wrap-anywhere">{title}</span></button>
       {#if actions}<div class="shrink-0">{@render actions()}</div>{/if}
     </div>
     {#if children}<div class="mt-2 min-w-0 text-[0.8rem]">{@render children()}</div>{/if}

@@ -102,7 +102,7 @@ describe("native Calendar window boundary", () => {
     const input = { ...snapshot(), occurrences: [], diagnostics: [{ event_id: "series", message: "BYHOUR is preservation-only" }] };
     const mapped = mapNativeCalendarWindow(input, "UTC");
     expect(mapped.windowEvents).toEqual([]);
-    expect(mapped.rawBlocks).toHaveLength(1);
+    expect(mapped.sourceEvents).toHaveLength(1);
     expect(mapped.diagnostics).toEqual(input.diagnostics);
   });
 });

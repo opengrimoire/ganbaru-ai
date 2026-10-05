@@ -197,8 +197,8 @@ fn diff_numstat(root: &Path, pre_oid: &str, post_oid: &str) -> ChatResult<DiffLi
         let additions = parse_stat(parts.next());
         let deletions = parse_stat(parts.next());
         let path = parts.next().unwrap_or_default();
-        let final_path = if path.is_empty() {
-            let _old = fields.next();
+        let destination_path = if path.is_empty() {
+            let _source_path = fields.next();
             fields
                 .next()
                 .and_then(|value| std::str::from_utf8(value).ok())
@@ -206,8 +206,8 @@ fn diff_numstat(root: &Path, pre_oid: &str, post_oid: &str) -> ChatResult<DiffLi
         } else {
             path
         };
-        if !final_path.is_empty() {
-            result.insert(final_path.to_string(), (additions, deletions));
+        if !destination_path.is_empty() {
+            result.insert(destination_path.to_string(), (additions, deletions));
         }
     }
     Ok(result)

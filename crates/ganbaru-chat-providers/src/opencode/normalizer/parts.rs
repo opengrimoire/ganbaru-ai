@@ -46,7 +46,7 @@ impl OpenCodeEventNormalizer {
                     effective_model_options: text(info, "variant")
                         .map(|variant| ModelOptionSelection {
                             key: "variant".to_string(),
-                            value: ModelOptionValue::Choice(bounded(variant, 256)),
+                            value: ModelOptionValue::Choice(bounded_text(variant, 256)),
                         })
                         .into_iter()
                         .collect(),
@@ -83,7 +83,7 @@ impl OpenCodeEventNormalizer {
                 item_id: part_id.to_string(),
                 stream_kind,
                 content_index: 0,
-                delta: bounded(delta, MAX_TEXT_BYTES),
+                delta: bounded_text(delta, MAX_TEXT_BYTES),
             }),
         )?])
     }
@@ -117,12 +117,12 @@ impl OpenCodeEventNormalizer {
                     detail: part.get("error").map(safe_shape).and_then(|value| {
                         serde_json::to_string(&value.value)
                             .ok()
-                            .map(|value| bounded(&value, 4096))
+                            .map(|value| bounded_text(&value, 4096))
                     }),
                 }),
             )?]),
             "snapshot" | "step-start" | "agent" => Ok(Vec::new()),
-            unknown => Ok(vec![self.unknown(
+            unknown => Ok(vec![self.unknown_event(
                 state,
                 "message.part.updated",
                 unknown,
@@ -214,13 +214,13 @@ impl OpenCodeEventNormalizer {
         };
         let kind = tool_kind(tool);
         let title = text(state_value, "title")
-            .map(|title| bounded(title, 512))
-            .or_else(|| Some(bounded(tool, 256)));
+            .map(|title| bounded_text(title, 512))
+            .or_else(|| Some(bounded_text(tool, 256)));
         let detail = state_value
             .get("output")
             .and_then(Value::as_str)
             .or_else(|| text(state_value, "error"))
-            .map(|detail| bounded(detail, MAX_TEXT_BYTES));
+            .map(|detail| bounded_text(detail, MAX_TEXT_BYTES));
         let input = state_value.get("input").map(safe_shape);
         Ok(vec![self.item_lifecycle_event(
             state,
@@ -234,7 +234,7 @@ impl OpenCodeEventNormalizer {
                 safe_metadata: Some(VersionedJson {
                     schema_version: 1,
                     value: json!({
-                        "tool": bounded(tool, 256),
+                        "tool": bounded_text(tool, 256),
                         "input": input.map(|value| value.value),
                     }),
                 }),
@@ -249,7 +249,7 @@ impl OpenCodeEventNormalizer {
     ) -> ChatResult<Vec<CanonicalRuntimeEvent>> {
         let id = identifier(part, "id", "file part ID")?;
         let title = text(part, "filename")
-            .map(|value| bounded(value, 1024))
+            .map(|value| bounded_text(value, 1024))
             .unwrap_or_else(|| "File context".to_string());
         Ok(vec![self.item_event(
             state,
@@ -342,9 +342,9 @@ impl OpenCodeEventNormalizer {
                     parent_task_id: None,
                     status: ActivityStatus::Active,
                     title: text(part, "description")
-                        .map(|value| bounded(value, 512))
+                        .map(|value| bounded_text(value, 512))
                         .unwrap_or_else(|| "OpenCode subtask".to_string()),
-                    detail: text(part, "prompt").map(|value| bounded(value, 4096)),
+                    detail: text(part, "prompt").map(|value| bounded_text(value, 4096)),
                     safe_metadata: Some(safe_shape(&Value::Object(part.clone()))),
                 }),
             )?,

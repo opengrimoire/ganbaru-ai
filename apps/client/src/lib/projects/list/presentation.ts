@@ -40,16 +40,16 @@ export function parseProjectListPresentation(value: unknown, fields: readonly Pr
   if (typeof value !== "object" || value === null || Array.isArray(value)) return result;
   const record = value as Record<string, unknown>;
   const available = new Set<string>(["name", ...PROJECT_TASK_LIST_COLUMNS, ...fields.map((field) => `custom:${field.id}`)]);
-  const column = (candidate: unknown): candidate is ProjectTaskListResizableColumn => typeof candidate === "string" && available.has(candidate);
-  if (Array.isArray(record.wrappedColumns)) result.wrappedColumns = [...new Set(record.wrappedColumns.filter(column))];
-  if (column(record.frozenThrough)) result.frozenThrough = record.frozenThrough;
+  const isColumn = (candidate: unknown): candidate is ProjectTaskListResizableColumn => typeof candidate === "string" && available.has(candidate);
+  if (Array.isArray(record.wrappedColumns)) result.wrappedColumns = [...new Set(record.wrappedColumns.filter(isColumn))];
+  if (isColumn(record.frozenThrough)) result.frozenThrough = record.frozenThrough;
   for (const [key, options] of [
     ["dateFormats", PROJECT_COLUMN_DATE_FORMATS], ["timeFormats", PROJECT_COLUMN_TIME_FORMATS], ["numberFormats", PROJECT_COLUMN_NUMBER_FORMATS],
   ] as const) {
     const entries = record[key];
     if (typeof entries !== "object" || entries === null || Array.isArray(entries)) continue;
     for (const [id, format] of Object.entries(entries)) {
-      if (!column(id) || !options.some((option) => option === format)) continue;
+      if (!isColumn(id) || !options.some((option) => option === format)) continue;
       const field = fields.find((candidate) => candidate.id === (id === "name" ? undefined : customFieldIdFromTaskListColumn(id)));
       if (key === "dateFormats" && (id === "start" || id === "due" || field?.fieldType === "date")) result.dateFormats[id] = format as ProjectColumnDateFormat;
       if (key === "timeFormats" && (id === "start" || id === "due")) result.timeFormats[id] = format as ProjectColumnTimeFormat;
@@ -58,7 +58,7 @@ export function parseProjectListPresentation(value: unknown, fields: readonly Pr
   }
   if (typeof record.calculations === "object" && record.calculations !== null && !Array.isArray(record.calculations)) {
     for (const [id, calculation] of Object.entries(record.calculations)) {
-      if (column(id) && projectColumnCalculationOptions(id, fields).some((option) => option === calculation)) {
+      if (isColumn(id) && projectColumnCalculationOptions(id, fields).some((option) => option === calculation)) {
         result.calculations[id] = calculation as ProjectColumnCalculation;
       }
     }

@@ -17,10 +17,10 @@ beforeEach(() => {
 
 describe("data folder state api", () => {
   it("formats non-empty default folder errors with default-specific guidance", async () => {
-    const { formatDataFolderError } = await loadModule();
+    const { formatVaultError } = await loadModule();
 
     expect(
-      formatDataFolderError(
+      formatVaultError(
         "selected folder is not empty and is not a Ganbaru AI folder",
         "default",
       ),
@@ -30,49 +30,49 @@ describe("data folder state api", () => {
   });
 
   it("formats import and marker errors as user-facing folder guidance", async () => {
-    const { formatDataFolderError } = await loadModule();
+    const { formatVaultError } = await loadModule();
 
-    expect(formatDataFolderError("selected folder is not a Ganbaru AI folder", "import")).toBe(
+    expect(formatVaultError("selected folder is not a Ganbaru AI folder", "import")).toBe(
       "Not a Ganbaru AI folder. Choose your previous app folder.",
     );
     expect(
-      formatDataFolderError(
+      formatVaultError(
         "read Ganbaru AI folder marker: No such file or directory (os error 2)",
         "import",
       ),
     ).toBe(
       "Can't identify this folder. Choose the main Ganbaru AI folder.",
     );
-    expect(formatDataFolderError("parse Ganbaru AI folder marker: expected value", "import")).toBe(
+    expect(formatVaultError("parse Ganbaru AI folder marker: expected value", "import")).toBe(
       "This folder's information is damaged. Restore a backup or choose another.",
     );
   });
 
   it("formats permission and database errors without raw backend text", async () => {
-    const { formatDataFolderError } = await loadModule();
+    const { formatVaultError } = await loadModule();
 
-    expect(formatDataFolderError("read Ganbaru AI folder: Permission denied")).toBe(
+    expect(formatVaultError("read Ganbaru AI folder: Permission denied")).toBe(
       "Can't access this folder. Check permissions or choose another.",
     );
     expect(
-      formatDataFolderError("run database migrations: file is not a database", "startup"),
+      formatVaultError("run database migrations: file is not a database", "startup"),
     ).toBe(
       "Can't open this folder's data. Restore a backup or choose another.",
     );
   });
 
   it("keeps unexpected backend details out of the setup message", async () => {
-    const { formatDataFolderError } = await loadModule();
+    const { formatVaultError } = await loadModule();
 
-    expect(formatDataFolderError("unable to read /private/folder: internal error", "startup")).toBe(
+    expect(formatVaultError("unable to read /private/folder: internal error", "startup")).toBe(
       "Can't open this folder. Choose another or import an existing one.",
     );
   });
 
   it("gives a short recovery action for a missing folder", async () => {
-    const { formatDataFolderError } = await loadModule();
+    const { formatVaultError } = await loadModule();
 
-    expect(formatDataFolderError("canonicalize Ganbaru AI folder path: No such file", "startup")).toBe(
+    expect(formatVaultError("canonicalize Ganbaru AI folder path: No such file", "startup")).toBe(
       "Folder not found. Choose another or import an existing one.",
     );
   });
@@ -134,9 +134,9 @@ describe("data folder state api", () => {
       folderName: "Ganbaru AI",
       developmentBuild: false,
     });
-    const { getDefaultDataFolderLocation } = await loadModule();
+    const { getDefaultVaultLocation } = await loadModule();
 
-    await expect(getDefaultDataFolderLocation()).resolves.toEqual({
+    await expect(getDefaultVaultLocation()).resolves.toEqual({
       path: "/home/user/Documents/Ganbaru AI",
       parentPath: "/home/user/Documents",
       folderName: "Ganbaru AI",

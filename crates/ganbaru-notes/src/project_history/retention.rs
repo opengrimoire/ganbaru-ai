@@ -99,7 +99,7 @@ pub(super) async fn run_due_maintenance(pool: &SqlitePool) -> Result<(), String>
         .map_err(|e| format!("commit Notes history maintenance: {e}"))
 }
 
-pub async fn notes_get_history_retention_impact(
+pub async fn notes_history_retention_impact(
     pool: &SqlitePool,
     project_id: Option<String>,
     retention_days: i64,

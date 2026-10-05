@@ -160,7 +160,7 @@ describe("Projects initial loading", () => {
     } satisfies ProjectsWorkspaceSnapshot);
     await Promise.all([firstLoad, secondLoad]);
     expect(projects.selectedProjectId).toBe("project-1");
-    expect(projects.projectDataLoaded("project-1")).toBe(true);
+    expect(projects.isProjectDataLoaded("project-1")).toBe(true);
     expect(backend.workspaceCalls).toBe(1);
 
     await Promise.all([

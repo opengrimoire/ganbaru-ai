@@ -21,7 +21,7 @@
     chat.toggleSessionMessageReaction(target.reactionKey, value, localDisplayName);
   }
 
-  function localUserSelected(reaction: ChatMessageReaction): boolean {
+  function isSelectedByLocalUser(reaction: ChatMessageReaction): boolean {
     return reaction.participants.some(({ participantId }) => participantId === LOCAL_CHAT_PARTICIPANT_ID);
   }
 
@@ -39,8 +39,8 @@
       <button
         type="button"
         class="message-reaction-chip reaction-chip"
-        class:selected={localUserSelected(reaction)}
-        aria-pressed={localUserSelected(reaction)}
+        class:selected={isSelectedByLocalUser(reaction)}
+        aria-pressed={isSelectedByLocalUser(reaction)}
         aria-label={reactionTooltip(reaction)}
         data-app-tooltip={reactionTooltip(reaction)}
         onclick={() => toggleReaction(reaction.value)}

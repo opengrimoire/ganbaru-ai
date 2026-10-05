@@ -179,15 +179,15 @@ fn evaluate_candidate(
             })
         })
         .collect::<Result<Vec<_>, String>>()?;
-    evaluation(&candidate.id, results, outcomes)
+    policy_evaluation(&candidate.id, results, outcomes)
 }
 
-fn evaluation(
+fn policy_evaluation(
     candidate: &str,
     results: Vec<ReplayResult>,
     outcomes: &[ObservedOutcome],
 ) -> Result<PolicyEvaluation, String> {
-    let summary = summary(&results);
+    let summary = summarize_results(&results);
     let outcome_score = score_results(&results, outcomes, Attribution::SelectedRhythmMatch)?;
     Ok(PolicyEvaluation {
         candidate_id: candidate.to_owned(),
@@ -220,15 +220,18 @@ fn context_reports(
     order
         .into_iter()
         .map(|key| {
-            let values = &contexts[&key];
+            let results_by_candidate = &contexts[&key];
             let context_evaluations = evaluations
                 .iter()
                 .map(|entry| {
                     Ok(ContextEvaluation {
                         context_key: key.clone(),
-                        evaluation: evaluation(
+                        evaluation: policy_evaluation(
                             &entry.candidate_id,
-                            values.get(&entry.candidate_id).cloned().unwrap_or_default(),
+                            results_by_candidate
+                                .get(&entry.candidate_id)
+                                .cloned()
+                                .unwrap_or_default(),
                             outcomes,
                         )?,
                     })
@@ -242,7 +245,7 @@ fn context_reports(
         .collect()
 }
 
-fn summary(results: &[ReplayResult]) -> ReplaySummary {
+fn summarize_results(results: &[ReplayResult]) -> ReplaySummary {
     let mut summary = ReplaySummary {
         total_opportunities: results.len(),
         ..ReplaySummary::default()
@@ -265,23 +268,23 @@ fn summary(results: &[ReplayResult]) -> ReplaySummary {
                 .entry(assignment.experiment.id.clone())
                 .or_default() += 1;
         }
-        let a = decision.current_rhythm;
-        let b = decision.selected_rhythm;
+        let current = decision.current_rhythm;
+        let selected = decision.selected_rhythm;
         for (changed, key) in [
             (
-                a.focus_duration_minutes != b.focus_duration_minutes,
+                current.focus_duration_minutes != selected.focus_duration_minutes,
                 "focus_duration_minutes",
             ),
             (
-                a.short_break_minutes != b.short_break_minutes,
+                current.short_break_minutes != selected.short_break_minutes,
                 "short_break_minutes",
             ),
             (
-                a.long_break_minutes != b.long_break_minutes,
+                current.long_break_minutes != selected.long_break_minutes,
                 "long_break_minutes",
             ),
             (
-                a.long_break_after_focus_count != b.long_break_after_focus_count,
+                current.long_break_after_focus_count != selected.long_break_after_focus_count,
                 "long_break_after_focus_count",
             ),
         ] {

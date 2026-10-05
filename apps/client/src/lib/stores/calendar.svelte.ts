@@ -42,7 +42,7 @@ import { calendarWindowIncludesGlobalCount } from "$lib/stores/calendar/window-c
 import { loadPomodoroSchedulerEventsFromDb } from "$lib/stores/calendar/pomodoro-window";
 
 /** DB-backed template events for the current render window plus recurring templates. */
-let rawBlocks = $state<CalendarEvent[]>([]);
+let sourceEvents = $state<CalendarEvent[]>([]);
 let windowEvents = $state<CalendarEvent[]>([]);
 let expansionDiagnostics = $state<CalendarExpansionDiagnostic[]>([]);
 let loaded = $state(false);
@@ -61,7 +61,7 @@ interface CalendarWindowSnapshot {
   renderZone: string;
   windowStart: Temporal.PlainDate;
   windowEnd: Temporal.PlainDate;
-  rawBlocks: CalendarEvent[];
+  sourceEvents: CalendarEvent[];
   windowEvents: CalendarEvent[];
   diagnostics: CalendarExpansionDiagnostic[];
   totalEventCount: number;
@@ -107,7 +107,7 @@ async function invalidate(): Promise<void> {
  */
 function resolveToTemplate(event: CalendarEvent): CalendarEvent | undefined {
   const parentId = event.recurringParentId ?? event.id;
-  return rawBlocks.find((b) => b.id === parentId);
+  return sourceEvents.find((b) => b.id === parentId);
 }
 
 function calendarWindowKey(
@@ -168,7 +168,7 @@ function markWindowLoadEvent(event: WindowLoadEvent<CalendarWindowLoadRequest>):
 }
 
 function applyWindowSnapshot(snapshot: CalendarWindowSnapshot): void {
-  rawBlocks = snapshot.rawBlocks;
+  sourceEvents = snapshot.sourceEvents;
   windowEvents = snapshot.windowEvents;
   expansionDiagnostics = snapshot.diagnostics;
   totalEventCount = snapshot.totalEventCount;
@@ -181,7 +181,7 @@ function applyWindowSnapshot(snapshot: CalendarWindowSnapshot): void {
   clearPanelEventCache();
   indexVersion++;
   perfMark("window.applied", {
-    rows: snapshot.rawBlocks.length,
+    rows: snapshot.sourceEvents.length,
     expanded: snapshot.windowEvents.length,
     cache: windowCache.size,
   });
@@ -190,7 +190,7 @@ function applyWindowSnapshot(snapshot: CalendarWindowSnapshot): void {
 function rememberWindowSnapshot(snapshot: CalendarWindowSnapshot): void {
   windowCache.set(snapshot.key, snapshot);
   perfMark("window.cache-put", {
-    rows: snapshot.rawBlocks.length,
+    rows: snapshot.sourceEvents.length,
     expanded: snapshot.windowEvents.length,
     size: windowCache.size,
   });
@@ -260,7 +260,7 @@ async function runWindowLoadRequest(
   });
   perfMark("window.rows-done", {
     mode,
-    rows: mapped.rawBlocks.length,
+    rows: mapped.sourceEvents.length,
     total: mapped.totalEventCount ?? totalEventCount,
   });
 
@@ -269,11 +269,11 @@ async function runWindowLoadRequest(
     return "superseded";
   }
 
-  if (markBoot) perfMark("boot.sql-main-done", { rows: mapped.rawBlocks.length, total: mapped.totalEventCount ?? totalEventCount });
+  if (markBoot) perfMark("boot.sql-main-done", { rows: mapped.sourceEvents.length, total: mapped.totalEventCount ?? totalEventCount });
   if (markBoot) perfMark("boot.maprow-done");
   perfMark("window.expand-done", {
     mode,
-    rows: mapped.rawBlocks.length,
+    rows: mapped.sourceEvents.length,
     expanded: mapped.windowEvents.length,
   });
 
@@ -282,7 +282,7 @@ async function runWindowLoadRequest(
     renderZone,
     windowStart,
     windowEnd,
-    rawBlocks: mapped.rawBlocks,
+    sourceEvents: mapped.sourceEvents,
     windowEvents: mapped.windowEvents,
     diagnostics: mapped.diagnostics,
     totalEventCount: mapped.totalEventCount ?? totalEventCount,
@@ -293,7 +293,7 @@ async function runWindowLoadRequest(
     applyWindowSnapshot(snapshot);
     if (markBoot) {
       perfMark("boot.sql-children-done");
-      perfMark("boot.rawblocks-set", { events: rawBlocks.length, total: totalEventCount });
+      perfMark("boot.rawblocks-set", { events: sourceEvents.length, total: totalEventCount });
     }
     scheduleAdjacentPrefetch(snapshot);
   }
@@ -325,7 +325,7 @@ async function loadWindowIntoState(
       prefetchGeneration++;
       windowLoadCoordinator.supersedePending();
       perfMark("window.cache-hit", {
-        rows: cached.rawBlocks.length,
+        rows: cached.sourceEvents.length,
         expanded: cached.windowEvents.length,
         size: windowCache.size,
       });
@@ -501,8 +501,8 @@ export function getCalendar() {
       return indexVersion;
     },
 
-    get rawBlocks(): CalendarEvent[] {
-      return rawBlocks;
+    get sourceEvents(): CalendarEvent[] {
+      return sourceEvents;
     },
 
     /** Unsupported native projections retain source rows and explicit diagnostics. */
@@ -533,7 +533,7 @@ export function getCalendar() {
         assignments.map((assignment) => [assignment.eventId, assignment.projectId]),
       );
       let changed = false;
-      rawBlocks = rawBlocks.map((event) => {
+      sourceEvents = sourceEvents.map((event) => {
         const projectId = projectIdByEventId.get(event.id);
         if (!projectId || event.projectId === projectId) return event;
         changed = true;
@@ -671,9 +671,9 @@ export function getCalendar() {
     async bulkImport(
       events: CalendarEvent[],
       targetCalendarId: string,
-      opts: CalendarBulkImportOptions = {},
+      options: CalendarBulkImportOptions = {},
     ): Promise<IcsImportSummary> {
-      const result = await bulkImportCalendarEvents(events, targetCalendarId, opts);
+      const result = await bulkImportCalendarEvents(events, targetCalendarId, options);
       if (!result.applied) return result.summary;
 
       totalEventCount += result.added;

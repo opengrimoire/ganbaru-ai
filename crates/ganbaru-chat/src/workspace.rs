@@ -157,7 +157,7 @@ pub fn authorize_workspace(
     }
     let current_filesystem_identity = filesystem_identity(&canonical_path, b"working-folder")?;
     if binding.filesystem_identity != current_filesystem_identity {
-        return Err(folder_identity_mismatch());
+        return Err(folder_identity_mismatch_error());
     }
     let probe = match probe_repository(&canonical_path) {
         Ok(probe) => Some(probe),
@@ -168,7 +168,7 @@ pub fn authorize_workspace(
         .as_ref()
         .is_some_and(|probe| repository_matches_binding(workspace, binding, probe));
     if operation.requires_repository_continuity() && !repository_matches {
-        return Err(repository_mismatch());
+        return Err(repository_mismatch_error());
     }
     let repository_kind = probe
         .as_ref()
@@ -596,7 +596,7 @@ fn path_to_string(path: &Path) -> ChatResult<String> {
     })
 }
 
-fn repository_mismatch() -> ChatError {
+fn repository_mismatch_error() -> ChatError {
     ChatError::new(
         ChatErrorCode::ConfigurationInvalid,
         "The selected folder belongs to a different repository. Rebind the project working folder or add it separately.",
@@ -604,7 +604,7 @@ fn repository_mismatch() -> ChatError {
     )
 }
 
-fn folder_identity_mismatch() -> ChatError {
+fn folder_identity_mismatch_error() -> ChatError {
     ChatError::new(
         ChatErrorCode::ConfigurationInvalid,
         "The project working folder was replaced. Locate or recreate it before continuing.",

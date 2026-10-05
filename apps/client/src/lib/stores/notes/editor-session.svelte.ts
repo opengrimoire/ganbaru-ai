@@ -363,7 +363,7 @@ export function createNotesEditorStore(navigation: NotesEditorNavigation, restor
     return treeProjection.removeLeafBlock(blockId);
   }
 
-  function setLoadedPageFromLoaded(loaded: NotesLoadedPage): void {
+  function setLoadedPage(loaded: NotesLoadedPage): void {
     treeProjection.setLoadedPage(loaded);
   }
 
@@ -544,7 +544,7 @@ export function createNotesEditorStore(navigation: NotesEditorNavigation, restor
     if (options.focusOnLoad) {
       requestLoadedPageFocus(loaded, options.focusBlockId ?? null);
     }
-    setLoadedPageFromLoaded(loaded);
+    setLoadedPage(loaded);
     replaceBlockOutlines(loaded.outlines, pageId);
     const bodyId = blockActions.ensurePageBody(pageId);
     if (options.focusOnLoad && loaded.outlines.length === 0) requestBlockFocus(bodyId, { start: 0, end: 0 });

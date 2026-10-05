@@ -241,7 +241,7 @@ impl ClaudeProviderDriver {
         let home = resolve_claude_home(&self.configuration)?;
         let continuation_group_id = home.continuation_group()?;
         input.verify_continuation(&continuation_group_id)?;
-        let cursor = input.cursor(&self.configuration.instance_id)?;
+        let cursor = input.resume_cursor(&self.configuration.instance_id)?;
         let model = input.model_id().cloned();
         let effort = selected_effort(input.model_options())?;
         let fast_mode = selected_fast_mode(input.model_options())?;
@@ -273,7 +273,7 @@ impl ClaudeProviderDriver {
                 if confirmed_resume_not_found(&error)
                     || diagnostic_confirms_resume_not_found(&diagnostic)
                 {
-                    return Err(resume_not_found(&diagnostic));
+                    return Err(resume_not_found_error(&diagnostic));
                 }
                 return Err(error);
             }

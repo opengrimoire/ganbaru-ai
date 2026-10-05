@@ -5,11 +5,11 @@
   let {
     timezones = [] as string[],
     anchorDate = new Date(),
-    tzCount = 1,
+    timezoneCount = 1,
   }: {
     timezones?: string[];
     anchorDate?: Date;
-    tzCount?: number;
+    timezoneCount?: number;
   } = $props();
 
   const preferences = getPreferences();
@@ -30,12 +30,12 @@
 
 <div
   class="grid select-none"
-  style="grid-column: span {tzCount}; grid-template-columns: subgrid;"
+  style="grid-column: span {timezoneCount}; grid-template-columns: subgrid;"
 >
-  {#each timezones as tz, tzIdx}
+  {#each timezones as tz, timezoneIndex}
     <div
       class="min-w-0"
-      style={tzIdx > 0 ? "border-left: 1px solid var(--cal-gridline);" : ""}
+      style={timezoneIndex > 0 ? "border-left: 1px solid var(--cal-gridline);" : ""}
     >
       {#each hours as hour}
         <div

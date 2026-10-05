@@ -277,14 +277,10 @@ fn database_buttons_require_confirmation_and_update_current_row_properties() {
         let stored_json: serde_json::Value = serde_json::from_str(&stored_properties).unwrap();
         assert!(stored_json.get("Finish").is_none());
 
-        let table = data_sources::layouts::table::get_data_source_table_view(
-            &pool,
-            DATA_SOURCE_A,
-            None,
-            None,
-        )
-        .await
-        .unwrap();
+        let table =
+            data_sources::layouts::table::data_source_table_view(&pool, DATA_SOURCE_A, None, None)
+                .await
+                .unwrap();
         let table_json = serde_json::to_value(table).unwrap();
         assert_eq!(
             table_json["rows"][0]["properties"]["Finish"]["button"]["label"],

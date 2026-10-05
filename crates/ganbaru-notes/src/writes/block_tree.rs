@@ -24,7 +24,7 @@ pub(super) async fn normalize_selection_root_ids(
     let selected = normalized.iter().cloned().collect::<HashSet<_>>();
     let mut roots = Vec::with_capacity(normalized.len());
     for block_id in normalized {
-        let row = load_block_row_in_tx(tx, &block_id, include_trashed).await?;
+        let row = load_block_row_tx(tx, &block_id, include_trashed).await?;
         if selected_ancestor_exists(tx, row.parent_block_id.as_deref(), &selected).await? {
             continue;
         }
@@ -64,7 +64,7 @@ pub(super) async fn selected_ancestor_exists(
     Ok(false)
 }
 
-pub(super) async fn load_block_row_in_tx(
+pub(super) async fn load_block_row_tx(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     block_id: &str,
     include_trashed: bool,
@@ -111,10 +111,10 @@ pub(super) async fn load_block_subtree_rows(
     block_id: &str,
     budget: &mut CopyBudget,
 ) -> Result<Vec<NoteBlockRow>, String> {
-    load_block_subtree_rows_with_trash(tx, block_id, false, budget).await
+    load_block_subtree_rows_including_trashed(tx, block_id, false, budget).await
 }
 
-pub(super) async fn load_block_subtree_rows_with_trash(
+pub(super) async fn load_block_subtree_rows_including_trashed(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     block_id: &str,
     include_trashed: bool,
@@ -291,7 +291,7 @@ pub(super) async fn load_child_page_block_row(
     .ok_or_else(|| "child page block not found".to_string())
 }
 
-pub(super) async fn load_child_page_block_row_any(
+pub(super) async fn load_child_page_block_row_including_trashed(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     block_id: &str,
 ) -> Result<Option<NoteBlockRow>, String> {
@@ -350,10 +350,10 @@ pub(super) async fn load_blocks_by_ids(
     pool: &SqlitePool,
     ids: Vec<String>,
 ) -> Result<NotePaginatedBlockList, String> {
-    load_blocks_by_ids_with_trash(pool, ids, false).await
+    load_blocks_by_ids_including_trashed(pool, ids, false).await
 }
 
-pub(super) async fn load_blocks_by_ids_with_trash(
+pub(super) async fn load_blocks_by_ids_including_trashed(
     pool: &SqlitePool,
     ids: Vec<String>,
     include_trashed: bool,
@@ -362,9 +362,9 @@ pub(super) async fn load_blocks_by_ids_with_trash(
     for id in ids {
         rows.push(reads::get_block_row(pool, &id, include_trashed).await?);
     }
-    let results = rows
+    let blocks = rows
         .into_iter()
         .map(NoteBlockDto::new)
         .collect::<Result<Vec<_>, _>>()?;
-    Ok(NotePaginatedBlockList::new(results, None, false))
+    Ok(NotePaginatedBlockList::new(blocks, None, false))
 }

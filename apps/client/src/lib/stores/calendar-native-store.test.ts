@@ -26,7 +26,7 @@ function event(id = "series::2024-03-11", startTime = "2024-03-11 09:00"): Calen
 }
 
 function snapshot(events = [event()]): MappedNativeCalendarWindow {
-  return { rawBlocks: [{ ...event("series"), recurringParentId: undefined,
+  return { sourceEvents: [{ ...event("series"), recurringParentId: undefined,
     recurrence: { frequency: "daily", interval: 1, end: { type: "never" } } }],
   windowEvents: events, totalEventCount: 1, diagnostics: [] };
 }
@@ -62,14 +62,14 @@ describe("Calendar store native occurrence ownership", () => {
     const { getCalendar } = await import("./calendar.svelte");
     const store = getCalendar();
     await store.loadWindow(start, end);
-    vi.mocked(loadNativeCalendarWindow).mockResolvedValue({ ...snapshot([]), rawBlocks: [], totalEventCount: 0 });
+    vi.mocked(loadNativeCalendarWindow).mockResolvedValue({ ...snapshot([]), sourceEvents: [], totalEventCount: 0 });
     store.acceptNativeEdit();
     await store.refreshWindow(start, end);
     expect(invoke).not.toHaveBeenCalled();
     expect(loadNativeCalendarWindow).toHaveBeenLastCalledWith(expect.objectContaining({ includeTotalEventCount: true }));
     expect(loadNativeCalendarWindow).toHaveBeenCalledTimes(2);
     expect(store.eventsInWindow(start, end)).toEqual([]);
-    expect(store.rawBlocks).toEqual([]);
+    expect(store.sourceEvents).toEqual([]);
     expect(store.eventCount).toBe(0);
   });
 
@@ -77,18 +77,18 @@ describe("Calendar store native occurrence ownership", () => {
     const { getCalendar } = await import("./calendar.svelte");
     const store = getCalendar();
     await store.loadWindow(start, end);
-    const oldRead = deferred<MappedNativeCalendarWindow>();
-    vi.mocked(loadNativeCalendarWindow).mockReturnValueOnce(oldRead.promise)
-      .mockResolvedValueOnce({ ...snapshot([]), rawBlocks: [], totalEventCount: null });
+    const staleRead = deferred<MappedNativeCalendarWindow>();
+    vi.mocked(loadNativeCalendarWindow).mockReturnValueOnce(staleRead.promise)
+      .mockResolvedValueOnce({ ...snapshot([]), sourceEvents: [], totalEventCount: null });
     const refresh = store.refreshCurrentWindow();
     await vi.waitFor(() => expect(loadNativeCalendarWindow).toHaveBeenCalledTimes(2));
     store.acceptNativeEdit();
     const deletion = store.refreshWindow(start, end);
-    oldRead.resolve(snapshot([event("stale")]));
+    staleRead.resolve(snapshot([event("stale")]));
     await Promise.all([refresh, deletion]);
     expect(loadNativeCalendarWindow).toHaveBeenCalledTimes(3);
     expect(store.eventsInWindow(start, end)).toEqual([]);
-    expect(store.rawBlocks).toEqual([]);
+    expect(store.sourceEvents).toEqual([]);
   });
 
   it("refreshes the global count from native acceptance rather than inferring removed rows from the viewport", async () => {
@@ -97,7 +97,7 @@ describe("Calendar store native occurrence ownership", () => {
     await store.loadWindow(start, end);
     store.acceptNativeEdit();
     expect(loadNativeCalendarWindow).toHaveBeenCalledTimes(1);
-    vi.mocked(loadNativeCalendarWindow).mockResolvedValue({ ...snapshot([]), rawBlocks: [], totalEventCount: 4_000 });
+    vi.mocked(loadNativeCalendarWindow).mockResolvedValue({ ...snapshot([]), sourceEvents: [], totalEventCount: 4_000 });
     await store.refreshWindow(start, end);
     expect(loadNativeCalendarWindow).toHaveBeenCalledTimes(2);
     expect(store.eventsInWindow(start, end)).toEqual([]);
@@ -112,7 +112,7 @@ describe("Calendar store native occurrence ownership", () => {
     vi.mocked(loadNativeCalendarWindow).mockResolvedValue({ ...snapshot([]), diagnostics: [{ event_id: "series", message: "Unsupported rule" }] });
     await store.loadWindow(start, end);
     expect(store.expansionDiagnostics).toEqual([{ event_id: "series", message: "Unsupported rule" }]);
-    expect(store.rawBlocks).toHaveLength(1);
+    expect(store.sourceEvents).toHaveLength(1);
     expect(store.eventsInWindow(start, end)).toEqual([]);
   });
 

@@ -1,17 +1,17 @@
 import type { getLocalization } from "$lib/i18n/translator.svelte";
 import { projectCustomFieldUsesOptions } from "$lib/projects/custom-fields";
 import {
-  projectSettingsCustomFieldNameDraftValue,
-  projectSettingsCustomFieldOptionCreateDraftRows,
-  projectSettingsCustomFieldOptionNameDraftValue,
-  projectSettingsCustomFieldOptionNamesForCreate,
-  projectSettingsRemoveCustomFieldCreateDraft,
-  projectSettingsRemoveCustomFieldCreateDraftOption,
-  projectSettingsRemoveCustomFieldOptionCreateDraft,
-  projectSettingsSetCustomFieldCreateDraftName,
-  projectSettingsSetCustomFieldCreateDraftOptionName,
-  projectSettingsSetCustomFieldCreateDraftPendingOptionName,
-  projectSettingsSetCustomFieldOptionCreateDraftName,
+  draftCustomFieldName,
+  newCustomFieldOptionDraftRows,
+  draftCustomFieldOptionName,
+  newCustomFieldOptionNames,
+  removeNewCustomFieldDraft,
+  removeNewCustomFieldDraftOption,
+  removeNewCustomFieldOptionDraft,
+  setNewCustomFieldDraftName,
+  setNewCustomFieldDraftOptionName,
+  setNewCustomFieldDraftPendingOptionName,
+  setNewCustomFieldOptionDraftName,
   type NewCustomFieldDraft,
   type NewCustomFieldOptionDraft,
 } from "./custom-field-drafts";
@@ -45,9 +45,9 @@ export function createProjectSettingsCustomFieldController(
   const fieldOptions = (field: ProjectCustomField): ProjectCustomFieldOption[] =>
     collections.optionsForField(field.id);
   const fieldName = (field: ProjectCustomField): string =>
-    projectSettingsCustomFieldNameDraftValue(field, state.customFieldNameDrafts);
+    draftCustomFieldName(field, state.customFieldNameDrafts);
   const optionName = (option: ProjectCustomFieldOption): string =>
-    projectSettingsCustomFieldOptionNameDraftValue(option, state.customFieldOptionNameDrafts);
+    draftCustomFieldOptionName(option, state.customFieldOptionNameDrafts);
   const normalized = (value: string): string => value.trim().toLowerCase();
 
   function fieldNameExists(name: string, ignoredId?: string): boolean {
@@ -63,7 +63,7 @@ export function createProjectSettingsCustomFieldController(
   }
 
   function optionCreateRows(fieldId: string): NewCustomFieldOptionDraft[] {
-    return projectSettingsCustomFieldOptionCreateDraftRows(state.customFieldOptionDraftRowsByField, fieldId);
+    return newCustomFieldOptionDraftRows(state.customFieldOptionDraftRowsByField, fieldId);
   }
 
   function optionNameExists(fieldId: string, name: string, ignoredId?: string): boolean {
@@ -86,35 +86,35 @@ export function createProjectSettingsCustomFieldController(
   }
 
   function setOptionCreateName(fieldId: string, optionId: string, name: string): void {
-    state.customFieldOptionDraftRowsByField = projectSettingsSetCustomFieldOptionCreateDraftName(
+    state.customFieldOptionDraftRowsByField = setNewCustomFieldOptionDraftName(
       state.customFieldOptionDraftRowsByField, fieldId, optionId, name,
     );
   }
 
   function removeOptionCreate(fieldId: string, optionId: string): void {
-    state.customFieldOptionDraftRowsByField = projectSettingsRemoveCustomFieldOptionCreateDraft(
+    state.customFieldOptionDraftRowsByField = removeNewCustomFieldOptionDraft(
       state.customFieldOptionDraftRowsByField, fieldId, optionId,
     );
   }
 
   function setCreateFieldName(fieldId: string, name: string): void {
-    state.customFieldCreateDraftRows = projectSettingsSetCustomFieldCreateDraftName(state.customFieldCreateDraftRows, fieldId, name);
+    state.customFieldCreateDraftRows = setNewCustomFieldDraftName(state.customFieldCreateDraftRows, fieldId, name);
   }
 
   function setCreateOptionName(fieldId: string, optionId: string, name: string): void {
-    state.customFieldCreateDraftRows = projectSettingsSetCustomFieldCreateDraftOptionName(state.customFieldCreateDraftRows, fieldId, optionId, name);
+    state.customFieldCreateDraftRows = setNewCustomFieldDraftOptionName(state.customFieldCreateDraftRows, fieldId, optionId, name);
   }
 
   function setCreatePendingOptionName(fieldId: string, name: string): void {
-    state.customFieldCreateDraftRows = projectSettingsSetCustomFieldCreateDraftPendingOptionName(state.customFieldCreateDraftRows, fieldId, name);
+    state.customFieldCreateDraftRows = setNewCustomFieldDraftPendingOptionName(state.customFieldCreateDraftRows, fieldId, name);
   }
 
   function removeCreateField(fieldId: string): void {
-    state.customFieldCreateDraftRows = projectSettingsRemoveCustomFieldCreateDraft(state.customFieldCreateDraftRows, fieldId);
+    state.customFieldCreateDraftRows = removeNewCustomFieldDraft(state.customFieldCreateDraftRows, fieldId);
   }
 
   function removeCreateOption(fieldId: string, optionId: string): void {
-    state.customFieldCreateDraftRows = projectSettingsRemoveCustomFieldCreateDraftOption(state.customFieldCreateDraftRows, fieldId, optionId);
+    state.customFieldCreateDraftRows = removeNewCustomFieldDraftOption(state.customFieldCreateDraftRows, fieldId, optionId);
   }
 
   function addOption(rows: NewCustomFieldOptionDraft[], pendingName: string, onAdd: (row: NewCustomFieldOptionDraft) => void): boolean {
@@ -158,7 +158,7 @@ export function createProjectSettingsCustomFieldController(
       state.projectSettingsError = options.translate("projects.customFields.nameExists");
       return;
     }
-    const optionNames = projectSettingsCustomFieldOptionNamesForCreate(
+    const optionNames = newCustomFieldOptionNames(
       state.newCustomFieldType, state.newCustomFieldOptionRows, state.newCustomFieldOptionName,
     );
     if (!optionNames.ok) {

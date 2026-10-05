@@ -8,10 +8,9 @@
   } from "$lib/projects/display";
   import type { ProjectTag, ProjectTask } from "$lib/projects/types";
   import type { Theme } from "$lib/themes";
-  import { cn } from "$lib/utils";
+  import { cn, type MaybePromise } from "$lib/utils";
   import ProjectSettingsSectionHeading from "$lib/components/projects/settings/ProjectSettingsSectionHeading.svelte";
 
-  type ActionResult = void | Promise<void>;
 
   let {
     task,
@@ -32,9 +31,9 @@
     canCreate: boolean;
     theme: Theme;
     onDraftChange: (value: string) => void;
-    onAttachTag: (task: ProjectTask, tag: ProjectTag) => ActionResult;
-    onSubmitTag: (task: ProjectTask) => ActionResult;
-    onDetachTag: (task: ProjectTask, tag: ProjectTag) => ActionResult;
+    onAttachTag: (task: ProjectTask, tag: ProjectTag) => MaybePromise;
+    onSubmitTag: (task: ProjectTask) => MaybePromise;
+    onDetachTag: (task: ProjectTask, tag: ProjectTag) => MaybePromise;
   } = $props();
 
   const { t } = getLocalization();

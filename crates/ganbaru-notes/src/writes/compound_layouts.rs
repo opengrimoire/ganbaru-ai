@@ -112,7 +112,7 @@ pub(super) async fn table_column(
     if payload_bytes > MAX_LAYOUT_PAYLOAD_BYTES {
         return Err("Notes table exceeds its payload limit".to_string());
     }
-    let table = block_tree::load_block_row_in_tx(tx, id, false).await?;
+    let table = block_tree::load_block_row_tx(tx, id, false).await?;
     if table.block_type != "table" {
         return Err("Notes column edit requires a table".to_string());
     }
@@ -123,7 +123,7 @@ pub(super) async fn table_column(
         .ok_or("Notes table has no valid width")? as usize;
     let mut rows = Vec::with_capacity(ids.len());
     for row_id in &ids {
-        let row = block_tree::load_block_row_in_tx(tx, row_id, false).await?;
+        let row = block_tree::load_block_row_tx(tx, row_id, false).await?;
         if row.block_type != "table_row" {
             return Err("Notes table contains an invalid row".to_string());
         }

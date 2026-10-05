@@ -58,7 +58,7 @@ fn table_group_counts_and_calculations_cover_filtered_rows_outside_the_window() 
         )
         .await
         .unwrap();
-        let dto = data_sources::layouts::table::get_data_source_table_view_window(
+        let dto = data_sources::layouts::table::data_source_table_view_window(
             &pool,
             DATA_SOURCE_A,
             None,
@@ -100,14 +100,10 @@ fn table_group_counts_and_calculations_cover_filtered_rows_outside_the_window() 
             .await
             .is_err()
         );
-        let dto = data_sources::layouts::table::get_data_source_table_view(
-            &pool,
-            DATA_SOURCE_A,
-            None,
-            None,
-        )
-        .await
-        .unwrap();
+        let dto =
+            data_sources::layouts::table::data_source_table_view(&pool, DATA_SOURCE_A, None, None)
+                .await
+                .unwrap();
         assert_eq!(serde_json::to_value(dto).unwrap()["total_row_count"], 225);
     });
 }

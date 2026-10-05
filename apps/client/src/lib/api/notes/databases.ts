@@ -194,7 +194,7 @@ export async function getNotesDataSourceSchema(
 ): Promise<NotesDataSourceSchema> {
   const dbUrl = await ensureDbUrl();
   return mapNotesDataSourceSchemaDto(
-    await invoke<unknown>("notes_get_data_source_schema", {
+    await invoke<unknown>("notes_data_source_schema", {
       dbUrl,
       dataSourceId,
       ...databaseViewScopeArgs(scope),
@@ -339,7 +339,7 @@ export async function getNotesDataSourceTableView(
 ): Promise<NotesDataSourceTableView> {
   const dbUrl = await ensureDbUrl();
   return mapNotesDataSourceTableViewDto(
-    await invoke<unknown>("notes_get_data_source_table_view", {
+    await invoke<unknown>("notes_data_source_table_view", {
       dbUrl,
       dataSourceId,
       ...databaseViewScopeArgs(scope),
@@ -370,7 +370,7 @@ export async function getNotesDataSourceBoardView(
 ): Promise<NotesDataSourceBoardView> {
   const dbUrl = await ensureDbUrl();
   return mapNotesDataSourceBoardViewDto(
-    await invoke<unknown>("notes_get_data_source_board_view", {
+    await invoke<unknown>("notes_data_source_board_view", {
       dbUrl,
       dataSourceId,
       ...databaseViewScopeArgs(scope),
@@ -418,7 +418,7 @@ export async function getNotesDataSourceGalleryView(
 ): Promise<NotesDataSourceGalleryView> {
   const dbUrl = await ensureDbUrl();
   return mapNotesDataSourceGalleryViewDto(
-    await invoke<unknown>("notes_get_data_source_gallery_view", {
+    await invoke<unknown>("notes_data_source_gallery_view", {
       dbUrl,
       dataSourceId,
       ...databaseViewScopeArgs(scope),
@@ -482,7 +482,7 @@ export async function getNotesDataSourceListView(
 ): Promise<NotesDataSourceListView> {
   const dbUrl = await ensureDbUrl();
   return mapNotesDataSourceListViewDto(
-    await invoke<unknown>("notes_get_data_source_list_view", {
+    await invoke<unknown>("notes_data_source_list_view", {
       dbUrl,
       dataSourceId,
       ...databaseViewScopeArgs(scope),
@@ -514,7 +514,7 @@ export async function getNotesDataSourceCalendarView(
 ): Promise<NotesDataSourceCalendarView> {
   const dbUrl = await ensureDbUrl();
   return mapNotesDataSourceCalendarViewDto(
-    await invoke<unknown>("notes_get_data_source_calendar_view", {
+    await invoke<unknown>("notes_data_source_calendar_view", {
       dbUrl,
       dataSourceId,
       ...databaseViewScopeArgs(scope),
@@ -546,7 +546,7 @@ export async function getNotesDataSourceTimelineView(
 ): Promise<NotesDataSourceTimelineView> {
   const dbUrl = await ensureDbUrl();
   return mapNotesDataSourceTimelineViewDto(
-    await invoke<unknown>("notes_get_data_source_timeline_view", {
+    await invoke<unknown>("notes_data_source_timeline_view", {
       dbUrl,
       dataSourceId,
       ...databaseViewScopeArgs(scope),

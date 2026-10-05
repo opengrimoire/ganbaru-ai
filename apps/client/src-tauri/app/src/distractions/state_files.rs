@@ -216,10 +216,10 @@ pub(super) fn block_event_phase_from_runtime(
 }
 
 pub(super) fn validate_limit_state(state: &DistractionsLimitState) -> Result<(), String> {
-    if !validate_local_date(&state.local_date) {
+    if !is_valid_local_date(&state.local_date) {
         return Err("local_date must use yyyy-mm-dd".to_string());
     }
-    if !validate_local_date(&state.week_start_local_date) {
+    if !is_valid_local_date(&state.week_start_local_date) {
         return Err("week_start_local_date must use yyyy-mm-dd".to_string());
     }
     if state.week_start_local_date != limits::week_start(&state.local_date)?
@@ -257,8 +257,8 @@ pub(super) fn validate_limit_state(state: &DistractionsLimitState) -> Result<(),
         {
             return Err("limit window or identity is inconsistent".into());
         }
-        if !validate_local_date(&limit.window_start_local_date)
-            || !validate_local_date(&limit.window_end_local_date)
+        if !is_valid_local_date(&limit.window_start_local_date)
+            || !is_valid_local_date(&limit.window_end_local_date)
         {
             return Err("limit window dates must use yyyy-mm-dd".to_string());
         }
@@ -357,7 +357,7 @@ pub(super) fn write_text_file_atomically(
         .ok_or_else(|| "state path has no file name".to_string())?
         .to_string_lossy();
     let generation = STATE_WRITE_GENERATION.fetch_add(1, Ordering::Relaxed);
-    let tmp_path = parent.join(format!(
+    let temporary_path = parent.join(format!(
         ".{file_name}.{}.{}.tmp",
         std::process::id(),
         generation
@@ -366,21 +366,21 @@ pub(super) fn write_text_file_atomically(
         let mut file = std::fs::OpenOptions::new()
             .write(true)
             .create_new(true)
-            .open(&tmp_path)
+            .open(&temporary_path)
             .map_err(|e| e.to_string())?;
         file.write_all(contents.as_bytes())
             .map_err(|e| e.to_string())?;
         file.sync_all().map_err(|e| e.to_string())?;
-        std::fs::rename(&tmp_path, path).map_err(|e| e.to_string())
+        std::fs::rename(&temporary_path, path).map_err(|e| e.to_string())
     })();
     if write_result.is_err() {
-        let _ = remove_file_if_exists(&tmp_path);
+        let _ = remove_file_if_exists(&temporary_path);
     }
     write_result
 }
 
 #[tauri::command]
-pub fn distractions_get_extension_status<R: Runtime>(
+pub fn distractions_extension_status<R: Runtime>(
     app: tauri::AppHandle<R>,
     fresh_after: Option<String>,
 ) -> Result<DistractionsExtensionStatus, String> {

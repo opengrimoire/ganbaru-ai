@@ -14,7 +14,7 @@ pub(super) fn context_gate(
     score: &OutcomeScore,
     options: &GateOptions,
 ) -> ContextGate {
-    let minimum = minimum(options.min_matched_outcomes_per_context);
+    let minimum = minimum_evidence(options.min_matched_outcomes_per_context);
     let maximum = clamp_ratio(options.max_guardrail_breach_rate, MAX_BREACH_RATE);
     let reasons = gate_reasons(
         score,
@@ -26,7 +26,7 @@ pub(super) fn context_gate(
     ContextGate {
         candidate_id: candidate.to_owned(),
         context_key: context.to_owned(),
-        status: status(score, minimum, maximum),
+        status: gate_status(score, minimum, maximum),
         reasons,
         scored_outcome_count: score.scored_outcome_count,
         min_matched_outcomes_per_context: minimum,
@@ -72,14 +72,14 @@ pub(super) fn observed_gate(candidate: &str, options: &GateOptions) -> ObservedG
         .find(|entry| entry.candidate_id == candidate)
         .map(|entry| &entry.outcome_score)
         .unwrap_or(&empty);
-    let minimum = minimum(options.min_observed_candidate_outcomes);
+    let minimum = minimum_evidence(options.min_observed_candidate_outcomes);
     let maximum = clamp_ratio(
         options.max_observed_candidate_guardrail_breach_rate,
         MAX_BREACH_RATE,
     );
     ObservedGate {
         candidate_id: candidate.to_owned(),
-        status: status(score, minimum, maximum),
+        status: gate_status(score, minimum, maximum),
         reasons: gate_reasons(
             score,
             minimum,
@@ -101,7 +101,7 @@ pub(super) fn interaction(
     components: Vec<PolicyEvaluation>,
     options: &GateOptions,
 ) -> Interaction {
-    let minimum = minimum(options.min_interaction_matched_outcomes);
+    let minimum = minimum_evidence(options.min_interaction_matched_outcomes);
     let best = components
         .iter()
         .filter(|entry| entry.outcome_score.scored_outcome_count >= minimum)
@@ -115,19 +115,19 @@ pub(super) fn interaction(
         reasons.push("insufficient_component_evidence".to_owned());
     }
     let difference = |a: Option<f64>, b: Option<f64>| a.zip(b).map(|(a, b)| a - b);
-    let guardrail = best.as_ref().and_then(|best| {
+    let guardrail_increase = best.as_ref().and_then(|best| {
         difference(
             combined.outcome_score.guardrail_breach_rate,
             best.outcome_score.guardrail_breach_rate,
         )
     });
-    let clean = best.as_ref().and_then(|best| {
+    let clean_focus_drop = best.as_ref().and_then(|best| {
         difference(
             best.outcome_score.clean_focus_ratio,
             combined.outcome_score.clean_focus_ratio,
         )
     });
-    let completion = best.as_ref().and_then(|best| {
+    let completion_drop = best.as_ref().and_then(|best| {
         difference(
             best.outcome_score.completion_rate,
             combined.outcome_score.completion_rate,
@@ -138,7 +138,7 @@ pub(super) fn interaction(
     } else {
         for (value, maximum, reason) in [
             (
-                guardrail,
+                guardrail_increase,
                 clamp_ratio(
                     options.max_interaction_guardrail_breach_rate_increase,
                     MAX_INTERACTION_BREACH_INCREASE,
@@ -146,7 +146,7 @@ pub(super) fn interaction(
                 "guardrail_exceeds_component",
             ),
             (
-                clean,
+                clean_focus_drop,
                 clamp_ratio(
                     options.max_interaction_clean_focus_ratio_drop,
                     MAX_INTERACTION_RATIO_DROP,
@@ -154,7 +154,7 @@ pub(super) fn interaction(
                 "clean_focus_under_component",
             ),
             (
-                completion,
+                completion_drop,
                 clamp_ratio(
                     options.max_interaction_completion_rate_drop,
                     MAX_INTERACTION_RATIO_DROP,
@@ -188,9 +188,9 @@ pub(super) fn interaction(
         combined_evaluation: combined,
         component_evaluations: components,
         best_component_evaluation: best,
-        guardrail_breach_rate_increase: guardrail,
-        clean_focus_ratio_drop: clean,
-        completion_rate_drop: completion,
+        guardrail_breach_rate_increase: guardrail_increase,
+        clean_focus_ratio_drop: clean_focus_drop,
+        completion_rate_drop: completion_drop,
     }
 }
 
@@ -211,7 +211,7 @@ pub(super) fn candidate_status(
     }
 }
 
-fn minimum(value: Option<f64>) -> usize {
+fn minimum_evidence(value: Option<f64>) -> usize {
     (value
         .filter(|value| value.is_finite())
         .unwrap_or(MIN_EVIDENCE)
@@ -227,7 +227,7 @@ fn clamp_ratio(value: Option<f64>, default: f64) -> f64 {
         MAX_BREACH_RATE
     }
 }
-fn status(score: &OutcomeScore, minimum: usize, maximum: f64) -> GateStatus {
+fn gate_status(score: &OutcomeScore, minimum: usize, maximum: f64) -> GateStatus {
     if score.scored_outcome_count < minimum {
         GateStatus::InsufficientEvidence
     } else if score
@@ -246,7 +246,7 @@ fn gate_reasons(
     insufficient: &str,
     breach: &str,
 ) -> Vec<String> {
-    match status(score, minimum, maximum) {
+    match gate_status(score, minimum, maximum) {
         GateStatus::Pass => Vec::new(),
         GateStatus::InsufficientEvidence => vec![insufficient.to_owned()],
         GateStatus::Fail => vec![breach.to_owned()],

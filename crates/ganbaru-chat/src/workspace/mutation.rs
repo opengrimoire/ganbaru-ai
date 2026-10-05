@@ -74,7 +74,7 @@ impl ChatWorkspaceMutationRegistry {
         let guard = self
             .lock_for(root)?
             .try_write_owned()
-            .map_err(|_| workspace_busy())?;
+            .map_err(|_| workspace_busy_error())?;
         turns.insert(
             key.clone(),
             ProviderTurnReservationEntry {
@@ -116,7 +116,7 @@ impl ChatWorkspaceMutationRegistry {
     pub fn try_mutation(&self, root: &Path) -> ChatResult<OwnedRwLockWriteGuard<()>> {
         self.lock_for(root)?
             .try_write_owned()
-            .map_err(|_| workspace_busy())
+            .map_err(|_| workspace_busy_error())
     }
 
     /// Waits for an active provider turn to settle, with a bounded deadline.
@@ -248,7 +248,7 @@ fn turn_key(thread_id: &ChatThreadId, turn_id: &ChatTurnId) -> String {
     format!("{}\0{}", thread_id.as_str(), turn_id.as_str())
 }
 
-fn workspace_busy() -> ChatError {
+fn workspace_busy_error() -> ChatError {
     ChatError::new(
         ChatErrorCode::Conflict,
         "The workspace is being changed by another Chat or source-control operation",

@@ -35,10 +35,10 @@ async function renderTable() {
   const query = new ProjectTaskQueryController({projects: {
     selectedProject: {id: "project"}, activeView: "list", customFieldsForProject: () => [field], prioritiesForProject: () => [],
     saveTaskListPresentation: savePresentation, addCustomField: addField, saveTaskListColumns: saveColumns,
-    projectDataLoaded: () => true, sectionsForProject: () => [],
+    isProjectDataLoaded: () => true, sectionsForProject: () => [],
     loadTaskView: async () => undefined, taskViewLoading: false, taskViewError: null,
     taskViewPage: { projectId: "project", view: "list", tasks: [], columnCalculations: [{column: "custom:points", total: 2500, filled: 1200, sum: 9000}] },
-  } as unknown as Input["projects"], calendar: {rawBlocks: []} as unknown as Input["calendar"], translate: getLocalization().t});
+  } as unknown as Input["projects"], calendar: {sourceEvents: []} as unknown as Input["calendar"], translate: getLocalization().t});
   query.listColumns = ["custom:points", "due"];
   component = mount(ProjectListTableHarness, { target, props: {query} });
   await tick();

@@ -19,7 +19,7 @@ fn append_children_paginates_and_preserves_payloads() {
         .await
         .unwrap();
 
-        let page_one = reads::get_block_children(&pool, PAGE_A, None, Some(2))
+        let page_one = reads::block_children(&pool, PAGE_A, None, Some(2))
             .await
             .unwrap();
         assert!(
@@ -31,7 +31,7 @@ fn append_children_paginates_and_preserves_payloads() {
             .as_str()
             .unwrap()
             .to_string();
-        let page_two = reads::get_block_children(&pool, PAGE_A, Some(&next_cursor), Some(2))
+        let page_two = reads::block_children(&pool, PAGE_A, Some(&next_cursor), Some(2))
             .await
             .unwrap();
         let page_two_json = serde_json::to_value(&page_two).unwrap();
@@ -117,7 +117,7 @@ fn append_children_round_trips_toggle_heading_parent_state() {
         assert_eq!(heading_json["heading_2"]["ganbaru_open"], false);
         assert_eq!(heading_json["has_children"], true);
 
-        let children = reads::get_block_children(&pool, BLOCK_B, None, Some(10))
+        let children = reads::block_children(&pool, BLOCK_B, None, Some(10))
             .await
             .unwrap();
         let children_json = serde_json::to_value(children).unwrap();

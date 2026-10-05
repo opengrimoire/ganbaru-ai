@@ -3,9 +3,8 @@
   import ArchiveRestore from "@lucide/svelte/icons/archive-restore";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import type { ProjectTask } from "$lib/projects/types";
-  import { cn } from "$lib/utils";
+  import { cn, type MaybePromise } from "$lib/utils";
 
-  type ActionResult = void | Promise<void>;
 
   let {
     task,
@@ -17,8 +16,8 @@
     task: ProjectTask;
     saving: boolean;
     dirty: boolean;
-    onArchive: (task: ProjectTask) => ActionResult;
-    onRestore: (task: ProjectTask) => ActionResult;
+    onArchive: (task: ProjectTask) => MaybePromise;
+    onRestore: (task: ProjectTask) => MaybePromise;
   } = $props();
 
   const { t } = getLocalization();

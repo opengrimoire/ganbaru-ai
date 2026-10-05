@@ -174,7 +174,7 @@ fn validate_redacted_value(value: &Value) -> ChatResult<()> {
                 .iter()
                 .any(|blocked| normalized.contains(&blocked.to_ascii_lowercase()))
                 {
-                    return Err(unredacted_diagnostic());
+                    return Err(unredacted_diagnostic_error());
                 }
                 validate_redacted_value(value)?;
             }
@@ -192,7 +192,7 @@ fn validate_redacted_value(value: &Value) -> ChatResult<()> {
                 || normalized.contains("/users/")
                 || normalized.contains("bearer ")
             {
-                return Err(unredacted_diagnostic());
+                return Err(unredacted_diagnostic_error());
             }
         }
         _ => {}
@@ -200,7 +200,7 @@ fn validate_redacted_value(value: &Value) -> ChatResult<()> {
     Ok(())
 }
 
-fn unredacted_diagnostic() -> ChatError {
+fn unredacted_diagnostic_error() -> ChatError {
     ChatError::validation(
         "event.redactedDiagnostic",
         "Chat diagnostic contains prohibited sensitive fields",

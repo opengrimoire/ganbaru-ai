@@ -150,7 +150,7 @@ export function computeDayTimelineBands(
   }));
   let cursorMs = Math.max(nowMs, Math.min(...candidates.map((event) => event.startMs)));
   let previousOwnerId = activeState?.activeBlockId ?? null;
-  let inheritedFocus = 0;
+  let inheritedFocusMinutes = 0;
   let inheritedRhythmPosition = 1;
   let firstWindow = true;
 
@@ -163,7 +163,7 @@ export function computeDayTimelineBands(
       if (!Number.isFinite(nextStartMs)) break;
       cursorMs = nextStartMs;
       previousOwnerId = null;
-      inheritedFocus = 0;
+      inheritedFocusMinutes = 0;
       inheritedRhythmPosition = 1;
       continue;
     }
@@ -172,13 +172,13 @@ export function computeDayTimelineBands(
     // no execution starts its proposal at now and carries no assumed past work.
     if (firstWindow && persistedSegments?.get(event.id)?.length && cursorMs > owner.startMs) {
       const previous = computeTrailingRhythmState(event.config, (cursorMs - owner.startMs) / 60_000);
-      inheritedFocus = previous.focusOffsetMinutes;
+      inheritedFocusMinutes = previous.focusOffsetMinutes;
       inheritedRhythmPosition = previous.rhythmPosition;
     }
     const durationMinutes = (owner.endMs - cursorMs) / 60_000;
     if (event !== activeEvent || !activeState?.segments.length) {
       const planned = computePlannedSegments(
-        event.config, durationMinutes, inheritedFocus, inheritedRhythmPosition,
+        event.config, durationMinutes, inheritedFocusMinutes, inheritedRhythmPosition,
       );
       for (const segment of planned) {
         if (segment.phase === "focus") continue;
@@ -191,9 +191,9 @@ export function computeDayTimelineBands(
       }
     }
     const trailing = computeTrailingRhythmState(
-      event.config, durationMinutes, inheritedFocus, inheritedRhythmPosition,
+      event.config, durationMinutes, inheritedFocusMinutes, inheritedRhythmPosition,
     );
-    inheritedFocus = trailing.focusOffsetMinutes;
+    inheritedFocusMinutes = trailing.focusOffsetMinutes;
     inheritedRhythmPosition = trailing.rhythmPosition;
     previousOwnerId = owner.id;
     cursorMs = owner.endMs;

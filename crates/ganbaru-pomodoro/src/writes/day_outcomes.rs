@@ -308,12 +308,12 @@ async fn add_planned_pomodoro_day_outcomes_tx(
     event_date: &str,
     summary: &mut AdaptiveDayOutcomeSummary,
 ) -> Result<(), String> {
-    let mut planned_events = load_captured_adaptive_planned_blocks_tx(tx, event_date).await?;
-    if planned_events.is_empty() {
-        planned_events = load_calendar_adaptive_planned_blocks_tx(tx, event_date).await?;
+    let mut planned_blocks = load_captured_adaptive_planned_blocks_tx(tx, event_date).await?;
+    if planned_blocks.is_empty() {
+        planned_blocks = load_calendar_adaptive_planned_blocks_tx(tx, event_date).await?;
     }
 
-    for block in planned_events {
+    for block in planned_blocks {
         let planned_seconds = iso_seconds_between(&block.planned_start, &block.planned_end)
             .unwrap_or(0)
             .max(0);
@@ -417,7 +417,7 @@ async fn load_calendar_adaptive_planned_blocks_tx(
     .await
     .map_err(|e| format!("load adaptive planned pomodoro day events: {e}"))?;
 
-    let mut planned_events = HashMap::<String, AdaptivePlannedPomodoroBlock>::new();
+    let mut blocks_by_key = HashMap::<String, AdaptivePlannedPomodoroBlock>::new();
     for row in rows {
         let event_id: String = row
             .try_get("event_id")
@@ -435,7 +435,7 @@ async fn load_calendar_adaptive_planned_blocks_tx(
             .try_get("source_kind")
             .map_err(|e| format!("read adaptive planned day source_kind: {e}"))?;
         let key = format!("{original_event_id}|{start_time}");
-        planned_events
+        blocks_by_key
             .entry(key)
             .or_insert(AdaptivePlannedPomodoroBlock {
                 event_id: Some(event_id),
@@ -445,7 +445,7 @@ async fn load_calendar_adaptive_planned_blocks_tx(
                 source_kind,
             });
     }
-    let mut blocks = planned_events.into_values().collect::<Vec<_>>();
+    let mut blocks = blocks_by_key.into_values().collect::<Vec<_>>();
     blocks.sort_by(|a, b| a.planned_start.cmp(&b.planned_start));
     Ok(blocks)
 }

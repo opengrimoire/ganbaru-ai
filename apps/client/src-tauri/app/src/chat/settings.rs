@@ -29,7 +29,7 @@ pub(crate) use preferences::{remember_composer_selection, set_working_folder_pro
 pub(crate) use providers::{apply_provider_probe, operation_context, unique_model_ids};
 pub(crate) use store::{mutate_chat_config, provider_mut, read_chat_config, read_settings};
 
-pub(crate) fn provider_not_found() -> ChatError {
+pub(crate) fn provider_not_found_error() -> ChatError {
     ChatError::new(
         ChatErrorCode::NotFound,
         "Chat provider instance was not found",

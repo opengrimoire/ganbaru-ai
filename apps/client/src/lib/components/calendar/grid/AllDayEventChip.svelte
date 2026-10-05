@@ -26,9 +26,9 @@
     canDrag = true,
     mobileLayout = false,
     isPast = false,
-    onclick,
-    onprefetch,
-    onpointerdown,
+    onClick,
+    onPrefetch,
+    onPointerDown,
   }: {
     event: CalendarEvent;
     theme: Theme;
@@ -38,9 +38,9 @@
     canDrag?: boolean;
     mobileLayout?: boolean;
     isPast?: boolean;
-    onclick: (rect?: DOMRect) => void;
-    onprefetch?: () => void;
-    onpointerdown?: (e: PointerEvent) => void;
+    onClick: (rect?: DOMRect) => void;
+    onPrefetch?: () => void;
+    onPointerDown?: (e: PointerEvent) => void;
   } = $props();
 
   const preferences = getPreferences();
@@ -67,7 +67,7 @@
   function handleClick(e: MouseEvent | KeyboardEvent) {
     e.stopPropagation();
     const rect = chipEl?.getBoundingClientRect();
-    onclick(rect);
+    onClick(rect);
   }
 
   function handleKeydown(e: KeyboardEvent): void {
@@ -78,9 +78,9 @@
   }
 
   function handlePointerDown(e: PointerEvent) {
-    onprefetch?.();
+    onPrefetch?.();
     e.stopPropagation();
-    onpointerdown?.(e);
+    onPointerDown?.(e);
   }
 
 </script>
@@ -104,8 +104,8 @@
   "
   onclick={handleClick}
   onkeydown={handleKeydown}
-  onfocus={onprefetch}
-  onpointerenter={onprefetch}
+  onfocus={onPrefetch}
+  onpointerenter={onPrefetch}
   onpointerdown={handlePointerDown}
 >
   {#if hasIcons}

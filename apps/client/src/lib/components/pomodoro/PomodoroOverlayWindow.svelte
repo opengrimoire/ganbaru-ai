@@ -145,10 +145,10 @@
   }
 
   function reinforceFullscreen(): void {
-    const window = getCurrentWindow();
-    window.setAlwaysOnTop(true).catch(() => {});
-    window.setFullscreen(true).catch(() => {});
-    window.setFocus().catch(() => {});
+    const appWindow = getCurrentWindow();
+    appWindow.setAlwaysOnTop(true).catch(() => {});
+    appWindow.setFullscreen(true).catch(() => {});
+    appWindow.setFocus().catch(() => {});
   }
 
   async function acknowledgeBreak(): Promise<void> {

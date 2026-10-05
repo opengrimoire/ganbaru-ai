@@ -14,7 +14,7 @@ impl OpenCodeEventNormalizer {
         let title = text(info, "title")
             .map(str::trim)
             .filter(|title| !title.is_empty())
-            .map(|title| bounded(title, 512));
+            .map(|title| bounded_text(title, 512));
         Ok(vec![self.event(
             state,
             "session.updated",
@@ -27,8 +27,8 @@ impl OpenCodeEventNormalizer {
                 metadata: Some(VersionedJson {
                     schema_version: 1,
                     value: json!({
-                        "directory": text(info, "directory").map(|value| bounded(value, 4096)),
-                        "version": text(info, "version").map(|value| bounded(value, 128)),
+                        "directory": text(info, "directory").map(|value| bounded_text(value, 4096)),
+                        "version": text(info, "version").map(|value| bounded_text(value, 128)),
                     }),
                 }),
             }),
@@ -104,7 +104,7 @@ impl OpenCodeEventNormalizer {
                     .get("status")
                     .and_then(Value::as_object)
                     .and_then(|status| text(status, "message"))
-                    .map(|message| bounded(message, 4096));
+                    .map(|message| bounded_text(message, 4096));
                 Ok(vec![self.event(
                     state,
                     "session.status",
@@ -117,7 +117,7 @@ impl OpenCodeEventNormalizer {
                     }),
                 )?])
             }
-            unknown => Ok(vec![self.unknown(
+            unknown => Ok(vec![self.unknown_event(
                 state,
                 "session.status",
                 unknown,
@@ -135,7 +135,7 @@ impl OpenCodeEventNormalizer {
             .get("error")
             .and_then(Value::as_object)
             .and_then(|error| text(error, "message"))
-            .map(|message| bounded(message, 4096))
+            .map(|message| bounded_text(message, 4096))
             .unwrap_or_else(|| "OpenCode reported a provider error".to_string());
         let mut events = vec![self.event(
             state,
@@ -176,7 +176,7 @@ impl OpenCodeEventNormalizer {
             .get("diff")
             .and_then(Value::as_array)
             .ok_or_else(|| protocol_error("session diff"))?;
-        if diff.len() > MAX_SAFE_COLLECTION {
+        if diff.len() > MAX_SAFE_COLLECTION_ITEMS {
             return Err(protocol_error("session diff size"));
         }
         let mut files = Vec::new();
@@ -188,8 +188,9 @@ impl OpenCodeEventNormalizer {
                 .or_else(|| text(entry, "path"))
                 .ok_or_else(|| protocol_error("session diff path"))?;
             files.push(ChangedFileSummary {
-                relative_path: bounded(path, 4096),
-                previous_relative_path: text(entry, "before").map(|value| bounded(value, 4096)),
+                relative_path: bounded_text(path, 4096),
+                previous_relative_path: text(entry, "before")
+                    .map(|value| bounded_text(value, 4096)),
                 additions: entry.get("additions").and_then(Value::as_u64),
                 deletions: entry.get("deletions").and_then(Value::as_u64),
                 binary: entry

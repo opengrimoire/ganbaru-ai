@@ -131,13 +131,13 @@ function mapOverrides(
   renderZone: string,
   parentAllDayById: Map<string, boolean>,
 ): Map<string, EventOverride[]> {
-  const map = new Map<string, EventOverride[]>();
-  for (const r of rows) {
-    const list = map.get(r.parent_event_id) ?? [];
-    list.push(mapOverride(r, renderZone, parentAllDayById.get(r.parent_event_id) === true));
-    map.set(r.parent_event_id, list);
+  const overridesByParentId = new Map<string, EventOverride[]>();
+  for (const row of rows) {
+    const overrides = overridesByParentId.get(row.parent_event_id) ?? [];
+    overrides.push(mapOverride(row, renderZone, parentAllDayById.get(row.parent_event_id) === true));
+    overridesByParentId.set(row.parent_event_id, overrides);
   }
-  return map;
+  return overridesByParentId;
 }
 
 export function mapWindowRows(rows: CalendarWindowRows, renderZone: string): CalendarEvent[] {
@@ -145,52 +145,52 @@ export function mapWindowRows(rows: CalendarWindowRows, renderZone: string): Cal
   if (mapped.length === 0) return mapped;
 
   const parentAllDayById = new Map(mapped.map((event) => [event.id, event.allDay === true]));
-  const overrideMap = mapOverrides(rows.overrides, renderZone, parentAllDayById);
+  const overridesByParentId = mapOverrides(rows.overrides, renderZone, parentAllDayById);
   const surfaceAttendeesByEventId = new Map<string, DbWindowAttendee[]>();
   for (const attendee of rows.attendees) {
     const existing = surfaceAttendeesByEventId.get(attendee.event_id);
     if (existing) existing.push(attendee);
     else surfaceAttendeesByEventId.set(attendee.event_id, [attendee]);
   }
-  for (const evt of mapped) {
-    const ovr = overrideMap.get(evt.id);
-    if (ovr?.length) evt.overrides = ovr;
-    const surfaceAttendees = surfaceAttendeesByEventId.get(evt.id);
+  for (const event of mapped) {
+    const overrides = overridesByParentId.get(event.id);
+    if (overrides?.length) event.overrides = overrides;
+    const surfaceAttendees = surfaceAttendeesByEventId.get(event.id);
     if (surfaceAttendees?.length) {
-      evt.surfaceAttendees = surfaceAttendees.map(mapWindowAttendee);
+      event.surfaceAttendees = surfaceAttendees.map(mapWindowAttendee);
     }
   }
   return mapped;
 }
 
-export function slimEvent(e: CalendarEvent): CalendarEvent {
+export function slimEvent(event: CalendarEvent): CalendarEvent {
   const slim: CalendarEvent = {
-    id: e.id,
-    title: e.title,
-    start: e.start,
-    end: e.end,
-    timezone: e.timezone,
-    calendarId: e.calendarId,
+    id: event.id,
+    title: event.title,
+    start: event.start,
+    end: event.end,
+    timezone: event.timezone,
+    calendarId: event.calendarId,
   };
-  if (e.projectId) slim.projectId = e.projectId;
-  if (e.environmentId) slim.environmentId = e.environmentId;
-  if (e.playlistId) slim.playlistId = e.playlistId;
-  if (e.color !== undefined) slim.color = e.color;
-  if (e.recurrence) slim.recurrence = e.recurrence;
-  if (e.notifications && e.notifications.length > 0) slim.notifications = e.notifications;
-  if (e.exceptions && e.exceptions.length > 0) slim.exceptions = e.exceptions;
-  if (e.recurringParentId) slim.recurringParentId = e.recurringParentId;
-  if (e.recurrenceDate) slim.recurrenceDate = e.recurrenceDate;
-  if (e.allDay) slim.allDay = true;
-  if (e.meetingEnabled) slim.meetingEnabled = true;
-  if (e.hasCallLink || e.url) slim.hasCallLink = true;
-  if (e.location) slim.location = e.location;
-  if (e.transparency === "transparent") slim.transparency = "transparent";
-  if (e.status && e.status !== "confirmed") slim.status = e.status;
-  if (e.localParticipationStatus) slim.localParticipationStatus = e.localParticipationStatus;
-  if (e.pomodoroConfig) slim.pomodoroConfig = e.pomodoroConfig;
-  if (e.rdate && e.rdate.length > 0) slim.rdate = e.rdate;
-  if (e.overrides && e.overrides.length > 0) slim.overrides = e.overrides;
+  if (event.projectId) slim.projectId = event.projectId;
+  if (event.environmentId) slim.environmentId = event.environmentId;
+  if (event.playlistId) slim.playlistId = event.playlistId;
+  if (event.color !== undefined) slim.color = event.color;
+  if (event.recurrence) slim.recurrence = event.recurrence;
+  if (event.notifications && event.notifications.length > 0) slim.notifications = event.notifications;
+  if (event.exceptions && event.exceptions.length > 0) slim.exceptions = event.exceptions;
+  if (event.recurringParentId) slim.recurringParentId = event.recurringParentId;
+  if (event.recurrenceDate) slim.recurrenceDate = event.recurrenceDate;
+  if (event.allDay) slim.allDay = true;
+  if (event.meetingEnabled) slim.meetingEnabled = true;
+  if (event.hasCallLink || event.url) slim.hasCallLink = true;
+  if (event.location) slim.location = event.location;
+  if (event.transparency === "transparent") slim.transparency = "transparent";
+  if (event.status && event.status !== "confirmed") slim.status = event.status;
+  if (event.localParticipationStatus) slim.localParticipationStatus = event.localParticipationStatus;
+  if (event.pomodoroConfig) slim.pomodoroConfig = event.pomodoroConfig;
+  if (event.rdate && event.rdate.length > 0) slim.rdate = event.rdate;
+  if (event.overrides && event.overrides.length > 0) slim.overrides = event.overrides;
   return slim;
 }
 
@@ -221,20 +221,20 @@ export function hydrateFullEvent(
     event.alarms = rows.alarms.map(mapAlarm);
   }
   if (rows.overrides.length > 0) {
-    event.overrides = rows.overrides.map((r) => {
-      const slim = mapOverride(r, renderZone, row.all_day === 1);
-      if (r.description) {
-        slim.description = sanitizeCalendarDescriptionHtml(r.description);
+    event.overrides = rows.overrides.map((overrideRow) => {
+      const override = mapOverride(overrideRow, renderZone, row.all_day === 1);
+      if (overrideRow.description) {
+        override.description = sanitizeCalendarDescriptionHtml(overrideRow.description);
       }
-      if (r.location) slim.location = r.location;
-      if (r.url) slim.url = r.url;
-      if (r.visibility) slim.visibility = r.visibility as EventVisibility;
-      const ep = parseJsonStringRecord(r.extended_properties);
-      if (ep) slim.extendedProperties = ep;
-      if (r.icalendar_component_id) slim.icalendarComponentId = r.icalendar_component_id;
-      const rawJcal = safeJsonParse(r.icalendar_raw_jcal);
-      if (rawJcal) slim.icalendarRawJcal = rawJcal;
-      return slim;
+      if (overrideRow.location) override.location = overrideRow.location;
+      if (overrideRow.url) override.url = overrideRow.url;
+      if (overrideRow.visibility) override.visibility = overrideRow.visibility as EventVisibility;
+      const extendedProperties = parseJsonStringRecord(overrideRow.extended_properties);
+      if (extendedProperties) override.extendedProperties = extendedProperties;
+      if (overrideRow.icalendar_component_id) override.icalendarComponentId = overrideRow.icalendar_component_id;
+      const rawJcal = safeJsonParse(overrideRow.icalendar_raw_jcal);
+      if (rawJcal) override.icalendarRawJcal = rawJcal;
+      return override;
     });
   }
   return event;

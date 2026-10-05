@@ -6,7 +6,7 @@
   import { flushConfig } from "$lib/vault/config";
   import {
     backupActiveVault,
-    formatDataFolderError,
+    formatVaultError,
     restoreVaultBackup,
   } from "$lib/vault/state";
 
@@ -27,7 +27,7 @@
       const outcome = await backupActiveVault();
       status = { kind: "success", message: t("settings.data.backupSaved", outcome.fileName) };
     } catch (cause: unknown) {
-      status = { kind: "error", message: formatDataFolderError(cause, "backup", t) };
+      status = { kind: "error", message: formatVaultError(cause, "backup", t) };
     } finally {
       busy = null;
     }
@@ -42,7 +42,7 @@
       const restored = await restoreVaultBackup();
       if (restored) window.location.reload();
     } catch (cause: unknown) {
-      status = { kind: "error", message: formatDataFolderError(cause, "restore", t) };
+      status = { kind: "error", message: formatVaultError(cause, "restore", t) };
     } finally {
       busy = null;
     }

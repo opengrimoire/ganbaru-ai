@@ -133,7 +133,7 @@ async function render(onDirtyChange: (dirty: boolean) => void = () => {}): Promi
 }
 
 /** Open a folder's secondary controls through its visible options trigger. */
-async function options(name: string): Promise<HTMLElement> {
+async function openFolderOptions(name: string): Promise<HTMLElement> {
   const trigger = target.querySelector<HTMLButtonElement>(`[aria-label="Options for ${name}"]`)!;
   await vi.waitFor(() => expect(trigger.disabled).toBe(false));
   if (trigger.getAttribute("aria-expanded") !== "true") trigger.click();
@@ -180,7 +180,7 @@ describe("Project working folder settings", () => {
     expect(chat.setWorkingFolderProviderPreference).not.toHaveBeenCalled();
     expect(providerTrigger.textContent).toContain("Local provider");
     expect(menu.isConnected).toBe(false);
-    const folderMenu = await options("managed");
+    const folderMenu = await openFolderOptions("managed");
     expect(folderMenu.querySelector('[role="listbox"]')).toBeNull();
     expect(action(folderMenu, "Remove from project").disabled).toBe(true);
     await component!.saveDraft();
@@ -191,7 +191,7 @@ describe("Project working folder settings", () => {
     const prompt = vi.spyOn(window, "prompt");
     const confirm = vi.spyOn(window, "confirm");
     await render();
-    const menu = await options("managed");
+    const menu = await openFolderOptions("managed");
     expect(menu.textContent).toContain("/folders/managed");
     expect(menu.textContent).not.toContain("projects/project");
     expect([...menu.querySelectorAll("button")].map((button) => button.textContent?.trim())).toEqual([
@@ -216,7 +216,7 @@ describe("Project working folder settings", () => {
     chat.workingFolders[0].bindingStatus = bindingStatus;
     if (bindingStatus === "unbound") chat.workingFolders[0].canonicalPath = null;
     await render();
-    const menu = await options("managed");
+    const menu = await openFolderOptions("managed");
     expect(action(menu, "Open").disabled).toBe(true);
     if (bindingStatus === "unbound") {
       expect(menu.textContent).toContain("No local path");
@@ -276,20 +276,20 @@ describe("Project working folder settings", () => {
     await render();
     expect(target.textContent).toContain("Folder is missing");
     expect(target.querySelector('[aria-label="Open external"]')).toBeNull();
-    let menu = await options("external");
+    let menu = await openFolderOptions("external");
     expect(action(menu, "Open").disabled).toBe(true);
     action(menu, "Locate").click();
     await vi.waitFor(() => expect(folderApi.pickProjectWorkingFolder).toHaveBeenCalledExactlyOnceWith("project", "Choose a project working folder", "external"));
     expect(chat.locateWorkingFolder).not.toHaveBeenCalled();
     await tick();
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
-    menu = await options("external");
+    menu = await openFolderOptions("external");
     action(menu, "Remove from project").click();
     await tick();
     expect(confirm).toHaveBeenCalledWith("Remove external from this project? Files on disk will not be deleted.");
     expect(chat.removeWorkingFolder).not.toHaveBeenCalled();
     confirm.mockReturnValue(true);
-    menu = await options("external");
+    menu = await openFolderOptions("external");
     action(menu, "Remove from project").click();
     await tick();
     expect(chat.removeWorkingFolder).not.toHaveBeenCalled();
@@ -303,7 +303,7 @@ describe("Project working folder settings", () => {
     let resolvePrimary: (primary: ChatProjectPrimaryWorkingFolderRead) => void = () => { throw new Error("Primary request was not started"); };
     api.setChatProjectPrimaryWorkingFolder.mockImplementation(() => new Promise<ChatProjectPrimaryWorkingFolderRead>((resolve) => { resolvePrimary = resolve; }));
     await render();
-    const menu = await options("external");
+    const menu = await openFolderOptions("external");
     const primaryButton = action(menu, "Make primary");
     const actionClass = primaryButton.className;
     primaryButton.focus();
@@ -335,7 +335,7 @@ describe("Project working folder settings", () => {
     let rejectOpen: (error: Error) => void = () => { throw new Error("Open request was not started"); };
     chat.openWorkingFolder.mockImplementation(() => new Promise<void>((_resolve, reject) => { rejectOpen = reject; }));
     await render();
-    const menu = await options("managed");
+    const menu = await openFolderOptions("managed");
     menu.querySelector<HTMLButtonElement>('[aria-label="Open managed"]')!.click();
     await tick();
     expect(target.querySelector<HTMLButtonElement>('[aria-label="AI provider for external"]')?.disabled).toBe(true);

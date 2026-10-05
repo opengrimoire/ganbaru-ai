@@ -20,7 +20,7 @@ impl ClaudeEventNormalizer {
         if let Some(session_id) = text(object, "session_id") {
             if state.provider_thread_id.is_none() {
                 state.provider_thread_id = Some(session_id.to_string());
-                state.resume.session_uuid = session_id.to_string();
+                state.resume_cursor.session_uuid = session_id.to_string();
             }
         }
         match subtype {
@@ -28,7 +28,7 @@ impl ClaudeEventNormalizer {
                 let provider_thread = state
                     .provider_thread_id
                     .clone()
-                    .unwrap_or_else(|| state.resume.session_uuid.clone());
+                    .unwrap_or_else(|| state.resume_cursor.session_uuid.clone());
                 let provider_id = ProviderThreadId::new(provider_thread.clone())
                     .map_err(|_| protocol_error("session UUID"))?;
                 state.session_state = ProviderSessionState::Ready;
@@ -53,7 +53,7 @@ impl ClaudeEventNormalizer {
                         CanonicalEvent::ThreadMetadataUpdated(ThreadMetadataUpdatedEvent {
                             title: None,
                             provider_thread_id: Some(provider_id),
-                            resume_cursor: Some(resume_cursor(&state.resume)),
+                            resume_cursor: Some(resume_cursor(&state.resume_cursor)),
                             metadata: Some(VersionedJson {
                                 schema_version: 1,
                                 value: json!({
@@ -244,7 +244,7 @@ impl ClaudeEventNormalizer {
                 .is_some_and(|message| message.to_ascii_lowercase().contains("interrupt"));
         let is_success =
             subtype == "success" && object.get("is_error").and_then(Value::as_bool) != Some(true);
-        state.resume.turn_count = state.resume.turn_count.saturating_add(1);
+        state.resume_cursor.turn_count = state.resume_cursor.turn_count.saturating_add(1);
         state.session_state = ProviderSessionState::Ready;
         let turn_id = state.active_chat_turn_id.take();
         let event = if is_success {
@@ -295,7 +295,7 @@ impl ClaudeEventNormalizer {
                         .provider_thread_id
                         .as_deref()
                         .and_then(|value| ProviderThreadId::new(value.to_string()).ok()),
-                    resume_cursor: Some(resume_cursor(&state.resume)),
+                    resume_cursor: Some(resume_cursor(&state.resume_cursor)),
                     metadata: None,
                 }),
             )?,

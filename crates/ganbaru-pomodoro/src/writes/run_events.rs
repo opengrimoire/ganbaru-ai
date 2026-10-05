@@ -4,7 +4,7 @@ pub(crate) async fn normalized_close_run_ended_at(
     tx: &mut Transaction<'_, Sqlite>,
     closure: &PomodoroRunClosure,
 ) -> Result<String, String> {
-    let active_start = sqlx::query_scalar::<_, String>(
+    let latest_boundary = sqlx::query_scalar::<_, String>(
         "SELECT boundary_at
          FROM (
              SELECT actual_start AS boundary_at
@@ -25,7 +25,7 @@ pub(crate) async fn normalized_close_run_ended_at(
     .await
     .map_err(|e| format!("load active pomodoro segment start: {e}"))?;
 
-    Ok(active_start
+    Ok(latest_boundary
         .filter(|start| iso_is_before(&closure.ended_at, start))
         .unwrap_or_else(|| closure.ended_at.clone()))
 }
@@ -64,7 +64,7 @@ pub(crate) async fn replace_segment_pauses(
     Ok(())
 }
 
-pub(crate) async fn log_new_pause_events(
+pub(crate) async fn insert_segment_pause_events(
     tx: &mut Transaction<'_, Sqlite>,
     run_id: &str,
     segment: &PomodoroSegmentWrite,

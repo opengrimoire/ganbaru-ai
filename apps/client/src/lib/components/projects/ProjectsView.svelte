@@ -73,7 +73,7 @@
     return Boolean(
       projectId
       && projects.taskViewPage?.projectId === projectId
-      && projects.projectOptionalDataLoaded("saved_views", projectId),
+      && projects.isProjectOptionalDataLoaded("saved_views", projectId),
     );
   });
   const taskDetailDataReady = $derived.by(() => {
@@ -84,7 +84,7 @@
   });
 
   $effect(() => {
-    if (!selectedProjectId || projects.projectDataLoaded(selectedProjectId)) return;
+    if (!selectedProjectId || projects.isProjectDataLoaded(selectedProjectId)) return;
     void projects.ensureProjectData(selectedProjectId).catch((error) => {
       console.error("load selected project data failed", error);
     });

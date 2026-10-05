@@ -95,7 +95,7 @@
   const directEditor = getNativeCalendarEditController(() => pomodoro.vaultContext, "direct");
   const deleteEditor = getNativeCalendarEditController(() => pomodoro.vaultContext, "delete");
   let viewAlive = true;
-  const calZoom = getCalendarZoom();
+  const calendarZoom = getCalendarZoom();
   const theme = getTheme();
   const preferences = getPreferences();
   const mobileBackStack = getMobileBackStack();
@@ -142,13 +142,13 @@
   }
 
   function handlePanelSurfaceStatusChange(status: EventSurfaceStatus | undefined) {
-    const s = session.state;
-    if (s.mode === "create") {
+    const editState = session.state;
+    if (editState.mode === "create") {
       panelLifecycle.setSurfaceStatus(status, PENDING_CREATE_ID);
       return;
     }
-    if (s.mode === "edit") {
-      panelLifecycle.setSurfaceStatus(status, s.originalEvent.id);
+    if (editState.mode === "edit") {
+      panelLifecycle.setSurfaceStatus(status, editState.originalEvent.id);
       return;
     }
     panelLifecycle.setSurfaceStatus(undefined, undefined);
@@ -398,7 +398,7 @@
       });
     },
     getTemplate: calendarStore.getTemplate,
-    updateBlock: persistDirectCalendarEdit,
+    updateEvent: persistDirectCalendarEdit,
   });
   const commitService = new CalendarViewCommitService({
     calendarStore,
@@ -537,9 +537,9 @@
 
   // Merged event for the panel (original + changes, so panel sees drag/resize updates)
   const panelEvent = $derived.by(() => {
-    const s = session.state;
-    if (s.mode === "edit") {
-      return { ...s.originalEvent, ...session.changes } as CalendarEvent;
+    const editState = session.state;
+    if (editState.mode === "edit") {
+      return { ...editState.originalEvent, ...session.changes } as CalendarEvent;
     }
     return undefined;
   });
@@ -562,25 +562,25 @@
   });
 
   const selectedEditLock = $derived.by(() => {
-    const s = session.state;
-    if (s.mode !== "edit") return { locked: false, allowArchive: false };
-    return getCalendarEventEditLock(s.instanceEvent, calendarsStore.list, {
-      isActivePomodoroEvent: isSelectedActivePomodoroOccurrence(s),
+    const editState = session.state;
+    if (editState.mode !== "edit") return { locked: false, allowArchive: false };
+    return getCalendarEventEditLock(editState.instanceEvent, calendarsStore.list, {
+      isActivePomodoroEvent: isSelectedActivePomodoroOccurrence(editState),
     });
   });
 
   function currentPanelEditProjection(): PanelEditProjection | undefined {
-    const s = session.state;
-    if (s.mode !== "edit") return undefined;
+    const editState = session.state;
+    if (editState.mode !== "edit") return undefined;
     return {
-      selectedActive: isSelectedEndableActiveOccurrence(s),
-      recurring: isRecurring(s.originalEvent),
+      selectedActive: isSelectedEndableActiveOccurrence(editState),
+      recurring: isRecurring(editState.originalEvent),
       detailsLoaded: panelDetailsLoaded,
       locked: selectedEditLock.locked,
       allowArchive: selectedEditLock.allowArchive,
-      allowPomodoroWhenReadOnly: canEnablePomodoroForActiveCalendarEvent(s),
+      allowPomodoroWhenReadOnly: canEnablePomodoroForActiveCalendarEvent(editState),
       deleteWouldStopSession,
-      endWouldStopProductivity: selectedActiveEndWouldStopProductivity(s),
+      endWouldStopProductivity: selectedActiveEndWouldStopProductivity(editState),
     };
   }
 
@@ -623,53 +623,53 @@
     return calendar?.source === "local" && calendar.readOnly !== true;
   }
 
-  function isSelectedActivePomodoroOccurrence(s: Extract<EditSessionState, { mode: "edit" }>): boolean {
-    return pomodoro.isActive && s.instanceEvent.id === pomodoro.activeBlockId;
+  function isSelectedActivePomodoroOccurrence(editState: Extract<EditSessionState, { mode: "edit" }>): boolean {
+    return pomodoro.isActive && editState.instanceEvent.id === pomodoro.activeBlockId;
   }
 
-  function isSelectedActiveCalendarOccurrence(s: Extract<EditSessionState, { mode: "edit" }>): boolean {
-    return isLocalWritableEvent(s.originalEvent) && isActiveTimedCalendarEvent(s.instanceEvent);
+  function isSelectedActiveCalendarOccurrence(editState: Extract<EditSessionState, { mode: "edit" }>): boolean {
+    return isLocalWritableEvent(editState.originalEvent) && isActiveTimedCalendarEvent(editState.instanceEvent);
   }
 
-  function isSelectedEndableActiveOccurrence(s: Extract<EditSessionState, { mode: "edit" }>): boolean {
-    return isSelectedActivePomodoroOccurrence(s) || isSelectedActiveCalendarOccurrence(s);
+  function isSelectedEndableActiveOccurrence(editState: Extract<EditSessionState, { mode: "edit" }>): boolean {
+    return isSelectedActivePomodoroOccurrence(editState) || isSelectedActiveCalendarOccurrence(editState);
   }
 
   function canEnablePomodoroForActiveCalendarEvent(
-    s: Extract<EditSessionState, { mode: "edit" }>,
+    editState: Extract<EditSessionState, { mode: "edit" }>,
   ): boolean {
     return !pomodoro.isActive
-      && !isRecurring(s.originalEvent)
-      && !s.instanceEvent.pomodoroConfig
-      && isSelectedActiveCalendarOccurrence(s);
+      && !isRecurring(editState.originalEvent)
+      && !editState.instanceEvent.pomodoroConfig
+      && isSelectedActiveCalendarOccurrence(editState);
   }
 
   function selectedActiveEndWouldStopProductivity(
-    s: Extract<EditSessionState, { mode: "edit" }>,
+    editState: Extract<EditSessionState, { mode: "edit" }>,
   ): boolean {
-    if (!isSelectedActivePomodoroOccurrence(s)) return false;
+    if (!isSelectedActivePomodoroOccurrence(editState)) return false;
     return endActiveEventWouldStopProductivity(
-      s.instanceEvent,
+      editState.instanceEvent,
       currentVisibleStoreEvents(),
       new Date(),
     );
   }
 
   function effectiveRecurringScope(
-    s: Extract<EditSessionState, { mode: "edit" }>,
+    editState: Extract<EditSessionState, { mode: "edit" }>,
     requested?: RecurringScope,
   ): RecurringScope {
-    return isSelectedEndableActiveOccurrence(s) ? "this" : requested ?? session.scope;
+    return isSelectedEndableActiveOccurrence(editState) ? "this" : requested ?? session.scope;
   }
 
   /** Would this save remove the active pomodoro or move it out of the current time window? */
   function wouldSaveStopSession(data: PanelSaveData, _scope?: RecurringScope): boolean {
     if (!pomodoro.isActive || !pomodoro.activeBlockId || session.state.mode !== "edit") return false;
 
-    const s = session.state;
+    const editState = session.state;
     // Active recurring occurrences are isolated to this occurrence. Future
     // "following" or "all" edits in the same series do not move the active run.
-    if (!isSelectedActivePomodoroOccurrence(s)) return false;
+    if (!isSelectedActivePomodoroOccurrence(editState)) return false;
     return activePomodoroSaveWouldStopSession(data);
   }
 
@@ -685,11 +685,11 @@
     data: PanelSaveData,
     scope?: RecurringScope,
   ): void {
-    const s = session.state;
+    const editState = session.state;
     console.error("[CalendarView] event save failed", {
       context,
-      mode: s.mode,
-      eventId: s.mode === "edit" ? s.originalEvent.id : undefined,
+      mode: editState.mode,
+      eventId: editState.mode === "edit" ? editState.originalEvent.id : undefined,
       scope,
       keys: Object.keys(data).sort(),
       hasPomodoroConfig: !!data.pomodoroConfig,
@@ -854,7 +854,7 @@
       if (!(event instanceof CustomEvent) || typeof event.detail?.eventId !== "string") return;
       const eventId = event.detail.eventId;
       const selected = currentVisibleStoreEvents().find((candidate) => candidate.id === eventId)
-        ?? calendarStore.rawBlocks.find((candidate) => candidate.id === eventId);
+        ?? calendarStore.sourceEvents.find((candidate) => candidate.id === eventId);
       if (!selected) return;
       musicInspectionEventId = selected.id;
       void handleEventClick(selected, new DOMRect(window.innerWidth / 2, window.innerHeight / 3, 0, 0));
@@ -985,10 +985,10 @@
 
   function openMobileEventCreate(target: HTMLButtonElement): void {
     const today = new Date();
-    const sameDay = formatDatePart(anchorDate) === formatDatePart(today);
+    const isAnchorToday = formatDatePart(anchorDate) === formatDatePart(today);
     const start = new Date(anchorDate);
     start.setHours(0, 0, 0, 0);
-    const startMinute = sameDay
+    const startMinute = isAnchorToday
       ? Math.ceil((today.getHours() * 60 + today.getMinutes()) / 30) * 30
       : 9 * 60;
     start.setMinutes(startMinute);
@@ -1338,7 +1338,7 @@
         positionedAllDayEvents={calendarViewModel.positionedAllDayEvents}
         theme={theme.current}
         timezones={viewportController.timezones}
-        tzAbbrMode={viewportController.timezoneAbbreviationMode}
+        timezoneAbbreviationMode={viewportController.timezoneAbbreviationMode}
         editingId={visualEditingId}
         {previewedIds}
         persistedSegmentsByEvent={persistedSegments.byEvent}
@@ -1351,7 +1351,7 @@
         onAddTimezone={(timezone) => viewportController.addTimezone(timezone)}
         onRemoveTimezone={(index) => viewportController.removeTimezone(index)}
         onReorderTimezone={(from, to) => viewportController.reorderTimezone(from, to)}
-        onTzAbbrModeChange={(mode) => { viewportController.timezoneAbbreviationMode = mode; }}
+        onTimezoneAbbreviationModeChange={(mode) => { viewportController.timezoneAbbreviationMode = mode; }}
         onWheelNavigate={handleWheelNavigate}
         onDayHeaderClick={handleWeekDayHeaderClick}
         {mobileLayout}
@@ -1366,7 +1366,7 @@
         allDayEventsByDay={calendarViewModel.allDayEventsByDay}
         theme={theme.current}
         timezones={viewportController.timezones}
-        tzAbbrMode={viewportController.timezoneAbbreviationMode}
+        timezoneAbbreviationMode={viewportController.timezoneAbbreviationMode}
         editingId={visualEditingId}
         {previewedIds}
         persistedSegmentsByEvent={persistedSegments.byEvent}
@@ -1379,7 +1379,7 @@
         onAddTimezone={(timezone) => viewportController.addTimezone(timezone)}
         onRemoveTimezone={(index) => viewportController.removeTimezone(index)}
         onReorderTimezone={(from, to) => viewportController.reorderTimezone(from, to)}
-        onTzAbbrModeChange={(mode) => { viewportController.timezoneAbbreviationMode = mode; }}
+        onTimezoneAbbreviationModeChange={(mode) => { viewportController.timezoneAbbreviationMode = mode; }}
         onWheelNavigate={handleWheelNavigate}
         onDayHeaderClick={handleDayHeaderClick}
         allowPointerEditing={true}
@@ -1481,8 +1481,8 @@
   {/if}
 
 
-  {#if toasts.saveSuccessToast}
-    {@const saveToast = toasts.saveSuccessToast}
+  {#if toasts.saveToast}
+    {@const saveToast = toasts.saveToast}
     <ActionToast
       message={saveToast.message}
       variant={saveToast.variant}

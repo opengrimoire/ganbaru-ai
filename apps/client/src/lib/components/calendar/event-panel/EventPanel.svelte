@@ -179,7 +179,7 @@
   const startControlsDisabled = $derived(controlsDisabled || lockStartControls);
   const deleteControlsDisabled = $derived(parked || session.savePending || (readOnly && !allowDeleteWhenReadOnly));
   const scopeControlsDisabled = $derived(parked || session.savePending || (readOnly && !allowDeleteWhenReadOnly));
-  const endEventAction = $derived(mode === "edit" && !!event && !!onEndEvent);
+  const deleteEndsEvent = $derived(mode === "edit" && !!event && !!onEndEvent);
   const generalDisabledAffordance = $derived(parked);
   const startDisabledAffordance = $derived(parked || (lockStartControls && !readOnly));
 
@@ -197,7 +197,7 @@
   // click inside the panel disarms (see panel-root onclick below).
   const deleteAction = $derived(deletionOutcome ?? "mixed");
   const deleteActionLabel = $derived(
-    endEventAction
+    deleteEndsEvent
       ? t("calendar.eventPanel.deleteEndEvent")
       : deleteAction === "archive"
         ? t("calendar.eventPanel.deleteArchive")
@@ -340,12 +340,12 @@
   const panelLayout = $derived(geometry.layout);
   const activePanelLayout = $derived(mobileLayout ? "fullscreen" : panelLayout);
   const panelCanDrag = $derived(!mobileLayout && geometry.canDrag);
-  const stackedDateTime = $derived(geometry.stackedDateTime);
+  const isDateTimeStacked = $derived(geometry.isDateTimeStacked);
 
   function isSectionEnabled(s: Section): boolean {
     if (s === "meeting") return session.meetingEnabled;
     if (s === "pomodoro") return session.pomodoroEnabled;
-    if (s === "notifications") return session.notifEnabled;
+    if (s === "notifications") return session.notificationsEnabled;
     if (s === "repeat") return !!session.recurrence;
     return false;
   }
@@ -365,9 +365,9 @@
       if (s === "meeting") session.meetingEnabled = false;
       if (s === "pomodoro") session.pomodoroEnabled = false;
       if (s === "notifications") {
-        session.notifEnabled = false;
-        session.notifSelected = new Set();
-        session.customNotifs = [];
+        session.notificationsEnabled = false;
+        session.selectedNotificationMinutes = new Set();
+        session.customNotifications = [];
       }
       if (s === "repeat") session.recurrence = undefined;
       if (openSection === s) openSection = null;
@@ -382,14 +382,14 @@
       if (s === "pomodoro") {
         session.pomodoroEnabled = true;
         session.pomodoroPreset = "adaptive";
-        session.focusDuration = 40;
-        session.shortBreak = 5;
-        session.longBreak = 10;
+        session.focusDurationMinutes = 40;
+        session.shortBreakMinutes = 5;
+        session.longBreakMinutes = 10;
         session.applyDefaultIdleTimeoutPreference();
       }
       if (s === "notifications") {
-        session.notifEnabled = true;
-        session.notifSelected = new Set([0]);
+        session.notificationsEnabled = true;
+        session.selectedNotificationMinutes = new Set([0]);
       }
       if (s === "repeat") session.recurrence = { frequency: "daily", interval: 1, end: { type: "never" } };
     }
@@ -409,7 +409,7 @@
   }
 
   async function handleNotificationToggle(): Promise<void> {
-    const enabling = !session.notifEnabled;
+    const enabling = !session.notificationsEnabled;
     handleToggle("notifications");
     if (!enabling || !androidNotificationScheduling) return;
     const status = mobileNotificationStatus ?? await refreshMobileNotificationStatus();
@@ -561,9 +561,9 @@
       const createData = initialCreateData ?? {};
       session.initializeCreate(createData, start ?? "", end ?? "", initialAllDay);
       if (!notificationSchedulingAvailable) {
-        session.notifEnabled = false;
-        session.notifSelected = new Set();
-        session.customNotifs = [];
+        session.notificationsEnabled = false;
+        session.selectedNotificationMinutes = new Set();
+        session.customNotifications = [];
       }
     }
 
@@ -618,7 +618,7 @@
 
   $effect(() => {
     if (!lockStartControls) return;
-    dateTime.datepickerOpen = false;
+    dateTime.startDatePickerOpen = false;
     if (dateTime.timePickerTarget === "start") {
       dateTime.closeTimePicker();
       dateTime.restoreTimeInput("start");
@@ -626,7 +626,7 @@
   });
 
   $effect(() => {
-    if (!dateTime.datepickerOpen) return;
+    if (!dateTime.startDatePickerOpen) return;
     return mobileBackStack.activate({
       handle: () => dateTime.cancelDatePicker("start"),
     });
@@ -640,7 +640,7 @@
   });
 
   $effect(() => {
-    if (!dateTime.endDatepickerOpen) return;
+    if (!dateTime.endDatePickerOpen) return;
     return mobileBackStack.activate({
       handle: () => dateTime.cancelDatePicker("end"),
     });
@@ -668,7 +668,7 @@
   const saveControlsDisabled = $derived(
     (controlsDisabled && !pomodoroReadOnlyInteractive) || session.savePending || !saveReady,
   );
-  const eventPanelBodyConstrained = $derived(mobileLayout || geometry.bodyConstrained);
+  const isBodyConstrained = $derived(mobileLayout || geometry.isBodyConstrained);
 
   // ─── Emit changes ───────────────────────────────────────────────
   /**
@@ -768,7 +768,7 @@
     parked: () => parked,
     canDelete: () => !deleteControlsDisabled,
     hasDeleteTarget: () => mode === "edit" && !!event && !!(onDelete || onEndEvent),
-    endEventAction: () => endEventAction,
+    deleteEndsEvent: () => deleteEndsEvent,
     inlineEndEventConfirm: () => inlineEndEventConfirm,
     skipInlineDeleteConfirm: () => skipInlineDeleteConfirm,
     save: () => { void handleSave(); },
@@ -810,7 +810,7 @@
    * (Mod+Enter save, Mod+D end/delete, Escape close) bubble up to the
    * window-level listeners.
    */
-  function inputKeydown(e: KeyboardEvent) {
+  function handleInputKeydown(e: KeyboardEvent) {
     if (e.key === "Enter" && hasShortcutModifier(e)) return;
     if ((e.key === "d" || e.key === "D") && hasOnlyShortcutModifier(e)) return;
     if (e.key === "Escape") return;
@@ -851,7 +851,7 @@
 
   const METADATA_ICON_SIZE = 11;
   const METADATA_ICON_CLASS = "shrink-0 translate-y-[0.5px]";
-  const SCOPE_OPTIONS: ReadonlyArray<{ value: RecurringScope; label: string }> = $derived([
+  const scopeOptions: ReadonlyArray<{ value: RecurringScope; label: string }> = $derived([
     { value: "this", label: t("calendar.eventPanel.onlyThis") },
     { value: "following", label: t("calendar.eventPanel.following") },
     { value: "all", label: t("calendar.eventPanel.all") },
@@ -871,7 +871,7 @@
   const transparencyLabel = $derived(transparencyDisplayLabel(session.transparency));
   const visibilityLabel = $derived(visibilityDisplayLabel(session.visibility));
   const deleteActionVerb = $derived(
-    endEventAction
+    deleteEndsEvent
       ? t("calendar.eventPanel.actionEndEvent")
       : deleteAction === "archive"
         ? t("calendar.eventPanel.actionArchive")
@@ -881,7 +881,7 @@
   );
   const armedDeleteLabel = $derived.by(() => {
     const shortcut = formatShortcut("Mod + D");
-    if (endEventAction) return t("calendar.eventPanel.pressAgainToEndEvent", shortcut);
+    if (deleteEndsEvent) return t("calendar.eventPanel.pressAgainToEndEvent", shortcut);
     if (deleteAction === "archive") return t("calendar.eventPanel.pressAgainToArchive", shortcut);
     if (deleteAction === "mixed") return t("calendar.eventPanel.pressAgainToRemove", shortcut);
     return t("calendar.eventPanel.pressAgainToDelete", shortcut);
@@ -1038,14 +1038,14 @@
   <div
     class={cn(
       "relative min-h-0",
-      eventPanelBodyConstrained ? "flex-1 overflow-hidden" : "shrink-0",
+      isBodyConstrained ? "flex-1 overflow-hidden" : "shrink-0",
     )}
   >
     <div
       bind:this={geometry.scrollEl}
       class={cn(
         "event-panel-scroll hide-scrollbar overscroll-contain",
-        eventPanelBodyConstrained ? "h-full overflow-y-auto" : "overflow-visible",
+        isBodyConstrained ? "h-full overflow-y-auto" : "overflow-visible",
       )}
     >
     <div bind:this={geometry.contentEl}>
@@ -1057,13 +1057,13 @@
       <div class="relative top-0.5 mb-2 grid grid-cols-3 overflow-hidden rounded-sm bg-event-panel-contrast p-0.5 text-[0.733333rem]"
         role="radiogroup"
         aria-label={t("calendar.eventPanel.applyChangesTo")}>
-        {#each SCOPE_OPTIONS as option, index}
+        {#each scopeOptions as option, index}
           <button
             role="radio"
             aria-checked={session.scope === option.value}
             onclick={() => handleScopeClick(option.value)}
             onfocus={() => { scopeFocusIndex = index; }}
-            onkeydown={(e) => handlePanelRovingKeydown(e, "scope", index, SCOPE_OPTIONS.length)}
+            onkeydown={(e) => handlePanelRovingKeydown(e, "scope", index, scopeOptions.length)}
             data-panel-roving="scope"
             data-roving-index={index}
             tabindex={scopeFocusIndex === index ? 0 : -1}
@@ -1092,7 +1092,7 @@
           disabled={controlsDisabled}
           class="w-full bg-transparent py-0.5 text-[1rem] font-semibold text-foreground outline-none placeholder:text-event-panel-placeholder"
           oninput={() => session.emitChange()}
-          onkeydown={inputKeydown}
+          onkeydown={handleInputKeydown}
         />
       </div>
       <div class="event-identity-controls flex items-center {mobileLayout ? 'gap-1' : 'gap-2.5'}">
@@ -1108,7 +1108,7 @@
             theme={theme.current}
             {mobileLayout}
             buttonClass="event-identity-trigger"
-            onselect={(color) => {
+            onSelect={(color) => {
               session.color = color;
               session.emitChange();
             }}
@@ -1122,7 +1122,7 @@
       <!-- Date + time -->
       <div
         class="date-time-grid relative text-[0.866667rem] leading-none"
-        data-stacked={stackedDateTime || undefined}
+        data-stacked={isDateTimeStacked || undefined}
       >
       <!-- Start date -->
       <div class="relative z-1 min-w-0 justify-self-start">
@@ -1135,7 +1135,7 @@
             disabledAffordanceClass(startDisabledAffordance),
             startControlsDisabled
               ? ""
-              : dateTime.datepickerOpen
+              : dateTime.startDatePickerOpen
                 ? "ring-1 ring-primary/60"
                 : "hover:bg-black/5 dark:hover:bg-black/15",
           )}>
@@ -1143,10 +1143,10 @@
         </button>
 
         <!-- Floating start date picker -->
-        {#if dateTime.datepickerOpen}
+        {#if dateTime.startDatePickerOpen}
           <!-- svelte-ignore a11y_click_events_have_key_events -->
           <!-- svelte-ignore a11y_no_static_element_interactions -->
-          <div class="fixed inset-0 z-19" onclick={() => { dateTime.datepickerOpen = false; }}></div>
+          <div class="fixed inset-0 z-19" onclick={() => { dateTime.startDatePickerOpen = false; }}></div>
           <div class="absolute left-0 top-full z-20 mt-1 w-60 rounded-lg bg-popover p-2 shadow-lg ring-1 ring-border/60">
             <MiniDatePicker
               selectedDate={session.startDate}
@@ -1154,8 +1154,8 @@
               rangeEndDate={session.endDate}
               highlightToday={false}
               activeHighlight="primary"
-              onselect={(date, source) => dateTime.selectDate("start", date, source)}
-              oncancel={(source) => dateTime.cancelDatePicker("start", source)}
+              onSelect={(date, source) => dateTime.selectDate("start", date, source)}
+              onCancel={(source) => dateTime.cancelDatePicker("start", source)}
             />
           </div>
         {/if}
@@ -1219,18 +1219,18 @@
           <!-- svelte-ignore a11y_no_static_element_interactions -->
           <div class="fixed inset-0 z-19" onpointerdown={() => dateTime.closeTimePicker("pointer")}></div>
           {@const isEnd = dateTime.timePickerTarget === 'end'}
-          {@const startMins = (() => { const [h, m] = (session.startTime || "0:0").split(":").map(Number); return h * 60 + m; })()}
+          {@const startMinutes = (() => { const [h, m] = (session.startTime || "0:0").split(":").map(Number); return h * 60 + m; })()}
           <div class="absolute top-full z-20 mt-1 rounded-lg bg-popover shadow-lg ring-1 ring-border/60"
             style="left: {isEnd ? '50%' : '0'}; width: {dateTime.timePickerWidth(isEnd)};">
             <TimePicker
               currentTime={isEnd ? session.endTime : session.startTime}
               {isEnd}
-              startMinutes={startMins}
+              {startMinutes}
               focusOnOpen={dateTime.timePickerKeyboardOpen}
               inputNavigation={dateTime.timePickerInputNavigation}
-              onselect={(time, source) => dateTime.selectTime(time, source)}
-              oncancel={(source) => dateTime.closeTimePicker(source)}
-              ontypedigit={(digit) => dateTime.beginTimeTypingFromPicker(digit)} />
+              onSelect={(time, source) => dateTime.selectTime(time, source)}
+              onCancel={(source) => dateTime.closeTimePicker(source)}
+              onTypeDigit={(digit) => dateTime.beginTimeTypingFromPicker(digit)} />
           </div>
         {/if}
       </div>
@@ -1242,15 +1242,15 @@
           onkeydown={(e) => dateTime.handleDateButtonKeydown(e, "end")}
           disabled={controlsDisabled}
           class="date-chip max-w-full rounded py-0.5 text-event-panel-input-text
-            {controlsDisabled ? '' : dateTime.endDatepickerOpen ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}">
+            {controlsDisabled ? '' : dateTime.endDatePickerOpen ? 'ring-1 ring-primary/60' : 'hover:bg-black/5 dark:hover:bg-black/15'}">
           {shortEndDate}
         </button>
 
         <!-- Floating end date picker -->
-        {#if dateTime.endDatepickerOpen}
+        {#if dateTime.endDatePickerOpen}
           <!-- svelte-ignore a11y_click_events_have_key_events -->
           <!-- svelte-ignore a11y_no_static_element_interactions -->
-          <div class="fixed inset-0 z-19" onclick={() => { dateTime.endDatepickerOpen = false; }}></div>
+          <div class="fixed inset-0 z-19" onclick={() => { dateTime.endDatePickerOpen = false; }}></div>
           <div class="absolute right-0 top-full z-20 mt-1 w-60 rounded-lg bg-popover p-2 shadow-lg ring-1 ring-border/60">
             <MiniDatePicker
               selectedDate={session.endDate}
@@ -1258,8 +1258,8 @@
               rangeEndDate={session.endDate}
               highlightToday={false}
               activeHighlight="primary"
-              onselect={(date, source) => dateTime.selectDate("end", date, source)}
-              oncancel={(source) => dateTime.cancelDatePicker("end", source)}
+              onSelect={(date, source) => dateTime.selectDate("end", date, source)}
+              onCancel={(source) => dateTime.cancelDatePicker("end", source)}
             />
           </div>
         {/if}
@@ -1366,11 +1366,11 @@
           readOnly={controlsDisabled}
           allowReadOnlyExpand={readOnly && !parked}
           expanded={openSection === "meeting"}
-          ontoggle={() => handleToggle("meeting")}
-          onexpand={() => handleExpand("meeting")}
-          onsurfacestatuschange={onSurfaceStatusChange}
-          onchange={() => session.emitChange()}
-          ondescriptionchange={(html) => {
+          onToggle={() => handleToggle("meeting")}
+          onExpand={() => handleExpand("meeting")}
+          onSurfaceStatusChange={onSurfaceStatusChange}
+          onChange={() => session.emitChange()}
+          onDescriptionChange={(html) => {
             session.description = html;
             session.emitChange();
           }} />
@@ -1381,9 +1381,9 @@
         <PomodoroSection
           enabled={session.pomodoroEnabled}
           bind:preset={session.pomodoroPreset}
-          bind:focusDuration={session.focusDuration}
-          bind:shortBreak={session.shortBreak}
-          bind:longBreak={session.longBreak}
+          bind:focusDurationMinutes={session.focusDurationMinutes}
+          bind:shortBreakMinutes={session.shortBreakMinutes}
+          bind:longBreakMinutes={session.longBreakMinutes}
           bind:longBreakAfterFocusCount={session.longBreakAfterFocusCount}
           bind:customRhythmMode={session.customRhythmMode}
           bind:sequenceSteps={session.sequenceSteps}
@@ -1391,25 +1391,25 @@
           expanded={openSection === "pomodoro"}
           readonlyInteractive={pomodoroReadOnlyInteractive}
           idleDetectionAvailable={nativeIdleDetectionAvailable}
-          ontoggle={() => handleToggle("pomodoro")}
-          onexpand={() => handleExpand("pomodoro")}
-          onchange={() => session.emitChange()} />
+          onToggle={() => handleToggle("pomodoro")}
+          onExpand={() => handleExpand("pomodoro")}
+          onChange={() => session.emitChange()} />
       {/if}
 
       <!-- 3) Notifications -->
       {#if notificationSchedulingAvailable}
       <NotificationsSection
-        enabled={session.notifEnabled}
-        bind:selected={session.notifSelected}
-        bind:customNotifs={session.customNotifs}
+        enabled={session.notificationsEnabled}
+        bind:selected={session.selectedNotificationMinutes}
+        bind:customNotifications={session.customNotifications}
         expanded={openSection === "notifications"}
-        ontoggle={() => { void handleNotificationToggle(); }}
-        onexpand={() => handleExpand("notifications")}
-        onchange={() => session.emitChange()}
+        onToggle={() => { void handleNotificationToggle(); }}
+        onExpand={() => handleExpand("notifications")}
+        onChange={() => session.emitChange()}
         deliveryNotice={mobileNotificationDeliveryNotice}
         deliveryActionLabel={mobileNotificationDeliveryAction}
         deliveryActionBusy={mobileNotificationStatusBusy}
-        ondeliveryaction={() => { void resolveMobileNotificationDelivery(); }} />
+        onDeliveryAction={() => { void resolveMobileNotificationDelivery(); }} />
       {/if}
 
       <!-- 4) Repeat -->
@@ -1418,9 +1418,9 @@
         startDate={session.startDate}
         rdate={session.rdate}
         expanded={openSection === "repeat"}
-        ontoggle={() => handleToggle("repeat")}
-        onexpand={() => handleExpand("repeat")}
-        onchange={() => session.emitChange()} />
+        onToggle={() => handleToggle("repeat")}
+        onExpand={() => handleExpand("repeat")}
+        onChange={() => session.emitChange()} />
 
       <!-- 5) Music -->
       {#if timedSectionsVisible && musicAssignmentsAvailable}
@@ -1462,7 +1462,7 @@
   </div>
   </div>
   </div>
-    {#if eventPanelBodyConstrained}
+    {#if isBodyConstrained}
       <CalendarScrollbar scrollContainer={geometry.scrollEl} wheelPassthrough />
     {/if}
   </div>
@@ -1484,14 +1484,14 @@
       </div>
     {:else}
       <div class="panel-footer-actions flex">
-        {#if actions.deleteArmed && mode === "edit" && event && (onDelete || onEndEvent) && (!endEventAction || inlineEndEventConfirm)}
+        {#if actions.deleteArmed && mode === "edit" && event && (onDelete || onEndEvent) && (!deleteEndsEvent || inlineEndEventConfirm)}
           <button
             type="button"
             data-event-panel-delete-action
             onclick={() => actions.confirmArmedDelete()}
             disabled={deleteControlsDisabled}
             class="readonly-interactive flex flex-1 items-center justify-center gap-2 py-1.5 text-[0.866667rem] text-action-danger-armed-foreground bg-action-danger-armed">
-            {#if endEventAction}
+            {#if deleteEndsEvent}
               <Scissors size={14} strokeWidth={1.8} />
             {:else if deleteAction === "archive"}
               <Archive size={14} strokeWidth={1.8} />
@@ -1511,7 +1511,7 @@
                 "readonly-interactive event-panel-delete-icon-button flex w-10 shrink-0 items-center justify-center text-foreground",
               )}
               title={t("calendar.eventPanel.deleteShortcut", deleteActionLabel, formatShortcut("Mod + D"))}>
-              {#if endEventAction}
+              {#if deleteEndsEvent}
                 <Scissors size={14} strokeWidth={1.8} />
               {:else if deleteAction === "archive"}
                 <Archive size={14} strokeWidth={1.8} />

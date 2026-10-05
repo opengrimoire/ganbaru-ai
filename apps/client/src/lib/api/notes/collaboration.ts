@@ -23,7 +23,7 @@ import { invokeNotesMutation } from "./mutation";
 
 export async function getNotesLocalUser(): Promise<NotesLocalUser> {
   const dbUrl = await ensureDbUrl();
-  return mapNotesLocalUserDto(await invoke<unknown>("notes_get_local_user", { dbUrl }));
+  return mapNotesLocalUserDto(await invoke<unknown>("notes_local_user", { dbUrl }));
 }
 
 export async function updateNotesLocalUser(

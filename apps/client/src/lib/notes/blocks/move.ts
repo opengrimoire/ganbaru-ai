@@ -39,11 +39,11 @@ export function notesMoveToPageTargets(
 }
 
 function pageTitleForMoveTarget(page: NotesPage, untitledLabel: string): string {
-  const trimmed = pageTitleCache(page);
+  const trimmed = pageTitlePlainText(page);
   return trimmed || untitledLabel;
 }
 
-function pageTitleCache(page: NotesPage): string {
+function pageTitlePlainText(page: NotesPage): string {
   const title = page.properties.title;
   if (!isTitleProperty(title)) return "";
   return title.title

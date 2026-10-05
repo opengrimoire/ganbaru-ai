@@ -5,13 +5,13 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
-static TEMP_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+static TEMPORARY_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 struct TestDirectory(PathBuf);
 
 impl TestDirectory {
     fn new(label: &str) -> Self {
-        let sequence = TEMP_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+        let sequence = TEMPORARY_SEQUENCE.fetch_add(1, Ordering::Relaxed);
         let path = std::env::temp_dir().join(format!(
             "ganbaru-music-relink-{label}-{}-{sequence}",
             std::process::id()

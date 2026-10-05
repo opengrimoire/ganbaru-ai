@@ -27,9 +27,9 @@ impl TestRepository {
             std::process::id()
         ));
         fs::create_dir(&path).expect("test repository should be created");
-        command(&path, &["init", "-q"]);
-        command(&path, &["config", "user.name", "Ganbaru Test"]);
-        command(&path, &["config", "user.email", "test@ganbaru.invalid"]);
+        run_git(&path, &["init", "-q"]);
+        run_git(&path, &["config", "user.name", "Ganbaru Test"]);
+        run_git(&path, &["config", "user.email", "test@ganbaru.invalid"]);
         Self(fs::canonicalize(path).expect("test repository path should canonicalize"))
     }
 
@@ -42,8 +42,8 @@ impl TestRepository {
     }
 
     fn commit_all(&self) {
-        command(&self.0, &["add", "-A", "--", "."]);
-        command(&self.0, &["commit", "-q", "-m", "fixture"]);
+        run_git(&self.0, &["add", "-A", "--", "."]);
+        run_git(&self.0, &["commit", "-q", "-m", "fixture"]);
     }
 
     fn authorized(&self, identity: &str) -> AuthorizedWorkingFolder {
@@ -64,7 +64,7 @@ impl Drop for TestRepository {
     }
 }
 
-fn command(root: &Path, arguments: &[&str]) -> String {
+fn run_git(root: &Path, arguments: &[&str]) -> String {
     let output = Command::new("git")
         .arg("-C")
         .arg(root)
@@ -115,21 +115,21 @@ fn checkpoint_capture_preserves_head_index_staging_and_worktree() {
     repository.write("tracked.txt", b"base\n");
     repository.commit_all();
     repository.write("tracked.txt", b"staged\n");
-    command(&repository.0, &["add", "tracked.txt"]);
+    run_git(&repository.0, &["add", "tracked.txt"]);
     repository.write("unstaged.txt", b"untracked\n");
     let before = repository_fingerprint(&repository.0).expect("fingerprint should succeed");
-    let head = command(&repository.0, &["rev-parse", "HEAD"]);
+    let head = run_git(&repository.0, &["rev-parse", "HEAD"]);
     let captured = capture(&repository, "preserve", None);
     let after = repository_fingerprint(&repository.0).expect("fingerprint should succeed");
 
     assert_eq!(before, after);
-    assert_eq!(head, command(&repository.0, &["rev-parse", "HEAD"]));
+    assert_eq!(head, run_git(&repository.0, &["rev-parse", "HEAD"]));
     assert_eq!(
         captured.git_object_id,
-        command(&repository.0, &["rev-parse", &captured.hidden_ref_name])
+        run_git(&repository.0, &["rev-parse", &captured.hidden_ref_name])
     );
     assert_eq!(
-        command(&repository.0, &["diff", "--cached", "--name-only"]),
+        run_git(&repository.0, &["diff", "--cached", "--name-only"]),
         "tracked.txt"
     );
     assert!(repository.0.join("unstaged.txt").exists());
@@ -156,11 +156,11 @@ fn diff_covers_staged_unstaged_untracked_deleted_renamed_mode_binary_and_whitesp
     let pre = capture(&repository, "pre", None);
 
     repository.write("staged.txt", b"staged change\n");
-    command(&repository.0, &["add", "staged.txt"]);
+    run_git(&repository.0, &["add", "staged.txt"]);
     repository.write("unstaged.txt", b"unstaged change\n");
     repository.write("untracked.txt", b"new\n");
     fs::remove_file(repository.0.join("deleted.txt")).expect("file should be deleted");
-    command(&repository.0, &["mv", "renamed.txt", "moved.txt"]);
+    run_git(&repository.0, &["mv", "renamed.txt", "moved.txt"]);
     let mut permissions = fs::metadata(repository.0.join("mode.sh"))
         .expect("mode fixture should exist")
         .permissions();
@@ -247,13 +247,13 @@ fn restore_reinstates_worktree_and_real_index_without_moving_head() {
     repository.write("worktree.txt", b"base\n");
     repository.commit_all();
     repository.write("staged.txt", b"checkpoint staged\n");
-    command(&repository.0, &["add", "staged.txt"]);
+    run_git(&repository.0, &["add", "staged.txt"]);
     repository.write("worktree.txt", b"checkpoint worktree\n");
     repository.write("checkpoint-only.txt", b"checkpoint\n");
     let target = capture(&repository, "restore-target", None);
 
     repository.write("staged.txt", b"later staged\n");
-    command(&repository.0, &["add", "staged.txt"]);
+    run_git(&repository.0, &["add", "staged.txt"]);
     repository.write("worktree.txt", b"later worktree\n");
     fs::remove_file(repository.0.join("checkpoint-only.txt")).expect("file should be removed");
     repository.write("later-only.txt", b"later\n");
@@ -285,7 +285,7 @@ fn ref_validation_rejects_identity_changes_missing_refs_and_wrong_cleanup_oids()
     let identity_error = verify_checkpoint(&repository.authorized("identity-b"), &checkpoint)
         .expect_err("identity mismatch should fail");
     assert_eq!(identity_error.code, ChatErrorCode::ConfigurationInvalid);
-    let wrong_oid = command(&repository.0, &["rev-parse", "HEAD"]);
+    let wrong_oid = run_git(&repository.0, &["rev-parse", "HEAD"]);
     assert!(delete_exact_ref(&repository.0, &captured.hidden_ref_name, &wrong_oid).is_err());
     verify_checkpoint(&repository.authorized("identity-a"), &checkpoint)
         .expect("wrong expected OID must retain ref");

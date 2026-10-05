@@ -27,7 +27,7 @@ export interface CalendarDragCommitControllerOptions {
   loadPanel: () => Promise<void>;
   confirmDiscard: (action: () => Promise<void>) => void;
   getTemplate: (event: CalendarEvent) => CalendarEvent | undefined;
-  updateBlock: (event: CalendarEvent) => Promise<void>;
+  updateEvent: (event: CalendarEvent) => Promise<void>;
   now?: () => number;
 }
 
@@ -94,7 +94,7 @@ export class CalendarDragCommitController {
 
     const template = this.options.getTemplate(event);
     if (template && template.start === event.start && template.end === event.end) return;
-    await this.options.updateBlock(event);
+    await this.options.updateEvent(event);
   }
 
   private applyTimes(event: CalendarEvent): void {

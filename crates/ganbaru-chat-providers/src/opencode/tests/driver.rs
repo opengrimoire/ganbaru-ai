@@ -255,11 +255,11 @@ async fn read_request(connection: &mut TcpStream) -> std::io::Result<String> {
     let mut buffer = [0_u8; 4096];
     let mut expected_length = None;
     loop {
-        let read = connection.read(&mut buffer).await?;
-        if read == 0 {
+        let bytes_read = connection.read(&mut buffer).await?;
+        if bytes_read == 0 {
             break;
         }
-        request.extend_from_slice(&buffer[..read]);
+        request.extend_from_slice(&buffer[..bytes_read]);
         if request.len() > 5 * 1024 * 1024 {
             return Err(std::io::Error::other("fixture request exceeded bound"));
         }
@@ -465,16 +465,16 @@ fn external_workspace_requires_confirmation_before_any_request() {
 fn resume_forks_changed_directory_reasserts_permissions_and_reconciles_reconnect() {
     crate::test_block_on(async {
         let workspace = TestDirectory::new("external-resume");
-        let other = TestDirectory::new("external-other");
+        let other_workspace = TestDirectory::new("external-other");
         let server = OpenCodeServerFixture::start(
             workspace.path(),
-            Some(other.path().to_string_lossy().into_owned()),
+            Some(other_workspace.path().to_string_lossy().into_owned()),
             true,
         )
         .await;
         let configuration = external_configuration(&server.origin, true);
         let settings = OpenCodeProviderSettings::parse(&configuration).unwrap();
-        let group = continuation_group(&settings, None).unwrap();
+        let continuation_group_id = continuation_group(&settings, None).unwrap();
         let mut driver = OpenCodeProviderDriver::new(configuration).unwrap();
         let sink = Arc::new(RecordingSink::default());
         let snapshot = driver
@@ -484,7 +484,7 @@ fn resume_forks_changed_directory_reasserts_permissions_and_reconciles_reconnect
                     workspace: verified_workspace(workspace.path()),
                     provider_instance_id: ProviderInstanceId::new("opencode-instance").unwrap(),
                     provider_thread_id: ProviderThreadId::new("ses_resume").unwrap(),
-                    continuation_group_id: group,
+                    continuation_group_id,
                     resume_cursor: crate::opencode::protocol::resume_cursor("ses_resume").unwrap(),
                     modes: modes(),
                 },
@@ -538,7 +538,7 @@ fn resume_creates_a_fresh_session_only_after_confirmed_not_found() {
         let server = OpenCodeServerFixture::start(workspace.path(), None, false).await;
         let configuration = external_configuration(&server.origin, true);
         let settings = OpenCodeProviderSettings::parse(&configuration).unwrap();
-        let group = continuation_group(&settings, None).unwrap();
+        let continuation_group_id = continuation_group(&settings, None).unwrap();
         let mut driver = OpenCodeProviderDriver::new(configuration).unwrap();
         let snapshot = driver
             .resume_session(
@@ -547,7 +547,7 @@ fn resume_creates_a_fresh_session_only_after_confirmed_not_found() {
                     workspace: verified_workspace(workspace.path()),
                     provider_instance_id: ProviderInstanceId::new("opencode-instance").unwrap(),
                     provider_thread_id: ProviderThreadId::new("ses_missing").unwrap(),
-                    continuation_group_id: group,
+                    continuation_group_id,
                     resume_cursor: crate::opencode::protocol::resume_cursor("ses_missing").unwrap(),
                     modes: modes(),
                 },
@@ -588,11 +588,11 @@ fn resume_creates_a_fresh_session_only_after_confirmed_not_found() {
     });
 }
 
-fn external_configuration(origin: &str, confirmed: bool) -> ProviderInstanceConfig {
+fn external_configuration(origin: &str, access_confirmed: bool) -> ProviderInstanceConfig {
     configuration(json!({
         "mode": "external",
         "serverUrl": origin,
-        "confirmExternalWorkspaceAccess": confirmed
+        "confirmExternalWorkspaceAccess": access_confirmed
     }))
 }
 

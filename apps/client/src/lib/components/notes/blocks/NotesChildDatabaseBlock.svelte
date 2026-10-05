@@ -129,7 +129,7 @@
   const dataSourceId = $derived(block.child_database.data_source_id ?? null);
   const databaseId = $derived(block.child_database.database_id ?? null);
   const viewId = $derived(block.child_database.view_id ?? null);
-  const localDatabase = $derived(
+  const isLocalDatabase = $derived(
     block.child_database.database_id !== undefined
       && block.child_database.data_source_id !== undefined
       && block.child_database.view_id !== undefined,
@@ -143,7 +143,7 @@
     onReady();
   }
 
-  $effect(() => { if (!localDatabase || !dataSourceId) reportReady(); });
+  $effect(() => { if (!isLocalDatabase || !dataSourceId) reportReady(); });
 
   $effect(() => {
     const incoming = block.child_database.title;
@@ -156,7 +156,7 @@
   $effect(() => {
     const id = block.id;
     notesDatabaseSession.revision;
-    if (!localDatabase) return;
+    if (!isLocalDatabase) return;
     const revision = lockRevision;
     let cancelled = false;
     void getNotesDatabaseReference(id).then((value) => { if (!cancelled) {
@@ -475,13 +475,13 @@
   function mergeCreatedProperty(updated: NotesDataSourceSchema, created: NotesDataSourceSchemaPropertyDraft): void {
     const sourceId = updated.data_source.id;
     if (!editorSourceId || editorSourceId === sourceId) {
-      const retainDrafts = editorSourceId === sourceId && dirty;
+      const shouldRetainDrafts = editorSourceId === sourceId && dirty;
       schema = updated;
       editorSourceId = sourceId;
       schemaViewId = updated.view.id;
-      properties = retainDrafts ? [...properties, created] : notesDataSourceSchemaDraftFromDto(updated.data_source, updated.view);
-      dirty = retainDrafts;
-      saved = !retainDrafts;
+      properties = shouldRetainDrafts ? [...properties, created] : notesDataSourceSchemaDraftFromDto(updated.data_source, updated.view);
+      dirty = shouldRetainDrafts;
+      saved = !shouldRetainDrafts;
     } else {
       const retained = retainedSchemaDrafts.get(sourceId);
       if (retained?.dirty) retainedSchemaDrafts.set(sourceId, { ...retained, properties: [...retained.properties, created] });
@@ -734,7 +734,7 @@
         <ArrowUpRight class="size-5" strokeWidth={1.75} aria-hidden="true" />
       </button>
     {/if}
-    {#if localDatabase}
+    {#if isLocalDatabase}
       <input
         bind:this={titleInput}
         data-notes-database-title
@@ -757,7 +757,7 @@
       <button type="button" class="min-h-9 min-w-0 flex-1 truncate text-left text-base font-semibold" onkeydown={onKeydown} onclick={() => onFocusBlock(block.id)}>{title || t("notes.untitled")}</button>
       <span class="text-[0.8rem] text-muted-foreground">{t("notes.childDatabasePreserved")}</span>
     {/if}
-    {#if localDatabase}
+    {#if isLocalDatabase}
       <CollectionSaveIndicator pending={saving || titleSaving || linking || viewSaving} label={t("notes.databaseSaving")} />
       <CollectionMenu label={t("notes.databaseMore")} kind="actions" iconOnly showHeader={false}>
         {#if onOpenDatabase}
@@ -784,7 +784,7 @@
     <p class="mt-2 text-[0.8rem] text-destructive">{linkedViewError}</p>
   {/if}
 
-  {#if localDatabase && dataSourceId}
+  {#if isLocalDatabase && dataSourceId}
     <NotesDatabaseViewSurface
       onReady={reportReady}
       onSavingChange={(pending) => { viewSaving = pending; }}
@@ -810,8 +810,8 @@
   {/if}
 </section>
 
-{#if localDatabase && expanded}
-  <CollectionSettings label={t("notes.databaseViewEditProperties")} anchor={schemaAnchor} preferredWidth={384} onclose={() => { expanded = false; }}>
+{#if isLocalDatabase && expanded}
+  <CollectionSettings label={t("notes.databaseViewEditProperties")} anchor={schemaAnchor} preferredWidth={384} onClose={() => { expanded = false; }}>
       {#if editingLocked}<p class="text-muted-foreground">{t("notes.databaseEditingLockDescription")}</p>{/if}
       <fieldset disabled={loading || saving || editingLocked} class="m-0 min-w-0 space-y-2 border-0 p-0">
       <legend class="sr-only">{t("notes.databaseViewEditProperties")}</legend>

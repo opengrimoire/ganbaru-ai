@@ -8,7 +8,7 @@ use crate::validation::require_uuid;
 use crate::{
     data_sources,
     data_sources::views::{
-        ViewProperty as BoardProperty, canonical_filter, canonical_sorts, generated_uuid_tx,
+        ViewProperty as BoardProperty, canonical_filter, canonical_sorts, generate_uuid_tx,
         load_active_data_source_and_database_tx, normalized_row_for_schema, parse_json,
         stored_filters, stored_sorts, view_schema as board_schema,
     },
@@ -23,13 +23,13 @@ const BOARD_EMPTY_GROUP_ID: &str = "__empty__";
 const BOARD_UNGROUPED_ID: &str = "__ungrouped__";
 const BOARD_ROW_OPEN_MODES: &[&str] = &["full_page", "side_panel"];
 
-pub async fn get_data_source_board_view(
+pub async fn data_source_board_view(
     pool: &SqlitePool,
     data_source_id: &str,
     database_id: Option<&str>,
     view_id: Option<&str>,
 ) -> Result<NoteDataSourceBoardViewDto, String> {
-    get_data_source_board_view_window(
+    data_source_board_view_window(
         pool,
         data_source_id,
         database_id,
@@ -39,7 +39,7 @@ pub async fn get_data_source_board_view(
     .await
 }
 
-pub async fn get_data_source_board_view_window(
+pub async fn data_source_board_view_window(
     pool: &SqlitePool,
     data_source_id: &str,
     database_id: Option<&str>,
@@ -172,7 +172,7 @@ pub async fn move_data_source_board_row(
         },
     )
     .await?;
-    get_data_source_board_view(pool, data_source_id, database_id, view_id).await
+    data_source_board_view(pool, data_source_id, database_id, view_id).await
 }
 
 async fn load_board_view_tx(
@@ -190,7 +190,7 @@ async fn load_board_view_tx(
     let configuration = board_configuration(view.configuration.as_deref(), &schema)?;
     let filters = stored_filters(view.filter.as_deref(), "database board filter", "board")?;
     let sorts = stored_sorts(&view.sorts, "database board sorts", "board")?;
-    let window_schema = data_sources::window::table_properties_from_board(&schema);
+    let window_schema = data_sources::window::table_properties_from_view(&schema);
     let group_property = configuration
         .group_property_id
         .as_deref()
@@ -239,7 +239,7 @@ async fn ensure_board_view_row_tx(
     }
     let database_id = data_sources::views::scoped_database_id(data_source, database_id);
     crate::databases::editing_lock::ensure_unlocked_tx(tx, database_id).await?;
-    let id = generated_uuid_tx(tx, "generate board view id", "generated_board_view_id").await?;
+    let id = generate_uuid_tx(tx, "generate board view id", "generated_board_view_id").await?;
     let sort_order = data_sources::views::next_view_sort_order_tx(tx, database_id).await?;
     sqlx::query(
         "INSERT INTO notes_database_views (

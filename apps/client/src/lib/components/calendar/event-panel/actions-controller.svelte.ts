@@ -36,7 +36,7 @@ export interface EventPanelActionsControllerOptions {
   parked: () => boolean;
   canDelete: () => boolean;
   hasDeleteTarget: () => boolean;
-  endEventAction: () => boolean;
+  deleteEndsEvent: () => boolean;
   inlineEndEventConfirm: () => boolean;
   skipInlineDeleteConfirm: () => boolean;
   save: () => void;
@@ -69,14 +69,14 @@ export class EventPanelActionsController {
   confirmArmedDelete(): boolean {
     if (!this.deleteArmed) return false;
     this.deleteArmed = false;
-    if (this.options.endEventAction()) this.options.endEvent();
+    if (this.options.deleteEndsEvent()) this.options.endEvent();
     else this.options.delete();
     return true;
   }
 
   armOrConfirmDelete(): void {
     if (!this.options.hasDeleteTarget() || !this.options.canDelete()) return;
-    if (this.options.endEventAction()) {
+    if (this.options.deleteEndsEvent()) {
       if (!this.options.inlineEndEventConfirm()) {
         this.options.endEvent();
         return;

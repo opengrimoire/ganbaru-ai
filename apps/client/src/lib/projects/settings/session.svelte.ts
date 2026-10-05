@@ -1,29 +1,29 @@
 import { FALLBACK_COLOR_INDEX, type EventColor } from "$lib/calendar/types";
 import {
-  emptyProjectSettingsProjectDraft,
-  projectSettingsProjectDraftDirty,
-  projectSettingsProjectDraftFromProject,
-  projectSettingsProjectUpdateFromDraft,
-  type ProjectSettingsProjectDraft,
-  type ProjectSettingsProjectDraftError,
+  emptyProjectDraft,
+  projectDraftDirty,
+  projectDraftFromProject,
+  projectUpdateFromDraft,
+  type ProjectDraft,
+  type ProjectDraftError,
 } from "./project-draft";
 import {
-  projectSettingsPrioritySaveDrafts,
-  projectSettingsPriorityDraftDirty,
-  projectSettingsStatusSaveDrafts,
-  projectSettingsStatusDraftDirty,
-  projectSettingsTagSaveDrafts,
-  projectSettingsTagDraftDirty,
+  prioritySaveDrafts,
+  priorityDraftDirty,
+  statusSaveDrafts,
+  statusDraftDirty,
+  tagSaveDrafts,
+  tagDraftDirty,
 } from "./collection-drafts";
 import {
-  projectSettingsCustomFieldOptionSaveDrafts,
-  projectSettingsCustomFieldSaveDrafts,
-  projectSettingsCustomFieldDraftDirty,
-  projectSettingsCustomFieldOptionCreateDraftRows,
-  projectSettingsCustomFieldOptionDraftDirty,
+  customFieldOptionSaveDrafts,
+  customFieldSaveDrafts,
+  customFieldDraftDirty,
+  newCustomFieldOptionDraftRows,
+  customFieldOptionDraftDirty,
   type NewCustomFieldDraft,
   type NewCustomFieldOptionDraft,
-  type ProjectSettingsCustomFieldDraftError,
+  type CustomFieldDraftError,
 } from "./custom-field-drafts";
 import { projectHasLockedSystemIdentity } from "$lib/projects/system-defaults";
 import { getLocalization } from "$lib/i18n/translator.svelte";
@@ -44,7 +44,7 @@ import type { MusicContextAssignmentDraft } from "$lib/music/context-assignment"
 export interface ProjectSettingsSessionState {
   projectDraftId: string | null;
   projectDraftUpdatedAt: string | null;
-  projectDraft: ProjectSettingsProjectDraft;
+  projectDraft: ProjectDraft;
   projectSettingsSaving: boolean;
   projectSettingsError: string | null;
   statusNameDrafts: Record<string, string>;
@@ -106,7 +106,7 @@ export function createProjectSettingsSession(options: ProjectSettingsSessionOpti
   const state = $state<ProjectSettingsSessionState>({
     projectDraftId: null,
     projectDraftUpdatedAt: null,
-    projectDraft: emptyProjectSettingsProjectDraft(),
+    projectDraft: emptyProjectDraft(),
     projectSettingsSaving: false,
     projectSettingsError: null,
     statusNameDrafts: {},
@@ -141,7 +141,7 @@ export function createProjectSettingsSession(options: ProjectSettingsSessionOpti
   ): void {
     state.projectDraftId = project.id;
     state.projectDraftUpdatedAt = project.updatedAt;
-    state.projectDraft = projectSettingsProjectDraftFromProject(project);
+    state.projectDraft = projectDraftFromProject(project);
     state.projectSettingsError = null;
     state.statusNameDrafts = Object.fromEntries(
       collections.statuses.map((status) => [status.id, status.name]),
@@ -220,20 +220,20 @@ export function createProjectSettingsSession(options: ProjectSettingsSessionOpti
       colorDrafts: state.tagColorDrafts,
       fallbackColor: FALLBACK_COLOR_INDEX,
     };
-    return projectSettingsProjectDraftDirty(project, state.projectDraft)
-      || collections.statuses.some((status) => projectSettingsStatusDraftDirty(status, statusState))
-      || collections.priorities.some((priority) => projectSettingsPriorityDraftDirty(priority, priorityState))
-      || collections.tags.some((tag) => projectSettingsTagDraftDirty(tag, tagState))
+    return projectDraftDirty(project, state.projectDraft)
+      || collections.statuses.some((status) => statusDraftDirty(status, statusState))
+      || collections.priorities.some((priority) => priorityDraftDirty(priority, priorityState))
+      || collections.tags.some((tag) => tagDraftDirty(tag, tagState))
       || collections.customFields.some((field) =>
-        projectSettingsCustomFieldDraftDirty(field, state.customFieldNameDrafts)
+        customFieldDraftDirty(field, state.customFieldNameDrafts)
       )
       || collections.customFields.some((field) =>
         collections.optionsForField(field.id).some((option) =>
-          projectSettingsCustomFieldOptionDraftDirty(option, state.customFieldOptionNameDrafts)
+          customFieldOptionDraftDirty(option, state.customFieldOptionNameDrafts)
         )
       )
       || collections.customFields.some((field) =>
-        projectSettingsCustomFieldOptionCreateDraftRows(
+        newCustomFieldOptionDraftRows(
           state.customFieldOptionDraftRowsByField,
           field.id,
         ).length > 0
@@ -241,18 +241,18 @@ export function createProjectSettingsSession(options: ProjectSettingsSessionOpti
       || state.customFieldCreateDraftRows.length > 0;
   }
 
-  function customFieldDraftErrorMessage(error: ProjectSettingsCustomFieldDraftError): string {
+  function customFieldDraftErrorMessage(error: CustomFieldDraftError): string {
     if (error === "name_required") return t("projects.customFields.nameRequired");
     if (error === "name_exists") return t("projects.customFields.nameExists");
     if (error === "option_name_exists") return t("projects.customFields.optionNameExists");
     return t("projects.customFields.optionNameRequired");
   }
 
-  function setCustomFieldDraftError(error: ProjectSettingsCustomFieldDraftError): void {
+  function setCustomFieldDraftError(error: CustomFieldDraftError): void {
     state.projectSettingsError = customFieldDraftErrorMessage(error);
   }
 
-  function projectDraftErrorMessage(error: ProjectSettingsProjectDraftError): string {
+  function projectDraftErrorMessage(error: ProjectDraftError): string {
     if (error === "name_required") return t("projects.settings.nameRequired");
     if (error === "group_required") return t("projects.settings.groupRequired");
     return t("projects.settings.invalidDuration");
@@ -276,10 +276,10 @@ export function createProjectSettingsSession(options: ProjectSettingsSessionOpti
     commitDraft?: () => Promise<void>,
     onProjectSaved?: () => void,
   ): Promise<boolean> {
-    const shouldUpdateProject = projectSettingsProjectDraftDirty(project, state.projectDraft)
+    const shouldUpdateProject = projectDraftDirty(project, state.projectDraft)
       || Boolean(musicUpdate);
     const projectUpdateResult = shouldUpdateProject
-      ? projectSettingsProjectUpdateFromDraft({
+      ? projectUpdateFromDraft({
           project,
           draft: state.projectDraft,
           visibleGroupIds,
@@ -290,7 +290,7 @@ export function createProjectSettingsSession(options: ProjectSettingsSessionOpti
       state.projectSettingsError = projectDraftErrorMessage(projectUpdateResult.error);
       return false;
     }
-    const statusResult = projectSettingsStatusSaveDrafts(collections.statuses, {
+    const statusResult = statusSaveDrafts(collections.statuses, {
       nameDrafts: state.statusNameDrafts,
       categoryDrafts: state.statusCategoryDrafts,
       colorDrafts: state.statusColorDrafts,
@@ -300,7 +300,7 @@ export function createProjectSettingsSession(options: ProjectSettingsSessionOpti
       state.projectSettingsError = t("projects.settings.statusNameRequired");
       return false;
     }
-    const priorityResult = projectSettingsPrioritySaveDrafts(collections.priorities, {
+    const priorityResult = prioritySaveDrafts(collections.priorities, {
       nameDrafts: state.priorityNameDrafts,
       colorDrafts: state.priorityColorDrafts,
       fallbackColor: FALLBACK_COLOR_INDEX,
@@ -309,7 +309,7 @@ export function createProjectSettingsSession(options: ProjectSettingsSessionOpti
       state.projectSettingsError = t("projects.settings.priorityNameRequired");
       return false;
     }
-    const tagResult = projectSettingsTagSaveDrafts(collections.tags, {
+    const tagResult = tagSaveDrafts(collections.tags, {
       nameDrafts: state.tagNameDrafts,
       colorDrafts: state.tagColorDrafts,
       fallbackColor: FALLBACK_COLOR_INDEX,
@@ -320,7 +320,7 @@ export function createProjectSettingsSession(options: ProjectSettingsSessionOpti
         : t("projects.settings.tagNameRequired");
       return false;
     }
-    const customFieldResult = projectSettingsCustomFieldSaveDrafts({
+    const customFieldResult = customFieldSaveDrafts({
       fields: collections.customFields,
       fieldNameDrafts: state.customFieldNameDrafts,
       createDraftRows: state.customFieldCreateDraftRows,
@@ -329,7 +329,7 @@ export function createProjectSettingsSession(options: ProjectSettingsSessionOpti
       state.projectSettingsError = customFieldDraftErrorMessage(customFieldResult.error);
       return false;
     }
-    const customFieldOptionResult = projectSettingsCustomFieldOptionSaveDrafts({
+    const customFieldOptionResult = customFieldOptionSaveDrafts({
       fields: collections.customFields,
       fieldOptions: collections.optionsForField,
       optionNameDrafts: state.customFieldOptionNameDrafts,

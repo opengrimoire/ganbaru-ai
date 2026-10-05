@@ -143,14 +143,14 @@ pub fn parse_version(value: &str) -> ChatResult<ClaudeVersion> {
                 .next()
                 .is_some_and(|character| character.is_ascii_digit())
         })
-        .ok_or_else(unsupported_version)?;
+        .ok_or_else(unsupported_version_error)?;
     let core = token.split_once('-').map_or(token, |(core, _)| core);
     let mut parts = core.split('.');
     let major = parse_version_part(parts.next())?;
     let minor = parse_version_part(parts.next())?;
     let patch = parse_version_part(parts.next())?;
     if parts.next().is_some() {
-        return Err(unsupported_version());
+        return Err(unsupported_version_error());
     }
     Ok(ClaudeVersion::new(major, minor, patch))
 }
@@ -171,7 +171,7 @@ pub fn ensure_supported_version(value: ClaudeVersion) -> ChatResult<()> {
 fn parse_version_part(value: Option<&str>) -> ChatResult<u64> {
     value
         .and_then(|part| part.parse::<u64>().ok())
-        .ok_or_else(unsupported_version)
+        .ok_or_else(unsupported_version_error)
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -803,7 +803,7 @@ fn required_text<'a>(object: &'a Map<String, Value>, key: &str) -> ChatResult<&'
         .ok_or_else(|| protocol_error(key))
 }
 
-fn unsupported_version() -> ChatError {
+fn unsupported_version_error() -> ChatError {
     ChatError::new(
         ChatErrorCode::UnsupportedVersion,
         "Claude Code version could not be verified",

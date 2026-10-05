@@ -105,7 +105,7 @@ export function parsePomodoroOverlayBlockerAction(
   return null;
 }
 
-function hexToRgba(hex: string, alpha: number): string {
+function hexToRgbaCss(hex: string, alpha: number): string {
   const normalized = hex.replace("#", "");
   const red = Number.parseInt(normalized.slice(0, 2), 16);
   const green = Number.parseInt(normalized.slice(2, 4), 16);
@@ -117,8 +117,8 @@ function palette(background: string, mainText: string): PomodoroBlockedScreenPal
   return {
     background,
     mainText,
-    mutedText: hexToRgba(mainText, 0.72),
-    subtleText: hexToRgba(mainText, 0.56),
+    mutedText: hexToRgbaCss(mainText, 0.72),
+    subtleText: hexToRgbaCss(mainText, 0.56),
   };
 }
 
@@ -207,7 +207,7 @@ export function elapsedSecondsSince(startMs: number, nowMs: number): number {
   return Math.max(0, Math.floor((nowMs - startMs) / 1000));
 }
 
-export function delayUntil(targetMs: number, nowMs: number): number {
+export function delayMsUntil(targetMs: number, nowMs: number): number {
   return Math.max(0, targetMs - nowMs);
 }
 

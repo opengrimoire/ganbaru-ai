@@ -15,14 +15,14 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 const MAX_GIT_OUTPUT_BYTES: usize = 16 * 1024 * 1024;
 const REF_PREFIX: &str = "refs/ganbaru-ai/chat/";
-static TEMP_SEQUENCE: AtomicU64 = AtomicU64::new(1);
+static TEMPORARY_INDEX_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 
 pub fn verify_checkpoint(
     authorized: &AuthorizedWorkingFolder,
     checkpoint: &StoredCheckpoint,
 ) -> ChatResult<()> {
     if authorized.repository_identity.as_deref() != Some(&checkpoint.repository_identity)
-        || !valid_hidden_ref(&checkpoint.hidden_ref_name)
+        || !is_valid_hidden_ref(&checkpoint.hidden_ref_name)
     {
         return Err(ChatError::new(
             ChatErrorCode::ConfigurationInvalid,
@@ -57,7 +57,7 @@ pub fn verify_checkpoint(
 }
 
 pub fn delete_exact_ref(root: &Path, reference: &str, expected_oid: &str) -> ChatResult<()> {
-    if !valid_hidden_ref(reference)
+    if !is_valid_hidden_ref(reference)
         || !(40..=64).contains(&expected_oid.len())
         || !expected_oid.bytes().all(|byte| byte.is_ascii_hexdigit())
         || expected_oid.bytes().all(|byte| byte == b'0')
@@ -130,29 +130,29 @@ pub fn current_git_trees(root: &Path) -> ChatResult<CurrentGitTrees> {
 }
 
 fn capture_worktree_tree(root: &Path, head_oid: Option<&str>) -> ChatResult<String> {
-    let temp_index = TemporaryIndex::new()?;
+    let temporary_index = TemporaryIndex::new()?;
     if let Some(head_oid) = head_oid {
         git_output(
             root,
             &["read-tree", head_oid],
-            Some(temp_index.path()),
+            Some(temporary_index.path()),
             None,
         )?;
     } else {
         git_output(
             root,
             &["read-tree", "--empty"],
-            Some(temp_index.path()),
+            Some(temporary_index.path()),
             None,
         )?;
     }
     git_output(
         root,
         &["add", "-A", "--", "."],
-        Some(temp_index.path()),
+        Some(temporary_index.path()),
         None,
     )?;
-    git_text(root, &["write-tree"], Some(temp_index.path()))
+    git_text(root, &["write-tree"], Some(temporary_index.path()))
 }
 
 pub fn restore_git_snapshot(
@@ -259,29 +259,29 @@ pub(super) fn capture_git(
     let index_tree_oid = git_text(root, &["write-tree"], None)?;
     let index_fingerprint =
         hash_bytes(&git_output(root, &["ls-files", "--stage", "-z"], None, None)?.stdout);
-    let temp_index = TemporaryIndex::new()?;
+    let temporary_index = TemporaryIndex::new()?;
     if let Some(head_oid) = head_oid.as_deref() {
         git_output(
             root,
             &["read-tree", head_oid],
-            Some(temp_index.path()),
+            Some(temporary_index.path()),
             None,
         )?;
     } else {
         git_output(
             root,
             &["read-tree", "--empty"],
-            Some(temp_index.path()),
+            Some(temporary_index.path()),
             None,
         )?;
     }
     git_output(
         root,
         &["add", "-A", "--", "."],
-        Some(temp_index.path()),
+        Some(temporary_index.path()),
         None,
     )?;
-    let worktree_tree_oid = git_text(root, &["write-tree"], Some(temp_index.path()))?;
+    let worktree_tree_oid = git_text(root, &["write-tree"], Some(temporary_index.path()))?;
     let index_commit_oid =
         git_commit_tree(root, &index_tree_oid, None, "Ganbaru Chat index checkpoint")?;
     let git_object_id = git_commit_tree(
@@ -499,7 +499,7 @@ struct TemporaryIndex {
 
 impl TemporaryIndex {
     fn new() -> ChatResult<Self> {
-        let sequence = TEMP_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+        let sequence = TEMPORARY_INDEX_SEQUENCE.fetch_add(1, Ordering::Relaxed);
         let path = std::env::temp_dir().join(format!(
             "ganbaru-chat-index-{}-{sequence}",
             std::process::id()
@@ -538,7 +538,7 @@ fn short_hash(value: &str) -> String {
     format!("{:x}", Sha256::digest(value.as_bytes()))[..32].to_string()
 }
 
-fn valid_hidden_ref(reference: &str) -> bool {
+fn is_valid_hidden_ref(reference: &str) -> bool {
     reference.starts_with(REF_PREFIX)
         && !reference[REF_PREFIX.len()..].is_empty()
         && !reference.chars().any(char::is_whitespace)

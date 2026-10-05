@@ -112,7 +112,7 @@ vi.mock("$lib/stores/projects.svelte", async () => {
   };
   return { getProjects: () => store };
 });
-vi.mock("$lib/stores/calendar.svelte", () => ({ getCalendar: () => ({ loaded: true, rawBlocks: [] }) }));
+vi.mock("$lib/stores/calendar.svelte", () => ({ getCalendar: () => ({ loaded: true, sourceEvents: [] }) }));
 vi.mock("$lib/stores/pomodoro.svelte", () => ({ getPomodoro: () => ({ activeRunId: null, formattedTime: "00:00" }) }));
 vi.mock("$lib/vault/config", async (importOriginal) => ({
   ...await importOriginal<typeof import("$lib/vault/config")>(), setConfigKey: vi.fn(),

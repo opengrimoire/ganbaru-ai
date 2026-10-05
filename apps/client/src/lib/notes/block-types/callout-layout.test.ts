@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createBlockWrite, createRichText } from "$lib/notes/blocks/factory";
 import { flattenNotesBlockOutlines, notesBlockOutlineFromBlock } from "$lib/notes/blocks/outline";
-import { notesCalloutLayers, notesCalloutOwnTextHidden, notesEmbeddedCalloutLayers } from "./callout-layout";
+import { notesCalloutLayers, notesCalloutIsOwnTextHidden, notesEmbeddedCalloutLayers } from "./callout-layout";
 import type { NotesBlock, NotesBlockTreeItem, NotesParent } from "$lib/notes/types";
 
 const pageId = "page";
@@ -19,13 +19,13 @@ function block(id: string, type: NotesBlock["type"], parent: NotesParent, color?
 describe("Notes callout surfaces", () => {
   it("hides only an empty callout label that has children", () => {
     const callout = block("callout", "callout", { type: "page_id", page_id: pageId });
-    expect(notesCalloutOwnTextHidden(callout, 0)).toBe(false);
-    expect(notesCalloutOwnTextHidden(callout, 1)).toBe(true);
+    expect(notesCalloutIsOwnTextHidden(callout, 0)).toBe(false);
+    expect(notesCalloutIsOwnTextHidden(callout, 1)).toBe(true);
     callout.has_children = true;
-    expect(notesCalloutOwnTextHidden(callout, 0)).toBe(true);
+    expect(notesCalloutIsOwnTextHidden(callout, 0)).toBe(true);
     if (callout.type !== "callout") throw new Error("Expected callout");
     callout.callout.rich_text = [createRichText("Label")];
-    expect(notesCalloutOwnTextHidden(callout, 1)).toBe(false);
+    expect(notesCalloutIsOwnTextHidden(callout, 1)).toBe(false);
   });
 
   it("keeps every nested descendant inside its callout and rounds each callout boundary", () => {

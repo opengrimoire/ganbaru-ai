@@ -22,10 +22,10 @@ export function notesFocusedBlockEstimatedOffset(
   rangeItems: readonly { id: string; estimatedHeight: number }[],
   measuredHeights: ReadonlyMap<string, number>,
   blockId: string,
-  targetRendered: boolean,
+  isTargetRendered: boolean,
   preventScroll = false,
 ): number | null {
-  if (targetRendered || preventScroll) return null;
+  if (isTargetRendered || preventScroll) return null;
   const index = rangeItems.findIndex((item) => item.id === blockId);
   if (index < 0) return null;
   return rangeItems
@@ -87,18 +87,18 @@ export function createNotesBlockVirtualizer(options: NotesBlockVirtualizerOption
     const { blockId, requestId, preventScroll } = options.readFocusRequest();
     const scrollViewport = options.readScrollViewport();
     if (!blockId || requestId === handledFocusRequestId || !scrollViewport) return;
-    const renderedTarget = Array.from(
+    const isTargetRendered = Array.from(
       options.readListElement()?.querySelectorAll<HTMLElement>("[data-notes-virtual-block]") ?? [],
     ).some((element) => element.dataset.notesVirtualBlock === blockId);
     const targetOffset = notesFocusedBlockEstimatedOffset(
       rangeItems,
       measuredBlockHeights,
       blockId,
-      renderedTarget,
+      isTargetRendered,
       preventScroll,
     );
     if (targetOffset === null) {
-      if (renderedTarget || preventScroll) handledFocusRequestId = requestId;
+      if (isTargetRendered || preventScroll) handledFocusRequestId = requestId;
       return;
     }
     handledFocusRequestId = requestId;

@@ -547,7 +547,7 @@ fn database_trash_and_restore_cascade_nested_graphs_without_resurrecting_individ
             assert!(reads::get_page(&pool, id, false).await.is_err());
         }
         assert!(
-            data_sources::schema::get_data_source_schema(&pool, DATA_SOURCE_A, None, None)
+            data_sources::schema::data_source_schema(&pool, DATA_SOURCE_A, None, None)
                 .await
                 .is_err()
         );
@@ -558,7 +558,7 @@ fn database_trash_and_restore_cascade_nested_graphs_without_resurrecting_individ
         }
         assert!(reads::get_block(&pool, BLOCK_F, false).await.is_ok());
         assert!(
-            data_sources::schema::get_data_source_schema(&pool, DATA_SOURCE_A, None, None)
+            data_sources::schema::data_source_schema(&pool, DATA_SOURCE_A, None, None)
                 .await
                 .is_ok()
         );
@@ -593,7 +593,7 @@ fn page_trash_cascades_owned_databases_and_respects_rows_deleted_again_during_re
         assert!(reads::get_block(&pool, BLOCK_B, false).await.is_err());
         assert!(reads::get_block(&pool, DATABASE_A, false).await.is_ok());
         assert!(
-            data_sources::schema::get_data_source_schema(&pool, DATA_SOURCE_A, None, None)
+            data_sources::schema::data_source_schema(&pool, DATA_SOURCE_A, None, None)
                 .await
                 .is_ok()
         );
@@ -1006,7 +1006,7 @@ fn page_history_restore_refuses_to_delete_database_graphs() {
         assert!(error.contains("project version"));
         assert!(reads::get_page(&pool, PAGE_B, false).await.is_ok());
         assert!(
-            data_sources::schema::get_data_source_schema(&pool, DATA_SOURCE_A, None, None)
+            data_sources::schema::data_source_schema(&pool, DATA_SOURCE_A, None, None)
                 .await
                 .is_ok()
         );

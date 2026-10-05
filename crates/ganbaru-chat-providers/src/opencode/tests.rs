@@ -482,7 +482,7 @@ fn declared_capabilities_include_native_plan_and_plan_selects_the_native_agent()
     assert!(advertised.supports(ProviderCapability::NativePlan));
     assert!(advertised.supports(ProviderCapability::StructuredPlans));
 
-    let value = prompt(&SendTurnRequest {
+    let plan_prompt = prompt(&SendTurnRequest {
         command: ChatCommandContext {
             client_command_id: ChatCommandId::new("command-plan").unwrap(),
             expected_thread_revision: None,
@@ -501,7 +501,7 @@ fn declared_capabilities_include_native_plan_and_plan_selects_the_native_agent()
         developer_instructions: None,
     })
     .unwrap();
-    assert_eq!(value.agent.as_deref(), Some("plan"));
+    assert_eq!(plan_prompt.agent.as_deref(), Some("plan"));
 }
 
 #[test]
@@ -918,12 +918,12 @@ pub(super) struct TestDirectory {
 
 impl TestDirectory {
     pub(super) fn new(label: &str) -> Self {
-        let sequence = std::time::SystemTime::now()
+        let created_at_nanos = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
             .as_nanos();
         let path = std::env::temp_dir().join(format!(
-            "ganbaru-opencode-{label}-{}-{sequence}",
+            "ganbaru-opencode-{label}-{}-{created_at_nanos}",
             std::process::id()
         ));
         std::fs::create_dir_all(&path).unwrap();
@@ -961,11 +961,11 @@ impl HttpFixture {
             let mut buffer = [0_u8; 4096];
             let mut expected_length = None;
             loop {
-                let read = connection.read(&mut buffer).unwrap();
-                if read == 0 {
+                let bytes_read = connection.read(&mut buffer).unwrap();
+                if bytes_read == 0 {
                     break;
                 }
-                request.extend_from_slice(&buffer[..read]);
+                request.extend_from_slice(&buffer[..bytes_read]);
                 if expected_length.is_none() {
                     expected_length = complete_request_length(&request);
                 }

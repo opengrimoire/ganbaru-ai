@@ -200,23 +200,23 @@ function initialGroups(
     case "multi_select":
     case "status":
       return [
-        ...groupColumn.options.map((option) => group(option.id, option.name, option.color, configuration)),
-        group(LIST_EMPTY_GROUP_ID, "No value", "default", configuration),
+        ...groupColumn.options.map((option) => createGroup(option.id, option.name, option.color, configuration)),
+        createGroup(LIST_EMPTY_GROUP_ID, "No value", "default", configuration),
       ];
     case "checkbox":
       return [
-        group("false", "Unchecked", "gray", configuration),
-        group("true", "Checked", "green", configuration),
+        createGroup("false", "Unchecked", "gray", configuration),
+        createGroup("true", "Checked", "green", configuration),
       ];
     case "date":
     case "people":
-      return [group(LIST_EMPTY_GROUP_ID, "No value", "default", configuration)];
+      return [createGroup(LIST_EMPTY_GROUP_ID, "No value", "default", configuration)];
     default:
-      return [group(LIST_UNGROUPED_ID, "All rows", "default", configuration)];
+      return [createGroup(LIST_UNGROUPED_ID, "All rows", "default", configuration)];
   }
 }
 
-function group(
+function createGroup(
   id: string,
   name: string,
   color: string,

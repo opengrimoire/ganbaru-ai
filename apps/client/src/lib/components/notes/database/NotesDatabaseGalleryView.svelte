@@ -112,8 +112,8 @@
   const selectedPanelRow = $derived(
     gallery?.rows.find((row) => row.id === selectedPanelRowId) ?? null,
   );
-  const gridStyle = $derived(`grid-template-columns: repeat(auto-fill, minmax(min(100%, ${cardMinWidth()}px), 1fr));`);
-  const previewStyle = $derived(`height: ${previewHeight()}px;`);
+  const gridStyle = $derived(`grid-template-columns: repeat(auto-fill, minmax(min(100%, ${cardMinWidthPx()}px), 1fr));`);
+  const previewStyle = $derived(`height: ${previewHeightPx()}px;`);
 
   $effect(() => {
     const revision = notesDatabaseSession.revision;
@@ -290,13 +290,13 @@
     return notesDatabaseGalleryCardTitle(row, columns, t("notes.untitled"));
   }
 
-  function cardMinWidth(): number {
+  function cardMinWidthPx(): number {
     if (configuration.card_size === "small") return 176;
     if (configuration.card_size === "large") return 304;
     return 240;
   }
 
-  function previewHeight(): number {
+  function previewHeightPx(): number {
     if (configuration.card_size === "small") return 104;
     if (configuration.card_size === "large") return 192;
     return 144;
@@ -431,12 +431,12 @@
 
         <CollectionMenu fullWidth disabled={editingLocked} label={t("notes.databaseTableSorts")} kind="sort" activeCount={sorts.length} summary={formatList(localization.locale, sorts.map((sort) => columns.find((column) => column.id === sort.property_id)?.name ?? ""))}>
 
-          <NotesDatabaseSortControls properties={columns} {sorts} pending={mutating || editingLocked} onchange={saveSorts} />
+          <NotesDatabaseSortControls properties={columns} {sorts} pending={mutating || editingLocked} onChange={saveSorts} />
         </CollectionMenu>
 
         <CollectionMenu fullWidth disabled={editingLocked} label={t("notes.databaseTableFilters")} kind="filter" activeCount={notesDatabaseFilterCount(filters)} summary={notesDatabaseFilterCount(filters) ? formatNumber(localization.locale, notesDatabaseFilterCount(filters)) : ""}>
 
-          <NotesDatabaseFilterControls properties={columns} {filters} pending={mutating || editingLocked} onchange={saveFilters} />
+          <NotesDatabaseFilterControls properties={columns} {filters} pending={mutating || editingLocked} onChange={saveFilters} />
         </CollectionMenu>
       </div>
 
@@ -447,7 +447,7 @@
   <NotesDatabaseQueryBar properties={columns} {filters} {sorts} pending={mutating || editingLocked} onFiltersChange={saveFilters} onSortsChange={saveSorts} />
   {#if error}<p class="text-[0.8rem] text-destructive" role="alert">{error}</p>{/if}
   {#if settingsOpen}
-    <CollectionSettings label={t("notes.databaseViewSettings")} anchor={settingsAnchor} onclose={onCloseSettings}>
+    <CollectionSettings label={t("notes.databaseViewSettings")} anchor={settingsAnchor} onClose={onCloseSettings}>
       {@render settingsHeader?.()}
       {@render viewControls()}
       {#if gallery}{@render propertyControls()}{/if}
@@ -464,7 +464,7 @@
         {#each gallery.rows as row (row.id)}
           {@const title = rowTitle(row)}
           {@const cardCover = notesDatabaseGalleryCardCover(row, configuration)}
-          <CollectionCard {title} onopen={() => openCard(row)}>
+          <CollectionCard {title} onOpen={() => openCard(row)}>
             {#snippet cover()}
               {#if configuration.cover_source !== "none"}
               <button

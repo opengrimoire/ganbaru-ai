@@ -3,7 +3,7 @@
 use super::authorization::verify_folder_source;
 use super::{
     DEFAULT_PAGE_SIZE, HostToolContext, MAX_QUERY_BYTES, MAX_WORKSPACE_CONTENT_BYTES,
-    MAX_WORKSPACE_PATCH_EDITS, OpaqueCursor, generic_denial, internal_error, optional_limit,
+    MAX_WORKSPACE_PATCH_EDITS, OpaqueCursor, generic_denial_error, internal_error, optional_limit,
     optional_string, required_string, sha256_hex, truncate_utf8, wire_folder_capability,
 };
 use crate::chat::internal_mcp::{InternalMcpFolderSource, InternalMcpRunScope};
@@ -97,9 +97,9 @@ pub(super) async fn read_workspace_file(
     .await
     .map_err(|_| internal_error("read authorized workspace file"))??;
     if preview.binary || preview.oversized || preview.text.is_none() {
-        return Err(generic_denial());
+        return Err(generic_denial_error());
     }
-    let text = preview.text.as_deref().ok_or_else(generic_denial)?;
+    let text = preview.text.as_deref().ok_or_else(generic_denial_error)?;
     let text = truncate_utf8(text, 48 * 1024);
     Ok(json!({
         "rootHandle": root_handle,
@@ -180,7 +180,7 @@ pub(super) async fn patch_workspace_file(
     let current_revision = preview
         .content_revision
         .as_deref()
-        .ok_or_else(generic_denial)?;
+        .ok_or_else(generic_denial_error)?;
     if current_revision != expected_revision {
         return Err(ChatError::new(
             ChatErrorCode::Conflict,
@@ -188,7 +188,7 @@ pub(super) async fn patch_workspace_file(
             true,
         ));
     }
-    let current = preview.text.ok_or_else(generic_denial)?;
+    let current = preview.text.ok_or_else(generic_denial_error)?;
     let edits = workspace_patch_edits(arguments, &current)?;
     let mut patched = current;
     for edit in edits.iter().rev() {
@@ -255,15 +255,15 @@ fn workspace_patch_edits(
         .get("edits")
         .and_then(Value::as_array)
         .filter(|values| !values.is_empty() && values.len() <= MAX_WORKSPACE_PATCH_EDITS)
-        .ok_or_else(generic_denial)?;
+        .ok_or_else(generic_denial_error)?;
     let mut edits = Vec::with_capacity(values.len());
     let mut next_minimum = 0_usize;
     let mut previous_start = None;
     let mut resulting_bytes = current.len();
     for value in values {
-        let edit = value.as_object().ok_or_else(generic_denial)?;
+        let edit = value.as_object().ok_or_else(generic_denial_error)?;
         if edit.len() != 3 {
-            return Err(generic_denial());
+            return Err(generic_denial_error());
         }
         let start_byte = bounded_usize(edit, "startByte")?;
         let end_byte = bounded_usize(edit, "endByte")?;
@@ -275,13 +275,13 @@ fn workspace_patch_edits(
             || !current.is_char_boundary(start_byte)
             || !current.is_char_boundary(end_byte)
         {
-            return Err(generic_denial());
+            return Err(generic_denial_error());
         }
         resulting_bytes = resulting_bytes
             .checked_sub(end_byte - start_byte)
             .and_then(|value| value.checked_add(replacement.len()))
             .filter(|value| *value <= MAX_WORKSPACE_CONTENT_BYTES)
-            .ok_or_else(generic_denial)?;
+            .ok_or_else(generic_denial_error)?;
         edits.push(WorkspacePatchEdit {
             start_byte,
             end_byte,
@@ -298,7 +298,7 @@ fn bounded_usize(arguments: &Map<String, Value>, name: &str) -> ChatResult<usize
         .get(name)
         .and_then(Value::as_u64)
         .and_then(|value| usize::try_from(value).ok())
-        .ok_or_else(generic_denial)
+        .ok_or_else(generic_denial_error)
 }
 
 fn require_resolved_mutation_approval(policy: ChatRuntimeApprovalPolicy) -> ChatResult<()> {
@@ -346,7 +346,7 @@ fn folder_source<'a>(
         .find(|source| {
             source.root_handle == root_handle && source.capability.rank() >= minimum.rank()
         })
-        .ok_or_else(generic_denial)
+        .ok_or_else(generic_denial_error)
 }
 
 async fn authorize_folder(
@@ -388,7 +388,7 @@ fn bounded_text_argument<'a>(
         .get(name)
         .and_then(Value::as_str)
         .filter(|value| value.len() <= maximum_bytes && !value.contains('\0'))
-        .ok_or_else(generic_denial)
+        .ok_or_else(generic_denial_error)
 }
 
 struct WorkspacePatchEdit {

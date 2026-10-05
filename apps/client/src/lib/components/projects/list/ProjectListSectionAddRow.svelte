@@ -1,9 +1,9 @@
 <script lang="ts">
+  import type { MaybePromise } from "$lib/utils";
   import Plus from "@lucide/svelte/icons/plus";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import { projectListAddRowInputFocus } from "$lib/projects/list/add-row-focus";
 
-  type MaybePromise = Promise<void> | void;
 
   let {
     gridTemplate,

@@ -120,12 +120,12 @@ function shellQuote(value) {
   return `'${value.replaceAll("'", "'\\''")}'`;
 }
 
-const dir = manifestDir();
-mkdirSync(dir, { recursive: true });
+const hostManifestDir = manifestDir();
+mkdirSync(hostManifestDir, { recursive: true });
 
 const hostName = hostNames[appTarget];
-const manifestPath = join(dir, `${hostName}.json`);
-const launcherPath = join(dir, hostName);
+const manifestPath = join(hostManifestDir, `${hostName}.json`);
+const launcherPath = join(hostManifestDir, hostName);
 const targetConfigDir = appConfigDir();
 const launcher = [
   "#!/usr/bin/env sh",

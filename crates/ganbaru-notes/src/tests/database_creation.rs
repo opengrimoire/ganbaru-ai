@@ -146,7 +146,7 @@ fn create_local_database_inside_notes_page() {
         let properties_json: serde_json::Value = serde_json::from_str(&properties).unwrap();
         assert_eq!(properties_json["Name"]["type"], "title");
 
-        let children = reads::get_block_children(&pool, PAGE_A, None, Some(10))
+        let children = reads::block_children(&pool, PAGE_A, None, Some(10))
             .await
             .unwrap();
         let children_json = serde_json::to_value(children).unwrap();
@@ -480,7 +480,7 @@ fn linked_database_view_shares_source_and_keeps_view_settings_independent() {
         .await
         .unwrap();
 
-        let source_table = data_sources::layouts::table::get_data_source_table_view(
+        let source_table = data_sources::layouts::table::data_source_table_view(
             &pool,
             DATA_SOURCE_A,
             Some(DATABASE_A),
@@ -499,7 +499,7 @@ fn linked_database_view_shares_source_and_keeps_view_settings_independent() {
         );
         assert_eq!(source_json["view"]["sorts"][0]["property_id"], "estimate");
 
-        let linked_table = data_sources::layouts::table::get_data_source_table_view(
+        let linked_table = data_sources::layouts::table::data_source_table_view(
             &pool,
             DATA_SOURCE_A,
             Some(LINKED_DATABASE_A),
@@ -558,7 +558,7 @@ fn linked_database_view_shares_source_and_keeps_view_settings_independent() {
         .await
         .unwrap();
 
-        let reloaded_linked = data_sources::layouts::table::get_data_source_table_view(
+        let reloaded_linked = data_sources::layouts::table::data_source_table_view(
             &pool,
             DATA_SOURCE_A,
             Some(LINKED_DATABASE_A),

@@ -138,7 +138,7 @@ fn clear_binding(state: &mut VaultAppState, vault_id: &str, root_id: &str) {
 }
 
 #[tauri::command]
-pub fn music_get_local_root_bindings(
+pub fn music_local_root_bindings(
     app: tauri::AppHandle,
     vault_id: String,
     root_ids: Vec<String>,

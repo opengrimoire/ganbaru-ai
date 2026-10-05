@@ -26,8 +26,8 @@ import {
   FOCUS_BREAK_END_ESC_PRESS_OPTIONS,
   FOCUS_BREAK_EXTENSION_LIMIT_OPTIONS,
   FOCUS_IDLE_THRESHOLD_MINUTES_OPTIONS,
-  FOCUS_BREAK_SOUND_INTERVAL_SECONDS,
-  FOCUS_PAUSE_NOTIFICATION_INTERVAL_MINUTES,
+  FOCUS_BREAK_SOUND_INTERVAL_SECONDS_OPTIONS,
+  FOCUS_PAUSE_NOTIFICATION_INTERVAL_MINUTES_OPTIONS,
   DEFAULT_TITLE_BAR_VISIBILITY,
   DEFAULT_LANGUAGE_PREFERENCE,
   TITLE_BAR_CONTROL_IDS,
@@ -281,8 +281,8 @@ describe("focus preferences", () => {
   });
 
   it("uses fixed break screen sound intervals with 10 seconds as the default", () => {
-    expect(FOCUS_BREAK_SOUND_INTERVAL_SECONDS).toEqual([0, 10, 15, 30, 60]);
-    expect(Object.isFrozen(FOCUS_BREAK_SOUND_INTERVAL_SECONDS)).toBe(true);
+    expect(FOCUS_BREAK_SOUND_INTERVAL_SECONDS_OPTIONS).toEqual([0, 10, 15, 30, 60]);
+    expect(Object.isFrozen(FOCUS_BREAK_SOUND_INTERVAL_SECONDS_OPTIONS)).toBe(true);
     expect(DEFAULT_FOCUS_BREAK_FINISHED_REPEAT_SECONDS).toBe(10);
     expect(DEFAULT_FOCUS_BREAK_END_WARNING_SECONDS).toBe(10);
   });
@@ -300,8 +300,8 @@ describe("focus preferences", () => {
   });
 
   it("uses fixed paused focus notification intervals with 3 minutes as the default", () => {
-    expect(FOCUS_PAUSE_NOTIFICATION_INTERVAL_MINUTES).toEqual([0, 3, 5, 10, 15]);
-    expect(Object.isFrozen(FOCUS_PAUSE_NOTIFICATION_INTERVAL_MINUTES)).toBe(true);
+    expect(FOCUS_PAUSE_NOTIFICATION_INTERVAL_MINUTES_OPTIONS).toEqual([0, 3, 5, 10, 15]);
+    expect(Object.isFrozen(FOCUS_PAUSE_NOTIFICATION_INTERVAL_MINUTES_OPTIONS)).toBe(true);
     expect(DEFAULT_FOCUS_PAUSE_NOTIFICATION_INTERVAL_MINUTES).toBe(3);
   });
 

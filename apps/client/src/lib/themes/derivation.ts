@@ -98,9 +98,9 @@ const APP_FRACTIONS = {
 
 /**
  * Calendar-surface derivation offsets, measured from the built-ins.
- * - `calCanvasDarkDeltaL`: BASE.dark --cal-bg #131314 sits at ΔL -0.0894
+ * - `calendarCanvasDarkDeltaL`: BASE.dark --cal-bg #131314 sits at ΔL -0.0894
  *   below canvas #27282A.
- * - `calCanvasLightDeltaL`: BASE.light --cal-bg #FFFFFF clamps to L=1,
+ * - `calendarCanvasLightDeltaL`: BASE.light --cal-bg #FFFFFF clamps to L=1,
  *   ΔL +0.0320 above canvas #F4F4F7 (L=0.968). Asymmetric by design:
  *   dark pulls cal-bg into a recessed framing; light pushes it to paper
  *   white so the app canvas reads as a tinted border around it.
@@ -109,9 +109,9 @@ const APP_FRACTIONS = {
  * - `timelineRailLightDeltaL`: BASE.light rail #E5E7EB sits at -0.0724
  *   below cal-bg, recessing the track on a paper-white surface.
  */
-const CAL_DERIVATION = {
-  calCanvasDarkDeltaL: -0.089432,
-  calCanvasLightDeltaL: +0.031968,
+const CALENDAR_DERIVATION = {
+  calendarCanvasDarkDeltaL: -0.089432,
+  calendarCanvasLightDeltaL: +0.031968,
   timelineRailDarkDeltaL: +0.183151,
   timelineRailLightDeltaL: -0.072415,
 } as const;
@@ -122,8 +122,8 @@ const CAL_DERIVATION = {
  * --cal-time-label matches --muted-foreground's fraction; both land at
  * the same BASE hex #9494A0.
  */
-const CAL_FRACTIONS = {
-  calTimeLabel: 0.362173,
+const CALENDAR_FRACTIONS = {
+  calendarTimeLabel: 0.362173,
 } as const;
 
 /**
@@ -158,8 +158,8 @@ export function deriveAppTokens(
     warning,
     warningText,
   } = sources;
-  const d = APP_DERIVATION;
-  const f = APP_FRACTIONS;
+  const deltas = APP_DERIVATION;
+  const fractions = APP_FRACTIONS;
   const shift = (deltaL: number) => shiftPerceptualL(canvas, deltaL);
   const fg = (bg: string, target = 4.5) =>
     pickReadableForeground(bg, { ink, canvas, target });
@@ -180,15 +180,15 @@ export function deriveAppTokens(
   const bright = (bg: string, target = 4.5) =>
     pickBrightForeground(bg, ink, target);
   const canvasIsDark = relativeLuminance(canvas) < 0.5;
-  const card = shift(d.cardDeltaL);
-  const popover = shift(d.popoverDeltaL);
-  const secondary = shift(d.secondaryDeltaL);
-  const mutedBg = shift(d.mutedDeltaL);
-  const accent = shift(d.accentDeltaL);
-  const sidebar = shift(d.sidebarDeltaL);
-  const sidebarAccent = shift(d.sidebarAccentDeltaL);
-  const eventPanelBg = shift(d.eventPanelBgDeltaL);
-  const eventPanelContrast = shift(d.eventPanelContrastDeltaL);
+  const card = shift(deltas.cardDeltaL);
+  const popover = shift(deltas.popoverDeltaL);
+  const secondary = shift(deltas.secondaryDeltaL);
+  const mutedBg = shift(deltas.mutedDeltaL);
+  const accent = shift(deltas.accentDeltaL);
+  const sidebar = shift(deltas.sidebarDeltaL);
+  const sidebarAccent = shift(deltas.sidebarAccentDeltaL);
+  const eventPanelBg = shift(deltas.eventPanelBgDeltaL);
+  const eventPanelContrast = shift(deltas.eventPanelContrastDeltaL);
   return {
     "--background": canvas,
     "--cal-header-bg": canvas,
@@ -199,23 +199,23 @@ export function deriveAppTokens(
     "--secondary": secondary,
     "--secondary-foreground": fg(secondary),
     "--muted": mutedBg,
-    "--muted-foreground": walk(mutedBg, f.mutedForeground),
+    "--muted-foreground": walk(mutedBg, fractions.mutedForeground),
     "--accent": accent,
     "--accent-foreground": fg(accent),
-    "--ring": walk(canvas, f.ring),
+    "--ring": walk(canvas, fractions.ring),
     "--sidebar": sidebar,
     "--sidebar-foreground": bright(sidebar, 4.5),
     "--sidebar-accent": sidebarAccent,
     "--sidebar-accent-foreground": bright(sidebarAccent, 4.5),
     "--event-panel-bg": eventPanelBg,
     "--event-panel-contrast": eventPanelContrast,
-    "--event-panel-text": walk(eventPanelBg, f.eventPanelText),
-    "--event-panel-muted-text": walk(eventPanelBg, f.eventPanelMutedText),
+    "--event-panel-text": walk(eventPanelBg, fractions.eventPanelText),
+    "--event-panel-muted-text": walk(eventPanelBg, fractions.eventPanelMutedText),
     "--event-panel-edge": canvasIsDark ? "#0000008C" : "#0000004D",
     "--event-panel-shadow": canvasIsDark ? "#00000066" : "#0000001F",
-    "--event-panel-divider": walk(eventPanelBg, f.eventPanelDivider),
-    "--event-panel-input-text": walk(eventPanelBg, f.eventPanelInputText),
-    "--event-panel-placeholder": walk(eventPanelBg, f.eventPanelPlaceholder),
+    "--event-panel-divider": walk(eventPanelBg, fractions.eventPanelDivider),
+    "--event-panel-input-text": walk(eventPanelBg, fractions.eventPanelInputText),
+    "--event-panel-placeholder": walk(eventPanelBg, fractions.eventPanelPlaceholder),
     "--foreground": fg(canvas),
     "--form-indicator": anchorFor(canvas),
     "--primary": primary,
@@ -260,29 +260,29 @@ export function deriveCalendarTokens(
 ): Record<string, string> {
   const { canvas, ink } = sources;
   const canvasIsDark = relativeLuminance(canvas) < 0.5;
-  const calCanvasDelta = canvasIsDark
-    ? CAL_DERIVATION.calCanvasDarkDeltaL
-    : CAL_DERIVATION.calCanvasLightDeltaL;
-  const calCanvas = shiftPerceptualL(canvas, calCanvasDelta);
-  const calCanvasIsDark = relativeLuminance(calCanvas) < 0.5;
-  const timelineRailDelta = calCanvasIsDark
-    ? CAL_DERIVATION.timelineRailDarkDeltaL
-    : CAL_DERIVATION.timelineRailLightDeltaL;
+  const calendarCanvasDelta = canvasIsDark
+    ? CALENDAR_DERIVATION.calendarCanvasDarkDeltaL
+    : CALENDAR_DERIVATION.calendarCanvasLightDeltaL;
+  const calendarCanvas = shiftPerceptualL(canvas, calendarCanvasDelta);
+  const calendarCanvasIsDark = relativeLuminance(calendarCanvas) < 0.5;
+  const timelineRailDelta = calendarCanvasIsDark
+    ? CALENDAR_DERIVATION.timelineRailDarkDeltaL
+    : CALENDAR_DERIVATION.timelineRailLightDeltaL;
   // Same direction-aware anchor as deriveAppTokens: walk-fraction tokens
   // must start from a foreground that is actually visible against the
   // calendar surface, not from raw ink. Dark-BASE parity still holds
-  // because pickReadableForeground returns ink on BASE.dark's calCanvas.
+  // because pickReadableForeground returns ink on BASE.dark's calendarCanvas.
   const anchorFor = (bg: string) =>
     pickReadableForeground(bg, { ink, canvas, target: 4.5 });
   return {
-    "--cal-bg": calCanvas,
-    "--cal-gridline": pickReadableBorder(calCanvas, ink, { target: 1.4 }),
+    "--cal-bg": calendarCanvas,
+    "--cal-gridline": pickReadableBorder(calendarCanvas, ink, { target: 1.4 }),
     "--cal-time-label": walkFraction(
-      anchorFor(calCanvas),
-      calCanvas,
-      CAL_FRACTIONS.calTimeLabel,
+      anchorFor(calendarCanvas),
+      calendarCanvas,
+      CALENDAR_FRACTIONS.calendarTimeLabel,
     ),
-    "--cal-timeline-rail": shiftPerceptualL(calCanvas, timelineRailDelta),
+    "--cal-timeline-rail": shiftPerceptualL(calendarCanvas, timelineRailDelta),
   };
 }
 
@@ -318,17 +318,17 @@ function calendarRuntimeTokensFromAppTokens(
   };
 }
 
-function calendarRuntimeTokensFromCalCanvas(
-  calCanvas: string,
+function calendarRuntimeTokensFromCanvas(
+  calendarCanvas: string,
 ): Record<CalendarRuntimeTokenKey, string> {
   const contrastAnchor =
-    relativeLuminance(calCanvas) < 0.5 ? "#FFFFFF" : "#000000";
+    relativeLuminance(calendarCanvas) < 0.5 ? "#FFFFFF" : "#000000";
   return {
-    "--cal-scrollbar-thumb": pickReadableBorder(calCanvas, contrastAnchor, {
+    "--cal-scrollbar-thumb": pickReadableBorder(calendarCanvas, contrastAnchor, {
       target: CALENDAR_SCROLLBAR_THUMB_CONTRAST_TARGET,
     }),
     "--cal-scrollbar-thumb-hover": pickReadableBorder(
-      calCanvas,
+      calendarCanvas,
       contrastAnchor,
       {
         target: CALENDAR_SCROLLBAR_THUMB_HOVER_CONTRAST_TARGET,
@@ -370,12 +370,12 @@ export function deriveCalendarColorDefaultBundle(
   const basis = mode === "custom" ? customBasis : sources.canvas;
   const basisSources: ThemeSources = { ...sources, canvas: basis };
   const derived = deriveCalendarTokens(basisSources);
-  const calCanvas = derived["--cal-bg"] ?? basis;
-  const paletteBase: "light" | "dark" = defaultIconLabelFromCanvas(calCanvas);
+  const calendarCanvas = derived["--cal-bg"] ?? basis;
+  const paletteBase: "light" | "dark" = defaultIconLabelFromCanvas(calendarCanvas);
   const calendarTokens = fullCalendarSnapshot(paletteBase, derived);
   return {
     calendarTokens,
-    runtimeTokens: calendarRuntimeTokensFromCalCanvas(
+    runtimeTokens: calendarRuntimeTokensFromCanvas(
       calendarTokens["--cal-bg"],
     ),
     eventPalette:
@@ -464,7 +464,7 @@ export function resolveCanvas(theme: Theme): string {
  * Resolve the effective calendar background. Used to pick event text,
  * dimming, and calendar outline mixes based on the actual painted surface.
  */
-export function resolveCalCanvas(theme: Theme): string {
+export function resolveCalendarCanvas(theme: Theme): string {
   if (theme.kind === "user") return theme.calendarTokens["--cal-bg"];
   return BASE_CALENDAR_TOKENS[theme.base]["--cal-bg"];
 }
@@ -486,7 +486,7 @@ export function defaultIconLabelFromCanvas(
 
 /** True when the resolved calendar canvas crosses into dark-mode territory. */
 export function isThemeCalendarDark(theme: Theme): boolean {
-  return relativeLuminance(resolveCalCanvas(theme)) < DARK_SURFACE_THRESHOLD;
+  return relativeLuminance(resolveCalendarCanvas(theme)) < DARK_SURFACE_THRESHOLD;
 }
 
 /**

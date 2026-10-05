@@ -17,6 +17,7 @@ const MAX_PENDING_REQUESTS: usize = 128;
 const MAX_INBOUND_MESSAGES: usize = 256;
 const MAX_OUTBOUND_MESSAGES: usize = 256;
 const MAX_METHOD_BYTES: usize = 256;
+const MAX_RPC_ID_BYTES: usize = 256;
 const MAX_ERROR_MESSAGE_BYTES: usize = 2_048;
 const CANCELLATION_POLL_INTERVAL: Duration = Duration::from_millis(25);
 
@@ -514,7 +515,7 @@ fn validate_rpc_id(id: &Value) -> Result<(), CodexRpcFailure> {
         Value::Number(_) => Ok(()),
         Value::String(value)
             if !value.is_empty()
-                && value.len() <= MAX_METHOD_BYTES
+                && value.len() <= MAX_RPC_ID_BYTES
                 && !value.chars().any(char::is_control) =>
         {
             Ok(())
@@ -585,11 +586,11 @@ fn trim_line_ending(mut line: Vec<u8>) -> Vec<u8> {
     line
 }
 
-fn truncate_text(value: &str, maximum_bytes: usize) -> String {
-    if value.len() <= maximum_bytes {
+fn truncate_text(value: &str, max_bytes: usize) -> String {
+    if value.len() <= max_bytes {
         return value.to_string();
     }
-    let mut boundary = maximum_bytes;
+    let mut boundary = max_bytes;
     while !value.is_char_boundary(boundary) {
         boundary -= 1;
     }

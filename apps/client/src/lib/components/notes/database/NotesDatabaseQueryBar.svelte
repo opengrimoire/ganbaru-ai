@@ -38,20 +38,20 @@
     {#if sorts.length}
       <CollectionMenu label={sortLabel} ariaLabel={`${t("notes.databaseTableSorts")}: ${sortLabel}`} kind="sort" disabled={pending}
         triggerClass="h-7 rounded-full bg-primary/8 text-primary hover:bg-primary/12 font-normal">
-        <NotesDatabaseSortControls {properties} {sorts} {pending} onchange={onSortsChange} />
+        <NotesDatabaseSortControls {properties} {sorts} {pending} onChange={onSortsChange} />
       </CollectionMenu>
     {/if}
     {#if grouped}
       <CollectionMenu label={filterLabel} ariaLabel={`${t("notes.databaseTableFilters")}: ${filterLabel}`} kind="filter" disabled={pending}
         activeCount={predicates.length} triggerClass="h-7 rounded-full bg-primary/8 text-primary hover:bg-primary/12 font-normal">
-        <NotesDatabaseFilterControls {properties} {filters} {pending} onchange={onFiltersChange} />
+        <NotesDatabaseFilterControls {properties} {filters} {pending} onChange={onFiltersChange} />
       </CollectionMenu>
     {:else}
     {#each filterProperties as property (property.id)}
       <CollectionMenu label={property.name} ariaLabel={`${t("notes.databasePropertyFilter")}: ${property.name}`} kind="filter" disabled={pending}
         activeCount={property.count > 1 ? property.count : 0}
         triggerClass="h-7 rounded-full bg-primary/8 text-primary hover:bg-primary/12 font-normal">
-        <NotesDatabaseFilterControls {properties} {filters} propertyId={property.id} {pending} onchange={onFiltersChange} />
+        <NotesDatabaseFilterControls {properties} {filters} propertyId={property.id} {pending} onChange={onFiltersChange} />
       </CollectionMenu>
     {/each}
     {/if}

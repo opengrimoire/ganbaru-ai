@@ -33,7 +33,7 @@
   } = $props();
 
   const { t } = getLocalization();
-  let loaded = $state<NotesWorkingMarkdownFileRead | null>(null);
+  let loadedFile = $state<NotesWorkingMarkdownFileRead | null>(null);
   let remoteConflict = $state<NotesWorkingMarkdownFileRead | null>(null);
   let draft = $state("");
   let loading = $state(false);
@@ -41,8 +41,8 @@
   let error = $state<string | null>(null);
   let mode = $state<"edit" | "preview">("edit");
   let loadGeneration = 0;
-  const dirty = $derived(isWorkingMarkdownDirty(loaded?.content ?? null, draft));
-  const rendered = $derived(renderChatMarkdown(draft));
+  const dirty = $derived(isWorkingMarkdownDirty(loadedFile?.content ?? null, draft));
+  const renderedHtml = $derived(renderChatMarkdown(draft));
 
   $effect(() => {
     onDirtyChange(dirty);
@@ -76,11 +76,11 @@
     try {
       const result = await readNotesWorkingMarkdown(workingFolderId, relativePath);
       if (generation !== loadGeneration) return;
-      loaded = result;
+      loadedFile = result;
       draft = result.content;
     } catch (reason) {
       if (generation !== loadGeneration) return;
-      loaded = null;
+      loadedFile = null;
       draft = "";
       error = errorMessage(reason);
     } finally {
@@ -89,7 +89,7 @@
   }
 
   async function save(): Promise<void> {
-    if (!loaded || !dirty || saving) return;
+    if (!loadedFile || !dirty || saving) return;
     saving = true;
     error = null;
     remoteConflict = null;
@@ -98,9 +98,9 @@
         file.workingFolderId,
         file.relativePath,
         draft,
-        loaded.revision,
+        loadedFile.revision,
       );
-      loaded = result;
+      loadedFile = result;
       draft = result.content;
     } catch (reason) {
       error = errorMessage(reason);
@@ -111,7 +111,7 @@
   }
 
   async function refresh(): Promise<void> {
-    if (!loaded) {
+    if (!loadedFile) {
       await loadFile(file.workingFolderId, file.relativePath);
       return;
     }
@@ -119,8 +119,8 @@
     try {
       const remote = await readNotesWorkingMarkdown(file.workingFolderId, file.relativePath);
       const decision = workingMarkdownRefreshDecision(
-        loaded.content,
-        loaded.revision,
+        loadedFile.content,
+        loadedFile.revision,
         draft,
         remote.revision,
       );
@@ -129,7 +129,7 @@
         return;
       }
       if (decision === "preserve_local") return;
-      loaded = remote;
+      loadedFile = remote;
       draft = remote.content;
       remoteConflict = null;
     } catch (reason) {
@@ -138,10 +138,10 @@
   }
 
   async function detectConflict(): Promise<void> {
-    if (!loaded) return;
+    if (!loadedFile) return;
     try {
       const remote = await readNotesWorkingMarkdown(file.workingFolderId, file.relativePath);
-      if (remote.revision !== loaded.revision) remoteConflict = remote;
+      if (remote.revision !== loadedFile.revision) remoteConflict = remote;
     } catch {
       // Preserve the original save error when the recovery read also fails.
     }
@@ -149,7 +149,7 @@
 
   function reloadRemote(): void {
     if (!remoteConflict) return;
-    loaded = remoteConflict;
+    loadedFile = remoteConflict;
     draft = remoteConflict.content;
     remoteConflict = null;
     error = null;
@@ -223,7 +223,7 @@
     <div class="shrink-0 border-b border-destructive/30 px-3 py-2 text-sm text-destructive" role="alert">{error}</div>
   {/if}
 
-  {#if loading && !loaded}
+  {#if loading && !loadedFile}
     <div class="flex flex-1 items-center justify-center text-sm text-muted-foreground">{t("common.loading")}</div>
   {:else if mode === "edit"}
     <textarea
@@ -236,7 +236,7 @@
     <article
       class="chat-markdown min-h-0 flex-1 overflow-auto p-5 text-sm leading-6"
       use:previewLinks
-    >{@html rendered}</article>
+    >{@html renderedHtml}</article>
   {/if}
 </section>
 

@@ -1,7 +1,7 @@
 use super::*;
 
 #[cfg(target_os = "linux")]
-pub(super) fn read_linux_process_name(path: &Path) -> Vec<String> {
+pub(super) fn read_linux_process_names(path: &Path) -> Vec<String> {
     let mut names = Vec::new();
     if let Ok(comm) = std::fs::read_to_string(path.join("comm")) {
         if let Some(name) = normalize_process_match_name(&comm) {
@@ -43,7 +43,7 @@ pub(super) fn observe_linux_process(
     process_id: u32,
 ) -> Option<ObservedDesktopProcess> {
     let start_time = linux_process_start_time(path)?;
-    let mut match_names = read_linux_process_name(path);
+    let mut match_names = read_linux_process_names(path);
     match_names.sort_by_key(|name| app_name_key(name));
     match_names.dedup_by(|left, right| app_name_key(left) == app_name_key(right));
     let process_name = match_names.first()?.clone();

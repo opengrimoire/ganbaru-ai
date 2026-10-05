@@ -143,12 +143,8 @@ async fn duplicate_property_tx(
     name: &str,
 ) -> Result<Value, String> {
     property["id"] = Value::String(
-        data_sources::views::generated_uuid_tx(
-            tx,
-            "generate duplicated property id",
-            "property_id",
-        )
-        .await?,
+        data_sources::views::generate_uuid_tx(tx, "generate duplicated property id", "property_id")
+            .await?,
     );
     property["name"] = Value::String(name.to_string());
     let property_type = property
@@ -175,7 +171,7 @@ async fn duplicate_property_tx(
                 .and_then(Value::as_str)
                 .ok_or_else(|| "property option id is missing".to_string())?
                 .to_string();
-            let id = data_sources::views::generated_uuid_tx(
+            let id = data_sources::views::generate_uuid_tx(
                 tx,
                 "generate duplicated option id",
                 "option_id",

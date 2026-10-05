@@ -678,7 +678,7 @@ fn property_search_indexes_database_values_cached_rollups_and_formulas() {
         .await
         .unwrap();
 
-        data_sources::layouts::table::get_data_source_table_view(&pool, DATA_SOURCE_A, None, None)
+        data_sources::layouts::table::data_source_table_view(&pool, DATA_SOURCE_A, None, None)
             .await
             .unwrap();
 
@@ -703,7 +703,7 @@ fn property_search_indexes_database_values_cached_rollups_and_formulas() {
         .unwrap();
         assert_search_does_not_find_page(&pool, "11", PAGE_B).await;
 
-        data_sources::layouts::table::get_data_source_table_view(&pool, DATA_SOURCE_A, None, None)
+        data_sources::layouts::table::data_source_table_view(&pool, DATA_SOURCE_A, None, None)
             .await
             .unwrap();
         assert_search_finds_page(&pool, "13", PAGE_B).await;

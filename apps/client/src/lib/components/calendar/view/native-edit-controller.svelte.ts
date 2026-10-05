@@ -95,7 +95,7 @@ export class NativeCalendarEditController {
     this.schedule();
   }
 
-  private current(input: CalendarEditContext): boolean {
+  private isCurrentContext(input: CalendarEditContext): boolean {
     const context = this.context();
     return context?.vaultId === input.vaultId && context.vaultGeneration === input.vaultGeneration
       && this.vaultIdentity() === input.vaultId;
@@ -103,13 +103,13 @@ export class NativeCalendarEditController {
 
   /** Availability belongs to the current native process generation. */
   acceptsContext(input: CalendarEditContext): boolean {
-    return this.current(input);
+    return this.isCurrentContext(input);
   }
 
   /** Read contours only for the exact current draft, including before the next effect flush. */
   previewFor(input: CalendarEditDraft): CalendarEditPreview | null {
     const preview = this.preview;
-    return preview && this.desired?.key === JSON.stringify(input) && this.current(input) ? preview : null;
+    return preview && this.desired?.key === JSON.stringify(input) && this.isCurrentContext(input) ? preview : null;
   }
 
   private clearTimer(): void {
@@ -142,13 +142,13 @@ export class NativeCalendarEditController {
     try {
       const preview = await this.loadPreview({ commandId: work.commandId,
         edit: work.input.edit, window: work.input.window });
-      if (this.desired?.generation !== work.generation || !this.current(work.input)) return;
+      if (this.desired?.generation !== work.generation || !this.isCurrentContext(work.input)) return;
       if (preview.vaultId !== work.input.vaultId || preview.vaultGeneration !== work.input.vaultGeneration) {
         throw new Error("Calendar review belongs to a previous vault context");
       }
       this.preview = preview;
     } catch (error) {
-      if (this.desired?.generation !== work.generation || !this.current(work.input)) return;
+      if (this.desired?.generation !== work.generation || !this.isCurrentContext(work.input)) return;
       this.lastError = error;
       this.failedGeneration = work.generation;
       this.error = error instanceof Error ? error.message : String(error);
@@ -165,7 +165,7 @@ export class NativeCalendarEditController {
     this.clearTimer();
     this.failedGeneration = null;
     this.error = null;
-    while (this.desired?.generation === work.generation && this.current(input)) {
+    while (this.desired?.generation === work.generation && this.isCurrentContext(input)) {
       if (this.preview) return this.preview;
       await this.start();
       if (this.failedGeneration === work.generation) throw this.lastError;
@@ -185,7 +185,7 @@ export class NativeCalendarEditController {
   async commit(input: CalendarEditDraft): Promise<CalendarCommitReceipt> {
     if (this.committing) throw new Error("Calendar Save is already in progress");
     const key = intentKey(input);
-    if (this.accepted?.intentKey === key && this.current(input)) return this.accepted.receipt;
+    if (this.accepted?.intentKey === key && this.isCurrentContext(input)) return this.accepted.receipt;
     if (this.pendingCommit && (this.pendingCommit.intentKey !== key
       || this.pendingCommit.request.vaultId !== this.vaultIdentity())) {
       throw new CalendarCommitFailure("unknown", "The previous Save is unresolved; retry its original draft first");
@@ -220,7 +220,7 @@ export class NativeCalendarEditController {
     if (this.committing) throw new Error("Calendar operation is already in progress");
     if (this.pendingCommit || this.resultPending) throw new CalendarCommitFailure("unknown", "Resolve the previous Calendar operation first");
     if (!("kind" in input.edit) || input.edit.kind !== "delete" || !preview.deletion
-      || this.previewFor(input) !== preview || !this.current(input)) {
+      || this.previewFor(input) !== preview || !this.isCurrentContext(input)) {
       throw new Error("Calendar deletion selection changed during confirmation");
     }
     this.pendingCommit = { intentKey: intentKey(input), preview, request: {
@@ -235,7 +235,7 @@ export class NativeCalendarEditController {
   /** Submit only the accepted deletion identity and native preimage revision. */
   async undoDeletion(preview: CalendarEditPreview, receipt: CalendarCommitReceipt): Promise<CalendarCommitReceipt> {
     if (this.committing || this.pendingCommit || this.resultPending) throw new Error("Resolve the current Calendar operation before Undo");
-    if (!receipt.undoReviewRevision || !this.current(preview)) throw new Error("Calendar Undo belongs to an unavailable vault context");
+    if (!receipt.undoReviewRevision || !this.isCurrentContext(preview)) throw new Error("Calendar Undo belongs to an unavailable vault context");
     const request: CalendarCommitRequest = { vaultId: preview.vaultId, vaultGeneration: preview.vaultGeneration,
       commandId: this.newCommandId(), reviewRevision: receipt.undoReviewRevision,
       edit: { kind: "undo_delete", deleteCommandId: receipt.commandId } };

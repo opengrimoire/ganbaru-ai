@@ -8,14 +8,12 @@
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import type { ProjectSettingsDropPosition } from "$lib/projects/settings/reorder";
   import { projectSettingsIconButtonClass } from "$lib/projects/settings/ui";
-  import type { ProjectPriorityConfig } from "$lib/projects/types";
+  import type { MoveDirection, ProjectPriorityConfig } from "$lib/projects/types";
   import type { Theme } from "$lib/themes";
-  import { cn } from "$lib/utils";
+  import { cn, type MaybePromise } from "$lib/utils";
   import ProjectSettingsNewRowDragHandle from "./ProjectSettingsNewRowDragHandle.svelte";
   import ProjectSettingsSectionHeading from "./ProjectSettingsSectionHeading.svelte";
 
-  type MoveDirection = -1 | 1;
-  type MaybePromise = Promise<void> | void;
 
   let {
     theme,
@@ -116,7 +114,7 @@
           ariaLabel={t("projects.settings.selectPriorityColor", priority.name)}
           class="h-7 w-7 justify-center self-center"
           buttonClass="size-6 rounded-md"
-          onselect={(color) => setPriorityColor(priority.id, color)}
+          onSelect={(color) => setPriorityColor(priority.id, color)}
         />
         <input
           value={priorityNameDraftValue(priority)}
@@ -149,7 +147,7 @@
         ariaLabel={t("projects.settings.selectNewPriorityColor")}
         class="h-7 w-7 justify-center self-center"
         buttonClass="size-6 rounded-md"
-        onselect={setNewPriorityColor}
+        onSelect={setNewPriorityColor}
       />
       <input
         bind:value={newPriorityName}

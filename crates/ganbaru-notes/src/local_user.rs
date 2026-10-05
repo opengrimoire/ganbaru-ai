@@ -6,7 +6,7 @@ use sqlx::{Sqlite, SqlitePool, Transaction};
 const DEFAULT_LOCAL_USER_DISPLAY_NAME: &str = "You";
 const LOCAL_USER_DISPLAY_NAME_MAX_CHARS: usize = 80;
 
-pub async fn get_local_user(pool: &SqlitePool) -> Result<NoteLocalUserDto, String> {
+pub async fn load_local_user(pool: &SqlitePool) -> Result<NoteLocalUserDto, String> {
     let mut tx = pool
         .begin()
         .await

@@ -609,7 +609,7 @@ pub fn vault_default_location(app: tauri::AppHandle) -> Result<VaultDefaultLocat
 }
 
 #[tauri::command]
-pub async fn vault_use_default_folder(app: tauri::AppHandle) -> Result<VaultInfo, String> {
+pub async fn vault_use_default(app: tauri::AppHandle) -> Result<VaultInfo, String> {
     let path = default_data_folder_path(&app)?;
     create_and_select_vault(&app, path).await
 }
@@ -844,14 +844,14 @@ fn write_text_file_atomically(path: &Path, contents: &str) -> Result<(), String>
         .ok_or_else(|| "target has no file name".to_string())?
         .to_string_lossy()
         .into_owned();
-    let tmp_path = parent.join(format!("{file_name}.tmp"));
+    let temporary_path = parent.join(format!("{file_name}.tmp"));
     {
-        let mut file = fs::File::create(&tmp_path).map_err(|e| e.to_string())?;
+        let mut file = fs::File::create(&temporary_path).map_err(|e| e.to_string())?;
         file.write_all(contents.as_bytes())
             .map_err(|e| e.to_string())?;
         file.sync_all().map_err(|e| e.to_string())?;
     }
-    fs::rename(&tmp_path, target).map_err(|e| e.to_string())?;
+    fs::rename(&temporary_path, target).map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -930,7 +930,7 @@ mod tests {
         let path = unique_path("write.txt");
         let parent = path.parent().unwrap().to_path_buf();
         let file_name = path.file_name().unwrap().to_string_lossy().into_owned();
-        let tmp_sibling = parent.join(format!("{file_name}.tmp"));
+        let temporary_sibling = parent.join(format!("{file_name}.tmp"));
 
         write_text_file_atomically(&path, "payload").expect("write should succeed");
 
@@ -938,7 +938,7 @@ mod tests {
         assert_eq!(on_disk, "payload");
         // The .tmp sibling must not survive a successful write.
         assert!(
-            !tmp_sibling.exists(),
+            !temporary_sibling.exists(),
             "tmp file should have been renamed away"
         );
 

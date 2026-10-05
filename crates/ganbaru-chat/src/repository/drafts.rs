@@ -111,7 +111,9 @@ pub async fn save_draft(pool: &SqlitePool, draft: &ChatDraftWrite) -> ChatResult
         .map_err(persistence_error)?;
     }
     transaction.commit().await.map_err(persistence_error)?;
-    read_draft(pool, &draft.id).await?.ok_or_else(corrupt_data)
+    read_draft(pool, &draft.id)
+        .await?
+        .ok_or_else(corrupt_data_error)
 }
 
 pub async fn read_draft(pool: &SqlitePool, id: &str) -> ChatResult<Option<ChatDraftRead>> {
@@ -142,13 +144,13 @@ pub async fn read_draft(pool: &SqlitePool, id: &str) -> ChatResult<Option<ChatDr
             row.try_get::<String, _>("working_folder_id")
                 .map_err(persistence_error)?,
         )
-        .map_err(|_| corrupt_data())?,
+        .map_err(|_| corrupt_data_error())?,
         thread_id: row
             .try_get::<Option<String>, _>("thread_id")
             .map_err(persistence_error)?
             .map(ChatThreadId::new)
             .transpose()
-            .map_err(|_| corrupt_data())?,
+            .map_err(|_| corrupt_data_error())?,
         text: row.try_get("text").map_err(persistence_error)?,
         rich_content: read_versioned(&row, "rich_content_schema_version", "rich_content_data")?,
         attachment_ids: attachment_rows
@@ -158,7 +160,7 @@ pub async fn read_draft(pool: &SqlitePool, id: &str) -> ChatResult<Option<ChatDr
                     row.try_get::<String, _>("attachment_id")
                         .map_err(persistence_error)?,
                 )
-                .map_err(|_| corrupt_data())
+                .map_err(|_| corrupt_data_error())
             })
             .collect::<ChatResult<_>>()?,
         mentions: read_required_versioned(&row, "mentions_schema_version", "mentions_data")?,
@@ -167,7 +169,7 @@ pub async fn read_draft(pool: &SqlitePool, id: &str) -> ChatResult<Option<ChatDr
             .map_err(persistence_error)?
             .map(ProviderInstanceId::new)
             .transpose()
-            .map_err(|_| corrupt_data())?,
+            .map_err(|_| corrupt_data_error())?,
         model_selection: read_versioned(
             &row,
             "model_selection_schema_version",
@@ -188,7 +190,7 @@ pub async fn read_draft(pool: &SqlitePool, id: &str) -> ChatResult<Option<ChatDr
             row.try_get::<String, _>("updated_at")
                 .map_err(persistence_error)?,
         )
-        .map_err(|_| corrupt_data())?,
+        .map_err(|_| corrupt_data_error())?,
     }))
 }
 
@@ -301,7 +303,7 @@ fn read_required_versioned(
     version: &str,
     data: &str,
 ) -> ChatResult<VersionedJson> {
-    read_versioned(row, version, data)?.ok_or_else(corrupt_data)
+    read_versioned(row, version, data)?.ok_or_else(corrupt_data_error)
 }
 fn read_versioned(
     row: &sqlx::sqlite::SqliteRow,
@@ -316,10 +318,10 @@ fn read_versioned(
     ) {
         (None, None) => Ok(None),
         (Some(version), Some(data)) => Ok(Some(VersionedJson {
-            schema_version: u32::try_from(version).map_err(|_| corrupt_data())?,
+            schema_version: u32::try_from(version).map_err(|_| corrupt_data_error())?,
             value: serde_json::from_str(&data).map_err(serialization_error)?,
         })),
-        _ => Err(corrupt_data()),
+        _ => Err(corrupt_data_error()),
     }
 }
 fn json_text(value: &serde_json::Value) -> ChatResult<String> {
@@ -345,14 +347,14 @@ fn parse_safety(value: &str) -> ChatResult<SafetyMode> {
         "approve_for_me" => Ok(SafetyMode::ApproveForMe),
         "full_access" => Ok(SafetyMode::FullAccess),
         "custom" => Ok(SafetyMode::Custom),
-        _ => Err(corrupt_data()),
+        _ => Err(corrupt_data_error()),
     }
 }
 fn parse_interaction(value: &str) -> ChatResult<InteractionMode> {
     match value {
         "build" => Ok(InteractionMode::Build),
         "plan" => Ok(InteractionMode::Plan),
-        _ => Err(corrupt_data()),
+        _ => Err(corrupt_data_error()),
     }
 }
 fn persistence_error<T>(_error: T) -> ChatError {
@@ -369,7 +371,7 @@ fn serialization_error<T>(_error: T) -> ChatError {
         false,
     )
 }
-fn corrupt_data() -> ChatError {
+fn corrupt_data_error() -> ChatError {
     ChatError::new(
         ChatErrorCode::Persistence,
         "Stored Chat draft is invalid",

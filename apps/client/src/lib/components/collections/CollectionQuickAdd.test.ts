@@ -12,29 +12,29 @@ afterEach(async () => {
 
 describe("shared inline creation", () => {
   it("allows blank Notes creation on each click without opening a draft form", async () => {
-    const oncreate = vi.fn();
-    component = mount(CollectionQuickAdd, { target: document.body, props: { label: "New page", oncreate } });
+    const onCreate = vi.fn();
+    component = mount(CollectionQuickAdd, { target: document.body, props: { label: "New page", onCreate } });
     const trigger = document.querySelector<HTMLButtonElement>("button")!;
     trigger.click();
     trigger.click();
     await tick();
-    expect(oncreate).toHaveBeenCalledTimes(2);
+    expect(onCreate).toHaveBeenCalledTimes(2);
     expect(document.querySelector("form")).toBeNull();
     expect(trigger.disabled).toBe(false);
   });
 
   it("requires a name for task creation", async () => {
-    const onsubmit = vi.fn().mockResolvedValue(true);
-    component = mount(CollectionQuickAdd, { target: document.body, props: { label: "Add task", active: true, draft: "   ", onsubmit } });
+    const onSubmit = vi.fn().mockResolvedValue(true);
+    component = mount(CollectionQuickAdd, { target: document.body, props: { label: "Add task", active: true, draft: "   ", onSubmit } });
     document.querySelector("form")!.dispatchEvent(new Event("submit", { cancelable: true }));
     await tick();
-    expect(onsubmit).not.toHaveBeenCalled();
+    expect(onSubmit).not.toHaveBeenCalled();
   });
 
   it("keeps failed drafts and permits a retry without submitting twice while saving", async () => {
     let resolve: (success: boolean) => void = () => {};
-    const onsubmit = vi.fn(() => new Promise<boolean>((done) => { resolve = done; }));
-    component = mount(CollectionQuickAdd, { target: document.body, props: { label: "Add row", onsubmit } });
+    const onSubmit = vi.fn(() => new Promise<boolean>((done) => { resolve = done; }));
+    component = mount(CollectionQuickAdd, { target: document.body, props: { label: "Add row", onSubmit } });
     document.querySelector<HTMLButtonElement>("button")!.click();
     await tick();
     await tick();
@@ -46,14 +46,14 @@ describe("shared inline creation", () => {
     submit();
     submit();
     await tick();
-    expect(onsubmit).toHaveBeenCalledTimes(1);
+    expect(onSubmit).toHaveBeenCalledTimes(1);
     expect(input.disabled).toBe(true);
     resolve(false);
     await tick();
     await tick();
     expect(input.value).toBe("Draft task");
     submit();
-    expect(onsubmit).toHaveBeenCalledTimes(2);
+    expect(onSubmit).toHaveBeenCalledTimes(2);
     resolve(true);
     await tick();
     await tick();
@@ -61,8 +61,8 @@ describe("shared inline creation", () => {
   });
 
   it("reports rejected writes and only discards the draft on explicit cancellation", async () => {
-    const onsubmit = vi.fn().mockRejectedValue(new Error("Write failed"));
-    component = mount(CollectionQuickAdd, { target: document.body, props: { label: "Add card", active: true, draft: "Keep me", onsubmit } });
+    const onSubmit = vi.fn().mockRejectedValue(new Error("Write failed"));
+    component = mount(CollectionQuickAdd, { target: document.body, props: { label: "Add card", active: true, draft: "Keep me", onSubmit } });
     document.querySelector("form")!.dispatchEvent(new Event("submit", { cancelable: true }));
     await tick();
     await tick();
@@ -73,6 +73,6 @@ describe("shared inline creation", () => {
     await tick();
     expect(document.querySelector("input")).toBeNull();
     expect(document.querySelector('[role="alert"]')).toBeNull();
-    expect(onsubmit).toHaveBeenCalledTimes(1);
+    expect(onSubmit).toHaveBeenCalledTimes(1);
   });
 });

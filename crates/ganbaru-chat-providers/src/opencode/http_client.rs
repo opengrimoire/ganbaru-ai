@@ -543,12 +543,12 @@ fn basic_authorization(password: &OpenCodeSecret) -> ChatResult<HeaderValue> {
 
 async fn decode_json_response(mut response: reqwest::Response, label: &str) -> ChatResult<Value> {
     let status = response.status();
-    let cap = if status.is_success() {
+    let max_body_bytes = if status.is_success() {
         MAX_HTTP_BODY_BYTES
     } else {
         MAX_ERROR_BODY_BYTES
     };
-    let body = read_capped_body(&mut response, cap).await?;
+    let body = read_capped_body(&mut response, max_body_bytes).await?;
     if !status.is_success() {
         return Err(status_error(status, &body));
     }
@@ -599,7 +599,7 @@ fn status_error(status: StatusCode, body: &[u8]) -> ChatError {
         status if status.is_server_error() => ChatErrorCode::TransportUnavailable,
         _ => ChatErrorCode::Protocol,
     };
-    let details = serde_json::from_slice::<Value>(body)
+    let provider_error_name = serde_json::from_slice::<Value>(body)
         .ok()
         .and_then(|value| sanitized_error_name(&value));
     let mut error = ChatError::new(
@@ -620,7 +620,7 @@ fn status_error(status: StatusCode, body: &[u8]) -> ChatError {
         },
         code != ChatErrorCode::Protocol,
     );
-    error.details = details.map(|name| Box::new(json!({ "providerError": name })));
+    error.details = provider_error_name.map(|name| Box::new(json!({ "providerError": name })));
     error
 }
 

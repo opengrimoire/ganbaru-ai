@@ -1,8 +1,8 @@
 use crate::data_sources;
 use crate::data_sources::views::{
-    ViewProperty as BoardProperty, canonical_filter, canonical_sorts, generated_uuid_tx,
+    ViewProperty, canonical_filter, canonical_sorts, generate_uuid_tx,
     load_active_data_source_and_database_tx, normalized_row_for_schema, parse_json, stored_filters,
-    stored_sorts, view_schema as board_schema,
+    stored_sorts, view_schema,
 };
 use crate::models::{
     NoteDataSourceRow, NoteDataSourceRowWindow, NoteDataSourceTimelineConfigurationUpdate,
@@ -19,13 +19,13 @@ const MAX_TIMELINE_CONFIGURATION_BYTES: usize = 50 * 1024;
 const TIMELINE_ROW_OPEN_MODES: &[&str] = &["full_page", "side_panel"];
 
 #[cfg(test)]
-pub async fn get_data_source_timeline_view(
+pub async fn data_source_timeline_view(
     pool: &SqlitePool,
     data_source_id: &str,
     database_id: Option<&str>,
     view_id: Option<&str>,
 ) -> Result<NoteDataSourceTimelineViewDto, String> {
-    get_data_source_timeline_view_window(
+    data_source_timeline_view_window(
         pool,
         data_source_id,
         database_id,
@@ -35,7 +35,7 @@ pub async fn get_data_source_timeline_view(
     .await
 }
 
-pub async fn get_data_source_timeline_view_window(
+pub async fn data_source_timeline_view_window(
     pool: &SqlitePool,
     data_source_id: &str,
     database_id: Option<&str>,
@@ -76,7 +76,7 @@ pub async fn update_data_source_timeline_view(
     .await?;
     let (data_source, _database) =
         load_active_data_source_and_database_tx(&mut tx, data_source_id, "board").await?;
-    let schema = board_schema(&parse_json(
+    let schema = view_schema(&parse_json(
         &data_source.properties,
         "data source properties",
     )?)?;
@@ -130,12 +130,12 @@ async fn load_timeline_view_tx(
     let (data_source, database) =
         load_active_data_source_and_database_tx(tx, data_source_id, "board").await?;
     let schema_properties = parse_json(&data_source.properties, "data source properties")?;
-    let schema = board_schema(&schema_properties)?;
+    let schema = view_schema(&schema_properties)?;
     let view = ensure_timeline_view_row_tx(tx, &data_source, database_id, view_id, &schema).await?;
     let configuration = timeline_configuration(view.configuration.as_deref(), &schema)?;
     let filters = stored_filters(view.filter.as_deref(), "database board filter", "board")?;
     let sorts = stored_sorts(&view.sorts, "database board sorts", "board")?;
-    let window_schema = data_sources::window::table_properties_from_board(&schema);
+    let window_schema = data_sources::window::table_properties_from_view(&schema);
     let mut effective_window = window_request.clone();
     effective_window
         .range_start
@@ -202,7 +202,7 @@ async fn ensure_timeline_view_row_tx(
     data_source: &NoteDataSourceRow,
     database_id: Option<&str>,
     view_id: Option<&str>,
-    schema: &[BoardProperty],
+    schema: &[ViewProperty],
 ) -> Result<NoteDatabaseViewRow, String> {
     if let Some(view) = load_timeline_view_row_tx(tx, &data_source.id, database_id, view_id).await?
     {
@@ -210,7 +210,7 @@ async fn ensure_timeline_view_row_tx(
     }
     let database_id = data_sources::views::scoped_database_id(data_source, database_id);
     crate::databases::editing_lock::ensure_unlocked_tx(tx, database_id).await?;
-    let id = generated_uuid_tx(
+    let id = generate_uuid_tx(
         tx,
         "generate timeline view id",
         "generated_timeline_view_id",
@@ -273,7 +273,7 @@ async fn current_month_range_tx(
 }
 
 fn default_timeline_configuration(
-    schema: &[BoardProperty],
+    schema: &[ViewProperty],
     range_start: &str,
     range_end: &str,
 ) -> Value {
@@ -297,7 +297,7 @@ fn default_timeline_configuration(
 
 fn canonical_timeline_configuration(
     update: &NoteDataSourceTimelineConfigurationUpdate,
-    schema: &[BoardProperty],
+    schema: &[ViewProperty],
 ) -> Result<Value, String> {
     let date_property_id = canonical_date_property_id(update.date_property_id.as_deref(), schema)?;
     let group_property_id =
@@ -334,7 +334,7 @@ fn canonical_timeline_configuration(
 
 fn timeline_configuration(
     configuration: Option<&str>,
-    schema: &[BoardProperty],
+    schema: &[ViewProperty],
 ) -> Result<TimelineConfiguration, String> {
     let value = configuration
         .map(|configuration| parse_json(configuration, "timeline view configuration"))
@@ -377,7 +377,7 @@ fn timeline_configuration(
 
 fn canonical_date_property_id(
     raw_property_id: Option<&str>,
-    schema: &[BoardProperty],
+    schema: &[ViewProperty],
 ) -> Result<Option<String>, String> {
     let Some(property_id) = raw_property_id.map(str::trim).filter(|id| !id.is_empty()) else {
         return Ok(None);
@@ -394,7 +394,7 @@ fn canonical_date_property_id(
 
 fn canonical_group_property_id(
     raw_property_id: Option<&str>,
-    schema: &[BoardProperty],
+    schema: &[ViewProperty],
 ) -> Result<Option<String>, String> {
     let Some(property_id) = raw_property_id.map(str::trim).filter(|id| !id.is_empty()) else {
         return Ok(None);
@@ -403,7 +403,7 @@ fn canonical_group_property_id(
     Ok(Some(property_id.to_string()))
 }
 
-fn validate_group_property_id(property_id: &str, schema: &[BoardProperty]) -> Result<(), String> {
+fn validate_group_property_id(property_id: &str, schema: &[ViewProperty]) -> Result<(), String> {
     let property = schema
         .iter()
         .find(|property| property.id == property_id)
@@ -414,21 +414,21 @@ fn validate_group_property_id(property_id: &str, schema: &[BoardProperty]) -> Re
     Ok(())
 }
 
-fn default_date_property_id(schema: &[BoardProperty]) -> Option<String> {
+fn default_date_property_id(schema: &[ViewProperty]) -> Option<String> {
     schema
         .iter()
         .find(|property| property.property_type == "date")
         .map(|property| property.id.clone())
 }
 
-fn is_date_property_id(property_id: &str, schema: &[BoardProperty]) -> bool {
+fn is_date_property_id(property_id: &str, schema: &[ViewProperty]) -> bool {
     schema
         .iter()
         .any(|property| property.id == property_id && property.property_type == "date")
 }
 
 fn visible_timeline_property_ids(
-    schema: &[BoardProperty],
+    schema: &[ViewProperty],
     date_property_id: Option<&str>,
     group_property_id: Option<&str>,
 ) -> Vec<String> {
@@ -444,7 +444,7 @@ fn visible_timeline_property_ids(
 
 fn canonical_visible_property_ids(
     property_ids: &[String],
-    schema: &[BoardProperty],
+    schema: &[ViewProperty],
     date_property_id: Option<&str>,
     group_property_id: Option<&str>,
 ) -> Vec<String> {

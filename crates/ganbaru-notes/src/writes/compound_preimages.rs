@@ -55,7 +55,7 @@ impl Preimages {
                 return Err("Notes edit preimage exceeds its block limit".to_string());
             }
             self.bytes = charge_row(tx, id, self.bytes).await?;
-            let row = block_tree::load_block_row_in_tx(tx, id, true).await?;
+            let row = block_tree::load_block_row_tx(tx, id, true).await?;
             let placement = placement(tx, &row).await?;
             self.rows.insert(id.clone(), (row, placement));
         }

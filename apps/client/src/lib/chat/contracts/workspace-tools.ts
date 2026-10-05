@@ -239,14 +239,14 @@ export interface CreateHostedChangeRequest {
   draft: boolean;
 }
 
-export interface PreviewBounds {
+export interface BrowserTabBounds {
   x: number;
   y: number;
   width: number;
   height: number;
 }
 
-export interface PreviewTabRead {
+export interface BrowserTabRead {
   threadId: ChatThreadId;
   tabId: string;
   currentUrl: string;

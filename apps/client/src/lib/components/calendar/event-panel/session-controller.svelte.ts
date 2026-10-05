@@ -98,17 +98,17 @@ export class EventPanelSessionController {
   rdate = $state<string[]>();
   pomodoroEnabled = $state(false);
   pomodoroPreset = $state<PomodoroPreset>("adaptive");
-  focusDuration = $state(40);
-  shortBreak = $state(5);
-  longBreak = $state(10);
+  focusDurationMinutes = $state(40);
+  shortBreakMinutes = $state(5);
+  longBreakMinutes = $state(10);
   longBreakAfterFocusCount = $state(4);
   customRhythmMode = $state<"simple" | "sequence">("simple");
   sequenceSteps = $state<SequencePomodoroRhythmStep[]>([]);
   idleTimeoutEnabled = $state(true);
   idleTimeoutMinutesDraft = $state(3);
-  notifEnabled = $state(false);
-  notifSelected = $state(new Set<number>());
-  customNotifs = $state<{ amount: number; unit: number }[]>([]);
+  notificationsEnabled = $state(false);
+  selectedNotificationMinutes = $state(new Set<number>());
+  customNotifications = $state<{ amount: number; unit: number }[]>([]);
   recurrence = $state<RecurrenceConfig>();
   initialized = $state(false);
   fullEvent = $state<CalendarEvent | null>(null);
@@ -164,9 +164,9 @@ export class EventPanelSessionController {
   ): void {
     this.pomodoroEnabled = !!config || fallbackEnabled;
     if (!config) {
-      this.focusDuration = 40;
-      this.shortBreak = 5;
-      this.longBreak = 10;
+      this.focusDurationMinutes = 40;
+      this.shortBreakMinutes = 5;
+      this.longBreakMinutes = 10;
       this.longBreakAfterFocusCount = 4;
       this.customRhythmMode = "simple";
       this.sequenceSteps = [{
@@ -183,9 +183,9 @@ export class EventPanelSessionController {
       ? config.presetKey
       : "custom";
     if (config.rhythm.kind === "count") {
-      this.focusDuration = config.rhythm.focusDurationMinutes;
-      this.shortBreak = config.rhythm.shortBreakMinutes;
-      this.longBreak = config.rhythm.longBreakMinutes;
+      this.focusDurationMinutes = config.rhythm.focusDurationMinutes;
+      this.shortBreakMinutes = config.rhythm.shortBreakMinutes;
+      this.longBreakMinutes = config.rhythm.longBreakMinutes;
       this.longBreakAfterFocusCount = config.rhythm.longBreakAfterFocusCount;
       this.customRhythmMode = "simple";
       this.sequenceSteps = [{
@@ -199,11 +199,11 @@ export class EventPanelSessionController {
         breakPhase: "short_break" as const,
         breakDurationMinutes: COUNT_PRESET_RHYTHMS.adaptive.shortBreakMinutes,
       };
-      this.focusDuration = firstStep.focusDurationMinutes;
-      this.shortBreak = firstStep.breakPhase === "short_break"
+      this.focusDurationMinutes = firstStep.focusDurationMinutes;
+      this.shortBreakMinutes = firstStep.breakPhase === "short_break"
         ? firstStep.breakDurationMinutes
         : COUNT_PRESET_RHYTHMS.adaptive.shortBreakMinutes;
-      this.longBreak = firstStep.breakPhase === "long_break"
+      this.longBreakMinutes = firstStep.breakPhase === "long_break"
         ? firstStep.breakDurationMinutes
         : COUNT_PRESET_RHYTHMS.adaptive.longBreakMinutes;
       this.longBreakAfterFocusCount = config.rhythm.steps.length;
@@ -391,9 +391,9 @@ export class EventPanelSessionController {
       description: this.description,
       recurrence: this.recurrence,
       notifications: collectEventPanelNotifications({
-        enabled: this.notifEnabled,
-        selected: this.notifSelected,
-        custom: this.customNotifs,
+        enabled: this.notificationsEnabled,
+        selected: this.selectedNotificationMinutes,
+        custom: this.customNotifications,
       }),
       pomodoroConfig: buildEventPanelPomodoroConfig({
         allDay: this.allDay,
@@ -401,9 +401,9 @@ export class EventPanelSessionController {
         preset: this.pomodoroPreset,
         customRhythmMode: this.customRhythmMode,
         sequenceSteps: this.sequenceSteps,
-        focusDurationMinutes: this.focusDuration,
-        shortBreakMinutes: this.shortBreak,
-        longBreakMinutes: this.longBreak,
+        focusDurationMinutes: this.focusDurationMinutes,
+        shortBreakMinutes: this.shortBreakMinutes,
+        longBreakMinutes: this.longBreakMinutes,
         longBreakAfterFocusCount: this.longBreakAfterFocusCount,
         idleTimeoutMinutes: this.idleTimeoutMinutesForPayload,
       }),
@@ -451,18 +451,18 @@ export class EventPanelSessionController {
   }
 
   private applyNotifications(notifications: number[]): void {
-    this.notifEnabled = notifications.length > 0;
-    this.notifSelected = new Set<number>();
-    this.customNotifs = [];
+    this.notificationsEnabled = notifications.length > 0;
+    this.selectedNotificationMinutes = new Set<number>();
+    this.customNotifications = [];
     const presets = new Set([0, 5, 10, 30, 60, 1440]);
     for (const minutes of notifications) {
       if (presets.has(minutes)) {
-        this.notifSelected.add(minutes);
+        this.selectedNotificationMinutes.add(minutes);
         continue;
       }
       const unit = [10080, 1440, 60, 1].find((candidate) => minutes > 0 && minutes % candidate === 0) ?? 1;
-      if (this.customNotifs.length < 2) {
-        this.customNotifs = [...this.customNotifs, { amount: minutes / unit, unit }];
+      if (this.customNotifications.length < 2) {
+        this.customNotifications = [...this.customNotifications, { amount: minutes / unit, unit }];
       }
     }
   }

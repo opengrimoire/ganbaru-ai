@@ -179,16 +179,16 @@ fn write_binary_file_atomically(path: &Path, bytes: &[u8]) -> Result<(), String>
         .ok_or_else(|| "project icon target has no file name".to_string())?
         .to_string_lossy()
         .into_owned();
-    let tmp_path = parent.join(format!("{file_name}.tmp"));
+    let temporary_path = parent.join(format!("{file_name}.tmp"));
     {
         let mut file =
-            fs::File::create(&tmp_path).map_err(|e| format!("write project icon: {e}"))?;
+            fs::File::create(&temporary_path).map_err(|e| format!("write project icon: {e}"))?;
         file.write_all(bytes)
             .map_err(|e| format!("write project icon: {e}"))?;
         file.sync_all()
             .map_err(|e| format!("sync project icon: {e}"))?;
     }
-    fs::rename(&tmp_path, path).map_err(|e| format!("save project icon: {e}"))
+    fs::rename(&temporary_path, path).map_err(|e| format!("save project icon: {e}"))
 }
 
 fn save_project_icon_bytes<R: Runtime>(
@@ -577,7 +577,7 @@ async fn download_project_icon_url(url: &str) -> Result<Vec<u8>, String> {
 
 #[cfg(desktop)]
 #[tauri::command]
-pub async fn project_icon_pick_image_file<R: Runtime>(
+pub async fn projects_icon_pick_image_file<R: Runtime>(
     app: AppHandle<R>,
 ) -> Result<Option<ProjectIconAsset>, String> {
     let mut picker = app
@@ -596,7 +596,7 @@ pub async fn project_icon_pick_image_file<R: Runtime>(
 }
 
 #[tauri::command]
-pub fn project_icon_save_image_data_url<R: Runtime>(
+pub fn projects_icon_save_image_data_url<R: Runtime>(
     app: AppHandle<R>,
     data_url: String,
 ) -> Result<ProjectIconAsset, String> {
@@ -606,7 +606,7 @@ pub fn project_icon_save_image_data_url<R: Runtime>(
 
 #[cfg(desktop)]
 #[tauri::command]
-pub async fn project_icon_download_image_url<R: Runtime>(
+pub async fn projects_icon_download_image_url<R: Runtime>(
     app: AppHandle<R>,
     url: String,
 ) -> Result<ProjectIconAsset, String> {
@@ -616,7 +616,7 @@ pub async fn project_icon_download_image_url<R: Runtime>(
 
 #[cfg(desktop)]
 #[tauri::command]
-pub fn project_icon_asset_path<R: Runtime>(
+pub fn projects_icon_asset_path<R: Runtime>(
     app: AppHandle<R>,
     relative_path: String,
 ) -> Result<String, String> {
@@ -627,7 +627,7 @@ pub fn project_icon_asset_path<R: Runtime>(
 }
 
 #[tauri::command]
-pub fn project_icon_asset_data_url<R: Runtime>(
+pub fn projects_icon_asset_data_url<R: Runtime>(
     app: AppHandle<R>,
     relative_path: String,
 ) -> Result<String, String> {
@@ -637,7 +637,7 @@ pub fn project_icon_asset_data_url<R: Runtime>(
 }
 
 #[tauri::command]
-pub async fn project_icon_delete_assets_if_unreferenced<R: Runtime>(
+pub async fn projects_icon_delete_assets_if_unreferenced<R: Runtime>(
     app: AppHandle<R>,
     db_url: String,
     relative_paths: Vec<String>,

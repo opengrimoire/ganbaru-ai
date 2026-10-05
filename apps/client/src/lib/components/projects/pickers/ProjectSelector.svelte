@@ -24,13 +24,13 @@
 
   const projects = getProjects();
   const { t } = getLocalization();
-  const eventPanelProjectIconSize = 18;
-  const eventPanelProjectEmojiScale = 0.82;
-  const eventPanelSelectedProjectIconStrokeWidth = 1.5;
-  const eventPanelIconStrokeWidth = 1.6;
-  const projectSelectorPanelMinWidth = 202;
-  const projectSelectorPanelMaxWidth = 259;
-  const projectSelectorPanelRightNudge = 4;
+  const PROJECT_ICON_SIZE = 18;
+  const PROJECT_EMOJI_SCALE = 0.82;
+  const PROJECT_ICON_STROKE_WIDTH = 1.5;
+  const EMPTY_ICON_STROKE_WIDTH = 1.6;
+  const PANEL_MIN_WIDTH = 202;
+  const PANEL_MAX_WIDTH = 259;
+  const PANEL_RIGHT_NUDGE = 4;
 
   interface DropdownBounds {
     left: number;
@@ -109,11 +109,11 @@
     const gap = 4;
     const boundsWidth = Math.max(0, bounds.right - bounds.left);
     const width = Math.min(
-      projectSelectorPanelMaxWidth,
-      Math.max(projectSelectorPanelMinWidth, boundsWidth),
+      PANEL_MAX_WIDTH,
+      Math.max(PANEL_MIN_WIDTH, boundsWidth),
     );
     const left = Math.min(
-      Math.max(anchorRect.right + projectSelectorPanelRightNudge - width, bounds.left),
+      Math.max(anchorRect.right + PANEL_RIGHT_NUDGE - width, bounds.left),
       bounds.right - width,
     );
     const maxHeight = Math.max(0, window.innerHeight - edge * 2);
@@ -200,12 +200,12 @@
     {#if selectedProject}
       <ProjectIcon
         name={selectedProject.icon}
-        size={eventPanelProjectIconSize}
-        strokeWidth={eventPanelSelectedProjectIconStrokeWidth}
-        emojiScale={eventPanelProjectEmojiScale}
+        size={PROJECT_ICON_SIZE}
+        strokeWidth={PROJECT_ICON_STROKE_WIDTH}
+        emojiScale={PROJECT_EMOJI_SCALE}
       />
     {:else}
-      <FolderX size={eventPanelProjectIconSize} strokeWidth={eventPanelIconStrokeWidth} />
+      <FolderX size={PROJECT_ICON_SIZE} strokeWidth={EMPTY_ICON_STROKE_WIDTH} />
     {/if}
   </button>
 

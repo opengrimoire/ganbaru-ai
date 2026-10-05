@@ -699,30 +699,30 @@ function updateSourceValue(
     current.calendarDefaultMode,
     current.calendarDefaultCustom,
   );
-  const derivedCal = calendarBundle.calendarTokens;
+  const derivedCalendarTokens = calendarBundle.calendarTokens;
   const nextAppIsolated = normalizeSemanticSignalAppIsolated(
     current.appIsolated,
   );
-  const calBgIsolated = current.calendarIsolated.has("--cal-bg");
+  const calendarBackgroundIsolated = current.calendarIsolated.has("--cal-bg");
   const nextBlendCanvas =
-    !calBgIsolated && derivedCal["--cal-bg"]
-      ? derivedCal["--cal-bg"]
+    !calendarBackgroundIsolated && derivedCalendarTokens["--cal-bg"]
+      ? derivedCalendarTokens["--cal-bg"]
       : undefined;
   const nextAppTokens: Record<string, string> = { ...current.appTokens };
   for (const key of APP_TOKEN_KEYS) {
     if (nextAppIsolated.has(key) && !isSemanticSignalAppToken(key)) continue;
     if (derivedApp[key] !== undefined) nextAppTokens[key] = derivedApp[key];
   }
-  const nextCalTokens: Record<string, string> = { ...current.calendarTokens };
+  const nextCalendarTokens: Record<string, string> = { ...current.calendarTokens };
   for (const key of CALENDAR_TOKEN_KEYS) {
     if (current.calendarIsolated.has(key)) continue;
-    if (derivedCal[key] !== undefined) nextCalTokens[key] = derivedCal[key];
+    if (derivedCalendarTokens[key] !== undefined) nextCalendarTokens[key] = derivedCalendarTokens[key];
   }
   customThemes[id] = {
     ...current,
     sources: nextSources,
     appTokens: syncSemanticSignalAppTokens(nextSources, nextAppTokens),
-    calendarTokens: nextCalTokens,
+    calendarTokens: nextCalendarTokens,
     appIsolated: nextAppIsolated,
     blendCanvas: nextBlendCanvas ?? current.blendCanvas,
   };
@@ -741,15 +741,15 @@ function isolateToken(
 ): boolean {
   const current = customThemes[id];
   if (!current) return false;
-  const set = kind === "app" ? current.appIsolated : current.calendarIsolated;
-  if (set.has(key)) return false;
-  const nextSet = new Set(set);
-  nextSet.add(key);
+  const isolatedKeys = kind === "app" ? current.appIsolated : current.calendarIsolated;
+  if (isolatedKeys.has(key)) return false;
+  const nextIsolatedKeys = new Set(isolatedKeys);
+  nextIsolatedKeys.add(key);
   customThemes[id] = {
     ...current,
-    appIsolated: kind === "app" ? nextSet : current.appIsolated,
+    appIsolated: kind === "app" ? nextIsolatedKeys : current.appIsolated,
     calendarIsolated:
-      kind === "calendar" ? nextSet : current.calendarIsolated,
+      kind === "calendar" ? nextIsolatedKeys : current.calendarIsolated,
   };
   return true;
 }
@@ -765,8 +765,8 @@ function relinkToken(
 ): boolean {
   const current = customThemes[id];
   if (!current) return false;
-  const set = kind === "app" ? current.appIsolated : current.calendarIsolated;
-  if (!set.has(key)) return false;
+  const isolatedKeys = kind === "app" ? current.appIsolated : current.calendarIsolated;
+  if (!isolatedKeys.has(key)) return false;
   const derived =
     kind === "app"
       ? deriveAppTokens(current.sources)
@@ -781,8 +781,8 @@ function relinkToken(
   const derivedTokens = derived as Readonly<Record<string, string>>;
   const nextValue =
     derivedTokens[key] ?? (baseTokens as Readonly<Record<string, string>>)[key];
-  const nextSet = new Set(set);
-  nextSet.delete(key);
+  const nextIsolatedKeys = new Set(isolatedKeys);
+  nextIsolatedKeys.delete(key);
   const nextSnapshot =
     kind === "app"
       ? { ...current.appTokens, [key]: nextValue }
@@ -794,9 +794,9 @@ function relinkToken(
     appTokens: kind === "app" ? nextSnapshot : current.appTokens,
     calendarTokens:
       kind === "calendar" ? nextSnapshot : current.calendarTokens,
-    appIsolated: kind === "app" ? nextSet : current.appIsolated,
+    appIsolated: kind === "app" ? nextIsolatedKeys : current.appIsolated,
     calendarIsolated:
-      kind === "calendar" ? nextSet : current.calendarIsolated,
+      kind === "calendar" ? nextIsolatedKeys : current.calendarIsolated,
     blendCanvas: nextBlendCanvas,
   };
   if (id === activeId) applyThemeToDom();
@@ -1060,7 +1060,7 @@ function rebakeTheme(id: ThemeId): boolean {
   const current = customThemes[id];
   if (!current) return false;
   const derivedApp = deriveAppTokens(current.sources);
-  const derivedCal = deriveCalendarColorDefaultBundle(
+  const derivedCalendarTokens = deriveCalendarColorDefaultBundle(
     current.sources,
     current.calendarDefaultMode,
     current.calendarDefaultCustom,
@@ -1068,26 +1068,26 @@ function rebakeTheme(id: ThemeId): boolean {
   const nextAppIsolated = normalizeSemanticSignalAppIsolated(
     current.appIsolated,
   );
-  const calBgIsolated = current.calendarIsolated.has("--cal-bg");
+  const calendarBackgroundIsolated = current.calendarIsolated.has("--cal-bg");
   const nextBlendCanvas =
-    !calBgIsolated && derivedCal["--cal-bg"]
-      ? derivedCal["--cal-bg"]
+    !calendarBackgroundIsolated && derivedCalendarTokens["--cal-bg"]
+      ? derivedCalendarTokens["--cal-bg"]
       : undefined;
-  const nextApp: Record<string, string> = { ...current.appTokens };
+  const nextAppTokens: Record<string, string> = { ...current.appTokens };
   for (const key of APP_TOKEN_KEYS) {
     if (nextAppIsolated.has(key) && !isSemanticSignalAppToken(key)) continue;
-    if (derivedApp[key] !== undefined) nextApp[key] = derivedApp[key];
+    if (derivedApp[key] !== undefined) nextAppTokens[key] = derivedApp[key];
   }
-  const nextCal: Record<string, string> = { ...current.calendarTokens };
+  const nextCalendarTokens: Record<string, string> = { ...current.calendarTokens };
   for (const key of CALENDAR_TOKEN_KEYS) {
     if (current.calendarIsolated.has(key)) continue;
-    if (derivedCal[key] !== undefined) nextCal[key] = derivedCal[key];
+    if (derivedCalendarTokens[key] !== undefined) nextCalendarTokens[key] = derivedCalendarTokens[key];
   }
   customThemes[id] = {
     ...current,
-    appTokens: syncSemanticSignalAppTokens(current.sources, nextApp),
+    appTokens: syncSemanticSignalAppTokens(current.sources, nextAppTokens),
     appIsolated: nextAppIsolated,
-    calendarTokens: nextCal,
+    calendarTokens: nextCalendarTokens,
     blendCanvas: nextBlendCanvas ?? current.blendCanvas,
     derivationEngineVersion: DERIVATION_ENGINE_VERSION,
   };

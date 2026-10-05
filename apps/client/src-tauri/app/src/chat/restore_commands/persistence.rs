@@ -22,7 +22,7 @@ pub(super) async fn persist_restore(
         .into_iter()
         .map(|row| {
             ChatTurnId::new(row.try_get::<String, _>("id").map_err(persistence_error)?)
-                .map_err(|_| corrupt_data())
+                .map_err(|_| corrupt_data_error())
         })
         .collect::<ChatResult<Vec<_>>>()?;
     sqlx::query(
@@ -221,7 +221,7 @@ async fn append_reverted_event(
             .try_get::<i64, _>("last_event_sequence")
             .map_err(persistence_error)?,
     )
-    .map_err(|_| corrupt_data())?
+    .map_err(|_| corrupt_data_error())?
     .saturating_add(1);
     let event = CanonicalEvent::ThreadReverted(ThreadRevertedEvent {
         checkpoint_id: target.id.clone(),
@@ -325,17 +325,17 @@ pub(super) async fn read_preview(
             row.try_get::<String, _>("thread_id")
                 .map_err(persistence_error)?,
         )
-        .map_err(|_| corrupt_data())?,
+        .map_err(|_| corrupt_data_error())?,
         checkpoint_id: ChatCheckpointId::new(
             row.try_get::<String, _>("checkpoint_id")
                 .map_err(persistence_error)?,
         )
-        .map_err(|_| corrupt_data())?,
+        .map_err(|_| corrupt_data_error())?,
         expected_thread_revision: u64::try_from(
             row.try_get::<i64, _>("expected_thread_revision")
                 .map_err(persistence_error)?,
         )
-        .map_err(|_| corrupt_data())?,
+        .map_err(|_| corrupt_data_error())?,
         repository_identity: row
             .try_get("repository_identity")
             .map_err(persistence_error)?,
@@ -357,7 +357,7 @@ pub(super) async fn read_preview(
             row.try_get::<String, _>("expires_at")
                 .map_err(persistence_error)?,
         )
-        .map_err(|_| corrupt_data())?,
+        .map_err(|_| corrupt_data_error())?,
     })
 }
 

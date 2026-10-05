@@ -297,14 +297,10 @@ fn source_schema_updates_preserve_current_saved_and_linked_view_presentation() {
         )
         .await
         .unwrap();
-        let board = data_sources::layouts::board::get_data_source_board_view(
-            &pool,
-            DATA_SOURCE_A,
-            None,
-            None,
-        )
-        .await
-        .unwrap();
+        let board =
+            data_sources::layouts::board::data_source_board_view(&pool, DATA_SOURCE_A, None, None)
+                .await
+                .unwrap();
         let board_json = serde_json::to_value(board).unwrap();
         let board_id = board_json["view"]["id"].as_str().unwrap();
 
@@ -443,7 +439,7 @@ fn source_schema_updates_preserve_current_saved_and_linked_view_presentation() {
             json!(["details", "estimate"])
         );
         assert_eq!(configuration["board"]["row_open_mode"], "side_panel");
-        data_sources::layouts::board::get_data_source_board_view(
+        data_sources::layouts::board::data_source_board_view(
             &pool,
             DATA_SOURCE_A,
             None,
@@ -502,7 +498,7 @@ fn source_property_type_changes_clear_invalid_view_bindings_without_resetting_pr
         let mut views = Vec::new();
         for view in [
             serde_json::to_value(
-                data_sources::layouts::board::get_data_source_board_view(
+                data_sources::layouts::board::data_source_board_view(
                     &pool,
                     DATA_SOURCE_A,
                     None,
@@ -513,7 +509,7 @@ fn source_property_type_changes_clear_invalid_view_bindings_without_resetting_pr
             )
             .unwrap(),
             serde_json::to_value(
-                data_sources::layouts::list::get_data_source_list_view(
+                data_sources::layouts::list::data_source_list_view(
                     &pool,
                     DATA_SOURCE_A,
                     None,
@@ -524,7 +520,7 @@ fn source_property_type_changes_clear_invalid_view_bindings_without_resetting_pr
             )
             .unwrap(),
             serde_json::to_value(
-                data_sources::layouts::gallery::get_data_source_gallery_view(
+                data_sources::layouts::gallery::data_source_gallery_view(
                     &pool,
                     DATA_SOURCE_A,
                     None,
@@ -535,7 +531,7 @@ fn source_property_type_changes_clear_invalid_view_bindings_without_resetting_pr
             )
             .unwrap(),
             serde_json::to_value(
-                data_sources::layouts::calendar::get_data_source_calendar_view(
+                data_sources::layouts::calendar::data_source_calendar_view(
                     &pool,
                     DATA_SOURCE_A,
                     None,
@@ -546,7 +542,7 @@ fn source_property_type_changes_clear_invalid_view_bindings_without_resetting_pr
             )
             .unwrap(),
             serde_json::to_value(
-                data_sources::layouts::timeline::get_data_source_timeline_view(
+                data_sources::layouts::timeline::data_source_timeline_view(
                     &pool,
                     DATA_SOURCE_A,
                     None,

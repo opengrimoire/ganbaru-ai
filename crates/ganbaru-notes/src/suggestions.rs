@@ -105,7 +105,7 @@ pub async fn create_suggestion(
     let row = load_suggestion_row_tx(&mut tx, request.id.trim()).await?;
     collaboration_operations::record_tx(
         &mut tx,
-        collaboration_operations::NotesCollaborationOperation {
+        collaboration_operations::CollaborationOperation {
             entity_type: "suggestion",
             entity_id: &row.id,
             operation_type: "suggestion_create",
@@ -201,7 +201,7 @@ async fn decide_suggestion(
     let row = load_suggestion_row_tx(&mut tx, suggestion_id).await?;
     collaboration_operations::record_tx(
         &mut tx,
-        collaboration_operations::NotesCollaborationOperation {
+        collaboration_operations::CollaborationOperation {
             entity_type: "suggestion",
             entity_id: &row.id,
             operation_type: if status == "accepted" {

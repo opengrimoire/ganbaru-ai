@@ -161,7 +161,7 @@ export class EventPanelGeometryController {
     return this.layout === "anchored" || this.layout === "centered";
   }
 
-  get stackedDateTime(): boolean {
+  get isDateTimeStacked(): boolean {
     return this.width < 300;
   }
 
@@ -177,7 +177,7 @@ export class EventPanelGeometryController {
     return `position:fixed; left:-10000px; top:-10000px; width:${Math.round(this.width)}px; z-index:-1; pointer-events:none;`;
   }
 
-  get bodyConstrained(): boolean {
+  get isBodyConstrained(): boolean {
     return this.layout === "fullscreen"
       || shouldConstrainPanelHeight(
         this.panelHeight,

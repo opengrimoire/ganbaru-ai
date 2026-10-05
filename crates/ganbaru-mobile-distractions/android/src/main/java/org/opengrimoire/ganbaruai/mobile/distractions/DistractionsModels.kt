@@ -39,14 +39,14 @@ internal data class AcceptedUsage(
 /** Count observations after capture even when publication arrives later. */
 internal fun combinedUsageSinceAcceptance(
   acceptedUsedSeconds: Long,
-  localUsedAtAcceptance: Long,
+  localUsedSecondsAtAcceptance: Long,
   currentLocalUsedSeconds: Long,
 ): Long {
-  require(acceptedUsedSeconds >= 0 && localUsedAtAcceptance >= 0 && currentLocalUsedSeconds >= 0) {
+  require(acceptedUsedSeconds >= 0 && localUsedSecondsAtAcceptance >= 0 && currentLocalUsedSeconds >= 0) {
     "Distractions usage counters must be nonnegative"
   }
   return Math.addExact(acceptedUsedSeconds,
-    (currentLocalUsedSeconds - localUsedAtAcceptance).coerceAtLeast(0L))
+    (currentLocalUsedSeconds - localUsedSecondsAtAcceptance).coerceAtLeast(0L))
 }
 
 internal data class DistractionsCopy(
@@ -197,7 +197,7 @@ internal object DistractionsRuleCodec {
 }
 
 internal object DistractionsEvaluator {
-  fun evaluateSchedule(
+  fun isBlockedBySchedule(
     schedule: MobileSchedule,
     phase: PomodoroPhaseState?,
     packageName: String,

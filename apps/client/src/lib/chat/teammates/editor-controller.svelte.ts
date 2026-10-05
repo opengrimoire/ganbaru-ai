@@ -696,7 +696,7 @@ export function createTeammateEditorController(options: TeammateEditorOptions) {
     if (confirmAccess) clearAccessConfirmation();
     const creatingAtStart = creating;
     let requestDraft = captureStudioDraft();
-    let includeProfile = !creatingAtStart && profileDirty;
+    let includesProfileChange = !creatingAtStart && profileDirty;
     let includesAccessChange = !creatingAtStart && accessDirty;
     let savedDraft: ChatTeammateStudioDraft | null = null;
     let teammateId = selected?.participant.id ?? null;
@@ -725,18 +725,18 @@ export function createTeammateEditorController(options: TeammateEditorOptions) {
         requestDraft = captureStudioDraft();
         accessRevision = inertAccess.accessRevision;
         setStudioDraftBaseline(durableInertDraft);
-        includeProfile = profileSnapshotForDraft(requestDraft)
+        includesProfileChange = profileSnapshotForDraft(requestDraft)
           !== profileSnapshotForDraft(durableInertDraft);
         includesAccessChange = accessSnapshotForDraft(requestDraft)
           !== accessSnapshotForDraft(durableInertDraft);
         preserveStudioDraftForId = teammateId;
         await chat.refreshTeammates();
-        if (!includeProfile && !includesAccessChange) savedDraft = durableInertDraft;
+        if (!includesProfileChange && !includesAccessChange) savedDraft = durableInertDraft;
       }
 
-      if (teammateId && (includeProfile || includesAccessChange)) {
+      if (teammateId && (includesProfileChange || includesAccessChange)) {
         const policy = policyForDraft(requestDraft);
-        const request = accessReplacementRequest(teammateId, policy, requestDraft, includeProfile);
+        const request = accessReplacementRequest(teammateId, policy, requestDraft, includesProfileChange);
         const requestSnapshot = draftSnapshotForDraft(requestDraft);
         if (!creatingAtStart && !confirmAccess && includesAccessChange) {
           const impact = teammateAccessConfirmationImpact(

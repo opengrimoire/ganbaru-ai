@@ -56,7 +56,7 @@ export class ChatChannelNavigationController {
     for (const channel of this.activeChannels) {
       if (channel.projectId === projectId) channels.set(channel.id, channel);
     }
-    return [...channels.values()].sort(channelSort);
+    return [...channels.values()].sort(compareChannels);
   }
 
   find(channelId: ChatChannelId): ChatChannelRead | null {
@@ -159,10 +159,10 @@ export class ChatChannelNavigationController {
       : [...target, channel];
     if (channel.archivedAt) {
       this.activeChannels = this.activeChannels.filter((entry) => entry.id !== channel.id);
-      this.archivedChannels = next.sort(channelSort);
+      this.archivedChannels = next.sort(compareChannels);
     } else {
       this.archivedChannels = this.archivedChannels.filter((entry) => entry.id !== channel.id);
-      this.activeChannels = next.sort(channelSort);
+      this.activeChannels = next.sort(compareChannels);
     }
   }
 
@@ -176,7 +176,7 @@ export class ChatChannelNavigationController {
   }
 }
 
-function channelSort(left: ChatChannelRead, right: ChatChannelRead): number {
+function compareChannels(left: ChatChannelRead, right: ChatChannelRead): number {
   if (left.isDefault !== right.isDefault) return left.isDefault ? -1 : 1;
   return left.name.localeCompare(right.name) || left.id.localeCompare(right.id);
 }

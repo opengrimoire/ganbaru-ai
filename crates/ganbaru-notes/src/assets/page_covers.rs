@@ -12,9 +12,7 @@ use crate::assets::image_metadata::{
     parse_managed_image_metadata, validate_managed_image_dimensions,
 };
 
-use crate::assets::{
-    self, NOTES_ASSET_SOURCE_LOCAL_UPLOAD, NOTES_ASSET_STATE_AVAILABLE, NotesManagedAssetWrite,
-};
+use crate::assets::{self, ASSET_SOURCE_LOCAL_UPLOAD, ASSET_STATE_AVAILABLE, ManagedAssetWrite};
 
 const PAGE_COVER_MAX_DISPLAY_MEGABYTES: usize = 8;
 const PAGE_COVER_MAX_BYTES: usize = PAGE_COVER_MAX_DISPLAY_MEGABYTES * 1024 * 1024;
@@ -127,15 +125,16 @@ fn write_binary_file_atomically(path: &Path, bytes: &[u8]) -> Result<(), String>
         .ok_or_else(|| "page cover target has no file name".to_string())?
         .to_string_lossy()
         .into_owned();
-    let tmp_path = parent.join(format!("{file_name}.tmp"));
+    let temporary_path = parent.join(format!("{file_name}.tmp"));
     {
-        let mut file = fs::File::create(&tmp_path).map_err(|e| format!("write page cover: {e}"))?;
+        let mut file =
+            fs::File::create(&temporary_path).map_err(|e| format!("write page cover: {e}"))?;
         file.write_all(bytes)
             .map_err(|e| format!("write page cover: {e}"))?;
         file.sync_all()
             .map_err(|e| format!("sync page cover: {e}"))?;
     }
-    fs::rename(&tmp_path, path).map_err(|e| format!("save page cover: {e}"))
+    fs::rename(&temporary_path, path).map_err(|e| format!("save page cover: {e}"))
 }
 
 pub fn read_file_capped(path: &Path) -> Result<Vec<u8>, String> {
@@ -235,14 +234,14 @@ pub async fn save_page_cover_bytes(
     .map_err(|e| format!("record page cover asset: {e}"))?;
     assets::upsert_managed_asset_tx(
         &mut tx,
-        NotesManagedAssetWrite {
+        ManagedAssetWrite {
             relative_path: &relative_path,
             original_name: original_name.as_deref(),
             content_type: kind.mime_type(),
             byte_size: bytes.len() as i64,
             sha256: &sha256,
-            source_type: NOTES_ASSET_SOURCE_LOCAL_UPLOAD,
-            storage_state: NOTES_ASSET_STATE_AVAILABLE,
+            source_type: ASSET_SOURCE_LOCAL_UPLOAD,
+            storage_state: ASSET_STATE_AVAILABLE,
             missing_at: None,
         },
     )

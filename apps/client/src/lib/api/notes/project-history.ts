@@ -219,7 +219,7 @@ export async function getNotesHistoryRetentionImpact(
 ): Promise<NotesHistoryRetentionImpact> {
   const dbUrl = await ensureDbUrl();
   const parsed = record(
-    await invoke<unknown>("notes_get_history_retention_impact", {
+    await invoke<unknown>("notes_history_retention_impact", {
       dbUrl,
       projectId: projectId ?? null,
       retentionDays,

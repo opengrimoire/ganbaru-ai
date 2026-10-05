@@ -273,7 +273,7 @@
   const hasPanelMenuItems = $derived(
     linksBadgeCount > 0 || openCommentCount > 0 || openSuggestionCount > 0,
   );
-  const peekMode = $derived(openMode !== "full");
+  const isPeekMode = $derived(openMode !== "full");
   const activityPanelStyle = $derived.by(() => {
     void floatingLayoutVersion;
     return floatingPagePanelStyle(activityButton, ACTIVITY_PANEL_WIDTH_PX);
@@ -1033,7 +1033,7 @@
         <button type="button" class="shrink-0 rounded-md border px-2 py-1" onclick={() => void notes.retryEditorMutations().catch(() => undefined)}>{t("common.retry")}</button>
       </div>
     {/if}
-    {#if peekMode}
+    {#if isPeekMode}
       <div class="absolute right-3 top-2 z-40 flex items-center gap-0.5 rounded-md border border-border bg-popover/95 p-0.5 shadow-sm" data-notes-peek-controls>
         <button
           type="button"
@@ -1501,7 +1501,7 @@
         <div class="notes-page-title-surface min-w-0 pb-5">
           <div class={cn(
             "notes-page-title-actions -ml-1.5 flex min-h-8 flex-wrap items-center gap-1.5",
-            peekMode && !page.cover && "pr-28",
+            isPeekMode && !page.cover && "pr-28",
           )}>
             {#if panelLoadStates["icon-picker"]?.status === "ready" && panelLoadStates["icon-picker"].component.kind === "icon-picker"}
               {@const IconPicker = panelLoadStates["icon-picker"].component.component}

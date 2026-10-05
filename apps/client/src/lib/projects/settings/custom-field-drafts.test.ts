@@ -1,16 +1,16 @@
 import { describe, expect, it } from "vitest";
 import {
-  projectSettingsCustomFieldOptionCreateDraftRows,
-  projectSettingsCustomFieldOptionNamesForCreate,
-  projectSettingsCustomFieldOptionSaveDrafts,
-  projectSettingsCustomFieldSaveDrafts,
-  projectSettingsRemoveCustomFieldCreateDraft,
-  projectSettingsRemoveCustomFieldCreateDraftOption,
-  projectSettingsRemoveCustomFieldOptionCreateDraft,
-  projectSettingsSetCustomFieldCreateDraftName,
-  projectSettingsSetCustomFieldCreateDraftOptionName,
-  projectSettingsSetCustomFieldCreateDraftPendingOptionName,
-  projectSettingsSetCustomFieldOptionCreateDraftName,
+  newCustomFieldOptionDraftRows,
+  newCustomFieldOptionNames,
+  customFieldOptionSaveDrafts,
+  customFieldSaveDrafts,
+  removeNewCustomFieldDraft,
+  removeNewCustomFieldDraftOption,
+  removeNewCustomFieldOptionDraft,
+  setNewCustomFieldDraftName,
+  setNewCustomFieldDraftOptionName,
+  setNewCustomFieldDraftPendingOptionName,
+  setNewCustomFieldOptionDraftName,
   type NewCustomFieldDraft,
   type NewCustomFieldOptionDraft,
 } from "./custom-field-drafts";
@@ -68,14 +68,14 @@ function createOption(
   };
 }
 
-describe("projectSettingsCustomFieldSaveDrafts", () => {
+describe("customFieldSaveDrafts", () => {
   it("returns custom field updates and creates with trimmed option names", () => {
     const existingField = field();
     const createDraft = createField({
       optionRows: [createOption({ name: " Home " })],
     });
 
-    const result = projectSettingsCustomFieldSaveDrafts({
+    const result = customFieldSaveDrafts({
       fields: [existingField],
       fieldNameDrafts: { "field-1": "  Stage  " },
       createDraftRows: [createDraft],
@@ -96,12 +96,12 @@ describe("projectSettingsCustomFieldSaveDrafts", () => {
   });
 
   it("rejects blank and duplicate custom field names", () => {
-    expect(projectSettingsCustomFieldSaveDrafts({
+    expect(customFieldSaveDrafts({
       fields: [field()],
       fieldNameDrafts: { "field-1": " " },
       createDraftRows: [],
     })).toEqual({ ok: false, error: "name_required" });
-    expect(projectSettingsCustomFieldSaveDrafts({
+    expect(customFieldSaveDrafts({
       fields: [field(), field({ id: "field-2", name: "Area" })],
       fieldNameDrafts: { "field-2": " phase " },
       createDraftRows: [],
@@ -109,11 +109,11 @@ describe("projectSettingsCustomFieldSaveDrafts", () => {
   });
 });
 
-describe("projectSettingsCustomFieldOptionSaveDrafts", () => {
+describe("customFieldOptionSaveDrafts", () => {
   it("returns option updates and creates for fields that accept options", () => {
     const existingField = field();
     const existingOption = option();
-    const result = projectSettingsCustomFieldOptionSaveDrafts({
+    const result = customFieldOptionSaveDrafts({
       fields: [
         existingField,
         field({ id: "field-2", name: "Notes", fieldType: "text" }),
@@ -136,13 +136,13 @@ describe("projectSettingsCustomFieldOptionSaveDrafts", () => {
   });
 
   it("rejects blank and duplicate option names within a field", () => {
-    expect(projectSettingsCustomFieldOptionSaveDrafts({
+    expect(customFieldOptionSaveDrafts({
       fields: [field()],
       fieldOptions: () => [option()],
       optionNameDrafts: { "option-1": " " },
       optionCreateDraftRowsByField: {},
     })).toEqual({ ok: false, error: "option_name_required" });
-    expect(projectSettingsCustomFieldOptionSaveDrafts({
+    expect(customFieldOptionSaveDrafts({
       fields: [field()],
       fieldOptions: () => [option()],
       optionNameDrafts: {},
@@ -153,11 +153,11 @@ describe("projectSettingsCustomFieldOptionSaveDrafts", () => {
   });
 });
 
-describe("projectSettingsCustomFieldOptionNamesForCreate", () => {
+describe("newCustomFieldOptionNames", () => {
   it("returns no options for field types that do not accept options", () => {
     const fieldType: ProjectCustomFieldType = "text";
 
-    expect(projectSettingsCustomFieldOptionNamesForCreate(
+    expect(newCustomFieldOptionNames(
       fieldType,
       [createOption({ name: "Ignored" })],
       "Also ignored",
@@ -165,12 +165,12 @@ describe("projectSettingsCustomFieldOptionNamesForCreate", () => {
   });
 
   it("includes pending option names and rejects duplicates", () => {
-    expect(projectSettingsCustomFieldOptionNamesForCreate(
+    expect(newCustomFieldOptionNames(
       "select",
       [createOption({ name: "One" })],
       "Two",
     )).toEqual({ ok: true, value: ["One", "Two"] });
-    expect(projectSettingsCustomFieldOptionNamesForCreate(
+    expect(newCustomFieldOptionNames(
       "select",
       [createOption({ name: "One" })],
       " one ",
@@ -187,9 +187,9 @@ describe("custom field draft row transformations", () => {
       ],
     };
 
-    expect(projectSettingsCustomFieldOptionCreateDraftRows(rowsByField, "field-1"))
+    expect(newCustomFieldOptionDraftRows(rowsByField, "field-1"))
       .toEqual(rowsByField["field-1"]);
-    expect(projectSettingsSetCustomFieldOptionCreateDraftName(
+    expect(setNewCustomFieldOptionDraftName(
       rowsByField,
       "field-1",
       "draft-option-2",
@@ -198,7 +198,7 @@ describe("custom field draft row transformations", () => {
       createOption({ id: "draft-option-1", name: "One" }),
       createOption({ id: "draft-option-2", name: "Renamed" }),
     ]);
-    expect(projectSettingsRemoveCustomFieldOptionCreateDraft(
+    expect(removeNewCustomFieldOptionDraft(
       { "field-1": [createOption({ id: "draft-option-1" })] },
       "field-1",
       "draft-option-1",
@@ -215,22 +215,22 @@ describe("custom field draft row transformations", () => {
       createField({ id: "field-draft-2", name: "Two" }),
     ];
 
-    expect(projectSettingsSetCustomFieldCreateDraftName(rows, "field-draft-1", "Renamed")[0])
+    expect(setNewCustomFieldDraftName(rows, "field-draft-1", "Renamed")[0])
       .toMatchObject({ id: "field-draft-1", name: "Renamed" });
-    expect(projectSettingsSetCustomFieldCreateDraftOptionName(
+    expect(setNewCustomFieldDraftOptionName(
       rows,
       "field-draft-1",
       "option-draft-1",
       "Beta",
     )[0]?.optionRows[0]).toMatchObject({ id: "option-draft-1", name: "Beta" });
-    expect(projectSettingsSetCustomFieldCreateDraftPendingOptionName(
+    expect(setNewCustomFieldDraftPendingOptionName(
       rows,
       "field-draft-1",
       "Pending",
     )[0]).toMatchObject({ id: "field-draft-1", optionName: "Pending" });
-    expect(projectSettingsRemoveCustomFieldCreateDraft(rows, "field-draft-2"))
+    expect(removeNewCustomFieldDraft(rows, "field-draft-2"))
       .toHaveLength(1);
-    expect(projectSettingsRemoveCustomFieldCreateDraftOption(
+    expect(removeNewCustomFieldDraftOption(
       rows,
       "field-draft-1",
       "option-draft-1",

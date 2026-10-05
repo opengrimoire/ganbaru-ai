@@ -94,7 +94,7 @@
     ? `reply-thread:${chat.openReplyThreadId}`
     : "reply-thread:none");
 
-  function sameDay(left: string, right: string): boolean {
+  function isSameDay(left: string, right: string): boolean {
     return new Date(left).toDateString() === new Date(right).toDateString();
   }
 
@@ -333,7 +333,7 @@
       {#each renderEntries as entry, index (entry.key)}
         {@const previousEntry = renderEntries[index - 1]}
         {@const previousCreatedAt = previousEntry ? entryCreatedAt(previousEntry) : page.rootMessage.createdAt}
-        {#if !sameDay(previousCreatedAt, entryCreatedAt(entry))}
+        {#if !isSameDay(previousCreatedAt, entryCreatedAt(entry))}
           <div class="date-divider"><span>{formatDateTime(localization.locale, Date.parse(entryCreatedAt(entry)), { dateStyle: "full" })}</span></div>
         {/if}
         {#if entry.kind === "message"}

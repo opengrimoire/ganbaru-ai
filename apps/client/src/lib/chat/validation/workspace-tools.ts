@@ -25,7 +25,7 @@ import {
   type ChatWorkspaceChangeBatch,
   type ChatWorkspaceObserverStatusRead,
   type ChatWorkspaceRename,
-  type PreviewTabRead,
+  type BrowserTabRead,
   type ReviewDiffSource,
 } from "../contracts";
 import {
@@ -597,7 +597,7 @@ export function parseHostedChangeRequests(value: unknown): HostedChangeRequestRe
   return array(value, "hostedChangeRequests", parseHostedChangeRequest);
 }
 
-function parsePreviewTab(value: unknown, label: string): PreviewTabRead {
+function parseBrowserTab(value: unknown, label: string): BrowserTabRead {
   const record = readRecord(value, label);
   return {
     threadId: readIdentifier(record.threadId, `${label}.threadId`),
@@ -612,10 +612,10 @@ function parsePreviewTab(value: unknown, label: string): PreviewTabRead {
   };
 }
 
-export function parsePreviewTabs(value: unknown): PreviewTabRead[] {
-  return array(value, "previewTabs", parsePreviewTab);
+export function parseBrowserTabs(value: unknown): BrowserTabRead[] {
+  return array(value, "browserTabs", parseBrowserTab);
 }
 
-export function parsePreviewTabRead(value: unknown): PreviewTabRead {
-  return parsePreviewTab(value, "previewTab");
+export function parseBrowserTabRead(value: unknown): BrowserTabRead {
+  return parseBrowserTab(value, "browserTab");
 }

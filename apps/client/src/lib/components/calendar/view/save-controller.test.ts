@@ -14,7 +14,7 @@ function setup(overrides: Partial<CalendarViewSaveControllerOptions> = {}) {
     anchor: { x: 0, y: 0, width: 0, height: 0 } };
   const order: string[] = [];
   const persist = vi.fn(async () => { order.push("persist"); return { saveRefreshedVisibleWindow: false }; });
-  const toasts = { saveSuccessToast: null, showSavePendingToast: vi.fn(() => "toast-a"),
+  const toasts = { saveToast: null, showSavePendingToast: vi.fn(() => "toast-a"),
     showSaveSuccessToast: vi.fn(), showSaveErrorToast: vi.fn(),
     dismissSaveToastIfCurrent: vi.fn() } as unknown as ReturnType<typeof createCalendarViewToastController>;
   let confirmed: (() => Promise<void>) | undefined;

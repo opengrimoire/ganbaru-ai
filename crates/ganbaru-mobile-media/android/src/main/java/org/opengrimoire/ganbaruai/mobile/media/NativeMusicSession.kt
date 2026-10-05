@@ -23,7 +23,7 @@ object NativeMusicSession {
   private val main = Handler(Looper.getMainLooper())
   @Volatile private var channel: Channel? = null
   private const val MAX_PENDING_EFFECTS = 64
-  private val resolver = newMusicSourceWorker()
+  private val sourceWorker = newMusicSourceWorker()
   private val effects = NativeMusicEffectBuffer<MusicPlaybackService, JSONObject>(
     MAX_PENDING_EFFECTS,
     { action -> main.post { action() } },
@@ -62,7 +62,7 @@ object NativeMusicSession {
   fun dispatch(encoded: String): Boolean {
     if (channel == null || encoded.length > 64 * 1024) return false
     val effect = JSONObject(encoded)
-    if (!NativeMusicAuthority.current(effect.optLong("deliveryId", 0))) return false
+    if (!NativeMusicAuthority.isDeliveryCurrent(effect.optLong("deliveryId", 0))) return false
     return effects.offer(effect)
   }
 
@@ -106,7 +106,7 @@ object NativeMusicSession {
   }
 
   /** A destroyed service cannot create a replacement worker around stalled provider IO. */
-  internal fun resolveSource(action: () -> Unit) { resolver.execute(action) }
+  internal fun resolveSource(action: () -> Unit) { sourceWorker.execute(action) }
 
   /** Resolves selected-tree paths through the application ContentResolver. */
   fun resolveUri(context: Context, locator: String): Uri {
@@ -123,9 +123,9 @@ object NativeMusicSession {
     require(tree.scheme == "content" && context.contentResolver.persistedUriPermissions.any { it.uri == tree && it.isReadPermission }) { "Music folder access needs to be selected again" }
     var documentId = DocumentsContract.getTreeDocumentId(tree)
     for (segment in segments) {
-      val children = DocumentsContract.buildChildDocumentsUriUsingTree(tree, documentId)
+      val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(tree, documentId)
       var found: String? = null
-      context.contentResolver.query(children, arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID, DocumentsContract.Document.COLUMN_DISPLAY_NAME), null, null, null)?.use { cursor ->
+      context.contentResolver.query(childrenUri, arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID, DocumentsContract.Document.COLUMN_DISPLAY_NAME), null, null, null)?.use { cursor ->
         while (cursor.moveToNext()) { if (cursor.getString(1) == segment) { found = cursor.getString(0); break } }
       }
       documentId = found ?: throw IllegalStateException("The selected media file has moved or was removed")

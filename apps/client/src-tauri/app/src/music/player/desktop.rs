@@ -404,10 +404,10 @@ impl PlayerCore {
         }
         authority.require_current()?;
         if self.audio.is_none() {
-            let err = MediaPlayerError::backend_unavailable();
+            let error = MediaPlayerError::backend_unavailable();
             self.snapshot.status = PlayerStatus::Error;
-            self.snapshot.error = Some(err.message.clone());
-            return Err(err);
+            self.snapshot.error = Some(error.message.clone());
+            return Err(error);
         }
         if let Some(audio) = self.audio.as_mut() {
             audio.set_volume(self.snapshot.volume, self.snapshot.muted);
@@ -961,8 +961,8 @@ mod tests {
 
     #[test]
     fn local_file_validation_rejects_relative_paths() {
-        let err = validate_local_file_path(Path::new("song.mp3")).unwrap_err();
-        assert_eq!(err.code, "invalidSource");
+        let error = validate_local_file_path(Path::new("song.mp3")).unwrap_err();
+        assert_eq!(error.code, "invalidSource");
     }
 
     #[test]

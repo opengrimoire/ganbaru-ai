@@ -62,7 +62,7 @@ export interface TimedEventDragControllerConfig {
 }
 
 export function createTimedEventDragController(config: TimedEventDragControllerConfig) {
-  const calZoom = getCalendarZoom();
+  const calendarZoom = getCalendarZoom();
   let dragState = $state<DragState | null>(null);
   let dragPreviewDate = $state<string | null>(null);
   let dragPreview = $state<PositionedEvent | null>(null);
@@ -224,7 +224,7 @@ export function createTimedEventDragController(config: TimedEventDragControllerC
 
     const dateStr = event.start.split(" ")[0];
     const startMin = minuteOfDay(event.start);
-    const dur = durationMinutes(event.start, event.end);
+    const lengthMinutes = durationMinutes(event.start, event.end);
     const container = config.getScrollContainer();
 
     dragState = {
@@ -233,7 +233,7 @@ export function createTimedEventDragController(config: TimedEventDragControllerC
       originDate: dateStr,
       startColumnDate: config.getColumnDate(e.clientX),
       originStartMinute: startMin,
-      originEndMinute: startMin + dur,
+      originEndMinute: startMin + lengthMinutes,
       pointerStartY: e.clientY,
       pointerStartX: e.clientX,
       scrollTopAtStart: container ? container.scrollTop : 0,
@@ -244,12 +244,12 @@ export function createTimedEventDragController(config: TimedEventDragControllerC
     if (forceEdge) {
       dragState.type = forceEdge;
     } else if (!(config.mobileLayout() && e.pointerType === "touch")) {
-      const blockEl = (e.target as HTMLElement).closest(".event-block-wrapper");
-      if (blockEl) {
-        const rect = blockEl.getBoundingClientRect();
+      const eventEl = (e.target as HTMLElement).closest(".event-block-wrapper");
+      if (eventEl) {
+        const rect = eventEl.getBoundingClientRect();
         const relY = e.clientY - rect.top;
-        const clippedTop = blockEl.hasAttribute("data-clipped-top");
-        const clippedBottom = blockEl.hasAttribute("data-clipped-bottom");
+        const clippedTop = eventEl.hasAttribute("data-clipped-top");
+        const clippedBottom = eventEl.hasAttribute("data-clipped-bottom");
         // Match the resize handle's visible zone (6px inside block after overflow clipping)
         // Top handle: visible from y=0 to y<6 (6 pixels)
         // Bottom handle: visible from y>H-6 to y<H (6 pixels, where H is block height)
@@ -297,10 +297,10 @@ export function createTimedEventDragController(config: TimedEventDragControllerC
     const event = config.events().find((ev) => ev.id === dragState!.eventId);
     if (!event) return;
 
-    const e = lastPointerEvent;
+    const pointerEvent = lastPointerEvent;
     const hourHeight = config.hourHeight();
-    const deltaY = scrollAwareDeltaY(e.clientY);
-    const deltaMinutes = snapToGrid((deltaY / hourHeight) * 60, calZoom.gridMinutes);
+    const deltaY = scrollAwareDeltaY(pointerEvent.clientY);
+    const deltaMinutes = snapToGrid((deltaY / hourHeight) * 60, calendarZoom.gridMinutes);
 
     let newStart: number;
     let newEnd: number;
@@ -308,7 +308,7 @@ export function createTimedEventDragController(config: TimedEventDragControllerC
 
     if (dragState.type === "move") {
       // Compute column delta to handle dragging from continuation blocks
-      const currentColumnDate = config.getColumnDate(e.clientX);
+      const currentColumnDate = config.getColumnDate(pointerEvent.clientX);
       const startCol = parseCalendarDate(`${dragState.startColumnDate} 00:00`);
       const currentCol = parseCalendarDate(`${currentColumnDate} 00:00`);
       const dayDelta = Math.round(
@@ -318,27 +318,27 @@ export function createTimedEventDragController(config: TimedEventDragControllerC
       originDate.setDate(originDate.getDate() + dayDelta);
       targetDate = formatDatePart(originDate);
 
-      const dur = dragState.originEndMinute - dragState.originStartMinute;
-      let rawStart = snapToGrid(dragState.originStartMinute + deltaMinutes, calZoom.gridMinutes);
+      const lengthMinutes = dragState.originEndMinute - dragState.originStartMinute;
+      let rawStart = snapToGrid(dragState.originStartMinute + deltaMinutes, calendarZoom.gridMinutes);
 
       // Shift target day when event fully crosses midnight vertically
       while (rawStart >= 1440) {
         rawStart -= 1440;
-        const td = parseCalendarDate(`${targetDate} 00:00`);
-        td.setDate(td.getDate() + 1);
-        targetDate = formatDatePart(td);
+        const targetDay = parseCalendarDate(`${targetDate} 00:00`);
+        targetDay.setDate(targetDay.getDate() + 1);
+        targetDate = formatDatePart(targetDay);
       }
-      while (rawStart + dur <= 0) {
+      while (rawStart + lengthMinutes <= 0) {
         rawStart += 1440;
-        const td = parseCalendarDate(`${targetDate} 00:00`);
-        td.setDate(td.getDate() - 1);
-        targetDate = formatDatePart(td);
+        const targetDay = parseCalendarDate(`${targetDate} 00:00`);
+        targetDay.setDate(targetDay.getDate() - 1);
+        targetDate = formatDatePart(targetDay);
       }
 
       newStart = Math.min(1430, rawStart);
-      newEnd = newStart + dur; // may exceed 1440 or start < 0 (cross-midnight)
+      newEnd = newStart + lengthMinutes; // may exceed 1440 or start < 0 (cross-midnight)
     } else if (dragState.type === "resize-top") {
-      const minSize = calZoom.gridMinutes;
+      const minSize = calendarZoom.gridMinutes;
       const anchor = dragState.originEndMinute;
       let raw = snapToGrid(dragState.originStartMinute + deltaMinutes, minSize);
       raw = Math.max(0, raw);
@@ -354,7 +354,7 @@ export function createTimedEventDragController(config: TimedEventDragControllerC
       }
     } else {
       // resize-bottom (supports crossover and crossing midnight)
-      const minSize = calZoom.gridMinutes;
+      const minSize = calendarZoom.gridMinutes;
       const anchor = dragState.originStartMinute;
       let raw = snapToGrid(dragState.originEndMinute + deltaMinutes, minSize);
       if (raw > anchor) {
@@ -377,7 +377,7 @@ export function createTimedEventDragController(config: TimedEventDragControllerC
       newStart = dragState.originStartMinute;
       const now = new Date();
       const nowMinute = now.getHours() * 60 + now.getMinutes();
-      const snap = calZoom.gridMinutes;
+      const snap = calendarZoom.gridMinutes;
       const minEnd = snapToGrid(nowMinute, snap) + snap;
       if (newEnd < minEnd) newEnd = minEnd;
     }
@@ -549,7 +549,7 @@ export function createTimedEventDragController(config: TimedEventDragControllerC
 
     clearCreateHoldTimer();
     createState = { ...state, mode: "selecting" };
-    const snap = calZoom.gridMinutes;
+    const snap = calendarZoom.gridMinutes;
     createPreviewDate = state.dateStr;
     createPreview = buildPreview(
       state.dateStr,
@@ -566,12 +566,12 @@ export function createTimedEventDragController(config: TimedEventDragControllerC
     const hourHeight = config.hourHeight();
     const rect = createState.columnEl.getBoundingClientRect();
     const offsetY = lastPointerEvent.clientY - rect.top;
-    const cursorMinute = clampMinute(snapToGrid((offsetY / hourHeight) * 60, calZoom.gridMinutes));
+    const cursorMinute = clampMinute(snapToGrid((offsetY / hourHeight) * 60, calendarZoom.gridMinutes));
 
     const anchor = createState.anchorMinute;
     let startMinute = Math.min(anchor, cursorMinute);
     let endMinute = Math.max(anchor, cursorMinute);
-    const snap = calZoom.gridMinutes;
+    const snap = calendarZoom.gridMinutes;
     if (endMinute - startMinute < snap) endMinute = startMinute + snap;
 
     createPreview = buildPreview(

@@ -51,11 +51,11 @@ fn calendar_end_now_closes_a_paused_run_at_the_native_clock_and_preserves_proven
             .unwrap();
         assert_eq!(reread.run, result.run);
         assert_eq!(reread.segment, result.segment);
-        let segments: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM pomodoro_segments")
+        let segment_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM pomodoro_segments")
             .fetch_one(&pool)
             .await
             .unwrap();
-        assert_eq!(segments, 1);
+        assert_eq!(segment_count, 1);
     });
 }
 
@@ -114,7 +114,7 @@ fn calendar_end_now_rolls_back_retarget_and_closure_when_completion_evidence_fai
         };
         let mut tx = pool.begin().await.unwrap();
         sqlx::query("UPDATE calendar_events SET end_time = ? WHERE id = 'edited'")
-            .bind(persistence::timestamp(target.now_ms).unwrap())
+            .bind(persistence::format_timestamp(target.now_ms).unwrap())
             .execute(&mut *tx)
             .await
             .unwrap();
@@ -140,7 +140,7 @@ fn calendar_end_now_rolls_back_retarget_and_closure_when_completion_evidence_fai
                 .unwrap();
         assert_eq!(
             calendar_end,
-            persistence::timestamp(START + 20 * MINUTE).unwrap()
+            persistence::format_timestamp(START + 20 * MINUTE).unwrap()
         );
     });
 }
@@ -222,17 +222,17 @@ fn removing_focus_configuration_closes_only_committed_execution_during_retarget(
                 .await
                 .unwrap();
         assert_eq!(original, "focus-event");
-        let segments: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM pomodoro_segments")
+        let segment_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM pomodoro_segments")
             .fetch_one(&pool)
             .await
             .unwrap();
-        assert_eq!(segments, 1);
+        assert_eq!(segment_count, 1);
     });
 }
 
 async fn target(pool: &SqlitePool, now: i64) -> FocusExecutionContext {
     sqlx::query("INSERT INTO calendar_events (id, title, start_time, end_time, timezone, rrule) VALUES ('edited', 'Edited', ?, ?, 'Pacific/Kiritimati', 'FREQ=DAILY;COUNT=3')")
-        .bind(persistence::timestamp(START).unwrap()).bind(persistence::timestamp(START + 20 * MINUTE).unwrap()).execute(pool).await.unwrap();
+        .bind(persistence::format_timestamp(START).unwrap()).bind(persistence::format_timestamp(START + 20 * MINUTE).unwrap()).execute(pool).await.unwrap();
     let mut target = context(now);
     let commitment = target.commitment.as_mut().unwrap();
     commitment.event_id = "edited".into();

@@ -58,10 +58,10 @@ export function pushMusicBuilderRoute(
   route: MusicBuilderRoute,
   context: MusicBuilderRouteContext,
 ): MusicBuilderHistory {
-  const valid = repairMusicBuilderRoute(route, context);
-  if (routeKey(valid) === routeKey(history.current)) return history;
+  const repairedRoute = repairMusicBuilderRoute(route, context);
+  if (routeKey(repairedRoute) === routeKey(history.current)) return history;
   return {
-    current: valid,
+    current: repairedRoute,
     backStack: [...history.backStack, history.current].slice(-40),
   };
 }

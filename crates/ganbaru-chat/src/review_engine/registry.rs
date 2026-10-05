@@ -9,7 +9,7 @@ use super::authorization::authorize_snapshot;
 use super::contracts::*;
 use super::patch_store::{PatchIndex, ReviewObjectStore, read_patch_page};
 use super::selection::{select_provider_patch_lines, select_text_range};
-use super::{corrupt_data, registry_error, review_output};
+use super::{corrupt_data_error, registry_error, review_output};
 use sha2::{Digest, Sha256};
 use sqlx::SqlitePool;
 use std::collections::{HashMap, VecDeque};
@@ -388,7 +388,7 @@ pub fn review_revision(
     hasher.update([0]);
     hasher.update(environment_id);
     hasher.update([0]);
-    hasher.update(serde_json::to_vec(source).map_err(|_| corrupt_data())?);
+    hasher.update(serde_json::to_vec(source).map_err(|_| corrupt_data_error())?);
     hasher.update([0]);
     hasher.update(before);
     hasher.update([0]);
@@ -445,5 +445,5 @@ pub fn file_id(revision: &str, path: &str, previous: Option<&str>) -> String {
 pub fn action_request_fingerprint(request: &ApplyChatReviewActionRequest) -> ChatResult<String> {
     serde_json::to_vec(request)
         .map(|value| format!("{:x}", Sha256::digest(value)))
-        .map_err(|_| corrupt_data())
+        .map_err(|_| corrupt_data_error())
 }

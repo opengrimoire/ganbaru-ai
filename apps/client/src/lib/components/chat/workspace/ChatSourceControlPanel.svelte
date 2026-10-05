@@ -39,7 +39,7 @@
   let changeRequestBody = $state("");
   let changeRequestBase = $state("");
   let changeRequestHead = $state("");
-  let changeRequestDraft = $state(false);
+  let isChangeRequestDraft = $state(false);
   let bitbucketCredentialOpen = $state(false);
   let bitbucketUsername = $state("");
   let bitbucketToken = $state("");
@@ -274,7 +274,7 @@
         body: changeRequestBody,
         baseBranch: changeRequestBase.trim(),
         headBranch: changeRequestHead.trim(),
-        draft: changeRequestDraft,
+        draft: isChangeRequestDraft,
       });
       if (request !== operationRequest || !scopeMatches(workingFolderId, executionEnvironmentId)) return;
       hostedRequests = [created, ...hostedRequests.filter((entry) => entry.number !== created.number)];
@@ -570,7 +570,7 @@
         <input bind:value={changeRequestTitle} maxlength="1024" placeholder={t("chat.sourceControl.changeRequestTitle")} aria-label={t("chat.sourceControl.changeRequestTitle")} />
         <div><input bind:value={changeRequestBase} maxlength="1024" placeholder={t("chat.sourceControl.baseBranch")} aria-label={t("chat.sourceControl.baseBranch")} /><input bind:value={changeRequestHead} maxlength="1024" placeholder={t("chat.sourceControl.headBranch")} aria-label={t("chat.sourceControl.headBranch")} /></div>
         <textarea bind:value={changeRequestBody} maxlength="262144" rows="3" placeholder={t("chat.sourceControl.changeRequestBody")} aria-label={t("chat.sourceControl.changeRequestBody")}></textarea>
-        <label><input type="checkbox" bind:checked={changeRequestDraft} />{t("chat.sourceControl.draftChangeRequest")}</label>
+        <label><input type="checkbox" bind:checked={isChangeRequestDraft} />{t("chat.sourceControl.draftChangeRequest")}</label>
         <button type="submit" class="chat-primary-button" disabled={!changeRequestTitle.trim() || !changeRequestBase.trim() || !changeRequestHead.trim() || operation !== null}>{t("chat.sourceControl.createChangeRequest")}</button>
       </form>
     {/if}

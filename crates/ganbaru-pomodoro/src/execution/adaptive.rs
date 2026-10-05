@@ -5,7 +5,7 @@ use sqlx::{Sqlite, Transaction};
 use super::decisions::invalid_state;
 use super::models::{FocusConfiguration, FocusExecutionError};
 use super::mutations::Session;
-use super::persistence::{identity, timestamp};
+use super::persistence::{allocate_id, format_timestamp};
 use crate::adaptive::decision::{
     AdaptiveDecision, AdaptiveDecisionInput, POLICY_ID, decide_boundary, decide_run_start,
     decision_local_instants,
@@ -30,7 +30,7 @@ impl Session {
         planned_start_ms: i64,
         planned_end_ms: i64,
         now_ms: i64,
-        run_start: bool,
+        is_run_start: bool,
     ) -> Result<Option<AdaptiveDecision>, FocusExecutionError> {
         if configuration.preset_key.as_deref() != Some("adaptive") {
             return Ok(None);
@@ -39,13 +39,17 @@ impl Session {
             .local_time
             .as_ref()
             .ok_or_else(|| invalid_state("Native adaptive local-time adapter is unavailable"))?;
-        let started_at = timestamp(now_ms)?;
+        let started_at = format_timestamp(now_ms)?;
         let history =
             load_adaptive_history_tx(tx, &started_at, POLICY_ID, HISTORY_SEGMENT_LIMIT).await?;
         let input = AdaptiveDecisionInput {
             started_at,
-            planned_start: timestamp(if run_start { planned_start_ms } else { now_ms })?,
-            planned_end: timestamp(planned_end_ms)?,
+            planned_start: format_timestamp(if is_run_start {
+                planned_start_ms
+            } else {
+                now_ms
+            })?,
+            planned_end: format_timestamp(planned_end_ms)?,
             current_rhythm: CountRhythm::from_rhythm(&configuration.rhythm)
                 .ok_or_else(|| invalid_state("Adaptive execution requires a count rhythm"))?,
             idle_detection_enabled: if self.state.idle_timeout_override_set {
@@ -55,7 +59,7 @@ impl Session {
             },
             history: Some(history.into()),
         };
-        let dataset = if run_start {
+        let dataset = if is_run_start {
             Some(from_read(
                 load_adaptive_replay_dataset_tx(
                     tx,
@@ -95,7 +99,7 @@ impl Session {
                 "Native adaptive local-time response is incomplete or invalid",
             ));
         }
-        let mut decision = if run_start {
+        let mut decision = if is_run_start {
             decide_run_start(&input, &facts)
         } else {
             decide_boundary(&input, &facts)
@@ -139,9 +143,9 @@ impl Session {
         Ok(SnapshotIds {
             run: run.to_owned(),
             segment: segment.to_owned(),
-            context: identity(tx).await?,
-            decision: identity(tx).await?,
-            assignment: identity(tx).await?,
+            context: allocate_id(tx).await?,
+            decision: allocate_id(tx).await?,
+            assignment: allocate_id(tx).await?,
         })
     }
 }

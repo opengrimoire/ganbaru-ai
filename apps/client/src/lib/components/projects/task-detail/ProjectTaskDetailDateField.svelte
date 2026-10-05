@@ -144,7 +144,7 @@
     }}>
     <MiniDatePicker {selectedDate} {rangeStartDate} {rangeEndDate} small {highlightToday} {highlightMode}
       activeHighlight="primary"
-      onselect={(date) => { onSelect(date); trigger?.focus({ preventScroll: true }); }}
-      oncancel={cancelPicker} />
+      onSelect={(date) => { onSelect(date); trigger?.focus({ preventScroll: true }); }}
+      onCancel={cancelPicker} />
   </div>
 {/if}

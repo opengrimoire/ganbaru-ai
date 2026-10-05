@@ -109,7 +109,7 @@ pub fn decide_boundary(
         data_quality_flags: quality,
         observation_ended_at: Some(input.started_at.clone()),
     });
-    let started_at_ms = timestamp(&input.started_at)?;
+    let started_at_ms = parse_timestamp_ms(&input.started_at)?;
     let local = facts
         .get(&started_at_ms)
         .ok_or_else(|| "Native local-time facts are missing for adaptive decision".to_owned())?;
@@ -121,7 +121,7 @@ pub fn decide_boundary(
             .as_deref()
             .unwrap_or(&segment.planned_start);
         let segment_local = facts
-            .get(&timestamp(start)?)
+            .get(&parse_timestamp_ms(start)?)
             .ok_or_else(|| "Native local-time facts are missing for adaptive history".to_owned())?;
         if segment_local.date_key != local.date_key {
             continue;
@@ -143,8 +143,8 @@ pub fn decide_boundary(
     })
     .clean_focus_seconds
         / 60.0;
-    let duration = timestamp(&input.planned_end)?
-        .saturating_sub(timestamp(&input.planned_start)?)
+    let duration = parse_timestamp_ms(&input.planned_end)?
+        .saturating_sub(parse_timestamp_ms(&input.planned_start)?)
         .max(0) as f64
         / 60_000.0;
     let context = derive_context_bucket(
@@ -274,10 +274,10 @@ pub fn decide_run_start(
 
 /// Collect every instant whose device-local date participates in this decision.
 pub fn decision_local_instants(input: &AdaptiveDecisionInput) -> Result<BTreeSet<i64>, String> {
-    let mut instants = BTreeSet::from([timestamp(&input.started_at)?]);
+    let mut instants = BTreeSet::from([parse_timestamp_ms(&input.started_at)?]);
     if let Some(history) = &input.history {
         for segment in &history.segments {
-            instants.insert(timestamp(
+            instants.insert(parse_timestamp_ms(
                 segment
                     .actual_start
                     .as_deref()
@@ -349,7 +349,7 @@ fn push_reason(reasons: &mut Vec<String>, reason: &str) {
     }
 }
 
-fn timestamp(value: &str) -> Result<i64, String> {
+fn parse_timestamp_ms(value: &str) -> Result<i64, String> {
     DateTime::parse_from_rfc3339(value)
         .map(|value| value.timestamp_millis())
         .map_err(|error| format!("Invalid canonical adaptive timestamp: {error}"))

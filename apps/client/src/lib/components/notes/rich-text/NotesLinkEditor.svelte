@@ -12,8 +12,8 @@
   import Link from "@lucide/svelte/icons/link";
   import Trash2 from "@lucide/svelte/icons/trash-2";
 
-  const EDITOR_WIDTH = 360;
-  const PREVIEW_WIDTH = 320;
+  const EDITOR_WIDTH_PX = 360;
+  const PREVIEW_WIDTH_PX = 320;
   const PAGE_RESULT_LIMIT = 6;
   const PANEL_TEXT_SCALE = 0.8;
 
@@ -47,16 +47,16 @@
   let root = $state<HTMLDivElement | null>(null);
   let destinationInput = $state<HTMLInputElement | null>(null);
   let titleInput = $state<HTMLInputElement | null>(null);
-  let editingDestination = $state(false);
+  let isEditingDestination = $state(false);
   let anchor = $state<NotesFloatingPanelRect>({ top: 0, bottom: 0, left: 0, right: 0 });
   let panelHeight = $state(0);
   let panelFontSize = $state<string | undefined>(undefined);
   let viewport = $state({ width: 0, height: 0 });
   const localTarget = $derived(notesLinkTarget(value, typeof window === "undefined" ? undefined : window.location.href));
-  const matches = $derived(editingDestination && value.trim() && !localTarget
+  const matches = $derived(isEditingDestination && value.trim() && !localTarget
     ? pageTargets.filter((page) => page.title.toLocaleLowerCase().includes(value.trim().toLocaleLowerCase())).slice(0, PAGE_RESULT_LIMIT) : []);
   const position = $derived(notesFloatingPanelPlacement(anchor, viewport, {
-    width: mode === "preview" ? PREVIEW_WIDTH : EDITOR_WIDTH,
+    width: mode === "preview" ? PREVIEW_WIDTH_PX : EDITOR_WIDTH_PX,
     height: panelHeight, align: "start",
   }));
 
@@ -117,13 +117,13 @@
   });
 
   function editDestination(): void {
-    editingDestination = true;
+    isEditingDestination = true;
     void tick().then(() => { destinationInput?.focus({ preventScroll: true }); destinationInput?.select(); });
   }
 
   function selectPage(page: NotesPageMentionTarget): void {
     onInput(`#notes?page=${encodeURIComponent(page.id)}`);
-    editingDestination = false;
+    isEditingDestination = false;
     void tick().then(() => titleInput?.focus({ preventScroll: true }));
   }
 </script>
@@ -172,13 +172,13 @@
     <div class="space-y-3 p-3">
       <div class="space-y-1.5">
         <label for="notes-link-destination" class="text-[0.875em] text-muted-foreground">{t("notes.linkDestination")}</label>
-        {#if localTarget && !editingDestination}
+        {#if localTarget && !isEditingDestination}
           <button id="notes-link-destination" type="button" disabled={busy} class="flex min-h-9 w-full items-center gap-2 rounded-md border border-input bg-muted/40 px-2.5 text-left hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onclick={editDestination}>
             {#if localTarget.blockId}<Database class="size-4 shrink-0 text-muted-foreground" />{:else}<FileText class="size-4 shrink-0 text-muted-foreground" />{/if}
             <span class="truncate">{destinationTitle || value}</span>
           </button>
         {:else}
-          <input bind:this={destinationInput} id="notes-link-destination" class="min-h-9 w-full rounded-md border border-input bg-muted/40 px-2.5 outline-none focus:border-ring" {value} disabled={busy} placeholder={t("notes.linkUrlPlaceholder")} onfocus={() => { editingDestination = true; }} oninput={(event) => onInput(event.currentTarget.value)} />
+          <input bind:this={destinationInput} id="notes-link-destination" class="min-h-9 w-full rounded-md border border-input bg-muted/40 px-2.5 outline-none focus:border-ring" {value} disabled={busy} placeholder={t("notes.linkUrlPlaceholder")} onfocus={() => { isEditingDestination = true; }} oninput={(event) => onInput(event.currentTarget.value)} />
           {#if matches.length}
             <div class="space-y-0.5" aria-label={t("notes.linkDestination")}>
               {#each matches as page (page.id)}<button type="button" class="flex min-h-8 w-full items-center gap-2 rounded-md px-2 text-left hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onclick={() => selectPage(page)}><FileText class="size-4 shrink-0 text-muted-foreground" /><span class="truncate">{page.title}</span></button>{/each}

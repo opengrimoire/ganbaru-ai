@@ -12,17 +12,17 @@
     projectLifecycleLabel,
   } from "$lib/projects/display";
   import {
-    projectSettingsPriorityColorDraftValue,
-    projectSettingsPriorityNameDraftValue,
-    projectSettingsStatusCategoryDraftValue,
-    projectSettingsStatusColorDraftValue,
-    projectSettingsStatusNameDraftValue,
-    projectSettingsTagColorDraftValue,
-    projectSettingsTagNameDraftValue,
-    projectSettingsTagNameExists,
-    type ProjectSettingsPriorityDraftState,
-    type ProjectSettingsStatusDraftState,
-    type ProjectSettingsTagDraftState,
+    draftPriorityColor,
+    draftPriorityName,
+    draftStatusCategory,
+    draftStatusColor,
+    draftStatusName,
+    draftTagColor,
+    draftTagName,
+    tagNameTaken,
+    type PriorityDraftState,
+    type StatusDraftState,
+    type TagDraftState,
   } from "$lib/projects/settings/collection-drafts";
   import {
     PROJECT_LIFECYCLE_STATUSES,
@@ -166,14 +166,14 @@
   const pendingDeletePriority = $derived.by(() =>
     pendingDeletePriorityId ? priorities.find((priority) => priority.id === pendingDeletePriorityId) : undefined
   );
-  const projectSettingsDraftReady = $derived(
+  const draftReady = $derived(
     Boolean(selectedProject && sessionState.projectDraftId === selectedProject.id),
   );
   const musicAssignmentsDirty = $derived(
     Boolean(selectedProject && musicAssignmentsProjectId === selectedProject.id)
       && !musicAssignmentDraftsEqual(musicAssignments, savedMusicAssignments),
   );
-  const projectSettingsDirty = $derived.by(() => selectedProject
+  const settingsDirty = $derived.by(() => selectedProject
     ? session.dirty(selectedProject, sessionCollections()) || musicAssignmentsDirty || structure.dirty || workingFoldersDirty
     : false);
   const customFields = createProjectSettingsCustomFieldController({
@@ -234,9 +234,9 @@
     if (!selectedProject || sessionState.projectSettingsSaving) return;
     if (
       sessionState.projectDraftId !== selectedProject.id
-      || (!projectSettingsDirty && sessionState.projectDraftUpdatedAt !== selectedProject.updatedAt)
+      || (!settingsDirty && sessionState.projectDraftUpdatedAt !== selectedProject.updatedAt)
     ) {
-      loadProjectSettingsDraft(selectedProject);
+      loadDraft(selectedProject);
     }
   });
 
@@ -246,7 +246,7 @@
   });
 
   $effect(() => {
-    onDirtyChange(projectSettingsDirty);
+    onDirtyChange(settingsDirty);
   });
 
   onDestroy(() => {
@@ -254,7 +254,7 @@
     onDirtyChange(false);
   });
 
-  function loadProjectSettingsDraft(project: Project): void {
+  function loadDraft(project: Project): void {
     structure.load(canonicalCollections(project.id));
     session.load(project, sessionCollections(), initialCreateColors());
     pendingDeleteStatusId = null;
@@ -384,7 +384,7 @@
     return t("projects.pomodoro.adaptive");
   }
 
-  function statusDraftState(): ProjectSettingsStatusDraftState {
+  function statusDraftState(): StatusDraftState {
     return {
       nameDrafts: sessionState.statusNameDrafts,
       categoryDrafts: sessionState.statusCategoryDrafts,
@@ -393,7 +393,7 @@
     };
   }
 
-  function priorityDraftState(): ProjectSettingsPriorityDraftState {
+  function priorityDraftState(): PriorityDraftState {
     return {
       nameDrafts: sessionState.priorityNameDrafts,
       colorDrafts: sessionState.priorityColorDrafts,
@@ -401,7 +401,7 @@
     };
   }
 
-  function tagDraftState(): ProjectSettingsTagDraftState {
+  function tagDraftState(): TagDraftState {
     return {
       nameDrafts: sessionState.tagNameDrafts,
       colorDrafts: sessionState.tagColorDrafts,
@@ -449,11 +449,11 @@
   }
 
   function tagNameDraftValue(tag: ProjectTag): string {
-    return projectSettingsTagNameDraftValue(tag, tagDraftState());
+    return draftTagName(tag, tagDraftState());
   }
 
   function tagColorDraftValue(tag: ProjectTag): EventColor {
-    return projectSettingsTagColorDraftValue(tag, tagDraftState());
+    return draftTagColor(tag, tagDraftState());
   }
 
   const nextUnusedStatusColor = createProjectSettingsColorAllocator({
@@ -467,7 +467,7 @@
   });
 
   function tagNameExists(name: string, ignoredTagId?: string): boolean {
-    return projectSettingsTagNameExists({
+    return tagNameTaken({
       tags: projectTags,
       name,
       ignoredTagId,
@@ -481,15 +481,15 @@
   const clearCustomFieldOptionDrag = customFieldOptionReorder.clear;
 
   function statusNameDraftValue(status: ProjectStatus): string {
-    return projectSettingsStatusNameDraftValue(status, statusDraftState());
+    return draftStatusName(status, statusDraftState());
   }
 
   function statusCategoryDraftValue(status: ProjectStatus): ProjectStatusCategory {
-    return projectSettingsStatusCategoryDraftValue(status, statusDraftState());
+    return draftStatusCategory(status, statusDraftState());
   }
 
   function statusColorDraftValue(status: ProjectStatus): EventColor {
-    return projectSettingsStatusColorDraftValue(status, statusDraftState());
+    return draftStatusColor(status, statusDraftState());
   }
 
   function setStatusColor(statusId: string, color: EventColor | undefined): void {
@@ -555,11 +555,11 @@
   }
 
   function priorityNameDraftValue(priority: ProjectPriorityConfig): string {
-    return projectSettingsPriorityNameDraftValue(priority, priorityDraftState());
+    return draftPriorityName(priority, priorityDraftState());
   }
 
   function priorityColorDraftValue(priority: ProjectPriorityConfig): EventColor {
-    return projectSettingsPriorityColorDraftValue(priority, priorityDraftState());
+    return draftPriorityColor(priority, priorityDraftState());
   }
 
   function setPriorityColor(priorityId: string, color: EventColor | undefined): void {
@@ -760,7 +760,7 @@
   const submitCustomFieldCreateDraftOption = customFields.submitCreateDraftOption;
   const submitCustomField = customFields.submitField;
 
-  async function moveProjectCustomField(field: ProjectCustomField, direction: -1 | 1): Promise<void> {
+  async function moveCustomFieldByDirection(field: ProjectCustomField, direction: -1 | 1): Promise<void> {
     sessionState.projectSettingsError = null;
     try {
       await structure.moveCustomField(field, direction);
@@ -777,7 +777,7 @@
   const confirmDeleteCustomField = customFields.removeField;
   const submitCustomFieldOption = customFields.submitOption;
 
-  async function moveProjectCustomFieldOption(option: ProjectCustomFieldOption, direction: -1 | 1): Promise<void> {
+  async function moveCustomFieldOptionByDirection(option: ProjectCustomFieldOption, direction: -1 | 1): Promise<void> {
     sessionState.projectSettingsError = null;
     try {
       await structure.moveCustomFieldOption(option, direction);
@@ -857,8 +857,8 @@
 {#if selectedProject}
 <ProjectSettingsPanelShell
   {presentation}
-  draftReady={projectSettingsDraftReady}
-  dirty={projectSettingsDirty}
+  {draftReady}
+  dirty={settingsDirty}
   saving={sessionState.projectSettingsSaving}
   busy={settingsOperationsBusy()}
   error={sessionState.projectSettingsError}
@@ -982,13 +982,13 @@
             onCustomFieldDrop={customFieldReorder.drop}
             onCustomFieldDragStart={customFieldReorder.start}
             {clearCustomFieldDrag}
-            {moveProjectCustomField}
+            {moveCustomFieldByDirection}
             {requestDeleteCustomField}
             onCustomFieldOptionDragOver={customFieldOptionReorder.dragOver}
             onCustomFieldOptionDrop={customFieldOptionReorder.drop}
             onCustomFieldOptionDragStart={customFieldOptionReorder.start}
             {clearCustomFieldOptionDrag}
-            {moveProjectCustomFieldOption}
+            {moveCustomFieldOptionByDirection}
             {requestDeleteCustomFieldOption}
             {setCustomFieldOptionCreateDraftName}
             {removeCustomFieldOptionCreateDraft}

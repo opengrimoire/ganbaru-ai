@@ -95,7 +95,7 @@ fn create_child_page_from_block_moves_nested_children_and_syncs_page_state() {
         let child_page_json = serde_json::to_value(child_page).unwrap();
         assert_eq!(child_page_json["parent"]["page_id"], PAGE_A);
 
-        let child_blocks = reads::get_block_children(&pool, BLOCK_B, None, Some(10))
+        let child_blocks = reads::block_children(&pool, BLOCK_B, None, Some(10))
             .await
             .unwrap();
         let child_blocks_json = serde_json::to_value(child_blocks).unwrap();
@@ -254,7 +254,7 @@ fn duplicate_blocks_copies_loaded_subtrees_and_block_comments() {
         assert_eq!(duplicated_json["results"][0]["id"], BLOCK_D);
         assert_eq!(duplicated_json["results"][1]["id"], BLOCK_E);
 
-        let duplicated_children = reads::get_block_children(&pool, BLOCK_D, None, Some(10))
+        let duplicated_children = reads::block_children(&pool, BLOCK_D, None, Some(10))
             .await
             .unwrap();
         let duplicated_children_json = serde_json::to_value(duplicated_children).unwrap();
@@ -321,7 +321,7 @@ fn duplicate_blocks_copies_nested_notes_after_cut_and_rolls_back_failed_copies()
         };
         writes::duplicate_blocks(&pool, request).await.unwrap();
         let blocks = serde_json::to_value(
-            reads::get_block_children(&pool, BLOCK_D, None, Some(10))
+            reads::block_children(&pool, BLOCK_D, None, Some(10))
                 .await
                 .unwrap(),
         )
@@ -338,7 +338,7 @@ fn duplicate_blocks_copies_nested_notes_after_cut_and_rolls_back_failed_copies()
             serde_json::to_value(reads::get_page(&pool, nested_id, false).await.unwrap()).unwrap();
         assert_eq!(nested_page["parent"]["page_id"], BLOCK_D);
         let content = serde_json::to_value(
-            reads::get_block_children(&pool, nested_id, None, Some(10))
+            reads::block_children(&pool, nested_id, None, Some(10))
                 .await
                 .unwrap(),
         )
@@ -415,7 +415,7 @@ fn duplicate_blocks_can_copy_a_note_into_itself_without_copying_the_new_graph() 
         .await
         .unwrap();
         let copied = serde_json::to_value(
-            reads::get_block_children(&pool, PAGE_C, None, Some(10))
+            reads::block_children(&pool, PAGE_C, None, Some(10))
                 .await
                 .unwrap(),
         )
@@ -613,7 +613,7 @@ fn move_blocks_moves_subtrees_updates_comment_pages_and_rejects_cycles() {
         .await
         .unwrap();
 
-        let destination_children = reads::get_block_children(&pool, PAGE_B, None, Some(10))
+        let destination_children = reads::block_children(&pool, PAGE_B, None, Some(10))
             .await
             .unwrap();
         let destination_children_json = serde_json::to_value(destination_children).unwrap();

@@ -1,4 +1,4 @@
-use super::block_tree::load_child_page_block_row_any;
+use super::block_tree::load_child_page_block_row_including_trashed;
 use super::pages::load_page_row;
 use super::parents::{
     ParentTarget, parent_target_from_block_row, refresh_parent_has_children, touch_page,
@@ -15,7 +15,7 @@ use crate::{data_sources, page_history, reads};
 use sqlx::SqlitePool;
 use std::collections::HashSet;
 
-const NOTES_TRASH_RETENTION_DAYS: i64 = 7;
+const TRASH_RETENTION_DAYS: i64 = 7;
 
 pub(super) type PageParentColumns = (String, Option<String>, Option<String>, Option<String>);
 
@@ -39,7 +39,7 @@ pub async fn move_page(
         .await
         .map_err(|e| format!("begin move notes page: {e}"))?;
     let source_page = load_page_row(&mut tx, page_id).await?;
-    let child_block = load_child_page_block_row_any(&mut tx, page_id).await?;
+    let child_block = load_child_page_block_row_including_trashed(&mut tx, page_id).await?;
     let old_parent = child_block
         .as_ref()
         .filter(|block| block.in_trash == 0)
@@ -165,7 +165,7 @@ pub async fn trash_page(
 }
 
 pub async fn purge_expired_trashed_pages(pool: &SqlitePool) -> Result<Vec<String>, String> {
-    let retention_modifier = format!("-{NOTES_TRASH_RETENTION_DAYS} days");
+    let retention_modifier = format!("-{TRASH_RETENTION_DAYS} days");
     let expired_page_ids: Vec<String> = sqlx::query_scalar(
         "SELECT id
          FROM notes_pages
@@ -510,7 +510,7 @@ pub async fn archive_page(
         .begin()
         .await
         .map_err(|e| format!("begin archive notes page: {e}"))?;
-    let child_block = load_child_page_block_row_any(&mut tx, page_id).await?;
+    let child_block = load_child_page_block_row_including_trashed(&mut tx, page_id).await?;
     let child_parent = child_block.as_ref().map(parent_target_from_block_row);
     page_history::record_page_snapshot_tx(&mut tx, page_id, "archive_page").await?;
     let root_child_page_block_visible = if archived {

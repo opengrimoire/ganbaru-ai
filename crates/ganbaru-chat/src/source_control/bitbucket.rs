@@ -20,7 +20,7 @@ pub async fn probe_bitbucket(
         };
     };
     let result = read_bitbucket_credential(repository_slug, credential_store)
-        .and_then(|credential| credential.ok_or_else(credential_missing));
+        .and_then(|credential| credential.ok_or_else(missing_credential_error));
     let (status, unavailable_reason) = match result {
         Ok(credential) => {
             match bitbucket_authenticated_request(reqwest::Method::GET, "/user", &credential, None)
@@ -189,7 +189,8 @@ fn require_bitbucket_credential(
     repository_slug: &str,
     credential_store: &dyn CredentialStore,
 ) -> ChatResult<BitbucketCredential> {
-    read_bitbucket_credential(repository_slug, credential_store)?.ok_or_else(credential_missing)
+    read_bitbucket_credential(repository_slug, credential_store)?
+        .ok_or_else(missing_credential_error)
 }
 
 fn read_bitbucket_credential(
@@ -239,7 +240,7 @@ pub fn percent_encode_segment(value: &str) -> String {
     encoded
 }
 
-fn credential_missing() -> ChatError {
+fn missing_credential_error() -> ChatError {
     ChatError::new(
         ChatErrorCode::AuthenticationRequired,
         "Bitbucket credentials are not configured",

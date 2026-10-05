@@ -214,7 +214,7 @@ fn append_original_synced_block_accepts_children() {
         .await
         .unwrap();
 
-        let children = reads::get_block_children(&pool, BLOCK_B, None, Some(10))
+        let children = reads::block_children(&pool, BLOCK_B, None, Some(10))
             .await
             .unwrap();
         let children_json = serde_json::to_value(children).unwrap();
@@ -416,7 +416,7 @@ fn six_heading_levels_append_update_and_preserve_toggle_children() {
             assert_eq!(stored_json[heading]["is_toggleable"], true);
             assert_eq!(stored_json[heading]["ganbaru_open"], true);
 
-            let children = reads::get_block_children(&pool, BLOCK_B, None, Some(10))
+            let children = reads::block_children(&pool, BLOCK_B, None, Some(10))
                 .await
                 .unwrap();
             let children_json = serde_json::to_value(children).unwrap();
@@ -496,7 +496,7 @@ fn append_and_update_child_database_blocks_round_trip() {
         assert_eq!(stored_json["has_children"], true);
         assert_eq!(stored_json["child_database"]["title"], "Roadmap");
 
-        let children = reads::get_block_children(&pool, BLOCK_B, None, Some(10))
+        let children = reads::block_children(&pool, BLOCK_B, None, Some(10))
             .await
             .unwrap();
         let children_json = serde_json::to_value(children).unwrap();
@@ -591,7 +591,7 @@ fn append_update_and_duplicate_template_blocks_round_trip() {
         );
         assert_eq!(duplicate_json["has_children"], true);
 
-        let duplicate_children = reads::get_block_children(&pool, BLOCK_E, None, Some(10))
+        let duplicate_children = reads::block_children(&pool, BLOCK_E, None, Some(10))
             .await
             .unwrap();
         let duplicate_children_json = serde_json::to_value(duplicate_children).unwrap();
@@ -687,7 +687,7 @@ fn append_update_and_duplicate_button_blocks_round_trip() {
         );
         assert_eq!(duplicate_json["has_children"], true);
 
-        let duplicate_children = reads::get_block_children(&pool, BLOCK_E, None, Some(10))
+        let duplicate_children = reads::block_children(&pool, BLOCK_E, None, Some(10))
             .await
             .unwrap();
         let duplicate_children_json = serde_json::to_value(duplicate_children).unwrap();

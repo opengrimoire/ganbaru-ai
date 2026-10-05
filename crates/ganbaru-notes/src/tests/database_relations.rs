@@ -103,14 +103,10 @@ fn database_relations_persist_links_backlinks_and_search() {
             )]
         );
 
-        let table = data_sources::layouts::table::get_data_source_table_view(
-            &pool,
-            DATA_SOURCE_A,
-            None,
-            None,
-        )
-        .await
-        .unwrap();
+        let table =
+            data_sources::layouts::table::data_source_table_view(&pool, DATA_SOURCE_A, None, None)
+                .await
+                .unwrap();
         let table_json = serde_json::to_value(table).unwrap();
         assert_eq!(
             table_json["rows"][0]["properties"]["Project"]["relation"][0]["title"],

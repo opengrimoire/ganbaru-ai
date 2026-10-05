@@ -213,8 +213,8 @@ export function createNotesBlockSelectionController(options: NotesBlockSelection
       return;
     }
     if (!selection && options.handleNavigationKeydown(event, id)) return;
-    const modifier = event.ctrlKey || event.metaKey; const key = event.key.toLowerCase();
-    if (modifier && !event.shiftKey && !event.altKey && key === "a" && (!options.targetIsEditable(event.target) || selection)) {
+    const hasModifier = event.ctrlKey || event.metaKey; const key = event.key.toLowerCase();
+    if (hasModifier && !event.shiftKey && !event.altKey && key === "a" && (!options.targetIsEditable(event.target) || selection)) {
       const ids = options.readRenderedBlockIds();
       if (ids.length) {
         event.preventDefault(); clearNativeSelection();
@@ -222,11 +222,11 @@ export function createNotesBlockSelectionController(options: NotesBlockSelection
       }
       return;
     }
-    if (clipboard && modifier && !event.shiftKey && !event.altKey && key === "v" && !options.targetIsEditable(event.target)) { event.preventDefault(); void run(() => paste(selection?.focusBlockId ?? id)); return; }
+    if (clipboard && hasModifier && !event.shiftKey && !event.altKey && key === "v" && !options.targetIsEditable(event.target)) { event.preventDefault(); void run(() => paste(selection?.focusBlockId ?? id)); return; }
     if (selection && !event.altKey && (event.key === "Backspace" || event.key === "Delete")) { event.preventDefault(); void run(remove); return; }
-    if (selection && modifier && event.shiftKey && !event.altKey && (event.key === "ArrowUp" || event.key === "ArrowDown")) { event.preventDefault(); void run(() => move(event.key === "ArrowUp" ? "up" : "down")); return; }
-    if (selection && modifier && !event.shiftKey && !event.altKey && ["c", "x", "d"].includes(key)) { event.preventDefault(); void run(key === "c" ? () => copy("copy") : key === "x" ? () => copy("cut") : duplicate); return; }
-    if (event.key === "Escape" && !modifier && !event.altKey && !event.isComposing) {
+    if (selection && hasModifier && event.shiftKey && !event.altKey && (event.key === "ArrowUp" || event.key === "ArrowDown")) { event.preventDefault(); void run(() => move(event.key === "ArrowUp" ? "up" : "down")); return; }
+    if (selection && hasModifier && !event.shiftKey && !event.altKey && ["c", "x", "d"].includes(key)) { event.preventDefault(); void run(key === "c" ? () => copy("copy") : key === "x" ? () => copy("cut") : duplicate); return; }
+    if (event.key === "Escape" && !hasModifier && !event.altKey && !event.isComposing) {
       // Editable controls own dismissal before Svelte's delegated handlers run.
       // Escape never promotes a text caret or range into whole-block selection.
       if (!selection || options.targetIsEditable(event.target)) return;
@@ -236,7 +236,7 @@ export function createNotesBlockSelectionController(options: NotesBlockSelection
       options.focusTextEditorAtEnd(focusId);
       return;
     }
-    if (event.shiftKey && !modifier && !event.altKey && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
+    if (event.shiftKey && !hasModifier && !event.altKey && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
       if (!selection && options.targetIsEditable(event.target)) return;
       event.preventDefault(); clearNativeSelection();
       const next = notesBlockSelectionAfterKeyboard({ blockIds: options.readRenderedBlockIds(), current: selection, focusedBlockId: id, direction: event.key === "ArrowDown" ? "next" : "previous" });
@@ -246,16 +246,16 @@ export function createNotesBlockSelectionController(options: NotesBlockSelection
 
   function delegation(node: HTMLDivElement, delegates: NotesBlockSelectionDelegates) {
     const attached = attachNotesBlockSelectionDelegates(node, delegates);
-    const stop = () => { dragAnchorBlockId = null; dragPointerId = null; };
+    const endPointerGesture = () => { dragAnchorBlockId = null; dragPointerId = null; };
     const view = node.ownerDocument.defaultView;
-    view?.addEventListener("pointerup", stop);
-    view?.addEventListener("pointercancel", stop);
+    view?.addEventListener("pointerup", endPointerGesture);
+    view?.addEventListener("pointercancel", endPointerGesture);
     return {
       destroy() {
         attached.destroy();
-        view?.removeEventListener("pointerup", stop);
-        view?.removeEventListener("pointercancel", stop);
-        stop();
+        view?.removeEventListener("pointerup", endPointerGesture);
+        view?.removeEventListener("pointercancel", endPointerGesture);
+        endPointerGesture();
       },
     };
   }

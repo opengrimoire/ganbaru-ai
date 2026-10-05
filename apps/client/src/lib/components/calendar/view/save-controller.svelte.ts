@@ -101,8 +101,8 @@ export class CalendarViewSaveController {
       this.options.toasts.showSaveErrorToast(toastId, this.options.saveErrorLabel(error));
       return false;
     } finally {
-      if (toastId && this.options.toasts.saveSuccessToast?.id === toastId
-        && this.options.toasts.saveSuccessToast.pending) {
+      if (toastId && this.options.toasts.saveToast?.id === toastId
+        && this.options.toasts.saveToast.pending) {
         this.options.toasts.dismissSaveToastIfCurrent(toastId);
       }
       this.saving = false;

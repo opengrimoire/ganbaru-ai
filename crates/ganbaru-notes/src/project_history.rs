@@ -36,7 +36,7 @@ pub use reads::{
 pub use retention::prune_project_history_tx;
 use retention::{effective_retention_days_tx, run_due_maintenance, validate_retention_days};
 #[allow(unused_imports)]
-pub use retention::{notes_get_history_retention_impact, notes_prune_project_history};
+pub use retention::{notes_history_retention_impact, notes_prune_project_history};
 pub use schedule::mutation_result;
 #[cfg(test)]
 use schedule::{

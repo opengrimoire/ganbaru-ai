@@ -22,14 +22,14 @@ pub fn select_run_start_assignment(
     input: &SelectionInput,
     local_time: &LocalTimeFacts,
 ) -> Result<Option<ExperimentAssignment>, String> {
-    let occurred_at_ms = timestamp(&input.occurred_at)
+    let occurred_at_ms = parse_timestamp_ms(&input.occurred_at)
         .ok_or_else(|| "Adaptive experiment occurrence time is invalid".to_owned())?;
     let context_key = experiment_context_key(&input.context);
     let recent: Vec<_> = input
         .experiment_assignments
         .iter()
         .filter_map(|assignment| {
-            let assigned_at_ms = timestamp(&assignment.assigned_at)?;
+            let assigned_at_ms = parse_timestamp_ms(&assignment.assigned_at)?;
             (assignment.context_key == context_key
                 && assigned_at_ms >= occurred_at_ms.saturating_sub(EXPLORATION_WINDOW_MS)
                 && assigned_at_ms < occurred_at_ms)
@@ -50,7 +50,7 @@ pub fn select_run_start_assignment(
             }
         });
     for lane in ExperimentLane::SELECTION_ORDER {
-        if !eligible(lane, input) {
+        if !is_eligible(lane, input) {
             continue;
         }
         let definition = lane.definition();
@@ -134,7 +134,7 @@ pub fn experiment_cooldown_state<'a>(
     experiment_id: &str,
     occurred_at: &str,
 ) -> Option<&'a ExperimentState> {
-    let occurred_at_ms = timestamp(occurred_at)?;
+    let occurred_at_ms = parse_timestamp_ms(occurred_at)?;
     let mut latest = None;
     let mut latest_ms = i64::MIN;
     for state in states {
@@ -143,7 +143,7 @@ pub fn experiment_cooldown_state<'a>(
         {
             continue;
         }
-        let Some(ended_at_ms) = state.ended_at.as_deref().and_then(timestamp) else {
+        let Some(ended_at_ms) = state.ended_at.as_deref().and_then(parse_timestamp_ms) else {
             continue;
         };
         if ended_at_ms > occurred_at_ms || occurred_at_ms.saturating_sub(ended_at_ms) > COOLDOWN_MS
@@ -182,7 +182,7 @@ pub fn experiment_context_key(context: &ContextBucket) -> String {
     .join(":")
 }
 
-fn timestamp(value: &str) -> Option<i64> {
+fn parse_timestamp_ms(value: &str) -> Option<i64> {
     DateTime::parse_from_rfc3339(value)
         .ok()
         .map(|value| value.timestamp_millis())
@@ -199,7 +199,7 @@ fn scalar_rejected(lane: ExperimentLane, input: &SelectionInput, context: &str) 
             == "prefer_control"
 }
 
-fn eligible(lane: ExperimentLane, input: &SelectionInput) -> bool {
+fn is_eligible(lane: ExperimentLane, input: &SelectionInput) -> bool {
     let features = &input.features;
     let state = &input.state;
     if input.current_rhythm != CountRhythm::BASELINE

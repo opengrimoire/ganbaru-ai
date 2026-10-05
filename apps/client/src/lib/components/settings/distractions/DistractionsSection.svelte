@@ -16,7 +16,7 @@
   } = $props();
 
   const { t } = getLocalization();
-  const android = __GANBARU_AI_BUILD_PLATFORM__ === "android";
+  const isAndroid = __GANBARU_AI_BUILD_PLATFORM__ === "android";
 
   const tabs: ReadonlyArray<{
     id: DistractionsSettingsTab;
@@ -63,7 +63,7 @@
   {#if activeTab === "limits"}
     <DistractionsLimitsSettings {onOpenLimitEditor} />
   {:else if activeTab === "browser"}
-    {#if android}
+    {#if isAndroid}
       <p class="px-1 text-[0.8rem] text-muted-foreground">{t("settings.distractions.mobile.browserReadOnly")}</p>
       <fieldset disabled class="m-0 min-w-0 border-0 p-0 opacity-60">
         <DistractionsBrowserSettings showConnectionStatus={false} />
@@ -74,7 +74,7 @@
   {:else if activeTab === "mobile"}
     <DistractionsMobileSettings />
   {:else}
-    {#if android}
+    {#if isAndroid}
       <p class="px-1 text-[0.8rem] text-muted-foreground">{t("settings.distractions.mobile.desktopReadOnly")}</p>
       <fieldset disabled class="m-0 min-w-0 border-0 p-0 opacity-60">
         <DistractionsDesktopSettings />

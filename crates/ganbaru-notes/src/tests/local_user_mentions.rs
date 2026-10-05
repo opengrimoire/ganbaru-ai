@@ -7,7 +7,7 @@ fn local_user_identity_drives_notes_comments() {
         create_page(&pool, PAGE_A, BLOCK_A).await;
 
         let local_user_json =
-            serde_json::to_value(local_user::get_local_user(&pool).await.unwrap()).unwrap();
+            serde_json::to_value(local_user::load_local_user(&pool).await.unwrap()).unwrap();
         let local_user_id = local_user_json["id"].as_str().unwrap().to_string();
         assert_ne!(local_user_id, "local-user");
         assert_eq!(local_user_json["display_name"], "You");
@@ -102,7 +102,7 @@ fn mention_notifications_sync_blocks_comments_and_delivery_state() {
         create_page(&pool, PAGE_A, BLOCK_A).await;
 
         let local_user_json =
-            serde_json::to_value(local_user::get_local_user(&pool).await.unwrap()).unwrap();
+            serde_json::to_value(local_user::load_local_user(&pool).await.unwrap()).unwrap();
         let local_user_id = local_user_json["id"].as_str().unwrap().to_string();
 
         writes::update_block(

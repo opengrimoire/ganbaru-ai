@@ -1,7 +1,7 @@
 use crate::data_sources::layouts::table::{
     TableProperty, row_property_checked, row_property_number, row_property_plain_text,
 };
-use crate::data_sources::views::ViewProperty as BoardProperty;
+use crate::data_sources::views::ViewProperty;
 use crate::models::{
     NoteDataSourceFilterCondition, NoteDataSourceFilterOperator, NoteDataSourceRowWindow,
     NoteDataSourceTableFilter, NoteDataSourceTableFilterPredicate, NoteDataSourceTableSort,
@@ -28,7 +28,7 @@ pub(crate) struct RowWindowQuery<'a> {
     pub group_property: Option<&'a TableProperty>,
 }
 
-pub(crate) fn table_properties_from_board(schema: &[BoardProperty]) -> Vec<TableProperty> {
+pub(crate) fn table_properties_from_view(schema: &[ViewProperty]) -> Vec<TableProperty> {
     schema
         .iter()
         .map(|property| TableProperty {
@@ -627,16 +627,16 @@ fn push_cursor_branch(
     if !prior.is_empty() {
         query.push(" AND ");
     }
-    let null_flag = matches!(value, CursorValue::Null);
+    let cursor_is_null = matches!(value, CursorValue::Null);
     query.push("(").push(expression).push(") IS NULL ");
     query
         .push(if descending { "< " } else { "> " })
-        .push_bind(null_flag);
+        .push_bind(cursor_is_null);
     query
         .push(" OR ((")
         .push(expression)
         .push(") IS NULL = ")
-        .push_bind(null_flag);
+        .push_bind(cursor_is_null);
     query
         .push(" AND ")
         .push(expression)

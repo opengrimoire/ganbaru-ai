@@ -5,13 +5,13 @@ import { NOTES_TABLE_CALCULATIONS, parseNotesTablePresentation } from "$lib/note
 
 export { NOTES_TABLE_CALCULATIONS, parseNotesTablePresentation } from "$lib/notes/validation/database/table-presentation";
 
-function record(value: unknown): value is Record<string, unknown> {
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 /** Read grouping and presentation from a validated saved table view. */
 export function notesTableViewSettings(view: NotesDatabaseView): Pick<NotesDatabaseTableConfiguration, "group_property_id" | "group_order" | "collapsed_group_ids" | "hide_empty_groups" | "presentation"> {
-  const table = record(view.configuration?.table) ? view.configuration.table : {};
+  const table = isPlainRecord(view.configuration?.table) ? view.configuration.table : {};
   const strings = (value: unknown): string[] => Array.isArray(value) ? value.filter((id): id is string => typeof id === "string") : [];
   return {
     group_property_id: typeof table.group_property_id === "string" ? table.group_property_id : null,
@@ -56,12 +56,12 @@ export function notesTableGroups(rows: readonly NotesPage[], columns: readonly N
   });
   const groupedColumn = columns.find((column) => column.id === configuration.group_property_id);
   if (groupedColumn?.type === "people" || groupedColumn?.type === "relation") {
-    const people = rows.flatMap((row) => Object.values(row.properties).flatMap((value) => record(value) && value.id === groupedColumn.id && Array.isArray(value[groupedColumn.type]) ? value[groupedColumn.type] as unknown[] : []));
+    const people = rows.flatMap((row) => Object.values(row.properties).flatMap((value) => isPlainRecord(value) && value.id === groupedColumn.id && Array.isArray(value[groupedColumn.type]) ? value[groupedColumn.type] as unknown[] : []));
     for (const group of groups) {
       if (group.id === "__empty__") continue;
-      const person = people.find((value) => record(value) && value.id === group.id);
-      group.name = record(person) && typeof person.name === "string" && person.name ? person.name
-        : record(person) && typeof person.title === "string" && person.title ? person.title : group.id;
+      const person = people.find((value) => isPlainRecord(value) && value.id === group.id);
+      group.name = isPlainRecord(person) && typeof person.name === "string" && person.name ? person.name
+        : isPlainRecord(person) && typeof person.title === "string" && person.title ? person.title : group.id;
     }
   }
   for (const id of Object.keys(counts)) {

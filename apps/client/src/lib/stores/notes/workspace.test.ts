@@ -54,14 +54,14 @@ describe("Notes workspace reloads", () => {
     const initial = controller.load();
     backend.resolvers[0]?.(shell("project-a-next"));
     await initial;
-    const oldPagination = controller.loadMoreWorkspaceWindow();
+    const stalePagination = controller.loadMoreWorkspaceWindow();
     projectId = "project-b";
     const refresh = controller.refreshProjectNavigation();
     expect(backend.load).toHaveBeenLastCalledWith(expect.objectContaining({ project_id: "project-b", selected_page_id: "note" }));
     await controller.loadMoreWorkspaceWindow();
     expect(backend.load).toHaveBeenCalledTimes(3);
     backend.resolvers[1]?.(shell("stale-next"));
-    await oldPagination;
+    await stalePagination;
     expect(applyAdditionalShell).not.toHaveBeenCalled();
     const fresh = shell("project-b-next");
     backend.resolvers[2]?.(fresh);

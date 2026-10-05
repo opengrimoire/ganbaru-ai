@@ -1,4 +1,4 @@
-use super::{device_state_error, provider_not_found, store::read_chat_config};
+use super::{device_state_error, provider_not_found_error, store::read_chat_config};
 use crate::chat::device_state::{ChatProviderDeviceState, read_active_device_scope};
 use crate::chat::settings_commands::ProviderInstanceRead;
 use ganbaru_chat_contracts::config::ChatPortableProviderConfig;
@@ -16,7 +16,7 @@ pub(crate) fn read_provider(
         .providers
         .iter()
         .find(|candidate| &candidate.instance_id == instance_id)
-        .ok_or_else(provider_not_found)?;
+        .ok_or_else(provider_not_found_error)?;
     let scope = read_active_device_scope(app).map_err(device_state_error)?;
     Ok(provider_instance_read(portable, &scope.provider_instances))
 }

@@ -36,12 +36,12 @@ export function getThemeEditor() {
         session ? getTheme().exportTheme(session.editingId) : undefined,
       );
     },
-    open(id: ThemeId, opts: OpenEditorOptions): void {
+    open(id: ThemeId, options: OpenEditorOptions): void {
       session = {
         editingId: id,
-        snapshot: opts.snapshot,
-        createdFresh: opts.createdFresh ?? false,
-        previousActiveId: opts.previousActiveId,
+        snapshot: options.snapshot,
+        createdFresh: options.createdFresh ?? false,
+        previousActiveId: options.previousActiveId,
       };
     },
     // Commit the session: flush the in-memory edits to SQLite and clear

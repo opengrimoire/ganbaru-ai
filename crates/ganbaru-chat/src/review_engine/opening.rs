@@ -14,8 +14,8 @@ use super::registry::{
     ChatReviewRegistry, ReviewFileInternal, ReviewSnapshot, file_id, review_revision, snapshot_id,
     snapshot_read,
 };
-use super::validation::{thread_required, validate_path, validate_reference};
-use super::{corrupt_data, empty_tree, git_text, persistence_error, review_error};
+use super::validation::{thread_required_error, validate_path, validate_reference};
+use super::{corrupt_data_error, empty_tree, git_text, persistence_error, review_error};
 use sha2::{Digest, Sha256};
 use sqlx::{Row, SqlitePool};
 use std::collections::HashMap;
@@ -29,7 +29,7 @@ enum MissingReviewSource {
     ProviderTurn,
 }
 
-fn missing_review_source(reason: MissingReviewSource, message: &str) -> ChatError {
+fn missing_review_source_error(reason: MissingReviewSource, message: &str) -> ChatError {
     let mut error = ChatError::new(ChatErrorCode::NotFound, message, true);
     error.details = Some(Box::new(serde_json::json!({ "reason": reason })));
     error
@@ -73,11 +73,14 @@ pub async fn open_review(
                 )
             }
             ReviewDiffSource::Checkpoint { range, turn_id } => {
-                let thread_id = request.thread_id.as_ref().ok_or_else(thread_required)?;
+                let thread_id = request
+                    .thread_id
+                    .as_ref()
+                    .ok_or_else(thread_required_error)?;
                 let (pre, post) = checkpoint_pair(pool, thread_id, *range, turn_id.as_ref())
                     .await?
                     .ok_or_else(|| {
-                        missing_review_source(
+                        missing_review_source_error(
                             MissingReviewSource::CheckpointPair,
                             "A settled checkpoint pair is not available for this review",
                         )
@@ -193,7 +196,10 @@ pub async fn open_review(
                 )
             }
             ReviewDiffSource::ProviderTurn { turn_id } => {
-                let thread_id = request.thread_id.as_ref().ok_or_else(thread_required)?;
+                let thread_id = request
+                    .thread_id
+                    .as_ref()
+                    .ok_or_else(thread_required_error)?;
                 let (changed, patch) = provider_turn_patch(pool, thread_id, turn_id).await?;
                 let mut provider_patches = HashMap::new();
                 let mut files = Vec::new();
@@ -218,7 +224,7 @@ pub async fn open_review(
                     files.push(file_from_summary(String::new(), summary, &request.source));
                 }
                 if files.is_empty() {
-                    return Err(missing_review_source(
+                    return Err(missing_review_source_error(
                         MissingReviewSource::ProviderTurn,
                         "The provider did not report usable workspace-relative paths for this turn",
                     ));
@@ -260,7 +266,7 @@ pub async fn open_review(
         hasher.update([0]);
         hasher.update(environment_id.as_bytes());
         hasher.update([0]);
-        hasher.update(serde_json::to_vec(&request.source).map_err(|_| corrupt_data())?);
+        hasher.update(serde_json::to_vec(&request.source).map_err(|_| corrupt_data_error())?);
         let mut patches = provider_patches.iter().collect::<Vec<_>>();
         patches.sort_by(|left, right| left.0.cmp(right.0));
         for (path, patch) in patches {
@@ -349,7 +355,7 @@ async fn reconcile_review_comment_applicability(
     let Some(thread_id) = thread_id else {
         return Ok(());
     };
-    let source_data = serde_json::to_string(source).map_err(|_| corrupt_data())?;
+    let source_data = serde_json::to_string(source).map_err(|_| corrupt_data_error())?;
     sqlx::query(
         "UPDATE chat_review_comments
          SET applicability = CASE
@@ -422,8 +428,8 @@ async fn checkpoint_pair(
         .map_err(persistence_error)?;
     match (pre, post) {
         (Some(pre), Some(post)) => Ok(Some((
-            ChatCheckpointId::new(pre).map_err(|_| corrupt_data())?,
-            ChatCheckpointId::new(post).map_err(|_| corrupt_data())?,
+            ChatCheckpointId::new(pre).map_err(|_| corrupt_data_error())?,
+            ChatCheckpointId::new(post).map_err(|_| corrupt_data_error())?,
         ))),
         _ => Ok(None),
     }
@@ -474,23 +480,23 @@ pub async fn provider_turn_patch(
     .await
     .map_err(persistence_error)?
     .ok_or_else(|| {
-        missing_review_source(
+        missing_review_source_error(
             MissingReviewSource::ProviderTurn,
             "The provider did not report a patch for this turn",
         )
     })?;
-    match serde_json::from_str::<CanonicalEvent>(&payload).map_err(|_| corrupt_data())? {
+    match serde_json::from_str::<CanonicalEvent>(&payload).map_err(|_| corrupt_data_error())? {
         CanonicalEvent::DiffUpdated(event) => event
             .provider_diff
             .filter(|patch| !patch.is_empty())
             .map(|patch| (event.files, patch))
             .ok_or_else(|| {
-                missing_review_source(
+                missing_review_source_error(
                     MissingReviewSource::ProviderTurn,
                     "The provider did not report patch content for this turn",
                 )
             }),
-        _ => Err(corrupt_data()),
+        _ => Err(corrupt_data_error()),
     }
 }
 
@@ -656,7 +662,8 @@ mod source_error_tests {
             (MissingReviewSource::ProviderTurn, "provider_turn"),
         ] {
             let value =
-                serde_json::to_value(missing_review_source(reason, "Changed diagnostic")).unwrap();
+                serde_json::to_value(missing_review_source_error(reason, "Changed diagnostic"))
+                    .unwrap();
             assert_eq!(value["code"], "not_found");
             assert_eq!(value["details"]["reason"], expected);
             assert_eq!(value["message"], "Changed diagnostic");

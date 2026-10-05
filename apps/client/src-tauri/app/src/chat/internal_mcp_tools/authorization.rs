@@ -1,6 +1,6 @@
 //! Live authorization checks shared by host-tool calls and publication.
 
-use super::{generic_denial, persistence_error, wire_folder_capability};
+use super::{generic_denial_error, persistence_error, wire_folder_capability};
 use crate::chat::internal_mcp::{
     InternalMcpChannelSource, InternalMcpFolderSource, InternalMcpRunScope,
 };
@@ -62,7 +62,7 @@ pub(crate) async fn verify_scope(
     .await
     .map_err(persistence_error)?;
     if !valid {
-        return Err(generic_denial());
+        return Err(generic_denial_error());
     }
     if let Some(scratch_generation_id) = scope.scratch_generation_id.as_deref() {
         crate::chat::scratch::require_reusable_generation(
@@ -71,7 +71,7 @@ pub(crate) async fn verify_scope(
             scope.authorization_revision_id.as_str(),
         )
         .await
-        .map_err(|_| generic_denial())?;
+        .map_err(|_| generic_denial_error())?;
     }
     Ok(())
 }
@@ -291,14 +291,18 @@ pub(super) async fn verify_channel_source(
     .bind(&source.source_handle)
     .bind(&source.message_reference_id)
     .bind(&source.conversation_id)
-    .bind(i64::try_from(source.lower_ordinal).map_err(|_| generic_denial())?)
-    .bind(i64::try_from(source.high_ordinal).map_err(|_| generic_denial())?)
+    .bind(i64::try_from(source.lower_ordinal).map_err(|_| generic_denial_error())?)
+    .bind(i64::try_from(source.high_ordinal).map_err(|_| generic_denial_error())?)
     .bind(&source.source_revision_cutoff_id)
-    .bind(i64::try_from(source.destination_audience_revision).map_err(|_| generic_denial())?)
+    .bind(i64::try_from(source.destination_audience_revision).map_err(|_| generic_denial_error())?)
     .fetch_one(pool)
     .await
     .map_err(persistence_error)?;
-    if valid { Ok(()) } else { Err(generic_denial()) }
+    if valid {
+        Ok(())
+    } else {
+        Err(generic_denial_error())
+    }
 }
 
 pub(super) async fn verify_folder_source(
@@ -387,7 +391,11 @@ pub(super) async fn verify_folder_source(
     .fetch_one(pool)
     .await
     .map_err(persistence_error)?;
-    if valid { Ok(()) } else { Err(generic_denial()) }
+    if valid {
+        Ok(())
+    } else {
+        Err(generic_denial_error())
+    }
 }
 
 fn wire_runtime_approval_policy(policy: ChatRuntimeApprovalPolicy) -> &'static str {

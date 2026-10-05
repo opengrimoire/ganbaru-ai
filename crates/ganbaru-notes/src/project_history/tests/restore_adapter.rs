@@ -14,19 +14,20 @@ fn project_restore_removes_later_notes_and_keeps_a_safety_version() {
         restore::restore_version(&pool, PROJECT_ID, &baseline.id)
             .await
             .unwrap();
-        let later_exists: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM notes_pages WHERE id = ?")
-            .bind(LATER_PAGE_ID)
-            .fetch_one(&pool)
-            .await
-            .unwrap();
-        assert_eq!(later_exists, 0);
-        let versions: i64 = sqlx::query_scalar(
+        let later_page_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM notes_pages WHERE id = ?")
+                .bind(LATER_PAGE_ID)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(later_page_count, 0);
+        let version_count: i64 = sqlx::query_scalar(
             "SELECT COUNT(*) FROM notes_project_history_versions WHERE project_id = ?",
         )
         .bind(PROJECT_ID)
         .fetch_one(&pool)
         .await
         .unwrap();
-        assert!(versions >= 3);
+        assert!(version_count >= 3);
     });
 }

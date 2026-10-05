@@ -15,7 +15,7 @@ impl OpenCodeEventNormalizer {
             .get("patterns")
             .and_then(Value::as_array)
             .ok_or_else(|| protocol_error("permission patterns"))?;
-        if patterns.len() > MAX_SAFE_COLLECTION
+        if patterns.len() > MAX_SAFE_COLLECTION_ITEMS
             || patterns.iter().any(|value| value.as_str().is_none())
         {
             return Err(protocol_error("permission patterns"));
@@ -52,7 +52,7 @@ impl OpenCodeEventNormalizer {
         let detail = patterns
             .iter()
             .filter_map(Value::as_str)
-            .map(|value| bounded(value, 4096))
+            .map(|value| bounded_text(value, 4096))
             .collect::<Vec<_>>()
             .join("\n");
         let request_id =
@@ -121,7 +121,7 @@ impl OpenCodeEventNormalizer {
         if questions.is_empty() || questions.len() > MAX_QUESTIONS {
             return Err(protocol_error("questions"));
         }
-        let mut normalized = Vec::with_capacity(questions.len());
+        let mut normalized_questions = Vec::with_capacity(questions.len());
         let mut mappings = Vec::with_capacity(questions.len());
         for (index, question) in questions.iter().enumerate() {
             let question = question
@@ -146,12 +146,12 @@ impl OpenCodeEventNormalizer {
                 let label = text(option, "label")
                     .filter(|label| !label.trim().is_empty())
                     .ok_or_else(|| protocol_error("question option label"))?;
-                option_labels.push(bounded(label, 512));
+                option_labels.push(bounded_text(label, 512));
                 normalized_options.push(UserInputOption {
                     id: format!("option-{option_index}"),
-                    label: bounded(label, 512),
+                    label: bounded_text(label, 512),
                     description: text(option, "description")
-                        .map(|description| bounded(description, 2048)),
+                        .map(|description| bounded_text(description, 2048)),
                 });
             }
             let question_id = format!("question-{index}");
@@ -164,10 +164,10 @@ impl OpenCodeEventNormalizer {
                 option_labels,
                 free_form_allowed,
             });
-            normalized.push(UserInputQuestion {
+            normalized_questions.push(UserInputQuestion {
                 id: question_id,
-                header: text(question, "header").map(|header| bounded(header, 256)),
-                question: bounded(prompt, 4096),
+                header: text(question, "header").map(|header| bounded_text(header, 256)),
+                question: bounded_text(prompt, 4096),
                 options: normalized_options,
                 multiple: question
                     .get("multiple")
@@ -188,7 +188,7 @@ impl OpenCodeEventNormalizer {
             Some(request_id.clone()),
             CanonicalEvent::UserInputRequested(UserInputRequestedEvent {
                 request_id,
-                questions: normalized,
+                questions: normalized_questions,
             }),
         )?])
     }
@@ -218,7 +218,7 @@ impl OpenCodeEventNormalizer {
                         .map(|value| {
                             value
                                 .as_str()
-                                .map(|value| bounded(value, 512))
+                                .map(|value| bounded_text(value, 512))
                                 .ok_or_else(|| protocol_error("question answer value"))
                         })
                         .collect::<ChatResult<Vec<_>>>()?;

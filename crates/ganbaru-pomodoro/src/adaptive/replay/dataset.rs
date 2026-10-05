@@ -23,8 +23,8 @@ pub(crate) fn from_read(
         .into_iter()
         .map(|entry| (entry.opportunity_id, entry.history))
         .collect::<BTreeMap<_, _>>();
-    let mut rhythms = BTreeMap::new();
-    let mut candidates = BTreeMap::new();
+    let mut selected_rhythms = BTreeMap::new();
+    let mut candidate_ids = BTreeMap::new();
     let opportunities = dataset
         .opportunities
         .into_iter()
@@ -41,8 +41,8 @@ pub(crate) fn from_read(
                     entry.id
                 )
             })?;
-            rhythms.insert(entry.id.clone(), selected);
-            candidates.insert(entry.id.clone(), entry.candidate_id);
+            selected_rhythms.insert(entry.id.clone(), selected);
+            candidate_ids.insert(entry.id.clone(), entry.candidate_id);
             Ok(ReplayOpportunity {
                 label: Some(entry.run_id),
                 input: AdaptiveDecisionInput {
@@ -91,7 +91,7 @@ pub(crate) fn from_read(
                     .unwrap_or(0.0)
             };
             ObservedOutcome {
-                observed_rhythm: rhythms.get(&id).copied(),
+                observed_rhythm: selected_rhythms.get(&id).copied(),
                 opportunity_id: id,
                 features: FeatureVector {
                     completed_focus_segments: numeric("completed_focus_segments"),
@@ -124,7 +124,7 @@ pub(crate) fn from_read(
             }
         })
         .collect::<Vec<_>>();
-    let observed_scores = score_by_candidate(&outcomes, &candidates);
+    let observed_scores = score_by_candidate(&outcomes, &candidate_ids);
     Ok(ReplayDataset {
         opportunities,
         outcomes,

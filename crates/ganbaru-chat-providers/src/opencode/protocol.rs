@@ -31,14 +31,14 @@ pub struct OpenCodeCommand {
 }
 
 pub fn parse_commands(value: Value) -> ChatResult<Vec<OpenCodeCommand>> {
-    let values = value
+    let entries = value
         .as_array()
         .ok_or_else(|| protocol_error("command catalog"))?;
-    if values.len() > 512 {
+    if entries.len() > 512 {
         return Err(protocol_error("command catalog"));
     }
     let mut seen = BTreeSet::new();
-    values
+    entries
         .iter()
         .map(|value| {
             let object = value

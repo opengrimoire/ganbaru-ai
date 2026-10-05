@@ -2,7 +2,7 @@ import type { AppLocale } from "$lib/i18n/locales";
 import type { Translate } from "$lib/i18n/translator.svelte";
 import { formatDateTime, formatList, formatNumber } from "$lib/i18n/formatters";
 import type { NotesDataSourceNumberFormat, NotesPage } from "$lib/notes/types";
-import { notesDatabaseDateBoundaryOrder, notesDatabaseDateBoundaryValid, notesDatabaseDateValue, notesDatabaseTimeZoneValid, type NotesDatabaseDateValue } from "./date";
+import { notesDatabaseDateBoundaryOrder, notesDatabaseIsDateBoundaryValid, notesDatabaseDateValue, notesDatabaseIsTimeZoneValid, type NotesDatabaseDateValue } from "./date";
 import { notesDatabaseTableCellText, type NotesDatabaseTableColumn } from "./table";
 
 export type NotesDatabaseDateFormat = "locale" | "iso" | "relative";
@@ -59,10 +59,10 @@ export function notesDatabaseNumberDisplay(locale: AppLocale, value: number, for
 }
 
 function dateDisplayBoundary(value: string, date: NotesDatabaseDateValue, context: NotesDatabasePropertyDisplayContext, format: NotesDatabasePropertyDisplayFormat): string {
-  if (!notesDatabaseDateBoundaryValid(value)) return value;
+  if (!notesDatabaseIsDateBoundaryValid(value)) return value;
   const hasTime = value.includes("T");
-  const wallTime = !hasTime || !/(?:Z|[+-]\d{2}:\d{2})$/.test(value);
-  const timeZone = wallTime ? "UTC" : date.time_zone && notesDatabaseTimeZoneValid(date.time_zone) ? date.time_zone : undefined;
+  const isWallTime = !hasTime || !/(?:Z|[+-]\d{2}:\d{2})$/.test(value);
+  const timeZone = isWallTime ? "UTC" : date.time_zone && notesDatabaseIsTimeZoneValid(date.time_zone) ? date.time_zone : undefined;
   const instant = new Date(notesDatabaseDateBoundaryOrder(value));
   const dateOptions: Intl.DateTimeFormatOptions = { year: "numeric", month: "short", day: "numeric", timeZone };
   let label: string;
@@ -71,7 +71,7 @@ function dateDisplayBoundary(value: string, date: NotesDatabaseDateValue, contex
     label = ["year", "month", "day"].map((type) => parts.find((part) => part.type === type)?.value ?? "").join("-");
   } else if (format.date_format === "relative") {
     const now = context.now ?? new Date();
-    const relativeZone = date.time_zone && notesDatabaseTimeZoneValid(date.time_zone) ? date.time_zone : undefined;
+    const relativeZone = date.time_zone && notesDatabaseIsTimeZoneValid(date.time_zone) ? date.time_zone : undefined;
     const dayNumber = (value: Date, zone: string | undefined): number => {
       const parts = new Intl.DateTimeFormat("en", { year: "numeric", month: "numeric", day: "numeric", timeZone: zone }).formatToParts(value);
       const field = (type: string): number => Number(parts.find((part) => part.type === type)?.value);

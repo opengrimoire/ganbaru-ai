@@ -96,14 +96,10 @@ fn notion_export_import_reconstructs_pages_database_rows_links_and_provenance() 
         let data_source_id = value["imported_data_sources"][0]["local_id"]
             .as_str()
             .unwrap();
-        let table = data_sources::layouts::table::get_data_source_table_view(
-            &pool,
-            data_source_id,
-            None,
-            None,
-        )
-        .await
-        .unwrap();
+        let table =
+            data_sources::layouts::table::data_source_table_view(&pool, data_source_id, None, None)
+                .await
+                .unwrap();
         let table_json = serde_json::to_value(table).unwrap();
         let rows = table_json["rows"].as_array().unwrap();
         assert_eq!(rows.len(), 2);

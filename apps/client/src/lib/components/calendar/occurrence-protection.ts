@@ -32,7 +32,7 @@ export function eventMatchesActiveOccurrence(
 }
 
 /** Compare aliases of one concrete occurrence without interpreting rendered geometry. */
-export function sameConcreteOccurrence(a: CalendarEvent, b: CalendarEvent): boolean {
+export function isSameConcreteOccurrence(a: CalendarEvent, b: CalendarEvent): boolean {
   if (a.id === b.id) return true;
   const aRecurring = !!a.recurringParentId || /::\d{4}-\d{2}-\d{2}$/.test(a.id) || !!a.recurrence || !!a.rdate?.length;
   const bRecurring = !!b.recurringParentId || /::\d{4}-\d{2}-\d{2}$/.test(b.id) || !!b.recurrence || !!b.rdate?.length;

@@ -68,7 +68,7 @@ export function pickTicks(tMin: number, tMax: number, innerWidth: number): numbe
  * (sorted, lowercased to match the snake_case style of the fixed columns).
  * Missing values emit as empty cells so spreadsheet imports keep alignment.
  */
-export function samplesToCSV(samples: MemorySample[], metricSlug?: string): string {
+export function samplesToCsv(samples: MemorySample[], metricSlug?: string): string {
   if (samples.length === 0) return "";
   const procNames = new Set<string>();
   for (const s of samples) {

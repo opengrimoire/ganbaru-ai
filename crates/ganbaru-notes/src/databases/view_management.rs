@@ -11,7 +11,7 @@ use sqlx::{Sqlite, SqlitePool, Transaction};
 const VIEW_COLUMNS: &str = "id, database_id, data_source_id, name, type AS view_type, filter, sorts, configuration, source_provider, source_object_id, source_workspace_id, source_last_edited_time, url, created_time, last_edited_time";
 const MAX_VIEW_NAME_CHARS: usize = 200;
 
-fn view_name(name: &str) -> Result<&str, String> {
+fn validate_view_name(name: &str) -> Result<&str, String> {
     let trimmed = name.trim();
     if trimmed.is_empty() || trimmed.chars().count() > MAX_VIEW_NAME_CHARS {
         return Err("view name must contain 1 to 200 characters".to_string());
@@ -22,7 +22,10 @@ fn view_name(name: &str) -> Result<&str, String> {
     Ok(trimmed)
 }
 
-async fn page_id_tx(tx: &mut Transaction<'_, Sqlite>, database_id: &str) -> Result<String, String> {
+async fn load_parent_page_id_tx(
+    tx: &mut Transaction<'_, Sqlite>,
+    database_id: &str,
+) -> Result<String, String> {
     sqlx::query_scalar(
         "SELECT block.page_id
          FROM notes_databases AS database
@@ -36,7 +39,7 @@ async fn page_id_tx(tx: &mut Transaction<'_, Sqlite>, database_id: &str) -> Resu
     .ok_or_else(|| "database not found".to_string())
 }
 
-async fn view_tx(
+async fn load_view_tx(
     tx: &mut Transaction<'_, Sqlite>,
     database_id: &str,
     view_id: &str,
@@ -62,7 +65,7 @@ pub async fn list_database_views(
         .begin()
         .await
         .map_err(|error| format!("begin Notes view list: {error}"))?;
-    page_id_tx(&mut tx, database_id).await?;
+    load_parent_page_id_tx(&mut tx, database_id).await?;
     let query = format!(
         "SELECT {VIEW_COLUMNS} FROM notes_database_views WHERE database_id = ? ORDER BY sort_order ASC, created_time ASC, id ASC",
     );
@@ -84,14 +87,14 @@ pub async fn duplicate_database_view(
     require_uuid(&request.id, "id")?;
     require_uuid(&request.database_id, "database_id")?;
     require_uuid(&request.source_view_id, "source_view_id")?;
-    let name = view_name(&request.name)?;
+    let name = validate_view_name(&request.name)?;
     let mut tx = pool
         .begin()
         .await
         .map_err(|error| format!("begin Notes view duplicate: {error}"))?;
-    let page_id = page_id_tx(&mut tx, &request.database_id).await?;
+    let page_id = load_parent_page_id_tx(&mut tx, &request.database_id).await?;
     crate::databases::editing_lock::ensure_unlocked_tx(&mut tx, &request.database_id).await?;
-    let source = view_tx(&mut tx, &request.database_id, &request.source_view_id).await?;
+    let source = load_view_tx(&mut tx, &request.database_id, &request.source_view_id).await?;
     page_history::record_page_snapshot_tx(&mut tx, &page_id, "duplicate_database_view").await?;
     project_history::mark_page_dirty_tx(&mut tx, &page_id, "Duplicate database view", false)
         .await?;
@@ -118,7 +121,7 @@ pub async fn duplicate_database_view(
     .execute(&mut *tx)
     .await
     .map_err(|error| format!("duplicate Notes database view: {error}"))?;
-    let created = view_tx(&mut tx, &request.database_id, &request.id).await?;
+    let created = load_view_tx(&mut tx, &request.database_id, &request.id).await?;
     tx.commit()
         .await
         .map_err(|error| format!("commit Notes view duplicate: {error}"))?;
@@ -133,14 +136,14 @@ pub async fn rename_database_view(
 ) -> Result<NoteDatabaseViewDto, String> {
     require_uuid(database_id, "database_id")?;
     require_uuid(view_id, "view_id")?;
-    let name = view_name(&update.name)?;
+    let name = validate_view_name(&update.name)?;
     let mut tx = pool
         .begin()
         .await
         .map_err(|error| format!("begin Notes view rename: {error}"))?;
-    let page_id = page_id_tx(&mut tx, database_id).await?;
+    let page_id = load_parent_page_id_tx(&mut tx, database_id).await?;
     crate::databases::editing_lock::ensure_unlocked_tx(&mut tx, database_id).await?;
-    let current = view_tx(&mut tx, database_id, view_id).await?;
+    let current = load_view_tx(&mut tx, database_id, view_id).await?;
     if current.name != name {
         page_history::record_page_snapshot_tx(&mut tx, &page_id, "rename_database_view").await?;
         project_history::mark_page_dirty_tx(&mut tx, &page_id, "Rename database view", false)
@@ -155,7 +158,7 @@ pub async fn rename_database_view(
         .await
         .map_err(|error| format!("rename Notes database view: {error}"))?;
     }
-    let renamed = view_tx(&mut tx, database_id, view_id).await?;
+    let renamed = load_view_tx(&mut tx, database_id, view_id).await?;
     tx.commit()
         .await
         .map_err(|error| format!("commit Notes view rename: {error}"))?;
@@ -173,8 +176,8 @@ pub async fn delete_database_view(
         .begin()
         .await
         .map_err(|error| format!("begin Notes view delete: {error}"))?;
-    let page_id = page_id_tx(&mut tx, database_id).await?;
-    let current = view_tx(&mut tx, database_id, view_id).await?;
+    let page_id = load_parent_page_id_tx(&mut tx, database_id).await?;
+    let current = load_view_tx(&mut tx, database_id, view_id).await?;
     crate::databases::editing_lock::ensure_unlocked_tx(&mut tx, database_id).await?;
     if current.view_type == "table" {
         let other_tables: i64 = sqlx::query_scalar(

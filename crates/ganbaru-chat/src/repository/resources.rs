@@ -158,14 +158,14 @@ pub async fn store_browser_artifact(
     let extension = match input.kind {
         ChatResourceKind::BrowserScreenshot if input.mime_type == "image/png" => "png",
         ChatResourceKind::BrowserRecording if input.mime_type == "application/zip" => "zip",
-        _ => return Err(invalid_resource()),
+        _ => return Err(invalid_resource_error()),
     };
     let relative_path = format!(
         "assets/chat/browser-artifacts/{}.{}",
         input.resource_id, extension
     );
     let destination = attachments::resolve_managed_chat_path(vault_root, &relative_path)?;
-    let parent = destination.parent().ok_or_else(invalid_resource)?;
+    let parent = destination.parent().ok_or_else(invalid_resource_error)?;
     fs::create_dir_all(parent).map_err(io_error)?;
     let temporary = destination.with_extension(format!("{extension}.tmp"));
     let write_result = (|| -> std::io::Result<()> {
@@ -210,7 +210,7 @@ pub async fn store_browser_artifact(
         .bind(resource_kind)
         .bind(input.display_name)
         .bind(input.mime_type)
-        .bind(i64::try_from(input.bytes.len()).map_err(|_| invalid_resource())?)
+        .bind(i64::try_from(input.bytes.len()).map_err(|_| invalid_resource_error())?)
         .bind(&sha256)
         .bind(&relative_path)
         .bind(&resource_uri)
@@ -282,7 +282,7 @@ fn read_browser_artifact_bytes(
         .starts_with("assets/chat/browser-artifacts/")
         || resource.read.byte_size > MAX_BROWSER_ARTIFACT_BYTES
     {
-        return Err(invalid_resource());
+        return Err(invalid_resource_error());
     }
     let path = attachments::resolve_managed_chat_path(vault_root, &resource.managed_relative_path)?;
     let metadata = fs::symlink_metadata(&path).map_err(io_error)?;
@@ -290,7 +290,7 @@ fn read_browser_artifact_bytes(
         || !metadata.is_file()
         || metadata.len() != resource.read.byte_size
     {
-        return Err(invalid_resource());
+        return Err(invalid_resource_error());
     }
     fs::read(path).map_err(io_error)
 }
@@ -301,7 +301,7 @@ fn parse_stored_resource(row: sqlx::sqlite::SqliteRow) -> ChatResult<StoredChatR
         .map_err(persistence_error)?
         .map(ChatAttachmentId::new)
         .transpose()
-        .map_err(|_| corrupt_data())?;
+        .map_err(|_| corrupt_data_error())?;
     let managed_relative_path = row
         .try_get("managed_relative_path")
         .map_err(persistence_error)?;
@@ -321,7 +321,7 @@ fn parse_resource_read(row: sqlx::sqlite::SqliteRow) -> ChatResult<ChatResourceR
             row.try_get::<String, _>("working_folder_id")
                 .map_err(persistence_error)?,
         )
-        .map_err(|_| corrupt_data())?,
+        .map_err(|_| corrupt_data_error())?,
         kind: parse_kind(
             &row.try_get::<String, _>("resource_kind")
                 .map_err(persistence_error)?,
@@ -332,14 +332,14 @@ fn parse_resource_read(row: sqlx::sqlite::SqliteRow) -> ChatResult<ChatResourceR
             row.try_get::<i64, _>("byte_size")
                 .map_err(persistence_error)?,
         )
-        .map_err(|_| corrupt_data())?,
+        .map_err(|_| corrupt_data_error())?,
         sha256: row.try_get("sha256").map_err(persistence_error)?,
         resource_uri: row.try_get("resource_uri").map_err(persistence_error)?,
         created_at: UtcTimestamp::new(
             row.try_get::<String, _>("created_at")
                 .map_err(persistence_error)?,
         )
-        .map_err(|_| corrupt_data())?,
+        .map_err(|_| corrupt_data_error())?,
     })
 }
 
@@ -349,7 +349,7 @@ fn parse_kind(value: &str) -> ChatResult<ChatResourceKind> {
         "text_snippet" => Ok(ChatResourceKind::TextSnippet),
         "browser_screenshot" => Ok(ChatResourceKind::BrowserScreenshot),
         "browser_recording" => Ok(ChatResourceKind::BrowserRecording),
-        _ => Err(corrupt_data()),
+        _ => Err(corrupt_data_error()),
     }
 }
 
@@ -377,11 +377,11 @@ fn validate_artifact_resource_id(value: &str) -> ChatResult<()> {
     Ok(())
 }
 
-fn invalid_resource() -> ChatError {
+fn invalid_resource_error() -> ChatError {
     ChatError::validation("resource", "Managed Chat resource is invalid")
 }
 
-fn corrupt_data() -> ChatError {
+fn corrupt_data_error() -> ChatError {
     ChatError::new(
         ChatErrorCode::Persistence,
         "Stored Chat resource is invalid",

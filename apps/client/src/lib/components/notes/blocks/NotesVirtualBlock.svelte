@@ -23,8 +23,8 @@
     calloutLayers?: readonly NotesCalloutLayer[];
   } = $props();
 
-  const firstCallout = $derived(calloutLayers[0]?.first ?? false);
-  const lastCallout = $derived(calloutLayers[0]?.last ?? false);
+  const isFirstCallout = $derived(calloutLayers[0]?.first ?? false);
+  const isLastCallout = $derived(calloutLayers[0]?.last ?? false);
 </script>
 
 {#snippet body()}
@@ -36,11 +36,11 @@
 {/snippet}
 
 {#if item}
-  <div use:measure={item.block.id} data-notes-virtual-block={item.block.id} class:notes-callout-first={firstCallout} class:notes-callout-last={lastCallout} class:notes-ordinary-block={!calloutLayers.length}>
+  <div use:measure={item.block.id} data-notes-virtual-block={item.block.id} class:notes-callout-first={isFirstCallout} class:notes-callout-last={isLastCallout} class:notes-ordinary-block={!calloutLayers.length}>
     <NotesCalloutLayers layers={calloutLayers} {body} />
   </div>
 {:else}
-  <div class:notes-callout-first={firstCallout} class:notes-callout-last={lastCallout} class:notes-ordinary-block={!calloutLayers.length}>
+  <div class:notes-callout-first={isFirstCallout} class:notes-callout-last={isLastCallout} class:notes-ordinary-block={!calloutLayers.length}>
     <NotesCalloutLayers layers={calloutLayers} {body} />
   </div>
 {/if}

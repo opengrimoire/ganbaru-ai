@@ -42,7 +42,7 @@
     NotesTableOfContentsItem,
   } from "$lib/notes/types";
   import { notesNumberedListOrdinals } from "$lib/notes/blocks/editor-ui";
-  import { notesCalloutLayers, notesCalloutOwnTextHidden } from "$lib/notes/block-types/callout-layout";
+  import { notesCalloutLayers, notesCalloutIsOwnTextHidden } from "$lib/notes/block-types/callout-layout";
   import NotesBlockRow from "./NotesBlockRow.svelte";
   import type NotesSelectionContextMenu from "./NotesSelectionContextMenu.svelte";
   import type NotesDatabasePastePrompt from "$lib/components/notes/database/NotesDatabasePastePrompt.svelte";
@@ -136,7 +136,7 @@
   });
   function isHiddenCalloutLabel(blockId: string): boolean {
     const block = notes.blockById(blockId);
-    return !!block && notesCalloutOwnTextHidden(
+    return !!block && notesCalloutIsOwnTextHidden(
       block,
       notes.childIdsByParentId[blockId]?.length ?? 0,
     );
@@ -315,7 +315,7 @@
       dataSourceRowPages: notesMentionData.rowPages,
       projects: projects.projects,
       tasks: projects.tasks,
-      calendarEvents: calendar.rawBlocks,
+      calendarEvents: calendar.sourceEvents,
       activePomodoroRunId: pomodoro.activeRunId,
       pomodoroTime: pomodoro.formattedTime,
       currentMusicSource: musicMentionContext.currentMusicSource,

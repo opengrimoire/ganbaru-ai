@@ -61,7 +61,7 @@ impl Owner {
             self.state.status,
             SessionStatus::Playing | SessionStatus::Loading
         ) && !self.state.muted
-            && self.state.entry().is_some();
+            && self.state.current_entry().is_some();
         if should_duck {
             let (reply, response) = oneshot::channel();
             // Retain restoration before the first backend call. A lost or partially

@@ -5,7 +5,7 @@ fn permission_approvals_return_only_requested_subset_and_scope() {
     crate::test_block_on(async {
         let (client_reader, _server_writer) = tokio::io::duplex(4096);
         let (server_reader, client_writer) = tokio::io::duplex(4096);
-        let _connection = CodexRpcConnection::from_test_io(client_reader, client_writer);
+        let connection = CodexRpcConnection::from_test_io(client_reader, client_writer);
         let pending_id = identifier("provider-request-1", ProviderRequestId::new);
         let requested = json!({
             "fileSystem": { "write": ["/redacted/workspace"] },
@@ -56,7 +56,7 @@ fn permission_approvals_return_only_requested_subset_and_scope() {
         }))
         .unwrap();
         resolve_codex_approval(
-            &_connection.client(),
+            &connection.client(),
             &pending,
             &normalizer,
             &route,
@@ -89,7 +89,7 @@ fn secret_structured_answers_are_sent_to_codex_but_not_canonicalized() {
     crate::test_block_on(async {
         let (client_reader, _server_writer) = tokio::io::duplex(4096);
         let (server_reader, client_writer) = tokio::io::duplex(4096);
-        let _connection = CodexRpcConnection::from_test_io(client_reader, client_writer);
+        let connection = CodexRpcConnection::from_test_io(client_reader, client_writer);
         let pending_id = identifier("provider-request-secret", ProviderRequestId::new);
         let pending: PendingCodexRequests = Arc::new(Mutex::new(HashMap::from([(
             pending_id.clone(),
@@ -129,7 +129,7 @@ fn secret_structured_answers_are_sent_to_codex_but_not_canonicalized() {
         }))
         .unwrap();
         resolve_codex_user_input(
-            &_connection.client(),
+            &connection.client(),
             &pending,
             &normalizer,
             &route,

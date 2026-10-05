@@ -47,9 +47,9 @@
     ensureBenchmarkOverlay?: () => Promise<void>;
   } = $props();
 
-  const win = getCurrentWindow();
-  const isMainWindow = win.label === "main";
-  const detachedWindowView = detachableTabViewFromWindowLabel(win.label);
+  const appWindow = getCurrentWindow();
+  const isMainWindow = appWindow.label === "main";
+  const detachedWindowView = detachableTabViewFromWindowLabel(appWindow.label);
   const nav = getNavigation();
   const pomodoro = getPomodoro();
   const theme = getTheme();
@@ -147,9 +147,9 @@
   async function openMusicPanelFromTray(): Promise<void> {
     openMusicPanel();
     try {
-      await win.show();
-      await win.unminimize();
-      await win.setFocus();
+      await appWindow.show();
+      await appWindow.unminimize();
+      await appWindow.setFocus();
     } catch (error) {
       console.error("Failed to focus the main window for Music:", error);
     }
@@ -235,7 +235,7 @@
   const lockedByThemeEditor = $derived(!!themeEditor.editingId);
 
   const windowController = createTitleBarWindowController({
-    window: win,
+    window: appWindow,
     detachedWindowView,
     markDetachedViewAttached: (view) => detachedWindows.markAttached(view),
     benchmarkLocked: () => lockedByBenchmark,
@@ -279,7 +279,7 @@
   });
 
   const detachedController = createTitleBarDetachedController({
-    window: win,
+    window: appWindow,
     isMainWindow,
     detachedWindowView,
     contextView: () => tabContextView,
@@ -446,7 +446,7 @@
   <TitleBarTabs
     bind:this={titleBarTabs}
     {detachedWindowView}
-    windowLabel={win.label}
+    windowLabel={appWindow.label}
     pomodoroMenuOpen={showPomodoroMenu}
     onVolumeWheel={(event) => mediaControls?.handleVolumeWheel(event)}
     onOpenContextMenu={openTabContextMenu}
@@ -506,8 +506,8 @@
     isMaximized={windowController.isMaximized}
     {lockedByBenchmark}
     {isMainWindow}
-    onMinimize={() => { void win.minimize(); }}
-    onToggleMaximize={() => { void win.toggleMaximize(); }}
+    onMinimize={() => { void appWindow.minimize(); }}
+    onToggleMaximize={() => { void appWindow.toggleMaximize(); }}
     onClose={() => { void handleClose(); }}
   />
 </div>

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { MaybePromise } from "$lib/utils";
   import type { CalendarEvent } from "$lib/calendar/types";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import {
@@ -9,8 +10,6 @@
   import type { ProjectLinkableEvent, ProjectTask } from "$lib/projects/types";
   import ProjectTaskDetailScheduledBlocksSection from "./ProjectTaskDetailScheduledBlocksSection.svelte";
 
-  type ActionResult = void | Promise<void>;
-  type LinkActionResult = boolean | Promise<boolean>;
   type EventDatePickerTarget = "start" | "end";
 
   let {
@@ -34,8 +33,8 @@
       endDate?: string,
       limit?: number,
     ) => Promise<ProjectLinkableEvent[]>;
-    onLinkEvent: (task: ProjectTask, event: ProjectLinkableEvent) => LinkActionResult;
-    onUnlinkEvent: (task: ProjectTask, event: ProjectLinkableEvent) => ActionResult;
+    onLinkEvent: (task: ProjectTask, event: ProjectLinkableEvent) => MaybePromise<boolean>;
+    onUnlinkEvent: (task: ProjectTask, event: ProjectLinkableEvent) => MaybePromise;
   } = $props();
 
   const { t } = getLocalization();

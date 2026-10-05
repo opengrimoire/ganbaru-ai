@@ -22,7 +22,7 @@ pub(super) enum HostDecision {
 }
 
 impl HostDecision {
-    pub(super) fn blocked(&self) -> bool {
+    pub(super) fn is_blocked(&self) -> bool {
         match self {
             Self::Allowed
             | Self::SafetyAllowlist
@@ -90,7 +90,7 @@ pub(super) fn decide_url_with_limits(
 ) -> HostDecision {
     let regular_decision = if regular_rules_active {
         let decision = decide_url(host, url, config);
-        if decision.blocked() {
+        if decision.is_blocked() {
             return decision;
         }
         Some(decision)
@@ -98,7 +98,7 @@ pub(super) fn decide_url_with_limits(
         None
     };
     let limit_decision = decide_url_limit(host, config, limit_state);
-    if limit_decision.blocked() {
+    if limit_decision.is_blocked() {
         return limit_decision;
     }
     regular_decision.unwrap_or(HostDecision::Allowed)
@@ -255,10 +255,10 @@ fn feed_fingerprint_bool(hash: &mut u64, value: bool) {
     feed_fingerprint(hash, if value { "1" } else { "0" });
 }
 
-fn feed_fingerprint_hosts(hash: &mut u64, label: &str, hosts: &[String]) {
+fn feed_fingerprint_list(hash: &mut u64, label: &str, values: &[String]) {
     feed_fingerprint(hash, label);
-    for host in hosts {
-        feed_fingerprint(hash, host);
+    for value in values {
+        feed_fingerprint(hash, value);
     }
 }
 
@@ -275,7 +275,7 @@ pub(super) fn rules_fingerprint(
     feed_fingerprint_bool(&mut hash, config.block_during_short_breaks);
     feed_fingerprint_bool(&mut hash, config.block_during_long_breaks);
     feed_fingerprint_bool(&mut hash, config.pause_during_focus_pause);
-    feed_fingerprint_hosts(&mut hash, "category", &config.blocked_category_ids);
+    feed_fingerprint_list(&mut hash, "category", &config.blocked_category_ids);
     feed_fingerprint(&mut hash, "custom_stack");
     for stack in &config.custom_category_stacks {
         feed_fingerprint(&mut hash, &stack.id);
@@ -284,9 +284,9 @@ pub(super) fn rules_fingerprint(
             feed_fingerprint(&mut hash, host);
         }
     }
-    feed_fingerprint_hosts(&mut hash, "blocked", &config.blocked_hosts);
-    feed_fingerprint_hosts(&mut hash, "exception", &config.exception_hosts);
-    feed_fingerprint_hosts(&mut hash, "allowed", &config.allowed_hosts);
+    feed_fingerprint_list(&mut hash, "blocked", &config.blocked_hosts);
+    feed_fingerprint_list(&mut hash, "exception", &config.exception_hosts);
+    feed_fingerprint_list(&mut hash, "allowed", &config.allowed_hosts);
     feed_fingerprint_bool(&mut hash, config.limits.enabled);
     feed_fingerprint(&mut hash, "limits");
     for limit in &config.limits.items {

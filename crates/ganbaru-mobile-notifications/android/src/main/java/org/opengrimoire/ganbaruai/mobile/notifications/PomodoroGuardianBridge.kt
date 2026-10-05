@@ -84,8 +84,8 @@ internal class PomodoroGuardianClient(private val context: Context) {
 
     internal fun encodeSchedule(schedule: List<PomodoroReminder>): String =
       JSONArray().apply {
-        schedule.forEach { projection ->
-          put(JSONObject(projection.encode()))
+        schedule.forEach { reminder ->
+          put(JSONObject(reminder.encode()))
         }
       }.toString()
 
@@ -115,7 +115,7 @@ class PomodoroGuardianProvider : ContentProvider() {
         METHOD_CONFIGURE_COPY -> {
           val copy = PomodoroNotificationScheduler.decodeCopy(JSONObject(extras.requireString(KEY_COPY)))
           NativeFocusAuthorityProvider.requireProcessScope(extras).publish(
-            { processNonce -> NativeFocusAuthorityProvider.processCurrent(appContext, processNonce) },
+            { processNonce -> NativeFocusAuthorityProvider.isProcessCurrent(appContext, processNonce) },
           ) { PomodoroNotificationScheduler.configureCopy(appContext, copy) }
           Bundle.EMPTY
         }
@@ -129,7 +129,7 @@ class PomodoroGuardianProvider : ContentProvider() {
           val projection = PomodoroNotificationScheduler.decode(encoded)
             ?: error("Pomodoro projection is invalid")
           NativeFocusAuthorityProvider.requireScope(extras).publish(
-            { processNonce, generation, revision -> NativeFocusAuthorityProvider.current(appContext, processNonce, generation, revision) },
+            { processNonce, generation, revision -> NativeFocusAuthorityProvider.isCurrent(appContext, processNonce, generation, revision) },
           ) { PomodoroNotificationScheduler.update(appContext, projection) }
           Bundle.EMPTY
         }
@@ -137,13 +137,13 @@ class PomodoroGuardianProvider : ContentProvider() {
           val projection = PomodoroNotificationScheduler.decode(extras.requireString(KEY_PROJECTION))
             ?: error("Committed Focus completion projection is invalid")
           NativeFocusAuthorityProvider.requireScope(extras).publish(
-            { processNonce, generation, revision -> NativeFocusAuthorityProvider.current(appContext, processNonce, generation, revision) },
+            { processNonce, generation, revision -> NativeFocusAuthorityProvider.isCurrent(appContext, processNonce, generation, revision) },
           ) { PomodoroNotificationScheduler.complete(appContext, projection) }
           Bundle.EMPTY
         }
         METHOD_CANCEL -> {
           NativeFocusAuthorityProvider.requireProcessScope(extras).publish(
-            { processNonce -> NativeFocusAuthorityProvider.processCurrent(appContext, processNonce) },
+            { processNonce -> NativeFocusAuthorityProvider.isProcessCurrent(appContext, processNonce) },
           ) { PomodoroNotificationScheduler.cancel(appContext) }
           Bundle.EMPTY
         }

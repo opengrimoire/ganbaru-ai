@@ -201,10 +201,10 @@ function renderNode({ entry, children, databaseReference }: ClipboardNode): stri
         const row = node.entry.block;
         if (row.type !== "table_row") return renderNode(node);
         return `<tr>${row.table_row.cells.map((cell, columnIndex) => {
-          const columnHeader = block.table.has_column_header && rowIndex === 0;
-          const rowHeader = block.table.has_row_header && columnIndex === 0;
-          const tag = columnHeader || rowHeader ? "th" : "td";
-          const scope = columnHeader ? ' scope="col"' : rowHeader ? ' scope="row"' : "";
+          const isColumnHeader = block.table.has_column_header && rowIndex === 0;
+          const isRowHeader = block.table.has_row_header && columnIndex === 0;
+          const tag = isColumnHeader || isRowHeader ? "th" : "td";
+          const scope = isColumnHeader ? ' scope="col"' : isRowHeader ? ' scope="row"' : "";
           return `<${tag}${scope}>${richTextHtml(cell)}</${tag}>`;
         }).join("")}</tr>`;
       }).join("")}</tbody></table>`;
@@ -223,14 +223,14 @@ function renderNode({ entry, children, databaseReference }: ClipboardNode): stri
 function renderMarkdown(nodes: readonly ClipboardNode[]): string {
   const parts: string[] = [];
   let previousList = "";
-  let number = 0;
+  let listOrdinal = 0;
   for (const { entry, children, databaseReference } of nodes) {
     const { block } = entry;
     const items = selectedRichText(entry);
     const content = notesRichTextMarkdown(items);
     const descendants = renderMarkdown(children);
     const list = ["numbered_list_item", "bulleted_list_item", "to_do"].includes(block.type) ? block.type : "";
-    number = list === "numbered_list_item" ? (previousList === list ? number + 1 : 1) : 0;
+    listOrdinal = list === "numbered_list_item" ? (previousList === list ? listOrdinal + 1 : 1) : 0;
     let value = content;
     if (isHeadingBlockType(block.type)) value = `${"#".repeat(Number(block.type.slice(-1)))} ${content}`;
     else if (block.type === "toggle") {
@@ -238,7 +238,7 @@ function renderMarkdown(nodes: readonly ClipboardNode[]): string {
       if (descendants) value += `\n\n${descendants.split("\n").map((line) => `    ${line}`).join("\n")}`;
     }
     else if (list) {
-      const marker = block.type === "numbered_list_item" ? `${number}. `
+      const marker = block.type === "numbered_list_item" ? `${listOrdinal}. `
         : block.type === "to_do" ? `- [${block.to_do.checked ? "x" : " "}] ` : "- ";
       const indent = " ".repeat(marker.length);
       value = marker + content.replace(/\n/gu, `\n${indent}`);

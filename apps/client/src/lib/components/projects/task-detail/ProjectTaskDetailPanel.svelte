@@ -144,7 +144,7 @@
   const projectCustomFields = $derived(projects.customFieldsForProject(selectedProjectId));
   const allProjectEvents = $derived.by(() => {
     if (!selectedProjectId) return [];
-    return calendar.rawBlocks
+    return calendar.sourceEvents
       .filter((event) => event.projectId === selectedProjectId)
       .sort((a, b) => a.start.localeCompare(b.start));
   });

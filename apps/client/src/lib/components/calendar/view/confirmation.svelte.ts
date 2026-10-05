@@ -31,14 +31,14 @@ export function createCalendarViewConfirmationController({
   function requestConfirm(
     nextMessage: string,
     nextAction: () => Promise<void>,
-    opts?: ConfirmOptions,
+    options?: ConfirmOptions,
   ): void {
-    title = opts?.title;
+    title = options?.title;
     message = nextMessage;
     action = nextAction;
-    yesLabel = opts?.yesLabel ?? defaultYesLabel();
-    noLabel = opts?.noLabel ?? defaultNoLabel();
-    extraShortcut = opts?.extraConfirmShortcut;
+    yesLabel = options?.yesLabel ?? defaultYesLabel();
+    noLabel = options?.noLabel ?? defaultNoLabel();
+    extraShortcut = options?.extraConfirmShortcut;
   }
 
   async function confirmYes(): Promise<void> {

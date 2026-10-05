@@ -17,7 +17,7 @@ pub fn source_requires_thread(source: &ReviewDiffSource) -> bool {
     )
 }
 
-pub fn thread_required() -> ChatError {
+pub fn thread_required_error() -> ChatError {
     ChatError::validation(
         "threadId",
         "This review source requires an existing Chat thread",
@@ -26,7 +26,7 @@ pub fn thread_required() -> ChatError {
 
 pub fn validate_open_request(request: &OpenChatReviewRequest) -> ChatResult<()> {
     if source_requires_thread(&request.source) && request.thread_id.is_none() {
-        return Err(thread_required());
+        return Err(thread_required_error());
     }
     if request.context_lines > MAX_CONTEXT_LINES {
         return Err(ChatError::validation(

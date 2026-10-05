@@ -5,14 +5,12 @@
   import Check from "@lucide/svelte/icons/check";
   import Plus from "@lucide/svelte/icons/plus";
   import { getLocalization } from "$lib/i18n/translator.svelte";
-  import type { ProjectStatus, ProjectTask } from "$lib/projects/types";
+  import type { MoveDirection, ProjectStatus, ProjectTask } from "$lib/projects/types";
   import type { Theme } from "$lib/themes";
-  import { cn } from "$lib/utils";
+  import { cn, type MaybePromise } from "$lib/utils";
   import ProjectStatusBadge from "$lib/components/projects/ProjectStatusBadge.svelte";
   import ProjectSettingsSectionHeading from "$lib/components/projects/settings/ProjectSettingsSectionHeading.svelte";
 
-  type ActionResult = void | Promise<void>;
-  type SortDirection = -1 | 1;
 
   let {
     task,
@@ -33,16 +31,16 @@
     draft: string;
     statusForTask: (task: ProjectTask) => ProjectStatus | undefined;
     onDraftChange: (value: string) => void;
-    onSubmitSubtask: (task: ProjectTask) => ActionResult;
-    onToggleComplete: (task: ProjectTask) => ActionResult;
+    onSubmitSubtask: (task: ProjectTask) => MaybePromise;
+    onToggleComplete: (task: ProjectTask) => MaybePromise;
     onOpenTask: (task: ProjectTask) => void;
-    onPromoteSubtask: (task: ProjectTask) => ActionResult;
-    onMoveSubtask: (task: ProjectTask, direction: SortDirection) => ActionResult;
+    onPromoteSubtask: (task: ProjectTask) => MaybePromise;
+    onMoveSubtask: (task: ProjectTask, direction: MoveDirection) => MaybePromise;
   } = $props();
 
   const { t } = getLocalization();
 
-  function adjacentSubtask(subtask: ProjectTask, direction: SortDirection): ProjectTask | undefined {
+  function adjacentSubtask(subtask: ProjectTask, direction: MoveDirection): ProjectTask | undefined {
     const index = subtasks.findIndex((entry) => entry.id === subtask.id);
     if (index < 0) return undefined;
     return subtasks[index + direction];

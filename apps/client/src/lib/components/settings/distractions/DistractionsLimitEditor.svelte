@@ -65,10 +65,10 @@
   const usage = getDistractionsUsage();
   const theme = getTheme();
   const { t } = getLocalization();
-  const android = __GANBARU_AI_BUILD_PLATFORM__ === "android";
-  const sourceColorGridColumns = 4;
-  const sourceColorColumnOrder = [0, 3, 1, 2] as const;
-  const sourceColorPickOrder = createSourceColorPickOrder();
+  const isAndroid = __GANBARU_AI_BUILD_PLATFORM__ === "android";
+  const SOURCE_COLOR_GRID_COLUMNS = 4;
+  const SOURCE_COLOR_COLUMN_ORDER = [0, 3, 1, 2] as const;
+  const SOURCE_COLOR_PICK_ORDER = createSourceColorPickOrder();
 
   function budgetDurationLabel(minutes: number): string {
     if (minutes < 60) return t("settings.distractions.limits.editor.minutes", minutes);
@@ -207,11 +207,11 @@
   }
 
   function createSourceColorPickOrder(): readonly EventColor[] {
-    const rows = Math.ceil(EVENT_COLOR_OPTIONS.length / sourceColorGridColumns);
+    const rows = Math.ceil(EVENT_COLOR_OPTIONS.length / SOURCE_COLOR_GRID_COLUMNS);
     const colors: EventColor[] = [];
-    for (const column of sourceColorColumnOrder) {
+    for (const column of SOURCE_COLOR_COLUMN_ORDER) {
       for (let row = 0; row < rows; row += 1) {
-        const color = EVENT_COLOR_OPTIONS[(row * sourceColorGridColumns) + column];
+        const color = EVENT_COLOR_OPTIONS[(row * SOURCE_COLOR_GRID_COLUMNS) + column];
         if (typeof color === "number") colors.push(color);
       }
     }
@@ -219,7 +219,7 @@
   }
 
   function entryColorForIndex(index: number): EventColor {
-    return sourceColorPickOrder[index % sourceColorPickOrder.length] ?? FALLBACK_COLOR_INDEX;
+    return SOURCE_COLOR_PICK_ORDER[index % SOURCE_COLOR_PICK_ORDER.length] ?? FALLBACK_COLOR_INDEX;
   }
 
   function nextEntryColor(): EventColor {
@@ -228,7 +228,7 @@
         .map((entry) => entry.color)
         .filter((color): color is EventColor => typeof color === "number"),
     );
-    return sourceColorPickOrder.find((color) => !usedColors.has(color))
+    return SOURCE_COLOR_PICK_ORDER.find((color) => !usedColors.has(color))
       ?? entryColorForIndex(draftEntries.length);
   }
 
@@ -705,7 +705,7 @@
                     color={entry.color ?? undefined}
                     theme={theme.current}
                     ariaLabel={t("settings.distractions.limits.editor.selectSourceColor")}
-                    onselect={(color) => updateEntryColor(entry.id, color)}
+                    onSelect={(color) => updateEntryColor(entry.id, color)}
                   />
                 </div>
                 <button
@@ -724,7 +724,7 @@
                   <span class="text-[0.733333rem] font-medium text-muted-foreground">{t("settings.distractions.limits.editor.website")}</span>
                   <input
                     value={entry.websiteHost}
-                    disabled={android}
+                    disabled={isAndroid}
                     oninput={(event) => updateEntry(entry.id, "websiteHost", event.currentTarget.value)}
                     class="h-8 min-w-0 rounded-md border border-border bg-background/70 px-2.5 text-[0.8rem] text-foreground outline-none placeholder:text-muted-foreground focus:border-ring dark:bg-transparent"
                     placeholder="domain.com"
@@ -733,7 +733,7 @@
 
                 <div class="flex min-w-0 flex-col gap-1">
                   <span class="text-[0.733333rem] font-medium text-muted-foreground">{t("settings.distractions.limits.editor.mobile")}</span>
-                  {#if android}
+                  {#if isAndroid}
                     <div class="flex h-8 min-w-0 items-center gap-1 rounded-md border border-border bg-background/70 px-1.5 dark:bg-transparent">
                       <button type="button" onclick={() => openMobileAppPicker(entry.id)} class={["min-w-0 flex-1 truncate rounded-sm px-1.5 py-1 text-left text-[0.8rem] outline-none hover:bg-accent", entry.mobileAppName ? "text-foreground" : "text-muted-foreground"]}>
                         {entry.mobileAppName || t("settings.distractions.limits.editor.chooseApp")}
@@ -756,7 +756,7 @@
                     <button
                       type="button"
                       onclick={() => openDesktopAppPicker(entry.id)}
-                      disabled={android}
+                      disabled={isAndroid}
                       class={[
                         "min-w-0 flex-1 truncate rounded-sm px-1.5 py-1 text-left text-[0.8rem] outline-none transition-colors hover:bg-accent focus:bg-accent",
                         entry.desktopAppName ? "text-foreground" : "text-muted-foreground",
@@ -767,7 +767,7 @@
                     {#if entry.desktopAppName}
                       <button
                         type="button"
-                        disabled={android}
+                        disabled={isAndroid}
                         onclick={() => clearDesktopApp(entry.id)}
                         aria-label={t("settings.distractions.limits.editor.clearDesktopApp")}
                         class="flex h-6 w-6 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"

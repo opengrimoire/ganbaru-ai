@@ -1,9 +1,9 @@
 <script lang="ts">
+  import type { MaybePromise } from "$lib/utils";
   import ImageIcon from "@lucide/svelte/icons/image";
   import type { IconPickerAsset } from "./types";
   import { getLocalization } from "$lib/i18n/translator.svelte";
 
-  type ActionResult = void | Promise<void>;
 
   let {
     uploadDraft,
@@ -24,10 +24,10 @@
     uploading: boolean;
     uploadBodyStyle: string;
     uploadUrl: string;
-    onChooseFile: () => ActionResult;
-    onDiscardDraft: () => ActionResult;
-    onSelectDraft: () => ActionResult;
-    onDownloadUrl: () => ActionResult;
+    onChooseFile: () => MaybePromise;
+    onDiscardDraft: () => MaybePromise;
+    onSelectDraft: () => MaybePromise;
+    onDownloadUrl: () => MaybePromise;
     remoteUrlAvailable?: boolean;
   } = $props();
 

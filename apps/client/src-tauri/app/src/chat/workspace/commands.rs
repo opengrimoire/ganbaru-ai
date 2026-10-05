@@ -700,7 +700,7 @@ async fn pick_workspace_folder(
         picker = picker.set_directory(directory);
     }
     picker.pick_folder(move |selection| {
-        let result = selection.map(file_path_to_path_buf).transpose();
+        let result = selection.map(dialog_path).transpose();
         let _ = sender.try_send(result);
     });
     receiver
@@ -765,7 +765,7 @@ fn now_timestamp() -> ChatResult<UtcTimestamp> {
         .map_err(|_| ChatError::new(ChatErrorCode::Internal, "create Chat timestamp", false))
 }
 
-fn file_path_to_path_buf(path: FilePath) -> Result<PathBuf, String> {
+fn dialog_path(path: FilePath) -> Result<PathBuf, String> {
     path.into_path()
         .map_err(|_| "selected path is not local".to_string())
 }

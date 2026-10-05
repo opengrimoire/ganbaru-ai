@@ -159,7 +159,7 @@ pub fn config_options() -> Value {
     ])
 }
 
-pub fn initialize_response(auth: bool) -> Value {
+pub fn initialize_response(advertises_auth: bool) -> Value {
     json!({
         "protocolVersion": 1,
         "agentCapabilities": {
@@ -171,7 +171,7 @@ pub fn initialize_response(auth: bool) -> Value {
             },
             "sessionCapabilities": {}
         },
-        "authMethods": if auth {
+        "authMethods": if advertises_auth {
             json!([{ "id": "cursor_login", "name": "Cursor login" }])
         } else {
             json!([])

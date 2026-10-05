@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { calendarDataOnly } from "$lib/components/calendar/view/commit-service";
 import type { CalendarEvent } from "$lib/calendar/types";
 import type { MusicContextAssignmentDraft } from "$lib/music/context-assignment";
-import { prepareUpdateBlockPayload } from "./event-payloads";
+import { prepareEventUpdatePayload } from "./event-payloads";
 
 const snapshot: MusicContextAssignmentDraft = {
   phase: "focus",
@@ -33,7 +33,7 @@ const event: CalendarEvent = {
 
 describe("calendar music persistence", () => {
   it("encodes snapshots and overrides as transactional event update fields", () => {
-    const result = prepareUpdateBlockPayload({
+    const result = prepareEventUpdatePayload({
       id: event.id,
       musicSnapshotAssignments: [snapshot],
       musicOverrideAssignments: [override],

@@ -41,7 +41,7 @@ async fn metadata(pool: &SqlitePool, ids: &[&str]) -> Value {
     serde_json::to_value(rows).unwrap()
 }
 
-async fn child(pool: &SqlitePool) {
+async fn create_child_row(pool: &SqlitePool) {
     data_sources::row_hierarchy::create_subitem(
         pool,
         DATA_SOURCE_A,
@@ -62,7 +62,7 @@ fn database_subitems_keep_source_ownership_and_reject_cycles_and_foreign_parents
     crate::test_block_on(async {
         let pool = migrated_memory_pool().await;
         seed_source(&pool).await;
-        child(&pool).await;
+        create_child_row(&pool).await;
         let page = serde_json::to_value(reads::load_page(&pool, PAGE_C).await.unwrap()).unwrap();
         assert_eq!(page["page"]["parent"]["data_source_id"], DATA_SOURCE_A);
         for (row, parent) in [(PAGE_B, PAGE_C), (PAGE_C, PAGE_C), (PAGE_C, PAGE_A)] {
@@ -126,7 +126,7 @@ fn database_subitems_report_unloaded_ancestors_and_counts_and_restore_trashed_re
     crate::test_block_on(async {
         let pool = migrated_memory_pool().await;
         seed_source(&pool).await;
-        child(&pool).await;
+        create_child_row(&pool).await;
         let unloaded = metadata(&pool, &[PAGE_C]).await;
         assert_eq!(unloaded[PAGE_C]["depth"], 1);
         assert_eq!(unloaded[PAGE_C]["parent_row_page_id"], PAGE_B);
@@ -134,14 +134,9 @@ fn database_subitems_report_unloaded_ancestors_and_counts_and_restore_trashed_re
             .bind(json!({"type": "and", "filters": [{"property_id": "title", "condition": "equals", "value": "Child"}]}).to_string())
             .bind(DATABASE_VIEW_A).execute(&pool).await.unwrap();
         let window = serde_json::to_value(
-            data_sources::layouts::table::get_data_source_table_view(
-                &pool,
-                DATA_SOURCE_A,
-                None,
-                None,
-            )
-            .await
-            .unwrap(),
+            data_sources::layouts::table::data_source_table_view(&pool, DATA_SOURCE_A, None, None)
+                .await
+                .unwrap(),
         )
         .unwrap();
         assert_eq!(window["rows"].as_array().unwrap().len(), 1);
@@ -251,7 +246,7 @@ fn database_subitems_copy_and_export_canonical_relationships_with_independent_ro
     crate::test_block_on(async {
         let pool = migrated_memory_pool().await;
         seed_source(&pool).await;
-        child(&pool).await;
+        create_child_row(&pool).await;
         let copied = serde_json::to_value(
             databases::duplicate_database(
                 &pool,

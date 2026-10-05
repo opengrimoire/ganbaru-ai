@@ -37,7 +37,7 @@ pub struct ClaudeRouteState {
     pub session_state: ProviderSessionState,
     pub modes: TurnModeSnapshot,
     pub model_id: Option<ModelId>,
-    pub resume: ClaudeResumeCursor,
+    pub resume_cursor: ClaudeResumeCursor,
     pub(super) stream_blocks: HashMap<u32, StreamBlock>,
     pub(super) tool_kinds: HashMap<String, CanonicalItemKind>,
 }
@@ -46,7 +46,7 @@ impl ClaudeRouteState {
     pub fn new(
         modes: TurnModeSnapshot,
         model_id: Option<ModelId>,
-        resume: ClaudeResumeCursor,
+        resume_cursor: ClaudeResumeCursor,
     ) -> Self {
         Self {
             provider_thread_id: None,
@@ -54,7 +54,7 @@ impl ClaudeRouteState {
             session_state: ProviderSessionState::Starting,
             modes,
             model_id,
-            resume,
+            resume_cursor,
             stream_blocks: HashMap::new(),
             tool_kinds: HashMap::new(),
         }
@@ -196,7 +196,7 @@ impl ClaudeEventNormalizer {
     ) -> ChatResult<Vec<CanonicalRuntimeEvent>> {
         let mut events = Vec::new();
         if let Some(uuid) = text(object, "uuid") {
-            state.resume.last_assistant_uuid = Some(uuid.to_string());
+            state.resume_cursor.last_assistant_uuid = Some(uuid.to_string());
             events.push(
                 self.event(
                     state,
@@ -210,7 +210,7 @@ impl ClaudeEventNormalizer {
                             .provider_thread_id
                             .as_deref()
                             .and_then(|value| ProviderThreadId::new(value.to_string()).ok()),
-                        resume_cursor: Some(resume_cursor(&state.resume)),
+                        resume_cursor: Some(resume_cursor(&state.resume_cursor)),
                         metadata: None,
                     }),
                 )?,
@@ -518,11 +518,11 @@ pub(super) fn bounded_shape(value: &Value) -> Option<VersionedJson> {
     })
 }
 
-pub(super) fn bounded_text(value: &str, maximum: usize) -> String {
-    if value.len() <= maximum {
+pub(super) fn bounded_text(value: &str, max_bytes: usize) -> String {
+    if value.len() <= max_bytes {
         return value.to_string();
     }
-    let mut end = maximum;
+    let mut end = max_bytes;
     while end > 0 && !value.is_char_boundary(end) {
         end -= 1;
     }

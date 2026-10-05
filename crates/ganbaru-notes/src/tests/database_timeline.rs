@@ -151,7 +151,7 @@ fn timeline_database_view_uses_date_ranges_grouping_filters_sorts_and_configurat
         .await
         .unwrap();
 
-        let default_timeline = data_sources::layouts::timeline::get_data_source_timeline_view(
+        let default_timeline = data_sources::layouts::timeline::data_source_timeline_view(
             &pool,
             DATA_SOURCE_A,
             None,

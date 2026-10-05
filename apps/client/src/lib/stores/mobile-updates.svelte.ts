@@ -14,7 +14,7 @@ export interface ParsedSemVer {
   readonly prerelease: readonly string[];
 }
 
-export interface ReleaseInfo {
+export interface LatestRelease {
   readonly version: string;
   readonly releasePageUrl: string;
   readonly apkDownloadUrl: string | null;
@@ -33,7 +33,7 @@ function isRecord(value: unknown): value is RawReleasePayload {
   return typeof value === "object" && value !== null;
 }
 
-function isString(value: unknown): value is string {
+function isNonBlankString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
 }
 
@@ -152,16 +152,16 @@ function parseApkDownloadUrl(
 export function parseReleasePayload(
   payload: unknown,
   repository = GITHUB_REPOSITORY,
-): ReleaseInfo | null {
+): LatestRelease | null {
   if (!isRecord(payload)) return null;
   if (!GITHUB_REPOSITORY_PATTERN.test(repository)) return null;
 
   const rawTag = payload.tag_name;
-  if (!isString(rawTag)) return null;
+  if (!isNonBlankString(rawTag)) return null;
   const version = parseReleaseTag(rawTag);
   if (!version) return null;
 
-  const publishedAt = isString(payload.published_at) ? payload.published_at : null;
+  const publishedAt = isNonBlankString(payload.published_at) ? payload.published_at : null;
   const expectedReleaseUrl =
     `https://github.com/${repository}/releases/tag/${encodeURIComponent(rawTag)}`;
   const htmlUrl = payload.html_url === expectedReleaseUrl ? expectedReleaseUrl : null;
@@ -178,7 +178,7 @@ export function parseReleasePayload(
   };
 }
 
-function parseReleaseApiUrl(repository: string): string | null {
+function latestReleaseApiUrl(repository: string): string | null {
   if (!GITHUB_REPOSITORY_PATTERN.test(repository)) return null;
   const [owner, name] = repository.split("/", 2);
   if (!owner || !name) return null;
@@ -239,7 +239,7 @@ class MobileUpdateStore {
       return;
     }
 
-    const endpoint = parseReleaseApiUrl(this.repository);
+    const endpoint = latestReleaseApiUrl(this.repository);
     if (!endpoint) {
       this.status = "error";
       this.errorMessage = this.localization.t("updates.feedNotConfigured");
@@ -260,7 +260,7 @@ class MobileUpdateStore {
         let message = this.localization.t("updates.checkFailed");
         try {
           const body = (await response.json()) as { message?: unknown };
-          if (isRecord(body) && isString(body.message) && body.message.length > 0) {
+          if (isRecord(body) && isNonBlankString(body.message) && body.message.length > 0) {
             message = body.message;
           }
         } catch {

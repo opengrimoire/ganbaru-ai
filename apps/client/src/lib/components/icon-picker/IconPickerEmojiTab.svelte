@@ -17,18 +17,18 @@
     ProjectEmojiEntry,
   } from "$lib/projects/icons/emoji-catalog.generated";
   import {
-    PROJECT_ICON_PICKER_SKIN_TONE_OPTIONS,
+    ICON_PICKER_SKIN_TONE_OPTIONS,
     applyProjectEmojiSkinTone,
     type ProjectEmojiSkinTone,
-    type ProjectIconPickerVisibleEmojiCategory,
+    type IconPickerVisibleEmojiCategory,
   } from "$lib/projects/icons/picker";
   import type { ProjectIconValue } from "$lib/projects/icons/values";
   import type { ProjectCustomEmoji } from "$lib/projects/types";
   import { cn } from "$lib/utils";
   import ProjectIcon from "$lib/components/projects/ProjectIcon.svelte";
 
-  interface ProjectIconPickerEmojiGroup {
-    category: ProjectIconPickerVisibleEmojiCategory;
+  interface IconPickerEmojiGroup {
+    category: IconPickerVisibleEmojiCategory;
     entries: readonly ProjectEmojiEntry[];
   }
 
@@ -71,8 +71,8 @@
     gridColumnCount: number;
     emojiRecentValues: readonly string[];
     visibleCustomEmojis: readonly ProjectCustomEmoji[];
-    emojiGroups: readonly ProjectIconPickerEmojiGroup[];
-    visibleEmojiCategories: readonly ProjectIconPickerVisibleEmojiCategory[];
+    emojiGroups: readonly IconPickerEmojiGroup[];
+    visibleEmojiCategories: readonly IconPickerVisibleEmojiCategory[];
     onScroll: () => void;
     onChooseRandom: () => void;
     onChooseRecent: (rawValue: string) => void;
@@ -144,7 +144,7 @@
         class="absolute right-0 top-9 z-10 grid gap-1 rounded-lg border border-border p-2 shadow-lg"
         style="grid-template-columns: repeat(3, 2rem); width: 7rem; background-color: var(--icon-picker-bg); color: var(--icon-picker-text);"
       >
-        {#each PROJECT_ICON_PICKER_SKIN_TONE_OPTIONS as tone}
+        {#each ICON_PICKER_SKIN_TONE_OPTIONS as tone}
           <button
             type="button"
             class={cn(

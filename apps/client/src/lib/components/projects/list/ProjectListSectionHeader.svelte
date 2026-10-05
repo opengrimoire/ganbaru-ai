@@ -6,11 +6,10 @@
   import EyeOff from "@lucide/svelte/icons/eye-off";
   import MoreHorizontal from "@lucide/svelte/icons/more-horizontal";
   import { getLocalization } from "$lib/i18n/translator.svelte";
-  import { cn } from "$lib/utils";
+  import { cn, type MaybePromise } from "$lib/utils";
   import type { ProjectSection } from "$lib/projects/types";
   import ProjectListSelectionButton from "./ProjectListSelectionButton.svelte";
 
-  type MaybePromise = Promise<void> | void;
 
   let {
     section,

@@ -4,7 +4,7 @@ import {
 } from "$lib/stores/preference-options";
 import { formatTimeLabel } from "./utils";
 
-export const GUTTER_WIDTH_PER_TZ = 46;
+export const GUTTER_WIDTH_PER_TIMEZONE = 46;
 
 export function getLocalTimezone(): string {
   return Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -275,9 +275,9 @@ export function searchTimezones(
 ): string[] {
   const sorted = getSortedByOffset();
   const excludeSet = new Set(exclude);
-  const q = query.toLowerCase().trim();
+  const normalizedQuery = query.toLowerCase().trim();
 
-  if (!q) {
+  if (!normalizedQuery) {
     const out: string[] = [];
     for (const info of sorted) {
       if (!excludeSet.has(info.tz)) out.push(info.tz);
@@ -292,23 +292,23 @@ export function searchTimezones(
     if (excludeSet.has(info.tz)) continue;
 
     let tier = Infinity;
-    if (info.longNameLower.startsWith(q)) tier = 0;
-    else if (info.longNameLower.includes(q)) tier = 1;
+    if (info.longNameLower.startsWith(normalizedQuery)) tier = 0;
+    else if (info.longNameLower.includes(normalizedQuery)) tier = 1;
     if (tier > 2) {
-      if (info.cityLower.startsWith(q)) tier = Math.min(tier, 2);
-      else if (info.cityLower.includes(q)) tier = Math.min(tier, 3);
+      if (info.cityLower.startsWith(normalizedQuery)) tier = Math.min(tier, 2);
+      else if (info.cityLower.includes(normalizedQuery)) tier = Math.min(tier, 3);
     }
     if (tier > 4) {
-      if (info.regionLower.startsWith(q)) tier = Math.min(tier, 4);
-      else if (info.regionLower.includes(q)) tier = Math.min(tier, 5);
+      if (info.regionLower.startsWith(normalizedQuery)) tier = Math.min(tier, 4);
+      else if (info.regionLower.includes(normalizedQuery)) tier = Math.min(tier, 5);
     }
     if (tier > 6) {
-      if (info.abbrLower.startsWith(q)) tier = Math.min(tier, 6);
-      else if (info.abbrLower.includes(q)) tier = Math.min(tier, 7);
+      if (info.abbrLower.startsWith(normalizedQuery)) tier = Math.min(tier, 6);
+      else if (info.abbrLower.includes(normalizedQuery)) tier = Math.min(tier, 7);
     }
     if (tier > 8) {
-      if (info.ianaLower.startsWith(q)) tier = Math.min(tier, 8);
-      else if (info.ianaLower.includes(q)) tier = Math.min(tier, 9);
+      if (info.ianaLower.startsWith(normalizedQuery)) tier = Math.min(tier, 8);
+      else if (info.ianaLower.includes(normalizedQuery)) tier = Math.min(tier, 9);
     }
 
     if (tier !== Infinity) {

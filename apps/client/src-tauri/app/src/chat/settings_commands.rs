@@ -13,7 +13,7 @@ use super::settings::{
     device_state_error, discover_default_providers, discover_default_providers_once,
     executable_search_directories, invalidate_provider_state_for_credential,
     mark_discovery_finished, mutate_chat_config, operation_context, pick_local_path,
-    portable_configuration, provider_instance_read, provider_mut, provider_not_found,
+    portable_configuration, provider_instance_read, provider_mut, provider_not_found_error,
     provider_runtime_changed, read_chat_config, read_settings, remember_composer_selection,
     replacement_provider_configurations, set_working_folder_provider_preference, unique_model_ids,
     validate_picker_title,
@@ -232,7 +232,7 @@ pub fn chat_remove_provider(
         .iter()
         .find(|candidate| candidate.instance_id == instance_id)
         .cloned()
-        .ok_or_else(provider_not_found)?;
+        .ok_or_else(provider_not_found_error)?;
     mutate_chat_config(&app, &state, |config| {
         config
             .providers

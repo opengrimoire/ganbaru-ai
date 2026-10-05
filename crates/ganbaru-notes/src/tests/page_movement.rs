@@ -21,7 +21,7 @@ fn move_page_between_workspace_and_parent_page() {
         assert_eq!(moved_page["page"]["parent"]["type"], "page_id");
         assert_eq!(moved_page["page"]["parent"]["page_id"], PAGE_A);
 
-        let parent_blocks = reads::get_block_children(&pool, PAGE_A, None, Some(10))
+        let parent_blocks = reads::block_children(&pool, PAGE_A, None, Some(10))
             .await
             .unwrap();
         let parent_blocks_json = serde_json::to_value(parent_blocks).unwrap();
@@ -108,7 +108,7 @@ fn archiving_nested_page_hides_child_page_block() {
         .unwrap();
 
         writes::archive_page(&pool, PAGE_B, true).await.unwrap();
-        let parent_blocks = reads::get_block_children(&pool, PAGE_A, None, Some(10))
+        let parent_blocks = reads::block_children(&pool, PAGE_A, None, Some(10))
             .await
             .unwrap();
         let parent_blocks_json = serde_json::to_value(parent_blocks).unwrap();

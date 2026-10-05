@@ -1,6 +1,6 @@
 import type { NotesDatabaseTableColumn } from "./table";
 import type { NotesDatabaseTableFilter, NotesDatabaseTableFilterCondition, NotesDatabaseTableFilterPredicate, NotesDatabaseTableSort } from "$lib/notes/types";
-import { notesDatabaseIsFilterDate, notesDatabaseIsFilterPredicate, notesDatabaseSerializeFilters } from "./filters";
+import { notesDatabaseIsFilterDateValue, notesDatabaseIsFilterPredicate, notesDatabaseSerializeFilters } from "./filters";
 export { notesDatabaseRowMatchesFilters } from "./filter-evaluation";
 export { NOTES_DATABASE_QUERY_MAX_FILTERS, NOTES_DATABASE_QUERY_MAX_FILTER_GROUPS, NOTES_DATABASE_QUERY_MAX_FILTER_DEPTH,
   notesDatabaseFilterCount, notesDatabaseFilterPredicates, notesDatabaseIsFilterPredicate } from "./filters";
@@ -32,14 +32,14 @@ export function notesDatabaseFilterNeedsValue(condition: NotesDatabaseTableFilte
 }
 
 /** Match date properties and metadata using the same typed operators. */
-export function notesDatabaseFilterIsDate(property: NotesDatabaseQueryProperty): boolean {
+export function notesDatabaseIsDateFilterProperty(property: NotesDatabaseQueryProperty): boolean {
   return property.type === "date" || property.type === "created_time" || property.type === "last_edited_time";
 }
 
 /** Seed a complete typed value when switching from a valueless condition. */
 function initialFilterValue(property: NotesDatabaseQueryProperty): string | number {
   if (property.type === "number") return 0;
-  if (notesDatabaseFilterIsDate(property)) {
+  if (notesDatabaseIsDateFilterProperty(property)) {
     const now = new Date();
     return `${String(now.getFullYear()).padStart(4, "0")}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
   }
@@ -48,7 +48,7 @@ function initialFilterValue(property: NotesDatabaseQueryProperty): string | numb
 
 /** Create a supported initial predicate for the selected property. */
 export function notesDatabaseNewFilter(property: NotesDatabaseQueryProperty): NotesDatabaseTableFilterPredicate {
-  const typed = property.type === "number" || notesDatabaseFilterIsDate(property);
+  const typed = property.type === "number" || notesDatabaseIsDateFilterProperty(property);
   return {
     property_id: property.id,
     condition: property.type === "checkbox" ? "checked" : typed ? "is_not_empty" : "contains",
@@ -76,7 +76,7 @@ export function notesDatabaseUpdatedFilters(
     if (!notesDatabaseFilterNeedsValue(next.condition)) next.value = null;
     else if (next.value === null || next.value === undefined
       || (property.type === "number" && typeof next.value !== "number")
-      || (notesDatabaseFilterIsDate(property) && (typeof next.value !== "string" || !notesDatabaseIsFilterDate(next.value)))) next.value = initialFilterValue(property);
+      || (notesDatabaseIsDateFilterProperty(property) && (typeof next.value !== "string" || !notesDatabaseIsFilterDateValue(next.value)))) next.value = initialFilterValue(property);
     return next;
   });
 }
@@ -108,14 +108,14 @@ export function notesDatabaseAppendFilter(filters: readonly NotesDatabaseTableFi
 }
 
 /** Preserve sort priority when changing direction and never append the same property twice. */
-export function notesDatabaseSortedColumn(
+export function notesDatabaseSortsWithColumn(
   sorts: readonly NotesDatabaseTableSort[],
   propertyId: string,
   direction: NotesDatabaseTableSort["direction"],
 ): NotesDatabaseTableSort[] {
-  const existing = sorts.findIndex((sort) => sort.property_id === propertyId);
+  const existingIndex = sorts.findIndex((sort) => sort.property_id === propertyId);
   const next = { property_id: propertyId, direction };
-  if (existing < 0 && sorts.length >= NOTES_DATABASE_QUERY_MAX_SORTS) return sorts.map((sort) => ({ ...sort }));
-  return existing < 0 ? [...sorts.map((sort) => ({ ...sort })), next]
-    : sorts.map((sort, index) => index === existing ? next : { ...sort });
+  if (existingIndex < 0 && sorts.length >= NOTES_DATABASE_QUERY_MAX_SORTS) return sorts.map((sort) => ({ ...sort }));
+  return existingIndex < 0 ? [...sorts.map((sort) => ({ ...sort })), next]
+    : sorts.map((sort, index) => index === existingIndex ? next : { ...sort });
 }

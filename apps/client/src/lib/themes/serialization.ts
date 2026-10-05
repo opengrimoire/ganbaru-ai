@@ -267,7 +267,7 @@ function validateSnapshot(input: Record<string, unknown>): ThemeValidationResult
     "appTokens",
     errors,
   );
-  const cleanCalTokens = sanitizeFullTokenSnapshot(
+  const cleanCalendarTokens = sanitizeFullTokenSnapshot(
     input.calendarTokens,
     CALENDAR_TOKEN_KEYS,
     CALENDAR_TOKEN_KEY_SET,
@@ -297,7 +297,7 @@ function validateSnapshot(input: Record<string, unknown>): ThemeValidationResult
       errors,
     ),
   );
-  const cleanCalIsolated = sanitizeIsolatedList(
+  const cleanCalendarIsolated = sanitizeIsolatedList(
     input.calendarIsolated,
     CALENDAR_TOKEN_KEY_SET,
     "calendarIsolated",
@@ -344,14 +344,14 @@ function validateSnapshot(input: Record<string, unknown>): ThemeValidationResult
     calendarDefaultCustom: calendarDefaults.customBasis,
     sources: cleanSources as ThemeSources,
     appTokens: cleanAppTokens,
-    calendarTokens: cleanCalTokens,
+    calendarTokens: cleanCalendarTokens,
     appIsolated: cleanAppIsolated,
-    calendarIsolated: cleanCalIsolated,
+    calendarIsolated: cleanCalendarIsolated,
     seedSources: { ...(cleanSources as ThemeSources) },
     seedAppTokens: { ...cleanAppTokens },
-    seedCalendarTokens: { ...cleanCalTokens },
+    seedCalendarTokens: { ...cleanCalendarTokens },
     seedAppIsolated: new Set(cleanAppIsolated),
-    seedCalendarIsolated: new Set(cleanCalIsolated),
+    seedCalendarIsolated: new Set(cleanCalendarIsolated),
     seedEventPalette: [...cleanPalette],
     seedBlendCanvas: cleanBlend,
     seedCalendarDefaultMode: calendarDefaults.mode,

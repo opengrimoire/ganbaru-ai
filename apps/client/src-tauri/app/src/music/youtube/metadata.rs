@@ -40,7 +40,7 @@ struct YouTubeOEmbedDocument {
     thumbnail_url: Option<String>,
 }
 
-fn valid_youtube_id(value: &str, minimum_length: usize, maximum_length: usize) -> bool {
+fn is_valid_youtube_id(value: &str, minimum_length: usize, maximum_length: usize) -> bool {
     (minimum_length..=maximum_length).contains(&value.len())
         && value
             .bytes()
@@ -54,14 +54,14 @@ fn validate_request(request: &MusicYouTubeMetadataRequest) -> Result<(), String>
     if request
         .playlist_id
         .as_deref()
-        .is_some_and(|value| !valid_youtube_id(value, 6, 100))
+        .is_some_and(|value| !is_valid_youtube_id(value, 6, 100))
     {
         return Err("The YouTube playlist id is invalid.".to_string());
     }
     if request
         .video_ids
         .iter()
-        .any(|value| !valid_youtube_id(value, 6, 64))
+        .any(|value| !is_valid_youtube_id(value, 6, 64))
     {
         return Err("A YouTube video id is invalid.".to_string());
     }

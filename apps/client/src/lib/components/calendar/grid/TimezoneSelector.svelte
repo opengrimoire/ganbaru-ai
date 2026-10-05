@@ -27,7 +27,7 @@
 
   let {
     timezones,
-    tzCount = 1,
+    timezoneCount = 1,
     abbrMode = "acronym" as TimezoneAbbrMode,
     onAdd,
     onRemove,
@@ -35,7 +35,7 @@
     onAbbrModeChange,
   }: {
     timezones: string[];
-    tzCount?: number;
+    timezoneCount?: number;
     abbrMode?: TimezoneAbbrMode;
     onAdd: (tz: string) => void;
     onRemove: (index: number) => void;
@@ -93,10 +93,10 @@
   let dragFromIndex = $state<number | null>(null);
   let dragOverIndex = $state<number | null>(null);
 
-  const localTz = getLocalTimezone();
+  const localTimezone = getLocalTimezone();
 
   const EMPTY_TIMEZONE_RESULTS: string[] = [];
-  const filtered = $derived(
+  const timezoneResults = $derived(
     open && searchHydrated
       ? searchTimezones(query, timezones)
       : EMPTY_TIMEZONE_RESULTS,
@@ -195,19 +195,19 @@
     // over text in the result list doesn't initiate a selection.
     const prevUserSelect = document.body.style.userSelect;
     document.body.style.userSelect = "none";
-    function onMove(ev: PointerEvent) {
+    function onPointerMove(ev: PointerEvent) {
       if (!listEl) return;
       const dy = ev.clientY - anchorClientY;
       listEl.scrollTop = anchorScrollTop + (dy / trackAvail) * localMaxScroll;
     }
-    function onUp() {
+    function onPointerUp() {
       isDraggingThumb = false;
       document.body.style.userSelect = prevUserSelect;
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
     }
-    window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
   }
 
   function handleRowDragStart(e: DragEvent, i: number) {
@@ -248,8 +248,8 @@
     if (e.key === "ArrowDown") {
       e.preventDefault();
       e.stopPropagation();
-      if (filtered.length > 0) {
-        highlightIndex = Math.min(filtered.length - 1, highlightIndex + 1);
+      if (timezoneResults.length > 0) {
+        highlightIndex = Math.min(timezoneResults.length - 1, highlightIndex + 1);
         scrollHighlightIntoView();
       }
       return;
@@ -257,14 +257,14 @@
     if (e.key === "ArrowUp") {
       e.preventDefault();
       e.stopPropagation();
-      if (filtered.length > 0) {
+      if (timezoneResults.length > 0) {
         highlightIndex = Math.max(0, highlightIndex - 1);
         scrollHighlightIntoView();
       }
       return;
     }
     if (e.key === "Enter") {
-      const candidate = filtered[highlightIndex];
+      const candidate = timezoneResults[highlightIndex];
       if (candidate) {
         e.preventDefault();
         e.stopPropagation();
@@ -324,16 +324,16 @@
       scrollTop = el.scrollTop;
     };
     el.addEventListener("scroll", onScroll, { passive: true });
-    const ro = new ResizeObserver(syncScrollMetrics);
-    ro.observe(el);
+    const resizeObserver = new ResizeObserver(syncScrollMetrics);
+    resizeObserver.observe(el);
     return () => {
       el.removeEventListener("scroll", onScroll);
-      ro.disconnect();
+      resizeObserver.disconnect();
     };
   });
 
   $effect(() => {
-    void filtered;
+    void timezoneResults;
     if (open && listEl) requestAnimationFrame(syncScrollMetrics);
   });
 </script>
@@ -343,7 +343,7 @@
   bind:this={triggerEl}
   type="button"
   class="timezone-trigger relative grid cursor-pointer self-stretch rounded text-[0.866667rem] transition-colors hover:bg-accent"
-  style="color: var(--foreground); grid-column: span {tzCount}; grid-template-columns: subgrid;"
+  style="color: var(--foreground); grid-column: span {timezoneCount}; grid-template-columns: subgrid;"
   onclick={toggleOpen}
   aria-haspopup="dialog"
   aria-expanded={open}
@@ -371,15 +371,15 @@
     <div class="flex items-center justify-between gap-2 px-3 pt-3 pb-1">
       <div class="flex flex-col">
         <p class="text-xs font-semibold text-foreground">{t("calendar.timezone.title")}</p>
-        <p class="text-[0.666667rem] text-muted-foreground">{t("calendar.timezone.device", localTz)}</p>
+        <p class="text-[0.666667rem] text-muted-foreground">{t("calendar.timezone.device", localTimezone)}</p>
       </div>
       <div
         class="flex items-center gap-0.5 rounded border border-border bg-background p-0.5 text-[0.666667rem]"
         role="group"
         aria-label={t("calendar.timezone.labelFormat")}
       >
-        {#each ABBR_MODE_OPTIONS as opt (opt.mode)}
-          {@const isActive = abbrMode === opt.mode}
+        {#each ABBR_MODE_OPTIONS as option (option.mode)}
+          {@const isActive = abbrMode === option.mode}
           <button
             type="button"
             class="rounded px-1.5 py-0.5 transition-colors {isActive
@@ -388,10 +388,10 @@
             aria-pressed={isActive}
             onclick={(e: MouseEvent) => {
               e.stopPropagation();
-              onAbbrModeChange?.(opt.mode);
+              onAbbrModeChange?.(option.mode);
             }}
           >
-            {opt.label}
+            {option.label}
           </button>
         {/each}
       </div>
@@ -401,7 +401,7 @@
     <div class="flex flex-col gap-0.5 px-3">
       {#each timezones as tz, i (tz)}
         {@const info = getTimezoneInfo(tz)}
-        {@const isDevice = tz === localTz}
+        {@const isDevice = tz === localTimezone}
         {@const isDragging = dragFromIndex === i}
         {@const isDragTarget = dragOverIndex === i && dragFromIndex !== null && dragFromIndex !== i}
         <!-- Whole row is the drag source. Chevrons and X are draggable=false
@@ -491,12 +491,12 @@
           bind:this={listEl}
           class="tz-results min-h-0 flex-1 overflow-y-auto px-2 pb-3 pr-3"
         >
-          {#if filtered.length === 0}
+          {#if timezoneResults.length === 0}
             <p class="px-2 py-3 text-center text-[0.733333rem] text-muted-foreground">
               {t("calendar.timezone.noMatches")}
             </p>
           {:else}
-            {#each filtered as tz, idx}
+            {#each timezoneResults as tz, idx}
               {@const info = getTimezoneInfo(tz)}
               <button
                 type="button"

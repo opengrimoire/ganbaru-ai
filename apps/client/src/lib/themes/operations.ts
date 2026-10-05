@@ -48,7 +48,7 @@ export function cloneTheme(
   displayName: string,
 ): UserTheme {
   const resolvedApp = pickTokenSnapshot(resolveAppTokens(source), APP_TOKEN_KEYS);
-  const resolvedCal =
+  const resolvedCalendarTokens =
     source.kind === "user"
       ? pickTokenSnapshot(source.calendarTokens, CALENDAR_TOKEN_KEYS)
       : { ...BASE_CALENDAR_TOKENS[source.base] };
@@ -61,7 +61,7 @@ export function cloneTheme(
     source.kind === "user"
       ? normalizeSemanticSignalAppIsolated(source.appIsolated)
       : new Set<string>();
-  const calIsolated =
+  const calendarIsolated =
     source.kind === "user"
       ? new Set(source.calendarIsolated)
       : new Set<string>();
@@ -90,14 +90,14 @@ export function cloneTheme(
     calendarDefaultCustom,
     sources,
     appTokens: syncSemanticSignalAppTokens(sources, resolvedApp),
-    calendarTokens: { ...resolvedCal },
+    calendarTokens: { ...resolvedCalendarTokens },
     appIsolated,
-    calendarIsolated: calIsolated,
+    calendarIsolated: calendarIsolated,
     seedSources: { ...sources },
     seedAppTokens: syncSemanticSignalAppTokens(sources, resolvedApp),
-    seedCalendarTokens: { ...resolvedCal },
+    seedCalendarTokens: { ...resolvedCalendarTokens },
     seedAppIsolated: new Set(appIsolated),
-    seedCalendarIsolated: new Set(calIsolated),
+    seedCalendarIsolated: new Set(calendarIsolated),
     seedEventPalette: [...palette],
     seedBlendCanvas: source.blendCanvas,
     seedCalendarDefaultMode: calendarDefaultMode,

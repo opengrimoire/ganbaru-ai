@@ -57,7 +57,7 @@ pub(super) fn phase_rules(
     Ok(result)
 }
 
-fn safe_entry(entry: &limits::LimitEntry) -> bool {
+fn is_safe_entry(entry: &limits::LimitEntry) -> bool {
     entry
         .desktop_app_name
         .as_deref()
@@ -80,7 +80,7 @@ pub(super) fn usage_rules(config: &limits::LimitsConfig) -> Vec<DistractionsDesk
             limit
                 .entries
                 .iter()
-                .filter(|entry| safe_entry(entry))
+                .filter(|entry| is_safe_entry(entry))
                 .map(|entry| DistractionsDesktopAppRuleInput {
                     name: entry.desktop_app_name.clone().unwrap_or_default(),
                     match_names: entry.desktop_app_match_names.clone(),
@@ -113,7 +113,7 @@ pub(super) fn foreground_source(
             continue;
         }
         for entry in &limit.entries {
-            if !safe_entry(entry) {
+            if !is_safe_entry(entry) {
                 continue;
             }
             let configured = if entry.desktop_app_match_names.is_empty() {
@@ -188,7 +188,7 @@ pub(super) fn exhausted_rule(
         if let Some(entry) = limit
             .entries
             .iter()
-            .find(|entry| safe_entry(entry) && limits::matches(entry, &sample))
+            .find(|entry| is_safe_entry(entry) && limits::matches(entry, &sample))
         {
             return Some((
                 DistractionsDesktopRuleIdentity::UsageLimit {

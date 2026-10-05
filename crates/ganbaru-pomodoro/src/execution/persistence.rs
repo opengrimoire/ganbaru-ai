@@ -5,7 +5,7 @@ use super::super::{PomodoroRunRhythm, PomodoroRunSequenceStep};
 use super::models::*;
 
 pub(super) const MAX_SEGMENT_PAUSES: i64 = 1024;
-pub(super) fn timestamp(ms: i64) -> Result<String, FocusExecutionError> {
+pub(super) fn format_timestamp(ms: i64) -> Result<String, FocusExecutionError> {
     DateTime::<Utc>::from_timestamp_millis(ms)
         .map(|value| value.to_rfc3339_opts(SecondsFormat::Millis, true))
         .ok_or_else(|| {
@@ -16,7 +16,7 @@ pub(super) fn timestamp(ms: i64) -> Result<String, FocusExecutionError> {
         })
 }
 
-pub(super) fn milliseconds(value: &str) -> Result<i64, FocusExecutionError> {
+pub(super) fn parse_timestamp_ms(value: &str) -> Result<i64, FocusExecutionError> {
     DateTime::parse_from_rfc3339(value)
         .map(|value| value.timestamp_millis())
         .map_err(|error| {
@@ -126,7 +126,7 @@ pub(super) async fn save_receipt(
     Ok(())
 }
 
-pub(super) async fn identity(
+pub(super) async fn allocate_id(
     tx: &mut Transaction<'_, Sqlite>,
 ) -> Result<String, FocusExecutionError> {
     sqlx::query_scalar("SELECT lower(hex(randomblob(16)))")
@@ -208,10 +208,10 @@ pub(super) async fn load_run(
         title: row
             .try_get("current_title")
             .map_err(|error| error.to_string())?,
-        started_at_ms: milliseconds(&started_at)?,
-        planned_start_ms: milliseconds(&planned_start)?,
-        planned_end_ms: milliseconds(&planned_end)?,
-        ended_at_ms: ended_at.as_deref().map(milliseconds).transpose()?,
+        started_at_ms: parse_timestamp_ms(&started_at)?,
+        planned_start_ms: parse_timestamp_ms(&planned_start)?,
+        planned_end_ms: parse_timestamp_ms(&planned_end)?,
+        ended_at_ms: ended_at.as_deref().map(parse_timestamp_ms).transpose()?,
         inherited_focus_ms: row
             .try_get::<Option<i64>, _>("inherited_focus_ms")
             .map_err(|error| error.to_string())?
@@ -311,14 +311,14 @@ pub(super) async fn load_segment(
         .into_iter()
         .map(|(start, end, reason)| {
             Ok(FocusPauseSnapshot {
-                started_at_ms: milliseconds(&start)?,
-                ended_at_ms: end.as_deref().map(milliseconds).transpose()?,
+                started_at_ms: parse_timestamp_ms(&start)?,
+                ended_at_ms: end.as_deref().map(parse_timestamp_ms).transpose()?,
                 reason,
             })
         })
         .collect::<Result<Vec<_>, FocusExecutionError>>()?;
-    let planned_start_ms = milliseconds(&planned_start)?;
-    let planned_end_ms = milliseconds(&planned_end)?;
+    let planned_start_ms = parse_timestamp_ms(&planned_start)?;
+    let planned_end_ms = parse_timestamp_ms(&planned_end)?;
     Ok(FocusSegmentSnapshot {
         id: row.try_get("id").map_err(|error| error.to_string())?,
         run_id: row.try_get("run_id").map_err(|error| error.to_string())?,
@@ -332,8 +332,8 @@ pub(super) async fn load_segment(
             .map_err(|error| error.to_string())?,
         planned_start_ms,
         planned_end_ms,
-        actual_start_ms: milliseconds(&actual_start)?,
-        actual_end_ms: actual_end.as_deref().map(milliseconds).transpose()?,
+        actual_start_ms: parse_timestamp_ms(&actual_start)?,
+        actual_end_ms: actual_end.as_deref().map(parse_timestamp_ms).transpose()?,
         chosen_duration_ms: row
             .try_get::<Option<i64>, _>("chosen_duration_ms")
             .map_err(|error| error.to_string())?
@@ -359,7 +359,7 @@ pub(super) fn segment_elapsed_ms(
         .min(now_ms)
         .max(segment.actual_start_ms);
     let mut previous_end = segment.actual_start_ms;
-    let mut paused = 0i64;
+    let mut paused_ms = 0i64;
     for pause in &segment.pauses {
         if pause.started_at_ms < previous_end
             || pause.started_at_ms < segment.actual_start_ms
@@ -377,16 +377,16 @@ pub(super) fn segment_elapsed_ms(
             .unwrap_or(end)
             .min(end)
             .max(pause.started_at_ms);
-        paused = paused.saturating_add(pause_end.saturating_sub(pause.started_at_ms));
+        paused_ms = paused_ms.saturating_add(pause_end.saturating_sub(pause.started_at_ms));
         previous_end = pause.ended_at_ms.unwrap_or(i64::MAX);
     }
     Ok(end
         .saturating_sub(segment.actual_start_ms)
-        .saturating_sub(paused)
+        .saturating_sub(paused_ms)
         .max(0))
 }
 
-pub(super) async fn snapshot(
+pub(super) async fn load_snapshot(
     tx: &mut Transaction<'_, Sqlite>,
     revision: i64,
     state: &ExecutionState,
@@ -419,14 +419,14 @@ pub(super) async fn snapshot(
         .map(|segment| segment_elapsed_ms(segment, now_ms))
         .transpose()?
         .unwrap_or(0);
-    let work_remaining = segment
+    let work_remaining_ms = segment
         .as_ref()
         .filter(|segment| segment.status == "active")
         .map(|segment| segment.chosen_duration_ms.saturating_sub(elapsed_ms).max(0))
         .unwrap_or(0);
     let event_end = run.as_ref().map(|run| run.planned_end_ms);
     let remaining_ms = event_end
-        .map(|end| work_remaining.min(end.saturating_sub(now_ms).max(0)))
+        .map(|end| work_remaining_ms.min(end.saturating_sub(now_ms).max(0)))
         .unwrap_or(0);
     let phase_deadline_ms =
         (state.mode == FocusMode::Running).then(|| now_ms.saturating_add(remaining_ms));
@@ -478,7 +478,7 @@ pub async fn focus_read_execution_snapshot_tx(
     tx: &mut Transaction<'_, Sqlite>,
     now_ms: i64,
 ) -> Result<FocusExecutionSnapshot, FocusExecutionError> {
-    timestamp(now_ms)?;
+    format_timestamp(now_ms)?;
     if now_ms < 0 {
         return Err(execution_error(
             FocusErrorCode::InvalidState,
@@ -486,7 +486,7 @@ pub async fn focus_read_execution_snapshot_tx(
         ));
     }
     let (revision, state) = load_state(tx).await?;
-    snapshot(tx, revision, &state, now_ms, &[]).await
+    load_snapshot(tx, revision, &state, now_ms, &[]).await
 }
 
 /// Read the current canonical projection in one consistent read transaction.

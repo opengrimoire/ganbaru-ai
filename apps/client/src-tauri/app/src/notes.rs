@@ -138,13 +138,13 @@ pub async fn notes_list_backlinks<R: Runtime>(
 }
 
 #[tauri::command]
-pub async fn notes_get_page_breadcrumb<R: Runtime>(
+pub async fn notes_page_breadcrumb<R: Runtime>(
     app: AppHandle<R>,
     db_url: String,
     page_id: String,
 ) -> Result<Vec<NotePageBreadcrumbItemDto>, String> {
     let pool = connect_sqlite(app, db_url).await?;
-    reads::get_page_breadcrumb(&pool, &page_id).await
+    reads::page_breadcrumb(&pool, &page_id).await
 }
 
 #[tauri::command]
@@ -303,12 +303,12 @@ pub async fn notes_pick_and_write_agent_bridge<R: Runtime>(
 }
 
 #[tauri::command]
-pub async fn notes_get_local_user<R: Runtime>(
+pub async fn notes_local_user<R: Runtime>(
     app: AppHandle<R>,
     db_url: String,
 ) -> Result<NoteLocalUserDto, String> {
     let pool = connect_sqlite(app, db_url).await?;
-    local_user::get_local_user(&pool).await
+    local_user::load_local_user(&pool).await
 }
 
 #[tauri::command]
@@ -384,12 +384,12 @@ pub async fn notes_delete_page_template<R: Runtime>(
 }
 
 #[tauri::command]
-pub async fn notes_get_page_history_settings<R: Runtime>(
+pub async fn notes_load_page_history_settings<R: Runtime>(
     app: AppHandle<R>,
     db_url: String,
 ) -> Result<NotePageHistorySettingsDto, String> {
     let pool = connect_sqlite(app, db_url).await?;
-    page_history::get_page_history_settings(&pool).await
+    page_history::load_page_history_settings(&pool).await
 }
 
 #[cfg(test)]
@@ -747,7 +747,7 @@ pub async fn notes_list_data_sources<R: Runtime>(
 }
 
 #[tauri::command]
-pub async fn notes_get_data_source_schema<R: Runtime>(
+pub async fn notes_data_source_schema<R: Runtime>(
     app: AppHandle<R>,
     db_url: String,
     data_source_id: String,
@@ -755,7 +755,7 @@ pub async fn notes_get_data_source_schema<R: Runtime>(
     view_id: Option<String>,
 ) -> Result<NoteDataSourceSchemaDto, String> {
     let pool = connect_sqlite(app, db_url).await?;
-    data_sources::schema::get_data_source_schema(
+    data_sources::schema::data_source_schema(
         &pool,
         &data_source_id,
         database_id.as_deref(),
@@ -893,7 +893,7 @@ pub async fn notes_delete_data_source_template<R: Runtime>(
 }
 
 #[tauri::command]
-pub async fn notes_get_data_source_table_view<R: Runtime>(
+pub async fn notes_data_source_table_view<R: Runtime>(
     app: AppHandle<R>,
     db_url: String,
     data_source_id: String,
@@ -902,7 +902,7 @@ pub async fn notes_get_data_source_table_view<R: Runtime>(
     window: Option<NoteDataSourceViewWindowRequest>,
 ) -> Result<NoteDataSourceTableViewDto, String> {
     let pool = connect_sqlite(app, db_url).await?;
-    data_sources::layouts::table::get_data_source_table_view_window(
+    data_sources::layouts::table::data_source_table_view_window(
         &pool,
         &data_source_id,
         database_id.as_deref(),
@@ -968,7 +968,7 @@ pub async fn notes_click_data_source_button<R: Runtime>(
 }
 
 #[tauri::command]
-pub async fn notes_get_data_source_board_view<R: Runtime>(
+pub async fn notes_data_source_board_view<R: Runtime>(
     app: AppHandle<R>,
     db_url: String,
     data_source_id: String,
@@ -977,7 +977,7 @@ pub async fn notes_get_data_source_board_view<R: Runtime>(
     window: Option<NoteDataSourceViewWindowRequest>,
 ) -> Result<NoteDataSourceBoardViewDto, String> {
     let pool = connect_sqlite(app, db_url).await?;
-    data_sources::layouts::board::get_data_source_board_view_window(
+    data_sources::layouts::board::data_source_board_view_window(
         &pool,
         &data_source_id,
         database_id.as_deref(),
@@ -1030,7 +1030,7 @@ pub async fn notes_move_data_source_board_row<R: Runtime>(
 }
 
 #[tauri::command]
-pub async fn notes_get_data_source_gallery_view<R: Runtime>(
+pub async fn notes_data_source_gallery_view<R: Runtime>(
     app: AppHandle<R>,
     db_url: String,
     data_source_id: String,
@@ -1039,7 +1039,7 @@ pub async fn notes_get_data_source_gallery_view<R: Runtime>(
     window: Option<NoteDataSourceViewWindowRequest>,
 ) -> Result<NoteDataSourceGalleryViewDto, String> {
     let pool = connect_sqlite(app, db_url).await?;
-    data_sources::layouts::gallery::get_data_source_gallery_view_window(
+    data_sources::layouts::gallery::data_source_gallery_view_window(
         &pool,
         &data_source_id,
         database_id.as_deref(),
@@ -1071,7 +1071,7 @@ pub async fn notes_update_data_source_gallery_view<R: Runtime>(
 }
 
 #[tauri::command]
-pub async fn notes_get_data_source_list_view<R: Runtime>(
+pub async fn notes_data_source_list_view<R: Runtime>(
     app: AppHandle<R>,
     db_url: String,
     data_source_id: String,
@@ -1080,7 +1080,7 @@ pub async fn notes_get_data_source_list_view<R: Runtime>(
     window: Option<NoteDataSourceViewWindowRequest>,
 ) -> Result<NoteDataSourceListViewDto, String> {
     let pool = connect_sqlite(app, db_url).await?;
-    data_sources::layouts::list::get_data_source_list_view_window(
+    data_sources::layouts::list::data_source_list_view_window(
         &pool,
         &data_source_id,
         database_id.as_deref(),
@@ -1112,7 +1112,7 @@ pub async fn notes_update_data_source_list_view<R: Runtime>(
 }
 
 #[tauri::command]
-pub async fn notes_get_data_source_calendar_view<R: Runtime>(
+pub async fn notes_data_source_calendar_view<R: Runtime>(
     app: AppHandle<R>,
     db_url: String,
     data_source_id: String,
@@ -1121,7 +1121,7 @@ pub async fn notes_get_data_source_calendar_view<R: Runtime>(
     window: Option<NoteDataSourceViewWindowRequest>,
 ) -> Result<NoteDataSourceCalendarViewDto, String> {
     let pool = connect_sqlite(app, db_url).await?;
-    data_sources::layouts::calendar::get_data_source_calendar_view_window(
+    data_sources::layouts::calendar::data_source_calendar_view_window(
         &pool,
         &data_source_id,
         database_id.as_deref(),
@@ -1153,7 +1153,7 @@ pub async fn notes_update_data_source_calendar_view<R: Runtime>(
 }
 
 #[tauri::command]
-pub async fn notes_get_data_source_timeline_view<R: Runtime>(
+pub async fn notes_data_source_timeline_view<R: Runtime>(
     app: AppHandle<R>,
     db_url: String,
     data_source_id: String,
@@ -1162,7 +1162,7 @@ pub async fn notes_get_data_source_timeline_view<R: Runtime>(
     window: Option<NoteDataSourceViewWindowRequest>,
 ) -> Result<NoteDataSourceTimelineViewDto, String> {
     let pool = connect_sqlite(app, db_url).await?;
-    data_sources::layouts::timeline::get_data_source_timeline_view_window(
+    data_sources::layouts::timeline::data_source_timeline_view_window(
         &pool,
         &data_source_id,
         database_id.as_deref(),
@@ -1292,24 +1292,24 @@ pub async fn notes_open_page<R: Runtime>(
 }
 
 #[tauri::command]
-pub async fn notes_get_block_frontier<R: Runtime>(
+pub async fn notes_block_frontier<R: Runtime>(
     app: AppHandle<R>,
     db_url: String,
     parent_ids: Vec<String>,
 ) -> Result<NoteBlockFrontierDto, String> {
     let pool = connect_sqlite(app, db_url).await?;
-    reads::get_block_frontier(&pool, &parent_ids).await
+    reads::block_frontier(&pool, &parent_ids).await
 }
 
 #[tauri::command]
-pub async fn notes_get_block_outline_frontier<R: Runtime>(
+pub async fn notes_block_outline_frontier<R: Runtime>(
     app: AppHandle<R>,
     db_url: String,
     page_id: String,
     parent_ids: Vec<String>,
 ) -> Result<Vec<NoteBlockOutlineDto>, String> {
     let pool = connect_sqlite(app, db_url).await?;
-    reads::get_block_outline_frontier(&pool, &page_id, &parent_ids).await
+    reads::block_outline_frontier(&pool, &page_id, &parent_ids).await
 }
 
 #[tauri::command]
@@ -1323,7 +1323,7 @@ pub async fn notes_hydrate_blocks<R: Runtime>(
 }
 
 #[tauri::command]
-pub async fn notes_get_block_children<R: Runtime>(
+pub async fn notes_block_children<R: Runtime>(
     app: AppHandle<R>,
     db_url: String,
     parent_id: String,
@@ -1331,7 +1331,7 @@ pub async fn notes_get_block_children<R: Runtime>(
     page_size: Option<i64>,
 ) -> Result<NotePaginatedBlockList, String> {
     let pool = connect_sqlite(app, db_url).await?;
-    reads::get_block_children(&pool, &parent_id, start_cursor.as_deref(), page_size).await
+    reads::block_children(&pool, &parent_id, start_cursor.as_deref(), page_size).await
 }
 
 #[tauri::command]

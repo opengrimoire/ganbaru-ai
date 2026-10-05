@@ -84,10 +84,10 @@ internal class DistractionsGuardianClient(private val context: Context) {
     kind = requireString("kind"),
     packageName = requireString("packageName"),
     displayName = requireString("displayName"),
-    startedAt = requireLong("startedAt"),
+    startedAtEpochMs = requireLong("startedAt"),
     elapsedSeconds = requireInt("elapsedSeconds"),
     localDate = requireString("localDate"),
-    occurredAt = requireLong("occurredAt"),
+    occurredAtEpochMs = requireLong("occurredAt"),
     reason = getString("reason"),
     ruleId = getString("ruleId"),
     runId = getString("runId"),
@@ -140,7 +140,7 @@ class DistractionsGuardianProvider : ContentProvider() {
           putParcelableArrayList(
             KEY_EVENTS,
             ArrayList(DistractionsJournal(appContext).use { journal ->
-              journal.pending(extras.requireVaultId(), extras?.getBoolean("usageOnly", false) ?: false)
+              journal.exportPending(extras.requireVaultId(), extras?.getBoolean("usageOnly", false) ?: false)
                 .map { event -> event.toBundle() }
             }),
           )
@@ -218,10 +218,10 @@ class DistractionsGuardianProvider : ContentProvider() {
     putString("kind", kind)
     putString("packageName", packageName)
     putString("displayName", displayName)
-    putLong("startedAt", startedAt)
+    putLong("startedAt", startedAtEpochMs)
     putInt("elapsedSeconds", elapsedSeconds)
     putString("localDate", localDate)
-    putLong("occurredAt", occurredAt)
+    putLong("occurredAt", occurredAtEpochMs)
     putString("reason", reason)
     putString("ruleId", ruleId)
     putString("runId", runId)

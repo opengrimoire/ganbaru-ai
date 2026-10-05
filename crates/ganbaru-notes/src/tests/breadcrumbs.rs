@@ -78,10 +78,9 @@ fn block_frontier_batches_children_for_multiple_parents() {
         .await
         .unwrap();
 
-        let frontier =
-            reads::get_block_frontier(&pool, &[BLOCK_A.to_string(), BLOCK_B.to_string()])
-                .await
-                .unwrap();
+        let frontier = reads::block_frontier(&pool, &[BLOCK_A.to_string(), BLOCK_B.to_string()])
+            .await
+            .unwrap();
         let json = serde_json::to_value(frontier).unwrap();
         let ids = json["blocks"]
             .as_array()
@@ -91,7 +90,7 @@ fn block_frontier_batches_children_for_multiple_parents() {
             .collect::<Vec<_>>();
         assert_eq!(ids, vec![BLOCK_C, BLOCK_D]);
 
-        let outlines = reads::get_block_outline_frontier(
+        let outlines = reads::block_outline_frontier(
             &pool,
             PAGE_A,
             &[BLOCK_A.to_string(), BLOCK_B.to_string()],
@@ -168,7 +167,7 @@ fn page_breadcrumb_resolves_unloaded_ancestor_rows() {
         .await
         .unwrap();
 
-        let breadcrumb = reads::get_page_breadcrumb(&pool, PAGE_C).await.unwrap();
+        let breadcrumb = reads::page_breadcrumb(&pool, PAGE_C).await.unwrap();
         let breadcrumb_json = serde_json::to_value(breadcrumb).unwrap();
         assert_eq!(breadcrumb_json.as_array().unwrap().len(), 3);
         assert_eq!(breadcrumb_json[0]["id"], PAGE_A);
@@ -237,7 +236,7 @@ fn page_breadcrumb_marks_unavailable_ancestors() {
             .await
             .unwrap();
 
-        let breadcrumb = reads::get_page_breadcrumb(&pool, PAGE_C).await.unwrap();
+        let breadcrumb = reads::page_breadcrumb(&pool, PAGE_C).await.unwrap();
         let breadcrumb_json = serde_json::to_value(breadcrumb).unwrap();
         assert_eq!(breadcrumb_json[0]["id"], PAGE_A);
         assert_eq!(breadcrumb_json[0]["status"], "archived");
@@ -272,7 +271,7 @@ fn page_breadcrumb_marks_missing_ancestor_rows() {
             .await
             .unwrap();
 
-        let breadcrumb = reads::get_page_breadcrumb(&pool, PAGE_A).await.unwrap();
+        let breadcrumb = reads::page_breadcrumb(&pool, PAGE_A).await.unwrap();
         let breadcrumb_json = serde_json::to_value(breadcrumb).unwrap();
         assert_eq!(breadcrumb_json.as_array().unwrap().len(), 2);
         assert_eq!(breadcrumb_json[0]["id"], PAGE_B);

@@ -35,7 +35,7 @@ function createController(activeView: "list" | "kanban" = "list") {
     duplicateCustomField,
     customFieldsForProject: () => fields,
     prioritiesForProject: () => [],
-    projectDataLoaded: () => true,
+    isProjectDataLoaded: () => true,
     viewPreferences: [],
     taskViewLoading: false,
     taskViewPage: activeView === "list"
@@ -47,7 +47,7 @@ function createController(activeView: "list" | "kanban" = "list") {
   } as unknown as ControllerInput["projects"];
   const controller = new ProjectTaskQueryController({
     projects,
-    calendar: { rawBlocks: [] } as unknown as ControllerInput["calendar"],
+    calendar: { sourceEvents: [] } as unknown as ControllerInput["calendar"],
     translate: ((key: string, ...parameters: unknown[]) => parameters.length ? `${key}: ${String(parameters[0])}` : key) as Translate,
   });
   return { controller, requests, selection, saveTaskListColumns, applySectionCollapseState, saveTaskListPresentation, addCustomField, duplicateCustomField, fields, createdField, loadTaskView };

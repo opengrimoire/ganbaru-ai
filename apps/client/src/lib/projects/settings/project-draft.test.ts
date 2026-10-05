@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
-  projectSettingsProjectDraftDirty,
-  projectSettingsProjectDraftFromProject,
-  projectSettingsProjectUpdateFromDraft,
-  type ProjectSettingsProjectDraft,
+  projectDraftDirty,
+  projectDraftFromProject,
+  projectUpdateFromDraft,
+  type ProjectDraft,
 } from "./project-draft";
 import type { Project } from "$lib/projects/types";
 
@@ -39,15 +39,15 @@ function project(overrides: Partial<Project> = {}): Project {
 }
 
 function updateDraft(
-  draft: ProjectSettingsProjectDraft,
-  overrides: Partial<ProjectSettingsProjectDraft>,
-): ProjectSettingsProjectDraft {
+  draft: ProjectDraft,
+  overrides: Partial<ProjectDraft>,
+): ProjectDraft {
   return { ...draft, ...overrides };
 }
 
-describe("projectSettingsProjectDraftFromProject", () => {
+describe("projectDraftFromProject", () => {
   it("loads nullable project fields into editable string drafts", () => {
-    expect(projectSettingsProjectDraftFromProject(project())).toMatchObject({
+    expect(projectDraftFromProject(project())).toMatchObject({
       groupId: "group-1",
       name: "Project",
       defaultEventName: "",
@@ -59,24 +59,24 @@ describe("projectSettingsProjectDraftFromProject", () => {
   });
 });
 
-describe("projectSettingsProjectDraftDirty", () => {
+describe("projectDraftDirty", () => {
   it("treats a loaded project draft as clean", () => {
     const currentProject = project();
 
-    expect(projectSettingsProjectDraftDirty(
+    expect(projectDraftDirty(
       currentProject,
-      projectSettingsProjectDraftFromProject(currentProject),
+      projectDraftFromProject(currentProject),
     )).toBe(false);
   });
 
   it("detects project identity and default changes", () => {
     const currentProject = project();
-    const draft = updateDraft(projectSettingsProjectDraftFromProject(currentProject), {
+    const draft = updateDraft(projectDraftFromProject(currentProject), {
       name: "Renamed",
       defaultEventDurationMinutes: "90",
     });
 
-    expect(projectSettingsProjectDraftDirty(currentProject, draft)).toBe(true);
+    expect(projectDraftDirty(currentProject, draft)).toBe(true);
   });
 
   it("ignores locked identity drafts for built-in Routine projects", () => {
@@ -85,26 +85,26 @@ describe("projectSettingsProjectDraftDirty", () => {
       groupId: "group-routine",
       name: "Eating",
     });
-    const draft = updateDraft(projectSettingsProjectDraftFromProject(currentProject), {
+    const draft = updateDraft(projectDraftFromProject(currentProject), {
       name: "Renamed",
       groupId: "group-2",
     });
 
-    expect(projectSettingsProjectDraftDirty(currentProject, draft)).toBe(false);
+    expect(projectDraftDirty(currentProject, draft)).toBe(false);
   });
 });
 
-describe("projectSettingsProjectUpdateFromDraft", () => {
+describe("projectUpdateFromDraft", () => {
   it("builds a trimmed project update and preserves sort order inside the same group", () => {
     const currentProject = project({ focusPlaylistId: "focus-old" });
-    const draft = updateDraft(projectSettingsProjectDraftFromProject(currentProject), {
+    const draft = updateDraft(projectDraftFromProject(currentProject), {
       name: "  Renamed  ",
       defaultEventName: "  Session  ",
       focusPlaylistId: "  focus-new  ",
       breakPlaylistId: " ",
     });
 
-    const result = projectSettingsProjectUpdateFromDraft({
+    const result = projectUpdateFromDraft({
       project: currentProject,
       draft,
       visibleGroupIds: new Set(["group-1"]),
@@ -128,11 +128,11 @@ describe("projectSettingsProjectUpdateFromDraft", () => {
 
   it("uses the provided group sort order when the group changes", () => {
     const currentProject = project();
-    const draft = updateDraft(projectSettingsProjectDraftFromProject(currentProject), {
+    const draft = updateDraft(projectDraftFromProject(currentProject), {
       groupId: "group-2",
     });
 
-    const result = projectSettingsProjectUpdateFromDraft({
+    const result = projectUpdateFromDraft({
       project: currentProject,
       draft,
       visibleGroupIds: new Set(["group-1", "group-2"]),
@@ -152,14 +152,14 @@ describe("projectSettingsProjectUpdateFromDraft", () => {
       name: "Comer",
       sortOrder: 20,
     });
-    const draft = updateDraft(projectSettingsProjectDraftFromProject(currentProject), {
+    const draft = updateDraft(projectDraftFromProject(currentProject), {
       name: "Renamed",
       groupId: "group-2",
       icon: "lucide:utensils",
       status: "hidden",
     });
 
-    const result = projectSettingsProjectUpdateFromDraft({
+    const result = projectUpdateFromDraft({
       project: currentProject,
       draft,
       visibleGroupIds: new Set(["group-routine", "group-2"]),
@@ -180,7 +180,7 @@ describe("projectSettingsProjectUpdateFromDraft", () => {
 
   it("writes custom pomodoro values only when custom mode is selected", () => {
     const currentProject = project();
-    const draft = updateDraft(projectSettingsProjectDraftFromProject(currentProject), {
+    const draft = updateDraft(projectDraftFromProject(currentProject), {
       defaultPomodoroMode: "custom",
       defaultPomodoroFocusMinutes: 45,
       defaultPomodoroShortBreakMinutes: 10,
@@ -188,7 +188,7 @@ describe("projectSettingsProjectUpdateFromDraft", () => {
       defaultPomodoroLongBreakAfterFocusCount: 3,
     });
 
-    const result = projectSettingsProjectUpdateFromDraft({
+    const result = projectUpdateFromDraft({
       project: currentProject,
       draft,
       visibleGroupIds: new Set(["group-1"]),
@@ -210,21 +210,21 @@ describe("projectSettingsProjectUpdateFromDraft", () => {
 
   it("rejects invalid project drafts", () => {
     const currentProject = project();
-    const cleanDraft = projectSettingsProjectDraftFromProject(currentProject);
+    const cleanDraft = projectDraftFromProject(currentProject);
 
-    expect(projectSettingsProjectUpdateFromDraft({
+    expect(projectUpdateFromDraft({
       project: currentProject,
       draft: updateDraft(cleanDraft, { name: " " }),
       visibleGroupIds: new Set(["group-1"]),
       nextSortOrderForGroup: () => 5000,
     })).toEqual({ ok: false, error: "name_required" });
-    expect(projectSettingsProjectUpdateFromDraft({
+    expect(projectUpdateFromDraft({
       project: currentProject,
       draft: updateDraft(cleanDraft, { groupId: "missing-group" }),
       visibleGroupIds: new Set(["group-1"]),
       nextSortOrderForGroup: () => 5000,
     })).toEqual({ ok: false, error: "group_required" });
-    expect(projectSettingsProjectUpdateFromDraft({
+    expect(projectUpdateFromDraft({
       project: currentProject,
       draft: updateDraft(cleanDraft, { defaultEventDurationMinutes: "0" }),
       visibleGroupIds: new Set(["group-1"]),

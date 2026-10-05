@@ -285,13 +285,13 @@ export function createNotesBlockMovementActions(
     if (!plan && direction === "outdent" && indent === 0) return false;
     const parent = plan ? parentFromMoveParentId(plan.parentId) : block.parent;
     if (!parent) return false;
-    const oldParent = block.parent.type === "block_id" ? context.blockById(block.parent.block_id) : undefined;
-    if (direction === "outdent" && plan && oldParent?.type === "callout"
+    const sourceParent = block.parent.type === "block_id" ? context.blockById(block.parent.block_id) : undefined;
+    if (direction === "outdent" && plan && sourceParent?.type === "callout"
       && blockPlainText(block).length === 0
       && (context.treeState().childIdsByParentId[blockId] ?? []).length === 0) {
       const caret = selection ?? { start: 0, end: 0 };
       const before = record ? context.createUndoSnapshot(blockId, [], caret) : null;
-      const placement = { blockId, parent, after: oldParent.id, before: null };
+      const placement = { blockId, parent, after: sourceParent.id, before: null };
       context.applyPostMutation({ blocks: [{ ...block, parent }], placements: [placement] });
       if (record) {
         context.requestBlockFocus(blockId, caret);
@@ -307,7 +307,7 @@ export function createNotesBlockMovementActions(
       return true;
     }
     const nextIndent = plan
-      ? direction === "outdent" && oldParent ? blockIndent(oldParent) : 0
+      ? direction === "outdent" && sourceParent ? blockIndent(sourceParent) : 0
       : indent + (direction === "nest" ? 1 : -1);
     const indentUpdate = blockUpdateWithIndent(blockUpdateFromBlock(cloneNotesJson(block)), nextIndent);
     const caret = selection ?? selectionAtBlockEnd(blockId);
@@ -332,9 +332,9 @@ export function createNotesBlockMovementActions(
       childAfter = id;
       return { child, update, placement };
     });
-    const oldSiblings = oldParent ? state.childIdsByParentId[oldParent.id] ?? [] : [];
+    const sourceSiblings = sourceParent ? state.childIdsByParentId[sourceParent.id] ?? [] : [];
     const followingIds = direction === "outdent" && plan
-      ? oldSiblings.slice(oldSiblings.indexOf(blockId) + 1) : [];
+      ? sourceSiblings.slice(sourceSiblings.indexOf(blockId) + 1) : [];
     const followingParent: NotesParent = canBlockHaveChildren(block)
       ? { type: "block_id", block_id: blockId } : parent;
     let followingAfter = canBlockHaveChildren(block)

@@ -13,10 +13,10 @@ internal data class JournalEvent(
   val kind: String,
   val packageName: String,
   val displayName: String,
-  val startedAt: Long,
+  val startedAtEpochMs: Long,
   val elapsedSeconds: Int,
   val localDate: String,
-  val occurredAt: Long,
+  val occurredAtEpochMs: Long,
   val reason: String?,
   val ruleId: String?,
   val runId: String?,
@@ -27,8 +27,8 @@ internal data class JournalEvent(
 internal data class JournalUsageInterval(
   val packageName: String,
   val displayName: String,
-  val startedAt: Long,
-  val endedAt: Long,
+  val startedAtEpochMs: Long,
+  val endedAtEpochMs: Long,
 )
 
 internal class DistractionsJournal(context: Context) : SQLiteOpenHelper(
@@ -79,16 +79,16 @@ internal class DistractionsJournal(context: Context) : SQLiteOpenHelper(
   fun recordUsageBatch(
     vaultId: String,
     intervals: List<JournalUsageInterval>,
-    observedAt: Long,
+    observedAtEpochMs: Long,
   ) {
     require(intervals.size <= MAX_PENDING_EVENTS) { "Too many Distractions usage intervals" }
     writableDatabase.beginTransaction()
     try {
       var insertedEvents = 0
       for (interval in intervals) {
-        if (interval.endedAt <= interval.startedAt) continue
+        if (interval.endedAtEpochMs <= interval.startedAtEpochMs) continue
         val normalizedPackage = interval.packageName.lowercase()
-        for (slice in splitByLocalDate(interval.startedAt, interval.endedAt)) {
+        for (slice in splitByLocalDate(interval.startedAtEpochMs, interval.endedAtEpochMs)) {
           var partStart = slice.startEpochMs
           for (elapsedSeconds in compactedUsageParts((slice.endEpochMs - slice.startEpochMs) / 1_000L)) {
             insertedEvents += 1
@@ -101,7 +101,7 @@ internal class DistractionsJournal(context: Context) : SQLiteOpenHelper(
               put("started_at", partStart)
               put("elapsed_seconds", elapsedSeconds)
               put("local_date", slice.localDate)
-              put("occurred_at", interval.endedAt)
+              put("occurred_at", interval.endedAtEpochMs)
               put("vault_id", vaultId)
             }
             writableDatabase.insertOrThrow("journal_events", null, values)
@@ -112,8 +112,8 @@ internal class DistractionsJournal(context: Context) : SQLiteOpenHelper(
       }
       compactInTransaction()
       requireJournalCapacity(pendingCount(), MAX_PENDING_EVENTS)
-      writeMetadata("lastObservedEpochMs", observedAt)
-      pruneDailyTotals(observedAt)
+      writeMetadata("lastObservedEpochMs", observedAtEpochMs)
+      pruneDailyTotals(observedAtEpochMs)
       writableDatabase.setTransactionSuccessful()
     } finally {
       writableDatabase.endTransaction()
@@ -123,7 +123,7 @@ internal class DistractionsJournal(context: Context) : SQLiteOpenHelper(
   fun recordBlock(
     packageName: String,
     displayName: String,
-    occurredAt: Long,
+    occurredAtEpochMs: Long,
     reason: String,
     ruleId: String?,
     runId: String?,
@@ -137,10 +137,10 @@ internal class DistractionsJournal(context: Context) : SQLiteOpenHelper(
         put("kind", "block")
         put("package_name", packageName.lowercase())
         put("display_name", displayName.take(120))
-        put("started_at", occurredAt)
+        put("started_at", occurredAtEpochMs)
         put("elapsed_seconds", 0)
-        put("local_date", localDate(occurredAt))
-        put("occurred_at", occurredAt)
+        put("local_date", localDate(occurredAtEpochMs))
+        put("occurred_at", occurredAtEpochMs)
         put("reason", reason.take(80))
         put("rule_id", ruleId?.take(80))
         put("run_id", runId?.take(128))
@@ -171,7 +171,7 @@ internal class DistractionsJournal(context: Context) : SQLiteOpenHelper(
     }
   }
 
-  fun pending(vaultId: String, usageOnly: Boolean, limit: Int = 200): List<JournalEvent> {
+  fun exportPending(vaultId: String, usageOnly: Boolean, limit: Int = 200): List<JournalEvent> {
     writableDatabase.beginTransaction()
     try {
       val selection = if (usageOnly) "vault_id = ? AND kind = 'usage'" else "vault_id = ?"
@@ -223,10 +223,10 @@ internal class DistractionsJournal(context: Context) : SQLiteOpenHelper(
           kind = cursor.getString(1),
           packageName = cursor.getString(2),
           displayName = cursor.getString(3),
-          startedAt = cursor.getLong(4),
+          startedAtEpochMs = cursor.getLong(4),
           elapsedSeconds = cursor.getInt(5),
           localDate = cursor.getString(6),
-          occurredAt = cursor.getLong(7),
+          occurredAtEpochMs = cursor.getLong(7),
           reason = cursor.getString(8),
           ruleId = cursor.getString(9),
           runId = cursor.getString(10),
@@ -309,10 +309,10 @@ internal class DistractionsJournal(context: Context) : SQLiteOpenHelper(
           kind = "usage",
           packageName = cursor.getString(0),
           displayName = cursor.getString(1),
-          startedAt = cursor.getLong(2),
+          startedAtEpochMs = cursor.getLong(2),
           elapsedSeconds = 0,
           localDate = cursor.getString(4),
-          occurredAt = cursor.getLong(5),
+          occurredAtEpochMs = cursor.getLong(5),
           reason = null,
           ruleId = null,
           runId = null,
@@ -346,10 +346,10 @@ internal class DistractionsJournal(context: Context) : SQLiteOpenHelper(
       put("kind", event.kind)
       put("package_name", event.packageName)
       put("display_name", event.displayName)
-      put("started_at", event.startedAt)
+      put("started_at", event.startedAtEpochMs)
       put("elapsed_seconds", event.elapsedSeconds)
       put("local_date", event.localDate)
-      put("occurred_at", event.occurredAt)
+      put("occurred_at", event.occurredAtEpochMs)
       put("vault_id", event.vaultId)
     })
   }
@@ -399,14 +399,14 @@ internal class DistractionsJournal(context: Context) : SQLiteOpenHelper(
     val localDate: String,
   )
 
-  private fun splitByLocalDate(startedAt: Long, endedAt: Long): List<UsageSlice> {
+  private fun splitByLocalDate(startedAtEpochMs: Long, endedAtEpochMs: Long): List<UsageSlice> {
     val zone = ZoneId.systemDefault()
     val slices = mutableListOf<UsageSlice>()
-    var cursor = startedAt
-    while (cursor < endedAt) {
+    var cursor = startedAtEpochMs
+    while (cursor < endedAtEpochMs) {
       val day = Instant.ofEpochMilli(cursor).atZone(zone).toLocalDate()
       val nextDay = day.plusDays(1).atStartOfDay(zone).toInstant().toEpochMilli()
-      val end = minOf(endedAt, nextDay)
+      val end = minOf(endedAtEpochMs, nextDay)
       slices += UsageSlice(cursor, end, day.toString())
       require(slices.size <= MAX_PENDING_EVENTS) { "Distractions usage interval spans too many dates" }
       cursor = end

@@ -1,5 +1,5 @@
 import type { CalendarCreateIntent, CalendarEditIntent } from "$lib/api/calendar-edit";
-import { prepareUpdateBlockPayload, type CalendarUpdateField } from "$lib/stores/calendar/event-payloads";
+import { prepareEventUpdatePayload, type CalendarUpdateField } from "$lib/stores/calendar/event-payloads";
 import { fieldEqual, type EditSessionState } from "$lib/components/calendar/edit-session.svelte";
 import { recurrenceConfigsEqual, recurrenceToRrule } from "$lib/calendar/rrule";
 import type { CalendarEvent, RecurringScope } from "$lib/calendar/types";
@@ -8,7 +8,7 @@ import { PENDING_CREATE_ID } from "$lib/components/calendar/display-events";
 type EditState = Extract<EditSessionState, { mode: "edit" }>;
 type EditableField = NonNullable<CalendarEditIntent["draft"]["fields"]>[number];
 
-function editableField(field: CalendarUpdateField): field is EditableField {
+function isEditableField(field: CalendarUpdateField): field is EditableField {
   switch (field.field) {
     case "startTime": case "endTime": case "timezone": case "allDay": case "rrule":
     case "repeatUntil": case "exceptions": case "rdate": case "sourceUid": case "sequence":
@@ -28,12 +28,12 @@ export function buildNativeCalendarCreate(input: {
   const allDay = changes.allDay === true;
   const endpoint = (value: string) => allDay ? value.slice(0, 10) : value.replace(" ", "T");
   const { start: _start, end: _end, timezone: _timezone, recurrence: _recurrence, ...metadata } = changes;
-  const { payload } = prepareUpdateBlockPayload({ ...metadata, id: PENDING_CREATE_ID }, []);
+  const { payload } = prepareEventUpdatePayload({ ...metadata, id: PENDING_CREATE_ID }, []);
   return { kind: "create", draft: {
     timing: { startTime: endpoint(changes.start ?? input.start), endTime: endpoint(changes.end ?? input.end),
       timezone: changes.timezone ?? renderZone, inputZone: renderZone, allDay },
     recurrence: changes.recurrence ? { kind: "set", value: recurrenceToRrule(changes.recurrence) } : { kind: "clear" },
-    fields: payload.fields.filter(editableField), attendees: payload.attendees, alarms: payload.alarms,
+    fields: payload.fields.filter(isEditableField), attendees: payload.attendees, alarms: payload.alarms,
     pomodoroConfig: payload.pomodoroConfig,
   } };
 }
@@ -78,12 +78,12 @@ export function buildNativeCalendarEdit(input: {
     && !recurrenceConfigsEqual(changes.recurrence, baseline.recurrence)
     ? changes.recurrence ? { kind: "set", value: recurrenceToRrule(changes.recurrence) } : { kind: "clear" }
     : { kind: "unchanged" };
-  const { payload } = prepareUpdateBlockPayload({ ...metadata, id: state.templateId }, []);
+  const { payload } = prepareEventUpdatePayload({ ...metadata, id: state.templateId }, []);
   return {
     ...(input.action && input.action !== "save" ? { action: input.action } : {}),
     selection: { templateId: state.templateId, recurrenceDate: selected.recurrenceDate,
       scope: input.action && input.action !== "save" ? "this" : input.scope },
-    draft: { timing, recurrence, fields: payload.fields.filter(editableField),
+    draft: { timing, recurrence, fields: payload.fields.filter(isEditableField),
       attendees: payload.attendees, alarms: payload.alarms, pomodoroConfig: payload.pomodoroConfig },
   };
 }

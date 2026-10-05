@@ -32,7 +32,7 @@ fn text(row: &Value, key: &str) -> Option<String> {
     row.get(key).and_then(Value::as_str).map(ToOwned::to_owned)
 }
 
-fn optional_text_in(row: &Value, key: &str, values: &HashSet<String>) -> bool {
+fn value_in(row: &Value, key: &str, values: &HashSet<String>) -> bool {
     text(row, key).is_some_and(|value| values.contains(&value))
 }
 
@@ -45,7 +45,7 @@ fn page_project_id(row: &Value) -> Option<&str> {
         .filter(|value| !value.is_empty())
 }
 
-fn extend_scope(rows: &BTreeMap<String, Vec<Value>>, project_id: &str) -> ProjectScope {
+fn collect_project_scope(rows: &BTreeMap<String, Vec<Value>>, project_id: &str) -> ProjectScope {
     let mut scope = ProjectScope::default();
     if let Some(folders) = rows.get("notes_folders") {
         for folder in folders {
@@ -59,7 +59,7 @@ fn extend_scope(rows: &BTreeMap<String, Vec<Value>>, project_id: &str) -> Projec
     if let Some(pages) = rows.get("notes_pages") {
         for page in pages {
             if page_project_id(page) == Some(project_id)
-                || optional_text_in(page, "folder_id", &scope.folder_ids)
+                || value_in(page, "folder_id", &scope.folder_ids)
             {
                 if let Some(id) = text(page, "id") {
                     scope.page_ids.insert(id);
@@ -77,7 +77,7 @@ fn extend_scope(rows: &BTreeMap<String, Vec<Value>>, project_id: &str) -> Projec
         );
         if let Some(blocks) = rows.get("notes_blocks") {
             for block in blocks {
-                if optional_text_in(block, "page_id", &scope.page_ids) {
+                if value_in(block, "page_id", &scope.page_ids) {
                     if let Some(id) = text(block, "id") {
                         scope.block_ids.insert(id);
                     }
@@ -86,9 +86,9 @@ fn extend_scope(rows: &BTreeMap<String, Vec<Value>>, project_id: &str) -> Projec
         }
         if let Some(databases) = rows.get("notes_databases") {
             for database in databases {
-                if optional_text_in(database, "id", &scope.block_ids)
-                    || optional_text_in(database, "parent_page_id", &scope.page_ids)
-                    || optional_text_in(database, "parent_block_id", &scope.block_ids)
+                if value_in(database, "id", &scope.block_ids)
+                    || value_in(database, "parent_page_id", &scope.page_ids)
+                    || value_in(database, "parent_block_id", &scope.block_ids)
                 {
                     if let Some(id) = text(database, "id") {
                         scope.database_ids.insert(id);
@@ -98,7 +98,7 @@ fn extend_scope(rows: &BTreeMap<String, Vec<Value>>, project_id: &str) -> Projec
         }
         if let Some(data_sources) = rows.get("notes_data_sources") {
             for data_source in data_sources {
-                if optional_text_in(data_source, "database_id", &scope.database_ids) {
+                if value_in(data_source, "database_id", &scope.database_ids) {
                     if let Some(id) = text(data_source, "id") {
                         scope.data_source_ids.insert(id);
                     }
@@ -107,9 +107,9 @@ fn extend_scope(rows: &BTreeMap<String, Vec<Value>>, project_id: &str) -> Projec
         }
         if let Some(pages) = rows.get("notes_pages") {
             for page in pages {
-                if optional_text_in(page, "parent_page_id", &scope.page_ids)
-                    || optional_text_in(page, "parent_block_id", &scope.block_ids)
-                    || optional_text_in(page, "parent_data_source_id", &scope.data_source_ids)
+                if value_in(page, "parent_page_id", &scope.page_ids)
+                    || value_in(page, "parent_block_id", &scope.block_ids)
+                    || value_in(page, "parent_data_source_id", &scope.data_source_ids)
                 {
                     if let Some(id) = text(page, "id") {
                         scope.page_ids.insert(id);
@@ -130,7 +130,7 @@ fn extend_scope(rows: &BTreeMap<String, Vec<Value>>, project_id: &str) -> Projec
 
     if let Some(templates) = rows.get("notes_data_source_templates") {
         for template in templates {
-            if optional_text_in(template, "data_source_id", &scope.data_source_ids) {
+            if value_in(template, "data_source_id", &scope.data_source_ids) {
                 if let Some(id) = text(template, "id") {
                     scope.data_source_template_ids.insert(id);
                 }
@@ -139,7 +139,7 @@ fn extend_scope(rows: &BTreeMap<String, Vec<Value>>, project_id: &str) -> Projec
     }
     if let Some(threads) = rows.get("notes_comment_threads") {
         for thread in threads {
-            if optional_text_in(thread, "page_id", &scope.page_ids) {
+            if value_in(thread, "page_id", &scope.page_ids) {
                 if let Some(id) = text(thread, "id") {
                     scope.thread_ids.insert(id);
                 }
@@ -148,7 +148,7 @@ fn extend_scope(rows: &BTreeMap<String, Vec<Value>>, project_id: &str) -> Projec
     }
     if let Some(comments) = rows.get("notes_comments") {
         for comment in comments {
-            if optional_text_in(comment, "thread_id", &scope.thread_ids) {
+            if value_in(comment, "thread_id", &scope.thread_ids) {
                 if let Some(id) = text(comment, "id") {
                     scope.comment_ids.insert(id);
                 }
@@ -157,10 +157,10 @@ fn extend_scope(rows: &BTreeMap<String, Vec<Value>>, project_id: &str) -> Projec
     }
     if let Some(references) = rows.get("notes_asset_references") {
         for reference in references {
-            let selected = optional_text_in(reference, "page_id", &scope.page_ids)
-                || optional_text_in(reference, "block_id", &scope.block_ids)
-                || optional_text_in(reference, "data_source_id", &scope.data_source_ids)
-                || optional_text_in(reference, "comment_id", &scope.comment_ids);
+            let selected = value_in(reference, "page_id", &scope.page_ids)
+                || value_in(reference, "block_id", &scope.block_ids)
+                || value_in(reference, "data_source_id", &scope.data_source_ids)
+                || value_in(reference, "comment_id", &scope.comment_ids);
             if selected {
                 if let Some(asset_id) = text(reference, "asset_id") {
                     scope.asset_ids.insert(asset_id);
@@ -173,8 +173,8 @@ fn extend_scope(rows: &BTreeMap<String, Vec<Value>>, project_id: &str) -> Projec
 
 fn row_is_selected(table: &str, row: &Value, scope: &ProjectScope) -> bool {
     match table {
-        "notes_folders" => optional_text_in(row, "id", &scope.folder_ids),
-        "notes_pages" | "notes_page_aliases" => optional_text_in(
+        "notes_folders" => value_in(row, "id", &scope.folder_ids),
+        "notes_pages" | "notes_page_aliases" => value_in(
             row,
             if table == "notes_pages" {
                 "id"
@@ -183,38 +183,36 @@ fn row_is_selected(table: &str, row: &Value, scope: &ProjectScope) -> bool {
             },
             &scope.page_ids,
         ),
-        "notes_blocks" => optional_text_in(row, "id", &scope.block_ids),
-        "notes_databases" => optional_text_in(row, "id", &scope.database_ids),
-        "notes_data_sources" => optional_text_in(row, "id", &scope.data_source_ids),
+        "notes_blocks" => value_in(row, "id", &scope.block_ids),
+        "notes_databases" => value_in(row, "id", &scope.database_ids),
+        "notes_data_sources" => value_in(row, "id", &scope.data_source_ids),
         "notes_database_views" => {
-            optional_text_in(row, "database_id", &scope.database_ids)
-                || optional_text_in(row, "data_source_id", &scope.data_source_ids)
+            value_in(row, "database_id", &scope.database_ids)
+                || value_in(row, "data_source_id", &scope.data_source_ids)
         }
-        "notes_data_source_templates" => {
-            optional_text_in(row, "id", &scope.data_source_template_ids)
-        }
+        "notes_data_source_templates" => value_in(row, "id", &scope.data_source_template_ids),
         "notes_data_source_row_hierarchy" => {
-            optional_text_in(row, "data_source_id", &scope.data_source_ids)
+            value_in(row, "data_source_id", &scope.data_source_ids)
         }
         "notes_data_source_template_blocks" => {
-            optional_text_in(row, "template_id", &scope.data_source_template_ids)
+            value_in(row, "template_id", &scope.data_source_template_ids)
         }
-        "notes_comment_threads" => optional_text_in(row, "id", &scope.thread_ids),
-        "notes_comments" => optional_text_in(row, "id", &scope.comment_ids),
+        "notes_comment_threads" => value_in(row, "id", &scope.thread_ids),
+        "notes_comments" => value_in(row, "id", &scope.comment_ids),
         "notes_comment_thread_anchors" | "notes_comment_thread_reads" => {
-            optional_text_in(row, "thread_id", &scope.thread_ids)
+            value_in(row, "thread_id", &scope.thread_ids)
         }
         "notes_suggestions" | "notes_mention_notifications" => {
-            optional_text_in(row, "page_id", &scope.page_ids)
+            value_in(row, "page_id", &scope.page_ids)
         }
         "notes_asset_references" => {
-            optional_text_in(row, "asset_id", &scope.asset_ids)
-                && (optional_text_in(row, "page_id", &scope.page_ids)
-                    || optional_text_in(row, "block_id", &scope.block_ids)
-                    || optional_text_in(row, "data_source_id", &scope.data_source_ids)
-                    || optional_text_in(row, "comment_id", &scope.comment_ids))
+            value_in(row, "asset_id", &scope.asset_ids)
+                && (value_in(row, "page_id", &scope.page_ids)
+                    || value_in(row, "block_id", &scope.block_ids)
+                    || value_in(row, "data_source_id", &scope.data_source_ids)
+                    || value_in(row, "comment_id", &scope.comment_ids))
         }
-        "notes_assets" => optional_text_in(row, "id", &scope.asset_ids),
+        "notes_assets" => value_in(row, "id", &scope.asset_ids),
         _ => false,
     }
 }
@@ -232,7 +230,7 @@ pub(super) async fn load_project_graph(
         return Err("project not found".to_string());
     }
     let source = transfers::json_graph_export::project_history_source_rows(pool).await?;
-    let scope = extend_scope(&source, project_id);
+    let scope = collect_project_scope(&source, project_id);
     let mut selected = BTreeMap::new();
     for (table, rows) in source {
         let table_rows = rows
@@ -273,7 +271,7 @@ pub(super) async fn load_project_graph(
 
 #[cfg(test)]
 mod tests {
-    use super::{extend_scope, row_is_selected};
+    use super::{collect_project_scope, row_is_selected};
     use serde_json::{Value, json};
     use std::collections::BTreeMap;
 
@@ -313,7 +311,7 @@ mod tests {
         );
         rows.insert("notes_pages".to_string(), vec![folder_page.clone()]);
 
-        let scope = extend_scope(&rows, "project-a");
+        let scope = collect_project_scope(&rows, "project-a");
 
         assert_eq!(scope.folder_ids.len(), 2);
         assert_eq!(scope.page_ids.len(), 1);

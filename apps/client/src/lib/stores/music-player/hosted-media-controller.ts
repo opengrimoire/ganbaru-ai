@@ -49,17 +49,17 @@ export function createMusicHostedMediaController(
   const state = options.state;
   let generation = 0;
   let staleVisualVersion = 0;
-  let clearTimeoutId: number | null = null;
+  let staleVisualClearTimeoutId: number | null = null;
 
   function nextGeneration(): number {
     generation += 1;
     return generation;
   }
 
-  function clearTimeout(): void {
-    if (clearTimeoutId === null || typeof window === "undefined") return;
-    window.clearTimeout(clearTimeoutId);
-    clearTimeoutId = null;
+  function cancelStaleVisualClear(): void {
+    if (staleVisualClearTimeoutId === null || typeof window === "undefined") return;
+    window.clearTimeout(staleVisualClearTimeoutId);
+    staleVisualClearTimeoutId = null;
   }
 
   function currentVisualSnapshot(): MusicStaleVisual | null {
@@ -74,7 +74,7 @@ export function createMusicHostedMediaController(
 
   function clearStaleVisual(): void {
     staleVisualVersion += 1;
-    clearTimeout();
+    cancelStaleVisualClear();
     state.staleVisual = null;
   }
 
@@ -82,12 +82,12 @@ export function createMusicHostedMediaController(
     const visual = currentVisualSnapshot();
     staleVisualVersion += 1;
     if (visual) {
-      clearTimeout();
+      cancelStaleVisualClear();
       state.staleVisual = visual;
       return true;
     }
     if (state.staleVisual) {
-      clearTimeout();
+      cancelStaleVisualClear();
       return true;
     }
     clearStaleVisual();
@@ -112,7 +112,7 @@ export function createMusicHostedMediaController(
 
   function finishVisualTransition(): void {
     if (!state.staleVisual) return;
-    clearTimeout();
+    cancelStaleVisualClear();
     state.staleVisual = null;
     syncRetention();
   }
@@ -120,13 +120,13 @@ export function createMusicHostedMediaController(
   function finishVisualTransitionAfterPaint(): void {
     if (!state.staleVisual) return;
     const expectedVersion = staleVisualVersion;
-    clearTimeout();
+    cancelStaleVisualClear();
     if (typeof window === "undefined") {
       finishVisualTransition();
       return;
     }
-    clearTimeoutId = window.setTimeout(() => {
-      clearTimeoutId = null;
+    staleVisualClearTimeoutId = window.setTimeout(() => {
+      staleVisualClearTimeoutId = null;
       window.requestAnimationFrame(() => {
         window.requestAnimationFrame(() => {
           if (staleVisualVersion === expectedVersion) finishVisualTransition();

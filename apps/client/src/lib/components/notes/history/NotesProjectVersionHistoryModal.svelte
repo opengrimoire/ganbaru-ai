@@ -98,7 +98,7 @@
     }
   }
 
-  async function selectVersion(versionId: string, openCompactPreview = true): Promise<void> {
+  async function selectVersion(versionId: string, shouldOpenCompactPreview = true): Promise<void> {
     selectedVersionId = versionId;
     historicalTree = null;
     selectedPage = null;
@@ -108,7 +108,7 @@
       const tree = await loadNotesProjectHistoryTree(projectId, versionId);
       if (currentRequest !== previewRequestId || selectedVersionId !== versionId) return;
       historicalTree = tree;
-      if (!openCompactPreview && compact) selectedVersionId = null;
+      if (!shouldOpenCompactPreview && compact) selectedVersionId = null;
     } catch (cause) {
       if (currentRequest !== previewRequestId) return;
       const message = cause instanceof Error ? cause.message : String(cause);

@@ -147,7 +147,7 @@ pub async fn apply_data_source_template(
     let page_id = if let Some(id) = requested_id {
         id
     } else {
-        data_sources::views::generated_uuid_tx(
+        data_sources::views::generate_uuid_tx(
             &mut tx,
             "generate data source template page id",
             "generated_data_source_template_page_id",
@@ -902,7 +902,7 @@ async fn next_reserved_uuid(
     reserved_ids: &mut HashSet<String>,
 ) -> Result<String, String> {
     for _ in 0..32 {
-        let id = data_sources::views::generated_uuid_tx(
+        let id = data_sources::views::generate_uuid_tx(
             tx,
             "generate data source template block id",
             "generated_data_source_template_block_id",

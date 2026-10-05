@@ -335,7 +335,7 @@ function buildBulkImportEvent(
   overrideLinks: PreservationEventLink[],
 ): CalendarBulkImportEvent {
   const homeZone = event.timezone || fallbackZone;
-  const gp = event.guestPermissions;
+  const guestPermissions = event.guestPermissions;
   const meetingEnabled = event.meetingEnabled ?? hasMeetingState(event);
   return {
     candidateId,
@@ -367,9 +367,9 @@ function buildBulkImportEvent(
     extendedProperties: jsonOrNull(event.extendedProperties),
     organizer: jsonOrNull(event.organizer),
     meetingEnabled,
-    guestCanModify: gp?.canModify ?? false,
-    guestCanInviteOthers: gp?.canInviteOthers ?? true,
-    guestCanSeeOtherGuests: gp?.canSeeOtherGuests ?? true,
+    guestCanModify: guestPermissions?.canModify ?? false,
+    guestCanInviteOthers: guestPermissions?.canInviteOthers ?? true,
+    guestCanSeeOtherGuests: guestPermissions?.canSeeOtherGuests ?? true,
     attendees: buildAttendees(event.attendees, link),
     alarms: buildAlarms(event.alarms, link),
     overrides: buildOverrides(

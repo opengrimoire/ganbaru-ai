@@ -11,8 +11,8 @@
     FOCUS_BREAK_END_ESC_PRESS_OPTIONS,
     FOCUS_BREAK_EXTENSION_LIMIT_OPTIONS,
     FOCUS_IDLE_THRESHOLD_MINUTES_OPTIONS,
-    FOCUS_BREAK_SOUND_INTERVAL_SECONDS,
-    FOCUS_PAUSE_NOTIFICATION_INTERVAL_MINUTES,
+    FOCUS_BREAK_SOUND_INTERVAL_SECONDS_OPTIONS,
+    FOCUS_PAUSE_NOTIFICATION_INTERVAL_MINUTES_OPTIONS,
   } from "$lib/stores/preference-options";
   import { getPreferences } from "$lib/stores/preferences.svelte";
   import { getPomodoro } from "$lib/stores/pomodoro.svelte";
@@ -38,7 +38,7 @@
   );
 
   const breakFinishedRepeatOptions = $derived<SelectOption[]>(
-    FOCUS_BREAK_SOUND_INTERVAL_SECONDS.map((seconds) => {
+    FOCUS_BREAK_SOUND_INTERVAL_SECONDS_OPTIONS.map((seconds) => {
       if (seconds === 0) return { value: String(seconds), label: t("settings.focus.optionNone") };
       if (seconds === 60) return { value: String(seconds), label: t("settings.focus.everyMinute") };
       return { value: String(seconds), label: t("settings.focus.everySeconds", seconds) };
@@ -46,7 +46,7 @@
   );
 
   const breakEndWarningOptions = $derived<SelectOption[]>(
-    FOCUS_BREAK_SOUND_INTERVAL_SECONDS.map((seconds) => {
+    FOCUS_BREAK_SOUND_INTERVAL_SECONDS_OPTIONS.map((seconds) => {
       if (seconds === 0) return { value: String(seconds), label: t("settings.focus.optionNone") };
       if (seconds === 60) return { value: String(seconds), label: t("settings.focus.oneMinuteBefore") };
       return { value: String(seconds), label: t("settings.focus.secondsBefore", seconds) };
@@ -65,7 +65,7 @@
   ]);
 
   const pausedFocusWarningOptions = $derived<SelectOption[]>(
-    FOCUS_PAUSE_NOTIFICATION_INTERVAL_MINUTES.map((minutes) => {
+    FOCUS_PAUSE_NOTIFICATION_INTERVAL_MINUTES_OPTIONS.map((minutes) => {
       if (minutes === 0) return { value: String(minutes), label: t("settings.focus.optionNone") };
       return { value: String(minutes), label: t("settings.focus.everyMinutes", minutes) };
     }),

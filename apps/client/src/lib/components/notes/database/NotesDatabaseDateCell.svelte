@@ -1,7 +1,7 @@
 <script lang="ts">
   import CollectionSettings from "$lib/components/collections/CollectionSettings.svelte";
   import { getLocalization } from "$lib/i18n/translator.svelte";
-  import { notesDatabaseDateBoundaryOrder, notesDatabaseDateBoundaryValid, notesDatabaseTimeZoneValid, type NotesDatabaseDateValue } from "$lib/notes/database/date";
+  import { notesDatabaseDateBoundaryOrder, notesDatabaseIsDateBoundaryValid, notesDatabaseIsTimeZoneValid, type NotesDatabaseDateValue } from "$lib/notes/database/date";
   import { notesDatabaseDateDisplay } from "$lib/notes/database/property-display";
   import { notesDatabaseTableDateValue, type NotesDatabaseTableColumn } from "$lib/notes/database/table";
   import type { NotesPage } from "$lib/notes/types";
@@ -51,10 +51,10 @@
     if (mutating || saving) return;
     const value: NotesDatabaseDateValue | null = clear ? null : { start: start.trim(), end: end.trim() || null, time_zone: timeZone.trim() || null };
     if (value) {
-      if (!notesDatabaseDateBoundaryValid(value.start)) { error = t("notes.databaseDateInvalidStart"); return; }
-      if (value.end && !notesDatabaseDateBoundaryValid(value.end)) { error = t("notes.databaseDateInvalidEnd"); return; }
+      if (!notesDatabaseIsDateBoundaryValid(value.start)) { error = t("notes.databaseDateInvalidStart"); return; }
+      if (value.end && !notesDatabaseIsDateBoundaryValid(value.end)) { error = t("notes.databaseDateInvalidEnd"); return; }
       if (value.end && notesDatabaseDateBoundaryOrder(value.end) < notesDatabaseDateBoundaryOrder(value.start)) { error = t("notes.databaseDateReversedRange"); return; }
-      if (value.time_zone && !notesDatabaseTimeZoneValid(value.time_zone)) { error = t("notes.databaseDateInvalidZone"); return; }
+      if (value.time_zone && !notesDatabaseIsTimeZoneValid(value.time_zone)) { error = t("notes.databaseDateInvalidZone"); return; }
     }
     saving = true;
     error = null;
@@ -75,7 +75,7 @@
 </button>
 
 {#if expanded}
-  <CollectionSettings label={column.name} {anchor} onclose={close}>
+  <CollectionSettings label={column.name} {anchor} onClose={close}>
     <fieldset disabled={saving || mutating} class="m-0 grid min-w-0 gap-2 border-0 p-1 font-normal">
       <label class="grid gap-1">{t("notes.databaseDateStart")}<input class="h-8 min-w-0 rounded border border-input bg-background px-2 outline-none" aria-label={t("notes.databaseDateStart")} placeholder={t("notes.databaseDateBoundaryHint")} bind:value={start} /></label>
       <label class="grid gap-1">{t("notes.databaseDateEnd")}<input class="h-8 min-w-0 rounded border border-input bg-background px-2 outline-none" aria-label={t("notes.databaseDateEnd")} placeholder={t("notes.databaseDateBoundaryHint")} bind:value={end} /></label>

@@ -31,8 +31,8 @@
     highlightMode = "day",
     highlightToday = true,
     activeHighlight = "accent",
-    onselect,
-    oncancel,
+    onSelect,
+    onCancel,
   }: {
     selectedDate: string;
     minDate?: string;
@@ -42,8 +42,8 @@
     highlightMode?: "day" | "week" | "workweek" | "none";
     highlightToday?: boolean;
     activeHighlight?: "accent" | "primary";
-    onselect: (dateStr: string, source?: "keyboard" | "pointer") => void;
-    oncancel?: (source?: "keyboard" | "pointer") => void;
+    onSelect: (dateStr: string, source?: "keyboard" | "pointer") => void;
+    onCancel?: (source?: "keyboard" | "pointer") => void;
   } = $props();
 
   const localization = getLocalization();
@@ -346,7 +346,7 @@
     if (e.key === "Escape") {
       e.preventDefault();
       e.stopPropagation();
-      if (headerFocused) oncancel?.("keyboard");
+      if (headerFocused) onCancel?.("keyboard");
       else void focusHeaderButton();
       return;
     }
@@ -365,7 +365,7 @@
       e.preventDefault();
       e.stopPropagation();
       if (pickerMode === "days") {
-        onselect(activeDateStr, "keyboard");
+        onSelect(activeDateStr, "keyboard");
       } else if (pickerMode === "months") {
         pickerMode = "days";
         void focusActiveGridButton();
@@ -461,7 +461,7 @@
   function selectDay(day: DatePickerDay) {
     if (minDate && day.dateStr < minDate) return;
     activeDateStr = day.dateStr;
-    onselect(day.dateStr, "pointer");
+    onSelect(day.dateStr, "pointer");
     const [y, m] = day.dateStr.split("-").map(Number);
     year = y;
     month = m;

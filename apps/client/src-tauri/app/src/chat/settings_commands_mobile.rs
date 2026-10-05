@@ -40,7 +40,7 @@ fn config_error(message: String) -> ganbaru_chat_contracts::models::ChatError {
     )
 }
 
-fn read_config(app: &tauri::AppHandle) -> ChatResult<ChatVaultConfig> {
+fn read_chat_config(app: &tauri::AppHandle) -> ChatResult<ChatVaultConfig> {
     let raw = vault::vault_read_config(app.clone()).map_err(config_error)?;
     let root: Value = serde_json::from_str(&raw)
         .map_err(|error| config_error(format!("Chat config is invalid: {error}")))?;
@@ -49,7 +49,7 @@ fn read_config(app: &tauri::AppHandle) -> ChatResult<ChatVaultConfig> {
 
 fn read_settings(app: &tauri::AppHandle) -> ChatResult<ChatSettingsRead> {
     Ok(ChatSettingsRead {
-        configuration: read_config(app)?,
+        configuration: read_chat_config(app)?,
         provider_families: Vec::new(),
         provider_instances: Vec::new(),
         credential_store_availability: CredentialStoreAvailability::Unavailable,
@@ -57,7 +57,7 @@ fn read_settings(app: &tauri::AppHandle) -> ChatResult<ChatSettingsRead> {
     })
 }
 
-fn mutate_config(
+fn mutate_chat_config(
     app: &tauri::AppHandle,
     mutate: impl FnOnce(&mut ChatVaultConfig),
 ) -> ChatResult<ChatVaultConfig> {
@@ -88,7 +88,7 @@ pub fn chat_update_behavior(
     app: tauri::AppHandle,
     behavior: ChatBehaviorPreferences,
 ) -> ChatResult<ChatVaultConfig> {
-    mutate_config(&app, |config| config.behavior = behavior)
+    mutate_chat_config(&app, |config| config.behavior = behavior)
 }
 
 #[tauri::command]
@@ -96,5 +96,5 @@ pub fn chat_update_panels(
     app: tauri::AppHandle,
     panels: ChatPanelPreferences,
 ) -> ChatResult<ChatVaultConfig> {
-    mutate_config(&app, |config| config.panels = panels)
+    mutate_chat_config(&app, |config| config.panels = panels)
 }

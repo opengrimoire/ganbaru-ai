@@ -12,15 +12,15 @@
   let {
     message,
     pending = false,
-    onsendnow,
-    onretry,
-    oncancel,
+    onSendNow,
+    onRetry,
+    onCancel,
   }: {
     message: ChatScheduledMessageRead;
     pending?: boolean;
-    onsendnow: () => void;
-    onretry: () => void;
-    oncancel: () => void;
+    onSendNow: () => void;
+    onRetry: () => void;
+    onCancel: () => void;
   } = $props();
 
   const localization = getLocalization();
@@ -59,11 +59,11 @@
       </span>
       <div class="message-actions">
         {#if message.state === "failed"}
-          <button type="button" disabled={pending} onclick={onretry}><RotateCcw size={13} />{t("chat.organization.retryScheduledMessage")}</button>
+          <button type="button" disabled={pending} onclick={onRetry}><RotateCcw size={13} />{t("chat.organization.retryScheduledMessage")}</button>
         {:else}
-          <button type="button" disabled={pending || message.state === "dispatching"} onclick={onsendnow}><Send size={13} />{t("chat.organization.sendScheduledNow")}</button>
+          <button type="button" disabled={pending || message.state === "dispatching"} onclick={onSendNow}><Send size={13} />{t("chat.organization.sendScheduledNow")}</button>
         {/if}
-        <button class="cancel-action" type="button" disabled={pending || message.state === "dispatching"} onclick={oncancel}><Trash2 size={13} />{t("chat.organization.cancelScheduledMessage")}</button>
+        <button class="cancel-action" type="button" disabled={pending || message.state === "dispatching"} onclick={onCancel}><Trash2 size={13} />{t("chat.organization.cancelScheduledMessage")}</button>
       </div>
     </div>
     {#if message.lastError}<p class="delivery-error">{message.lastError}</p>{/if}

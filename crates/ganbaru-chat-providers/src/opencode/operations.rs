@@ -26,7 +26,7 @@ impl ProviderDriver for OpenCodeProviderDriver {
     }
 
     fn authority_support(&self) -> ProviderAuthoritySupport {
-        if self.settings.external() {
+        if self.settings.is_external() {
             return ProviderAuthoritySupport::default();
         }
         ProviderAuthoritySupport {
@@ -68,7 +68,7 @@ impl ProviderDriver for OpenCodeProviderDriver {
         Box::pin(async move {
             let checked_at = now_utc()?;
             if context.is_cancelled() {
-                return Err(cancelled());
+                return Err(cancelled_error());
             }
             let workspace = canonical_current_directory()?;
             match self.catalog_snapshot(&workspace).await {
@@ -116,7 +116,7 @@ impl ProviderDriver for OpenCodeProviderDriver {
     ) -> DriverFuture<'a, ProviderModelCatalog> {
         Box::pin(async move {
             if context.is_cancelled() {
-                return Err(cancelled());
+                return Err(cancelled_error());
             }
             let workspace = canonical_current_directory()?;
             let snapshot = self.catalog_snapshot(&workspace).await?;
@@ -309,13 +309,13 @@ impl ProviderDriver for OpenCodeProviderDriver {
         Box::pin(async move {
             let prompt = steering_prompt(&request.prompt)?;
             let live = self.live_mut(&request.session_id)?;
-            let active = live
+            let active_turn_id = live
                 .route
                 .lock()
                 .map_err(|_| driver_state_error())?
                 .active_turn_id
                 .clone();
-            if active.as_ref() != Some(&request.turn_id) {
+            if active_turn_id.as_ref() != Some(&request.turn_id) {
                 return Err(ChatError::new(
                     ChatErrorCode::Conflict,
                     "OpenCode steering does not match the active turn",
@@ -339,19 +339,19 @@ impl ProviderDriver for OpenCodeProviderDriver {
     ) -> DriverFuture<'a, DriverOperationReceipt> {
         Box::pin(async move {
             let live = self.live_mut(&request.session_id)?;
-            let active = live
+            let active_turn_id = live
                 .route
                 .lock()
                 .map_err(|_| driver_state_error())?
                 .active_turn_id
                 .clone();
-            if active.is_none() {
+            if active_turn_id.is_none() {
                 return Ok(operation_receipt(
                     request.command.client_command_id.as_str(),
                     "OpenCode turn was already settled",
                 ));
             }
-            if active.as_ref() != Some(&request.turn_id) {
+            if active_turn_id.as_ref() != Some(&request.turn_id) {
                 return Err(ChatError::new(
                     ChatErrorCode::Conflict,
                     "OpenCode interrupt does not match the active turn",
@@ -578,7 +578,7 @@ fn probe_detail(code: ChatErrorCode) -> &'static str {
     }
 }
 
-fn cancelled() -> ChatError {
+fn cancelled_error() -> ChatError {
     ChatError::new(
         ChatErrorCode::Cancelled,
         "OpenCode operation was cancelled",

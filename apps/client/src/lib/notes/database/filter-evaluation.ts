@@ -23,12 +23,12 @@ function dateNumber(value: unknown, dayOnly: boolean): number | null {
   if (typeof value !== "string" || !value) return null;
   // Stored dates can use a separate timezone with a local timestamp. SQL treats
   // such timestamps as wall-clock values; explicit offsets denote UTC instants.
-  const explicit = /(?:Z|[+-]\d{2}:\d{2})$/.test(value);
-  const timestamp = Date.parse(value.length === 10 ? `${value}T00:00:00Z` : explicit ? value : `${value}Z`);
+  const hasExplicitOffset = /(?:Z|[+-]\d{2}:\d{2})$/.test(value);
+  const timestamp = Date.parse(value.length === 10 ? `${value}T00:00:00Z` : hasExplicitOffset ? value : `${value}Z`);
   return Number.isFinite(timestamp) ? dayOnly ? Math.floor(timestamp / DAY_MILLISECONDS) : timestamp : null;
 }
 
-function compare(condition: NotesDatabaseTableFilterCondition, left: number | string, right: number | string): boolean {
+function satisfiesCondition(condition: NotesDatabaseTableFilterCondition, left: number | string, right: number | string): boolean {
   switch (condition) {
     case "equals": return left === right;
     case "not_equals": return left !== right;
@@ -55,15 +55,15 @@ export function notesDatabaseRowMatchesFilters(row: NotesPage, columns: readonly
     if (filter.condition === "checked") return column.type === "checkbox" && payload === true;
     if (filter.condition === "unchecked") return column.type === "checkbox" && payload === false;
     if (column.type === "number") return typeof payload === "number" && Number.isFinite(payload)
-      && typeof filter.value === "number" && Number.isFinite(filter.value) && compare(filter.condition, payload, filter.value);
+      && typeof filter.value === "number" && Number.isFinite(filter.value) && satisfiesCondition(filter.condition, payload, filter.value);
     if (column.type === "date" || column.type === "created_time" || column.type === "last_edited_time") {
       const dayOnly = typeof filter.value === "string" && filter.value.length === 10;
       const left = dateNumber(text, dayOnly), right = dateNumber(filter.value, dayOnly);
-      return left !== null && right !== null && compare(filter.condition, left, right);
+      return left !== null && right !== null && satisfiesCondition(filter.condition, left, right);
     }
     const left = sqliteAsciiCaseFold(text);
     const right = sqliteAsciiCaseFold(String(filter.value ?? ""));
-    return filter.condition === "contains" ? left.includes(right) : compare(filter.condition, left, right);
+    return filter.condition === "contains" ? left.includes(right) : satisfiesCondition(filter.condition, left, right);
   }
   return filters.every(matches);
 }

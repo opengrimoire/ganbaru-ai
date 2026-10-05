@@ -72,7 +72,7 @@ use foreground::{close_current_foreground_desktop_app, foreground_desktop_app_st
 #[cfg(desktop)]
 use processes::list_blocked_desktop_app_matches;
 #[cfg(all(desktop, target_os = "linux"))]
-use processes::{observe_linux_process, read_linux_process_name};
+use processes::{observe_linux_process, read_linux_process_names};
 #[cfg(all(desktop, any(target_os = "linux", test)))]
 use rules::desktop_rule_matchers;
 #[cfg(desktop)]
@@ -91,7 +91,7 @@ use state_files::{
     read_fresh_runtime_state, state_path,
 };
 #[cfg(desktop)]
-use usage::validate_local_date;
+use usage::is_valid_local_date;
 
 #[cfg(all(desktop, test))]
 use state_files::{

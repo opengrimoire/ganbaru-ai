@@ -14,14 +14,14 @@ afterEach(async () => {
 });
 
 /** Mount settings inside a clipped page preview and wait for initial focus. */
-async function openSettings(onclose = vi.fn(), oncommit = vi.fn()) {
+async function openSettings(onClose = vi.fn(), onCommit = vi.fn()) {
   const preview = document.createElement("div");
   preview.dataset.floatingRoot = "";
   const clipped = document.createElement("div");
   clipped.style.overflow = "hidden";
   preview.append(clipped);
   document.body.append(preview);
-  component = mount(SettingsFixture, { target: clipped, props: { onclose, oncommit } });
+  component = mount(SettingsFixture, { target: clipped, props: { onClose, onCommit } });
   const anchor = clipped.querySelector<HTMLButtonElement>("button")!;
   vi.spyOn(anchor, "getBoundingClientRect").mockReturnValue(new DOMRect(800, 32, 32, 32));
   anchor.focus();
@@ -30,7 +30,7 @@ async function openSettings(onclose = vi.fn(), oncommit = vi.fn()) {
   await tick();
   await tick();
   const panel = preview.querySelector<HTMLDivElement>('[role="dialog"]')!;
-  return { preview, clipped, anchor, panel, onclose, oncommit };
+  return { preview, clipped, anchor, panel, onClose, onCommit };
 }
 
 /** Press a key at the focused element as a browser would. */
@@ -177,18 +177,18 @@ describe("Collection settings navigation", () => {
   });
 
   it("dismisses when outside focus moves and preserves that focus", async () => {
-    const { panel, onclose } = await openSettings();
+    const { panel, onClose } = await openSettings();
     const outside = document.createElement("button");
     document.body.append(outside);
     outside.focus();
     await tick();
     expect(panel.isConnected).toBe(false);
     expect(document.activeElement).toBe(outside);
-    expect(onclose).toHaveBeenCalledOnce();
+    expect(onClose).toHaveBeenCalledOnce();
   });
 
   it("dismisses on outside pointer without restoring focus over the target", async () => {
-    const { panel, onclose } = await openSettings();
+    const { panel, onClose } = await openSettings();
     const outside = document.createElement("input");
     document.body.append(outside);
     outside.dispatchEvent(new Event("pointerdown", { bubbles: true }));
@@ -196,11 +196,11 @@ describe("Collection settings navigation", () => {
     await tick();
     expect(panel.isConnected).toBe(false);
     expect(document.activeElement).toBe(outside);
-    expect(onclose).toHaveBeenCalledOnce();
+    expect(onClose).toHaveBeenCalledOnce();
   });
 
   it("commits a focused draft before outside background dismissal without restoring anchor focus", async () => {
-    const { panel, anchor, onclose, oncommit } = await openSettings();
+    const { panel, anchor, onClose, onCommit } = await openSettings();
     const anchorFocus = vi.spyOn(anchor, "focus");
     const input = panel.querySelector<HTMLInputElement>('[aria-label="View name"]')!;
     input.value = "Weekly plan";
@@ -208,13 +208,13 @@ describe("Collection settings navigation", () => {
     const background = document.createElement("div");
     document.body.append(background);
     background.dispatchEvent(new Event("pointerdown", { bubbles: true }));
-    expect(oncommit).toHaveBeenCalledExactlyOnceWith("Weekly plan");
+    expect(onCommit).toHaveBeenCalledExactlyOnceWith("Weekly plan");
     expect(input.isConnected).toBe(true);
     background.dispatchEvent(new Event("pointerdown", { bubbles: true }));
     await tick();
     expect(panel.isConnected).toBe(false);
-    expect(onclose).toHaveBeenCalledOnce();
-    expect(oncommit).toHaveBeenCalledOnce();
+    expect(onClose).toHaveBeenCalledOnce();
+    expect(onCommit).toHaveBeenCalledOnce();
     expect(anchorFocus).not.toHaveBeenCalled();
     expect(document.activeElement).toBe(document.body);
   });
@@ -261,7 +261,7 @@ describe("Collection settings navigation", () => {
   });
 
   it("navigates settings rows with arrows and removes listeners when unmounted", async () => {
-    const { panel, onclose } = await openSettings();
+    const { panel, onClose } = await openSettings();
     const layout = panel.querySelector<HTMLButtonElement>('[aria-label="Layout"]')!;
     const filter = panel.querySelector<HTMLButtonElement>('[aria-label="Filter"]')!;
     layout.focus();
@@ -275,6 +275,6 @@ describe("Collection settings navigation", () => {
     expect(panel.contains(document.activeElement)).toBe(false);
     document.body.dispatchEvent(new Event("pointerdown", { bubbles: true }));
     document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-    expect(onclose).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
   });
 });

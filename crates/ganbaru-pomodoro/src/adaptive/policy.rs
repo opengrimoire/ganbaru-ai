@@ -24,198 +24,201 @@ const CADENCE_MAXIMUM: i64 = 5;
 /// Branch order is policy meaning and matches the prior TypeScript implementation.
 pub fn select_adaptive_rhythm(
     current: CountRhythm,
-    f: &FeatureVector,
-    s: StateScores,
+    features: &FeatureVector,
+    state: StateScores,
     _context: &ContextBucket,
 ) -> PolicyDecision {
     let mut selected = current;
-    let mut reasons = reason_codes_for_state(s);
-    if f.data_quality_flags
+    let mut reasons = reason_codes_for_state(state);
+    if features
+        .data_quality_flags
         .iter()
         .any(|flag| flag == "extension_unavailable")
     {
-        add(&mut reasons, "missing_extension_data");
+        push_unique(&mut reasons, "missing_extension_data");
     }
-    if f.data_quality_flags
+    if features
+        .data_quality_flags
         .iter()
         .any(|flag| flag == "diary_missing")
     {
-        add(&mut reasons, "missing_diary_data");
+        push_unique(&mut reasons, "missing_diary_data");
     }
-    if s.confidence < LOW_CONFIDENCE {
-        add(
+    if state.confidence < LOW_CONFIDENCE {
+        push_unique(
             &mut reasons,
-            if f.comparable_opportunity_count == 0.0 {
+            if features.comparable_opportunity_count == 0.0 {
                 "no_history"
             } else {
                 "low_confidence"
             },
         );
-        return decision(selected, "fallback", reasons, s);
+        return decision(selected, "fallback", reasons, state);
     }
-    if s.recovery_debt >= HIGH_PRESSURE
-        || (s.strain >= HIGH_PRESSURE && f.focus_failure_count > 0.0)
+    if state.recovery_debt >= HIGH_PRESSURE
+        || (state.strain >= HIGH_PRESSURE && features.focus_failure_count > 0.0)
     {
         selected.focus_duration_minutes = decrease_focus(
             selected.focus_duration_minutes,
-            if f.focus_failure_count > 0.0 {
+            if features.focus_failure_count > 0.0 {
                 FOCUS_MINIMUM
             } else {
                 NORMAL_FOCUS_MINIMUM
             },
         );
         support_recovery(&mut selected);
-        add(&mut reasons, "guardrail_recovery");
-        return decision(selected, "recovery", reasons, s);
+        push_unique(&mut reasons, "guardrail_recovery");
+        return decision(selected, "recovery", reasons, state);
     }
-    if f.late_focus_segment_count >= 2.0 && f.late_focus_failure_count >= 2.0 {
+    if features.late_focus_segment_count >= 2.0 && features.late_focus_failure_count >= 2.0 {
         support_recovery(&mut selected);
-        add(&mut reasons, "guardrail_recovery");
-        return decision(selected, "guardrail", reasons, s);
+        push_unique(&mut reasons, "guardrail_recovery");
+        return decision(selected, "guardrail", reasons, state);
     }
-    if f.skipped_long_break_next_focus_failure_count >= 1.0
-        || f.skipped_break_next_focus_failure_count >= 2.0
+    if features.skipped_long_break_next_focus_failure_count >= 1.0
+        || features.skipped_break_next_focus_failure_count >= 2.0
     {
         support_recovery(&mut selected);
-        add(&mut reasons, "skipped_break_recovery");
-        add(&mut reasons, "guardrail_recovery");
-        return decision(selected, "guardrail", reasons, s);
+        push_unique(&mut reasons, "skipped_break_recovery");
+        push_unique(&mut reasons, "guardrail_recovery");
+        return decision(selected, "guardrail", reasons, state);
     }
-    if f.late_focus_segment_count >= 2.0
-        && (f.late_focus_failure_count == 1.0
-            || (f.late_focus_blocked_attempt_count >= 3.0
-                && f.late_focus_blocked_attempt_count > f.early_focus_blocked_attempt_count
-                && s.recovery_debt < LOW_RISK))
-        && s.strain < HIGH_PRESSURE
-        && s.recovery_debt < HIGH_PRESSURE
-        && s.avoidance_pressure < HIGH_PRESSURE
+    if features.late_focus_segment_count >= 2.0
+        && (features.late_focus_failure_count == 1.0
+            || (features.late_focus_blocked_attempt_count >= 3.0
+                && features.late_focus_blocked_attempt_count
+                    > features.early_focus_blocked_attempt_count
+                && state.recovery_debt < LOW_RISK))
+        && state.strain < HIGH_PRESSURE
+        && state.recovery_debt < HIGH_PRESSURE
+        && state.avoidance_pressure < HIGH_PRESSURE
     {
         selected.long_break_after_focus_count =
             (selected.long_break_after_focus_count - 1).clamp(CADENCE_MINIMUM, CADENCE_MAXIMUM);
-        add(&mut reasons, "guardrail_recovery");
-        return decision(selected, "explore", reasons, s);
+        push_unique(&mut reasons, "guardrail_recovery");
+        return decision(selected, "explore", reasons, state);
     }
-    if f.early_focus_idle_pause_count >= 2.0
-        && s.strain >= LOW_RISK
-        && s.avoidance_pressure < HIGH_PRESSURE
+    if features.early_focus_idle_pause_count >= 2.0
+        && state.strain >= LOW_RISK
+        && state.avoidance_pressure < HIGH_PRESSURE
     {
         selected.focus_duration_minutes =
             decrease_focus(selected.focus_duration_minutes, NORMAL_FOCUS_MINIMUM);
-        add(&mut reasons, "focus_idle_pressure");
-        add(&mut reasons, "guardrail_recovery");
-        return decision(selected, "guardrail", reasons, s);
+        push_unique(&mut reasons, "focus_idle_pressure");
+        push_unique(&mut reasons, "guardrail_recovery");
+        return decision(selected, "guardrail", reasons, state);
     }
-    if f.late_focus_idle_pause_count >= 2.0 && s.recovery_debt >= LOW_RISK {
+    if features.late_focus_idle_pause_count >= 2.0 && state.recovery_debt >= LOW_RISK {
         selected.focus_duration_minutes =
             decrease_focus(selected.focus_duration_minutes, NORMAL_FOCUS_MINIMUM);
-        add(&mut reasons, "focus_idle_pressure");
-        add(&mut reasons, "guardrail_recovery");
-        return decision(selected, "guardrail", reasons, s);
+        push_unique(&mut reasons, "focus_idle_pressure");
+        push_unique(&mut reasons, "guardrail_recovery");
+        return decision(selected, "guardrail", reasons, state);
     }
-    if f.early_go_to_break_now_count >= 2.0
-        && s.strain >= LOW_RISK
-        && s.avoidance_pressure < HIGH_PRESSURE
+    if features.early_go_to_break_now_count >= 2.0
+        && state.strain >= LOW_RISK
+        && state.avoidance_pressure < HIGH_PRESSURE
     {
         selected.focus_duration_minutes =
             decrease_focus(selected.focus_duration_minutes, NORMAL_FOCUS_MINIMUM);
-        add(&mut reasons, "guardrail_recovery");
-        return decision(selected, "guardrail", reasons, s);
+        push_unique(&mut reasons, "guardrail_recovery");
+        return decision(selected, "guardrail", reasons, state);
     }
-    if f.late_go_to_break_now_count >= 2.0 && s.recovery_debt >= LOW_RISK {
+    if features.late_go_to_break_now_count >= 2.0 && state.recovery_debt >= LOW_RISK {
         selected.focus_duration_minutes =
             decrease_focus(selected.focus_duration_minutes, NORMAL_FOCUS_MINIMUM);
-        add(&mut reasons, "guardrail_recovery");
-        return decision(selected, "guardrail", reasons, s);
+        push_unique(&mut reasons, "guardrail_recovery");
+        return decision(selected, "guardrail", reasons, state);
     }
-    if f.late_focus_blocked_attempt_count >= 3.0
-        && f.late_focus_blocked_attempt_count > f.early_focus_blocked_attempt_count
-        && s.recovery_debt >= LOW_RISK
+    if features.late_focus_blocked_attempt_count >= 3.0
+        && features.late_focus_blocked_attempt_count > features.early_focus_blocked_attempt_count
+        && state.recovery_debt >= LOW_RISK
     {
         support_recovery(&mut selected);
-        add(&mut reasons, "guardrail_recovery");
-        return decision(selected, "guardrail", reasons, s);
+        push_unique(&mut reasons, "guardrail_recovery");
+        return decision(selected, "guardrail", reasons, state);
     }
-    if s.avoidance_pressure >= HIGH_PRESSURE
-        && s.strain < LOW_RISK
-        && s.recovery_debt < LOW_RISK
-        && f.focus_failure_count == 0.0
-        && f.interrupted_focus_segments == 0.0
+    if state.avoidance_pressure >= HIGH_PRESSURE
+        && state.strain < LOW_RISK
+        && state.recovery_debt < LOW_RISK
+        && features.focus_failure_count == 0.0
+        && features.interrupted_focus_segments == 0.0
     {
-        add(&mut reasons, "hold_current_rhythm");
-        return decision(selected, "hold", reasons, s);
+        push_unique(&mut reasons, "hold_current_rhythm");
+        return decision(selected, "hold", reasons, state);
     }
-    if f.focus_repeated_blocked_source_attempt_count >= 3.0
-        && s.strain < LOW_RISK
-        && s.recovery_debt < LOW_RISK
-        && f.focus_failure_count == 0.0
-        && f.interrupted_focus_segments == 0.0
+    if features.focus_repeated_blocked_source_attempt_count >= 3.0
+        && state.strain < LOW_RISK
+        && state.recovery_debt < LOW_RISK
+        && features.focus_failure_count == 0.0
+        && features.interrupted_focus_segments == 0.0
     {
-        add(&mut reasons, "repeated_blocked_source_pressure");
-        add(&mut reasons, "hold_current_rhythm");
-        return decision(selected, "hold", reasons, s);
+        push_unique(&mut reasons, "repeated_blocked_source_pressure");
+        push_unique(&mut reasons, "hold_current_rhythm");
+        return decision(selected, "hold", reasons, state);
     }
-    if s.strain >= HIGH_PRESSURE || s.avoidance_pressure >= HIGH_PRESSURE {
+    if state.strain >= HIGH_PRESSURE || state.avoidance_pressure >= HIGH_PRESSURE {
         selected.focus_duration_minutes =
             decrease_focus(selected.focus_duration_minutes, NORMAL_FOCUS_MINIMUM);
-        if s.avoidance_pressure >= HIGH_PRESSURE && f.blocked_burst_count > 0.0 {
+        if state.avoidance_pressure >= HIGH_PRESSURE && features.blocked_burst_count > 0.0 {
             selected.long_break_after_focus_count =
                 (selected.long_break_after_focus_count - 1).clamp(CADENCE_MINIMUM, CADENCE_MAXIMUM);
         }
-        return decision(selected, "guardrail", reasons, s);
+        return decision(selected, "guardrail", reasons, state);
     }
-    if f.short_break_overtime_seconds >= SHORT_BREAK_DRIFT_SECONDS
-        && f.short_break_overtime_blocked_attempt_count > 0.0
+    if features.short_break_overtime_seconds >= SHORT_BREAK_DRIFT_SECONDS
+        && features.short_break_overtime_blocked_attempt_count > 0.0
     {
-        add(&mut reasons, "break_transition_pressure");
-        add(&mut reasons, "hold_current_rhythm");
-        return decision(selected, "hold", reasons, s);
+        push_unique(&mut reasons, "break_transition_pressure");
+        push_unique(&mut reasons, "hold_current_rhythm");
+        return decision(selected, "hold", reasons, state);
     }
-    if f.short_break_overtime_seconds >= SHORT_BREAK_DRIFT_SECONDS
-        && s.avoidance_pressure < LOW_RISK
+    if features.short_break_overtime_seconds >= SHORT_BREAK_DRIFT_SECONDS
+        && state.avoidance_pressure < LOW_RISK
     {
         selected.short_break_minutes = (selected.short_break_minutes + 2).clamp(3, 12);
-        add(&mut reasons, "break_return_drift");
-        return decision(selected, "explore", reasons, s);
+        push_unique(&mut reasons, "break_return_drift");
+        return decision(selected, "explore", reasons, state);
     }
-    if f.long_break_overtime_seconds >= LONG_BREAK_DRIFT_SECONDS
-        && f.long_break_overtime_blocked_attempt_count == 0.0
-        && s.avoidance_pressure < LOW_RISK
+    if features.long_break_overtime_seconds >= LONG_BREAK_DRIFT_SECONDS
+        && features.long_break_overtime_blocked_attempt_count == 0.0
+        && state.avoidance_pressure < LOW_RISK
     {
         selected.long_break_minutes = (selected.long_break_minutes + LONG_BREAK_STEP)
             .clamp(LONG_BREAK_MINIMUM, LONG_BREAK_MAXIMUM);
-        add(&mut reasons, "break_return_drift");
-        return decision(selected, "explore", reasons, s);
+        push_unique(&mut reasons, "break_return_drift");
+        return decision(selected, "explore", reasons, state);
     }
-    let ready_for_growth = s.confidence >= MODERATE_CONFIDENCE
-        && s.momentum >= HIGH_MOMENTUM
-        && s.strain < LOW_RISK
-        && s.avoidance_pressure < LOW_RISK
-        && s.recovery_debt < LOW_RISK;
+    let ready_for_growth = state.confidence >= MODERATE_CONFIDENCE
+        && state.momentum >= HIGH_MOMENTUM
+        && state.strain < LOW_RISK
+        && state.avoidance_pressure < LOW_RISK
+        && state.recovery_debt < LOW_RISK;
     if ready_for_growth
-        && f.completed_focus_segments >= 12.0
-        && f.clean_focus_seconds >= f.planned_focus_seconds
-        && f.interrupted_focus_segments == 0.0
-        && f.focus_failure_count == 0.0
-        && f.break_skipped_count == 0.0
-        && f.break_completed_count >= 10.0
-        && f.blocked_attempt_count == 0.0
-        && f.short_break_overtime_seconds == 0.0
-        && f.long_break_overtime_seconds == 0.0
-        && f.comparable_opportunity_count >= 24.0
+        && features.completed_focus_segments >= 12.0
+        && features.clean_focus_seconds >= features.planned_focus_seconds
+        && features.interrupted_focus_segments == 0.0
+        && features.focus_failure_count == 0.0
+        && features.break_skipped_count == 0.0
+        && features.break_completed_count >= 10.0
+        && features.blocked_attempt_count == 0.0
+        && features.short_break_overtime_seconds == 0.0
+        && features.long_break_overtime_seconds == 0.0
+        && features.comparable_opportunity_count >= 24.0
     {
         selected.long_break_after_focus_count =
             (selected.long_break_after_focus_count + 1).clamp(CADENCE_MINIMUM, CADENCE_MAXIMUM);
-        add(&mut reasons, "capacity_rebuild");
-        return decision(selected, "explore", reasons, s);
+        push_unique(&mut reasons, "capacity_rebuild");
+        return decision(selected, "explore", reasons, state);
     }
     if ready_for_growth {
         selected.focus_duration_minutes =
             (selected.focus_duration_minutes + FOCUS_STEP).clamp(FOCUS_MINIMUM, FOCUS_MAXIMUM);
-        add(&mut reasons, "capacity_rebuild");
-        return decision(selected, "exploit", reasons, s);
+        push_unique(&mut reasons, "capacity_rebuild");
+        return decision(selected, "exploit", reasons, state);
     }
-    add(&mut reasons, "hold_current_rhythm");
-    decision(selected, "hold", reasons, s)
+    push_unique(&mut reasons, "hold_current_rhythm");
+    decision(selected, "hold", reasons, state)
 }
 
 fn support_recovery(selected: &mut CountRhythm) {
@@ -240,7 +243,7 @@ fn decision(
         state_scores,
     }
 }
-pub(super) fn add(values: &mut Vec<String>, value: &str) {
+pub(super) fn push_unique(values: &mut Vec<String>, value: &str) {
     if !values.iter().any(|existing| existing == value) {
         values.push(value.to_owned());
     }

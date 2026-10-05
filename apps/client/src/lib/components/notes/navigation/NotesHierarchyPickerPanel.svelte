@@ -38,11 +38,10 @@
     projectPickerSubpanelGeometry,
   } from "$lib/projects/picker-panels";
   import { getNotesEditor } from "$lib/components/notes/editor-context";
-  import { cn } from "$lib/utils";
+  import { cn, type MaybePromise } from "$lib/utils";
   import NotesHierarchyPickerPanel from "./NotesHierarchyPickerPanel.svelte";
   import NotesPageIcon from "$lib/components/notes/pages/NotesPageIcon.svelte";
 
-  type MaybePromise<T> = T | Promise<T>;
 
   interface NotesMobileHierarchyLevel {
     parent: NotesHierarchyParent;
@@ -92,13 +91,13 @@
   );
   const iconSize = $derived(mobileLayout ? 18 : 13);
   const iconStrokeWidth = 1.6;
-  const panelGap = 4;
+  const panelGapPx = 4;
   const panelListPadding = NOTES_HIERARCHY_PANEL_LIST_PADDING;
   const panelRowHeight = NOTES_HIERARCHY_PANEL_ROW_HEIGHT;
   const viewIcons = { table: Table2, board: Columns3, gallery: LayoutGrid, list: List, calendar: CalendarDays, timeline: ChartGantt };
 
   let search = $state("");
-  let creatingFolder = $state(false);
+  let isCreatingFolder = $state(false);
   let folderDraft = $state("");
   let folderCreationError = $state<string | null>(null);
   let folderInput = $state<HTMLInputElement | null>(null);
@@ -110,10 +109,10 @@
   let childBridgeStyle = $state("");
   let scrollElement = $state<HTMLElement | undefined>();
   let views = $state<NotesDatabaseView[]>([]);
-  let viewsLoading = $state(false);
+  let isLoadingViews = $state(false);
   let viewError = $state<string | null>(null);
   let navigationError = $state<string | null>(null);
-  let viewRetry = $state(0);
+  let viewRetryCount = $state(0);
   let childMeasuredItemCount = $state<number | null>(null);
   let mobileParent = $state<NotesHierarchyParent>(untrack(() => parent));
   let mobileTitle = $state(untrack(() => title ?? t("notes.noteNavigatorLabel")));
@@ -179,7 +178,7 @@
       anchorRect: activeNodeAnchor.getBoundingClientRect(),
       panelRect: rootElement.getBoundingClientRect(),
       bounds: currentBounds(),
-      gap: panelGap,
+      gap: panelGapPx,
       footerHeight: notesHierarchyPanelChromeHeight(childParent, false),
       panelHeight: childPanelElement?.getBoundingClientRect().height || undefined,
       projectCount: Math.max(1, childItemCount),
@@ -240,8 +239,8 @@
   }
 
   function handleMobileBack(): void {
-    if (creatingFolder) {
-      creatingFolder = false;
+    if (isCreatingFolder) {
+      isCreatingFolder = false;
       folderDraft = "";
       folderCreationError = null;
       return;
@@ -332,7 +331,7 @@
   function beginFolderCreation(): void {
     folderDraft = nextFolderName();
     folderCreationError = null;
-    creatingFolder = true;
+    isCreatingFolder = true;
     void tick().then(() => {
       folderInput?.focus();
       folderInput?.select();
@@ -350,7 +349,7 @@
         name,
         effectiveParent.kind === "folder" ? effectiveParent.id : null,
       );
-      creatingFolder = false;
+      isCreatingFolder = false;
       folderDraft = "";
     } catch (error) {
       folderCreationError = error instanceof Error ? error.message : String(error);
@@ -362,21 +361,21 @@
       ? notes.navigationDatabases.find((item) => item.id === effectiveParent.id)
       : null;
     notesDatabaseSession.revision;
-    viewRetry;
+    viewRetryCount;
     views = [];
     viewError = null;
-    viewsLoading = false;
+    isLoadingViews = false;
     if (!database) return;
     const resource = databaseResource("views", database.data_source_id, { databaseId: database.id });
     const cached = untrack(() => notesDatabaseSession.read(resource));
     views = cached ?? [];
-    viewsLoading = cached === null;
+    isLoadingViews = cached === null;
     let cancelled = false;
     void untrack(() => notesDatabaseSession.load(resource, () => listNotesDatabaseViews(database.id))).then((loaded) => {
       if (!cancelled) views = loaded;
     }).catch((error: unknown) => {
       if (!cancelled) viewError = error instanceof Error ? error.message : String(error);
-    }).finally(() => { if (!cancelled) viewsLoading = false; });
+    }).finally(() => { if (!cancelled) isLoadingViews = false; });
     return () => { cancelled = true; };
   });
 
@@ -389,7 +388,7 @@
   $effect(() => {
     if (
       !mobileLayout
-      || (!onBack && mobileAncestors.length === 0 && !creatingFolder && !normalizedSearch)
+      || (!onBack && mobileAncestors.length === 0 && !isCreatingFolder && !normalizedSearch)
     ) return;
     return activateNestedMobileBack?.(handleMobileBack);
   });
@@ -486,9 +485,9 @@
       {#if navigationError || viewError}
         <div class="px-3 py-2 text-[0.8rem] text-destructive" role="alert">
           {navigationError ?? viewError}
-          {#if viewError}<button type="button" class="mt-1 block rounded px-1 py-1 text-popover-foreground hover:bg-accent" onclick={() => { viewRetry += 1; }}>{t("common.retry")}</button>{/if}
+          {#if viewError}<button type="button" class="mt-1 block rounded px-1 py-1 text-popover-foreground hover:bg-accent" onclick={() => { viewRetryCount += 1; }}>{t("common.retry")}</button>{/if}
         </div>
-      {:else if viewsLoading || (notes.loading && projectPages.length === 0 && projectFolders.length === 0)}
+      {:else if isLoadingViews || (notes.loading && projectPages.length === 0 && projectFolders.length === 0)}
         <div class="px-3 py-2 text-[0.8rem] text-popover-foreground/60">{t("notes.loading")}</div>
       {:else if notes.loadError}
         <div class="px-3 py-2 text-[0.8rem] text-destructive">{t("notes.loadFailed", notes.loadError)}</div>
@@ -601,7 +600,7 @@
   {#if effectiveParent.kind !== "database"}
   <div class={cn("relative z-10 shrink-0 bg-popover", mobileLayout ? "p-2" : "p-1.5")}>
     <div class="pointer-events-none absolute left-1.5 right-1.5 top-0 border-t border-border/70"></div>
-    {#if creatingFolder && effectiveParent.kind !== "page"}
+    {#if isCreatingFolder && effectiveParent.kind !== "page"}
       <form class={cn("flex", mobileLayout ? "gap-2" : "gap-1")} onsubmit={(event) => { event.preventDefault(); void createFolder(); }}>
         <input
           bind:this={folderInput}
@@ -622,7 +621,7 @@
             class="flex min-h-12 min-w-12 items-center justify-center rounded-xl active:bg-accent"
             aria-label={t("common.cancel")}
             onclick={() => {
-              creatingFolder = false;
+              isCreatingFolder = false;
               folderDraft = "";
               folderCreationError = null;
             }}

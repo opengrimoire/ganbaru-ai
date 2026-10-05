@@ -137,7 +137,7 @@ impl Owner {
         let app = self.app.clone();
         let worker = tauri::async_runtime::spawn_blocking(move || {
             let _delivery_permit = delivery_permit;
-            crate::music::soundscape::soundscape_stop(
+            crate::music::soundscape::music_soundscape_stop(
                 app.state::<crate::music::soundscape::SoundscapeEngineState>(),
             )
             .map(|_| ())

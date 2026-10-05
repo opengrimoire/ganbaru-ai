@@ -75,11 +75,11 @@
       height: window.innerHeight,
     };
     if (!triggerElement) return viewportRect;
-    const boundaryEl =
+    const boundaryElement =
       triggerElement.closest<HTMLElement>("[data-settings-content]")
       ?? triggerElement.closest<HTMLElement>("[data-settings-modal-panel]");
-    if (!boundaryEl) return viewportRect;
-    const boundary = boundaryEl.getBoundingClientRect();
+    if (!boundaryElement) return viewportRect;
+    const boundary = boundaryElement.getBoundingClientRect();
     const top = Math.max(viewportRect.top, boundary.top);
     const right = Math.min(viewportRect.right, boundary.right);
     const bottom = Math.min(viewportRect.bottom, boundary.bottom);

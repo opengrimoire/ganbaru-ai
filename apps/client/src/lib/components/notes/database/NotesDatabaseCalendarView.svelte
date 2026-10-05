@@ -431,12 +431,12 @@
 
           <CollectionMenu fullWidth disabled={editingLocked} label={t("notes.databaseTableSorts")} kind="sort" activeCount={sorts.length} summary={formatList(localization.locale, sorts.map((sort) => columns.find((column) => column.id === sort.property_id)?.name ?? ""))}>
 
-          <NotesDatabaseSortControls properties={columns} {sorts} pending={mutating || editingLocked} onchange={saveSorts} />
+          <NotesDatabaseSortControls properties={columns} {sorts} pending={mutating || editingLocked} onChange={saveSorts} />
         </CollectionMenu>
 
           <CollectionMenu fullWidth disabled={editingLocked} label={t("notes.databaseTableFilters")} kind="filter" activeCount={notesDatabaseFilterCount(filters)} summary={notesDatabaseFilterCount(filters) ? formatNumber(localization.locale, notesDatabaseFilterCount(filters)) : ""}>
 
-          <NotesDatabaseFilterControls properties={columns} {filters} pending={mutating || editingLocked} onchange={saveFilters} />
+          <NotesDatabaseFilterControls properties={columns} {filters} pending={mutating || editingLocked} onChange={saveFilters} />
         </CollectionMenu>
         </div>
 
@@ -447,7 +447,7 @@
   <NotesDatabaseQueryBar properties={columns} {filters} {sorts} pending={mutating || editingLocked} onFiltersChange={saveFilters} onSortsChange={saveSorts} />
   {#if error}<p class="text-[0.8rem] text-destructive" role="alert">{error}</p>{/if}
   {#if settingsOpen}
-    <CollectionSettings label={t("notes.databaseViewSettings")} anchor={settingsAnchor} onclose={onCloseSettings}>
+    <CollectionSettings label={t("notes.databaseViewSettings")} anchor={settingsAnchor} onClose={onCloseSettings}>
       {@render settingsHeader?.()}
       {@render viewControls()}
       {#if calendar}{@render propertyControls()}{/if}
@@ -508,13 +508,13 @@
                 <span class="flex size-7 items-center justify-center rounded-full text-[0.8rem] font-medium" class:bg-primary={day.date === Temporal.Now.plainDateISO().toString()} class:text-primary-foreground={day.date === Temporal.Now.plainDateISO().toString()}>{dayNumber(day.date)}</span>
                 {#if day.in_month && configuration.date_property_id}
                   <CollectionMenu kind="new" iconOnly label={t("notes.databaseCalendarCreateOnDate", day.date)}>
-                    <CollectionQuickAdd active label={t("notes.databaseRowsNewPlaceholder")} disabled={loading || mutating} onsubmit={(title) => createRow(day.date, title)} />
+                    <CollectionQuickAdd active label={t("notes.databaseRowsNewPlaceholder")} disabled={loading || mutating} onSubmit={(title) => createRow(day.date, title)} />
                   </CollectionMenu>
                 {/if}
               </div>
               <div class="grid gap-1">
                 {#each day.rows as row (row.id)}
-                  <CollectionCard title={rowTitle(row)} onopen={() => openRow(row)} compact>
+                  <CollectionCard title={rowTitle(row)} onOpen={() => openRow(row)} compact>
                     {#snippet actions()}
                       <CollectionMenu kind="actions" iconOnly showHeader={false} label={t("notes.databaseTableRowActions")}>
                         <button type="button" class="flex min-h-9 w-full items-center gap-2 rounded-md px-2 text-left hover:bg-accent" onclick={() => onSelectPage(row.id)}><ExternalLink class="size-4" />{t("notes.databaseRowsOpen", rowTitle(row))}</button>

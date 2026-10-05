@@ -153,8 +153,8 @@ export function parseCalendarEditPreview(value: unknown, request: CalendarPrevie
   const scheduling = "kind" in request.edit && request.edit.kind === "schedule_tasks";
   const deleting = "kind" in request.edit && request.edit.kind === "delete";
   if ("kind" in request.edit && request.edit.kind === "undo_delete") throw new Error("Calendar Undo has no authored preview");
-  const newSources = creating || scheduling;
-  if (row.commandId !== request.commandId || (!newSources && "selection" in request.edit
+  const createsSources = creating || scheduling;
+  if (row.commandId !== request.commandId || (!createsSources && "selection" in request.edit
     && row.sourceId !== request.edit.selection.templateId)) {
     throw new Error("Calendar preview belongs to another edit");
   }
@@ -171,13 +171,13 @@ export function parseCalendarEditPreview(value: unknown, request: CalendarPrevie
   if (creating && (sourceId !== editedId || !/^calendar-create-[0-9a-f]{64}$/u.test(sourceId))) {
     throw new Error("Invalid native Calendar creation identity");
   }
-  if (!deleting && !window.rawBlocks.some((event) => event.id === editedId)) throw new Error("Calendar preview has no edited source");
-  if (deleting && (sourceId !== editedId || window.rawBlocks.length > 1
-    || window.rawBlocks.some((event) => event.id !== sourceId)
+  if (!deleting && !window.sourceEvents.some((event) => event.id === editedId)) throw new Error("Calendar preview has no edited source");
+  if (deleting && (sourceId !== editedId || window.sourceEvents.length > 1
+    || window.sourceEvents.some((event) => event.id !== sourceId)
     || window.windowEvents.some((event) => (event.recurringParentId ?? event.id) !== sourceId))) {
     throw new Error("Calendar deletion preview contains another source");
   }
-  if (creating && (window.rawBlocks.length !== 1
+  if (creating && (window.sourceEvents.length !== 1
     || window.windowEvents.some((event) => (event.recurringParentId ?? event.id) !== editedId))) {
     throw new Error("Calendar creation preview contains another source");
   }
@@ -187,8 +187,8 @@ export function parseCalendarEditPreview(value: unknown, request: CalendarPrevie
     if (scheduledTasks.length !== request.edit.tasks.length || sourceId !== editedId
       || sourceId !== scheduledTasks[0]?.eventId
       || scheduledTasks.some((task, index) => task.taskId !== ("tasks" in request.edit ? request.edit.tasks[index]?.id : undefined))
-      || window.rawBlocks.length !== sourceIds.size || new Set(window.rawBlocks.map((event) => event.id)).size !== sourceIds.size
-      || window.rawBlocks.some((event) => !sourceIds.has(event.id))
+      || window.sourceEvents.length !== sourceIds.size || new Set(window.sourceEvents.map((event) => event.id)).size !== sourceIds.size
+      || window.sourceEvents.some((event) => !sourceIds.has(event.id))
       || window.windowEvents.some((event) => !sourceIds.has(event.id) || event.recurringParentId !== undefined)) {
       throw new Error("Calendar scheduling preview contains a different task selection");
     }
@@ -209,7 +209,7 @@ export function parseCalendarEditPreview(value: unknown, request: CalendarPrevie
   const selectedStarted = flag(scope.selectedStarted);
   const selectedHasHistory = flag(scope.selectedHasHistory);
   const selectedActive = flag(scope.selectedActive);
-  if (newSources && (effectiveScope !== "this" || selectedStarted || selectedHasHistory || selectedActive
+  if (createsSources && (effectiveScope !== "this" || selectedStarted || selectedHasHistory || selectedActive
     || !flag(row.changed) || previewedIds.size !== visibleIds.size)) {
     throw new Error("Invalid native Calendar creation projection");
   }

@@ -7,20 +7,20 @@
   import VaultHandoffPanel from "$lib/components/vault/handoff/VaultHandoffPanel.svelte";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import {
-    formatDataFolderError,
+    formatVaultError,
     getCachedActiveVaultInfo,
     getActiveVaultInfo,
-    importDataFolder,
-    pickDataFolderLocation,
+    pickOpenVault,
+    pickCreateVault,
     revealActiveVault,
-    type DataFolderInfo,
+    type VaultInfo,
   } from "$lib/vault/state";
 
-  const cachedDataFolder = getCachedActiveVaultInfo();
-  let activeDataFolder = $state<DataFolderInfo | null>(cachedDataFolder ?? null);
-  let folderStateLoaded = $state(cachedDataFolder !== undefined);
+  const cachedVault = getCachedActiveVaultInfo();
+  let activeVault = $state<VaultInfo | null>(cachedVault ?? null);
+  let folderStateLoaded = $state(cachedVault !== undefined);
   let busy = $state<"load" | "reveal" | "change" | "import" | null>(
-    cachedDataFolder === undefined ? "load" : null,
+    cachedVault === undefined ? "load" : null,
   );
   let error = $state<string | null>(null);
   const { t } = getLocalization();
@@ -34,17 +34,17 @@
   const currentFolderPath = $derived(
     !folderStateLoaded
       ? t("settings.data.loadingFolder")
-      : activeDataFolder?.path ?? t("settings.data.noActiveFolder"),
+      : activeVault?.path ?? t("settings.data.noActiveFolder"),
   );
 
-  async function loadDataFolderState(): Promise<void> {
+  async function loadVaultState(): Promise<void> {
     const showLoadingState = !folderStateLoaded;
     if (showLoadingState) busy = "load";
     error = null;
     try {
-      activeDataFolder = await getActiveVaultInfo();
+      activeVault = await getActiveVaultInfo();
     } catch (err) {
-      error = formatDataFolderError(err, "startup", t);
+      error = formatVaultError(err, "startup", t);
     } finally {
       folderStateLoaded = true;
       if (showLoadingState) busy = null;
@@ -55,33 +55,33 @@
     void invoke("restart_app");
   }
 
-  async function revealDataFolder(): Promise<void> {
+  async function revealVault(): Promise<void> {
     busy = "reveal";
     error = null;
     try {
       await revealActiveVault();
     } catch (err) {
-      error = formatDataFolderError(err, "general", t);
+      error = formatVaultError(err, "general", t);
     } finally {
       busy = null;
     }
   }
 
-  async function chooseDataFolder(mode: "change" | "import"): Promise<void> {
+  async function chooseVault(mode: "change" | "import"): Promise<void> {
     busy = mode;
     error = null;
     try {
-      const info = mode === "change" ? await pickDataFolderLocation() : await importDataFolder();
+      const info = mode === "change" ? await pickCreateVault() : await pickOpenVault();
       if (info) restartApp();
     } catch (err) {
-      error = formatDataFolderError(err, mode, t);
+      error = formatVaultError(err, mode, t);
     } finally {
       busy = null;
     }
   }
 
   $effect(() => {
-    void loadDataFolderState();
+    void loadVaultState();
   });
 </script>
 
@@ -103,8 +103,8 @@
         </div>
         <button
           type="button"
-          onclick={() => void revealDataFolder()}
-          disabled={busy !== null || !activeDataFolder}
+          onclick={() => void revealVault()}
+          disabled={busy !== null || !activeVault}
           class={secondaryButtonClass}
         >
           {#if busy === "reveal"}
@@ -125,7 +125,7 @@
         </div>
         <button
           type="button"
-          onclick={() => void chooseDataFolder("change")}
+          onclick={() => void chooseVault("change")}
           disabled={busy !== null}
           class={secondaryButtonClass}
         >
@@ -147,7 +147,7 @@
         </div>
         <button
           type="button"
-          onclick={() => void chooseDataFolder("import")}
+          onclick={() => void chooseVault("import")}
           disabled={busy !== null}
           class={secondaryButtonClass}
         >
@@ -172,7 +172,7 @@
       </div>
       <button
         type="button"
-        onclick={() => void loadDataFolderState()}
+        onclick={() => void loadVaultState()}
         disabled={busy !== null}
         class={linkButtonClass}
       >

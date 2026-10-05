@@ -84,7 +84,7 @@ internal object PomodoroReminderScheduler {
       require(identifiers.add(it.id)) { "Focus reminder IDs must be unique" }
       require(requestCodes.add(requestCode(it.id))) { "Focus reminder alarm identifier collision" }
     }
-    val previous = pending(context)
+    val previous = storedReminders(context)
     val delivered = delivered(context).intersect(identifiers)
     val editor = store(context).edit().clear().putStringSet(DELIVERED_KEY, delivered)
     schedule.forEach { editor.putString(it.id, it.encode()) }
@@ -98,7 +98,7 @@ internal object PomodoroReminderScheduler {
 
   fun restore(context: Context) {
     val now = System.currentTimeMillis()
-    pending(context).forEach { reminder ->
+    storedReminders(context).forEach { reminder ->
       when {
         now >= reminder.endsAtEpochMs -> {
           cancelAlarm(context, reminder.id)
@@ -115,7 +115,7 @@ internal object PomodoroReminderScheduler {
   }
 
   fun deliver(context: Context, id: String?) {
-    val reminder = pending(context).firstOrNull { it.id == id } ?: return
+    val reminder = storedReminders(context).firstOrNull { it.id == id } ?: return
     val delivered = delivered(context)
     if (!reminder.isDue(System.currentTimeMillis(), delivered)) return
     val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
@@ -127,9 +127,9 @@ internal object PomodoroReminderScheduler {
       lockscreenVisibility = Notification.VISIBILITY_PRIVATE
     })
     if (manager.getNotificationChannel(POMODORO_ALERTS_CHANNEL_ID)?.importance == NotificationManager.IMPORTANCE_NONE) return
-    val launch = requireNotNull(context.packageManager.getLaunchIntentForPackage(context.packageName))
-    val action = PendingIntent.getActivity(
-      context, requestCode(reminder.id), launch,
+    val launchIntent = requireNotNull(context.packageManager.getLaunchIntentForPackage(context.packageName))
+    val contentIntent = PendingIntent.getActivity(
+      context, requestCode(reminder.id), launchIntent,
       PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
     )
     val notification = Notification.Builder(context, POMODORO_ALERTS_CHANNEL_ID)
@@ -138,7 +138,7 @@ internal object PomodoroReminderScheduler {
       .setContentText(reminder.body)
       .setCategory(Notification.CATEGORY_REMINDER)
       .setVisibility(Notification.VISIBILITY_PRIVATE)
-      .setContentIntent(action)
+      .setContentIntent(contentIntent)
       .setAutoCancel(true)
       .build()
     // A crash after this receipt may lose an alert, but cannot repeat it or create execution.
@@ -148,7 +148,7 @@ internal object PomodoroReminderScheduler {
     manager.notify(requestCode(reminder.id), notification)
   }
 
-  private fun pending(context: Context): List<PomodoroReminder> = store(context).all
+  private fun storedReminders(context: Context): List<PomodoroReminder> = store(context).all
     .filterKeys { it != DELIVERED_KEY }
     .map { (_, value) -> PomodoroReminder.decode(value as? String ?: error("Invalid focus reminder record")) }
 

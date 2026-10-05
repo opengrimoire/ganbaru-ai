@@ -121,22 +121,22 @@
   });
   const setSlot = actions.setPaletteSlot;
   const setAppToken = actions.setAppToken;
-  const setCalToken = actions.setCalendarToken;
+  const setCalendarToken = actions.setCalendarToken;
   const setSource = actions.setSource;
   const applyCalendarDefault = actions.applyCalendarDefault;
   const setCalendarDefaultCustom = (hex: string) =>
     actions.applyCalendarDefault("custom", hex);
   const resetCalendarDefault = actions.resetCalendarDefault;
   const isolateAppToken = actions.isolateAppToken;
-  const isolateCalToken = actions.isolateCalendarToken;
+  const isolateCalendarToken = actions.isolateCalendarToken;
   const relinkAppToken = actions.relinkAppToken;
-  const relinkCalToken = actions.relinkCalendarToken;
+  const relinkCalendarToken = actions.relinkCalendarToken;
   const canResetSource = actions.canResetSource;
   const resetSource = actions.resetSource;
   const canResetAppToken = actions.canResetAppToken;
   const resetAppToken = actions.resetAppToken;
-  const canResetCalToken = actions.canResetCalendarToken;
-  const resetCalToken = actions.resetCalendarToken;
+  const canResetCalendarToken = actions.canResetCalendarToken;
+  const resetCalendarToken = actions.resetCalendarToken;
   const rebake = actions.rebake;
   const dismissRebake = actions.dismissRebake;
 
@@ -146,7 +146,7 @@
     translate: t,
     setSource,
     setAppToken,
-    setCalendarToken: setCalToken,
+    setCalendarToken,
     expandGroup: (groupId) => {
       collapsed = { ...collapsed, [groupId]: false };
     },
@@ -276,11 +276,11 @@
         ? viewTheme.appTokens
         : viewTheme.calendarTokens
       : undefined}
-    {@const displayVal = snapshot?.[key] ?? ""}
+    {@const displayValue = snapshot?.[key] ?? ""}
     {@const canResetRow =
-      scope === "app" ? canResetAppToken(key) : canResetCalToken(key)}
+      scope === "app" ? canResetAppToken(key) : canResetCalendarToken(key)}
     <ThemeTokenEditor
-      value={displayVal}
+      value={displayValue}
       label={ariaLabel}
       scope={scope === "app" ? "app" : "calendar"}
       linked={isLinked}
@@ -288,19 +288,19 @@
       canReset={canResetRow}
       onChange={(hex) => {
         if (scope === "app") setAppToken(key, hex);
-        else setCalToken(key, hex);
+        else setCalendarToken(key, hex);
       }}
       onReset={() => {
         if (scope === "app") resetAppToken(key);
-        else resetCalToken(key);
+        else resetCalendarToken(key);
       }}
       onIsolate={() => {
         if (scope === "app") isolateAppToken(key);
-        else isolateCalToken(key);
+        else isolateCalendarToken(key);
       }}
       onRelink={() => {
         if (scope === "app") relinkAppToken(key);
-        else relinkCalToken(key);
+        else relinkCalendarToken(key);
       }}
     />
   {/snippet}

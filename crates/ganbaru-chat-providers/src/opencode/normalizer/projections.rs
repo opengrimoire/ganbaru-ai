@@ -11,7 +11,7 @@ impl OpenCodeEventNormalizer {
             .get("todos")
             .and_then(Value::as_array)
             .ok_or_else(|| protocol_error("todo list"))?;
-        if todos.len() > MAX_SAFE_COLLECTION {
+        if todos.len() > MAX_SAFE_COLLECTION_ITEMS {
             return Err(protocol_error("todo list size"));
         }
         let mut steps = Vec::new();
@@ -22,9 +22,9 @@ impl OpenCodeEventNormalizer {
                 .ok_or_else(|| protocol_error("todo content"))?;
             steps.push(PlanStep {
                 id: text(todo, "id")
-                    .map(|value| bounded(value, 256))
+                    .map(|value| bounded_text(value, 256))
                     .unwrap_or_else(|| format!("opencode-todo-{index}")),
-                text: bounded(content, 4096),
+                text: bounded_text(content, 4096),
                 status: activity_status(text(todo, "status")),
             });
         }
@@ -57,19 +57,19 @@ impl OpenCodeEventNormalizer {
         state: &OpenCodeRouteState,
         properties: &Map<String, Value>,
     ) -> ChatResult<Vec<CanonicalRuntimeEvent>> {
-        let id = text(properties, "name")
+        let server_id = text(properties, "name")
             .or_else(|| text(properties, "id"))
             .ok_or_else(|| protocol_error("MCP server ID"))?;
-        validate_identifier(id, "MCP server ID")?;
+        validate_identifier(server_id, "MCP server ID")?;
         Ok(vec![self.event(
             state,
             "mcp.status",
             None,
             None,
             CanonicalEvent::McpStatus(McpStatusEvent {
-                server_id: id.to_string(),
+                server_id: server_id.to_string(),
                 status: activity_status(text(properties, "status")),
-                detail: text(properties, "message").map(|value| bounded(value, 4096)),
+                detail: text(properties, "message").map(|value| bounded_text(value, 4096)),
             }),
         )?])
     }

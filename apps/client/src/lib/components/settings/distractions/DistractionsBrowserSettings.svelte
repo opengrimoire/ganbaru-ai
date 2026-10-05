@@ -9,7 +9,7 @@
     getDistractionsCategoryDefinition,
     parseDistractionsHosts,
     type DistractionsCategoryId,
-    type DistractionsCustomCategoryStack,
+    type DistractionsCustomCategory,
     type DistractionsMode,
     type DistractionsHostRule,
   } from "$lib/distractions";
@@ -67,12 +67,12 @@
     categoryId: DistractionsCategoryId;
   }
 
-  interface PendingCustomStackAction {
+  interface PendingCustomCategoryAction {
     type: "disable" | "delete";
-    stackId: string;
+    customCategoryId: string;
   }
 
-  interface PendingCustomStackDraftHostAction {
+  interface PendingCustomCategoryDraftHostAction {
     host: string;
   }
 
@@ -81,10 +81,10 @@
     | { target: "browserConfiguration"; action: PendingBrowserConfigurationAction }
     | { target: "mode"; action: PendingModeAction }
     | { target: "category"; action: PendingCategoryAction }
-    | { target: "customStack"; action: PendingCustomStackAction }
-    | { target: "customStackDraftHost"; action: PendingCustomStackDraftHostAction };
+    | { target: "customCategory"; action: PendingCustomCategoryAction }
+    | { target: "customCategoryDraftHost"; action: PendingCustomCategoryDraftHostAction };
 
-  type CustomStackDraftField = "name" | "hosts";
+  type CustomCategoryDraftField = "name" | "hosts";
 
   interface CustomCategoryDraft {
     name: string;
@@ -141,12 +141,12 @@
     websiteSections.allowed,
   ];
 
-  let customStackDraft = $state<CustomCategoryDraft>({
+  let customCategoryDraft = $state<CustomCategoryDraft>({
     name: "",
     hostInput: "",
     hosts: [],
   });
-  let customStackErrors = $state<Record<CustomStackDraftField, string>>({
+  let customCategoryErrors = $state<Record<CustomCategoryDraftField, string>>({
     name: "",
     hosts: "",
   });
@@ -206,51 +206,51 @@
     };
   }
 
-  function requestCustomStackEnabledChange(stack: DistractionsCustomCategoryStack, enabled: boolean): void {
+  function requestCustomCategoryEnabledChange(customCategory: DistractionsCustomCategory, enabled: boolean): void {
     if (enabled) {
-      distractions.setCustomCategoryStackEnabled(stack.id, true);
+      distractions.setCustomCategoryEnabled(customCategory.id, true);
       return;
     }
     pendingAction = {
-      target: "customStack",
+      target: "customCategory",
       action: {
         type: "disable",
-        stackId: stack.id,
+        customCategoryId: customCategory.id,
       },
     };
   }
 
-  function requestCustomStackDelete(stack: DistractionsCustomCategoryStack): void {
+  function requestCustomCategoryDelete(customCategory: DistractionsCustomCategory): void {
     pendingAction = {
-      target: "customStack",
+      target: "customCategory",
       action: {
         type: "delete",
-        stackId: stack.id,
+        customCategoryId: customCategory.id,
       },
     };
   }
 
-  function requestEditingCustomStackDelete(): void {
+  function requestEditingCustomCategoryDelete(): void {
     if (!customCategoryEditingId) return;
-    const stack = findCustomStack(customCategoryEditingId);
-    if (!stack) return;
-    requestCustomStackDelete(stack);
+    const customCategory = findCustomCategory(customCategoryEditingId);
+    if (!customCategory) return;
+    requestCustomCategoryDelete(customCategory);
   }
 
-  function findCustomStack(stackId: string): DistractionsCustomCategoryStack | null {
-    return distractions.customCategoryStacks.find((stack) => stack.id === stackId) ?? null;
+  function findCustomCategory(customCategoryId: string): DistractionsCustomCategory | null {
+    return distractions.customCategories.find((customCategory) => customCategory.id === customCategoryId) ?? null;
   }
 
-  function clearCustomStackError(field: CustomStackDraftField): void {
-    customStackErrors[field] = "";
+  function clearCustomCategoryError(field: CustomCategoryDraftField): void {
+    customCategoryErrors[field] = "";
   }
 
   function clearCustomCategoryForm(): void {
-    customStackDraft.name = "";
-    customStackDraft.hostInput = "";
-    customStackDraft.hosts = [];
-    customStackErrors.name = "";
-    customStackErrors.hosts = "";
+    customCategoryDraft.name = "";
+    customCategoryDraft.hostInput = "";
+    customCategoryDraft.hosts = [];
+    customCategoryErrors.name = "";
+    customCategoryErrors.hosts = "";
     customCategoryEditingId = null;
   }
 
@@ -264,31 +264,31 @@
     customCategoryFormOpen = true;
   }
 
-  function openEditCustomCategoryForm(stack: DistractionsCustomCategoryStack): void {
-    customStackDraft.name = stack.name;
-    customStackDraft.hostInput = "";
-    customStackDraft.hosts = stack.hosts.map((rule) => rule.host);
-    customStackErrors.name = "";
-    customStackErrors.hosts = "";
-    customCategoryEditingId = stack.id;
+  function openEditCustomCategoryForm(customCategory: DistractionsCustomCategory): void {
+    customCategoryDraft.name = customCategory.name;
+    customCategoryDraft.hostInput = "";
+    customCategoryDraft.hosts = customCategory.hosts.map((rule) => rule.host);
+    customCategoryErrors.name = "";
+    customCategoryErrors.hosts = "";
+    customCategoryEditingId = customCategory.id;
     customCategoryFormOpen = true;
   }
 
   function addCustomCategoryDraftHost(): boolean {
-    const hosts = parseDistractionsHosts(customStackDraft.hostInput);
+    const hosts = parseDistractionsHosts(customCategoryDraft.hostInput);
     if (hosts.length === 0) {
-      customStackErrors.hosts = t("settings.distractions.browser.invalidDomain");
+      customCategoryErrors.hosts = t("settings.distractions.browser.invalidDomain");
       return false;
     }
-    const newHosts = hosts.filter((host) => !customStackDraft.hosts.includes(host));
+    const newHosts = hosts.filter((host) => !customCategoryDraft.hosts.includes(host));
     if (newHosts.length === 0) {
-      customStackErrors.hosts = t("settings.distractions.browser.duplicateDomain");
-      customStackDraft.hostInput = "";
+      customCategoryErrors.hosts = t("settings.distractions.browser.duplicateDomain");
+      customCategoryDraft.hostInput = "";
       return false;
     }
-    customStackDraft.hosts = [...customStackDraft.hosts, ...newHosts];
-    customStackDraft.hostInput = "";
-    customStackErrors.hosts = "";
+    customCategoryDraft.hosts = [...customCategoryDraft.hosts, ...newHosts];
+    customCategoryDraft.hostInput = "";
+    customCategoryErrors.hosts = "";
     return true;
   }
 
@@ -304,46 +304,46 @@
   }
 
   function saveCustomCategoryWithPendingHost(): void {
-    if (customStackDraft.hostInput.trim() && !addCustomCategoryDraftHost()) return;
+    if (customCategoryDraft.hostInput.trim() && !addCustomCategoryDraftHost()) return;
     saveCustomCategory();
   }
 
   function removeCustomCategoryDraftHost(host: string): void {
-    customStackDraft.hosts = customStackDraft.hosts.filter((draftHost) => draftHost !== host);
-    customStackErrors.hosts = "";
+    customCategoryDraft.hosts = customCategoryDraft.hosts.filter((draftHost) => draftHost !== host);
+    customCategoryErrors.hosts = "";
   }
 
   function requestCustomCategoryDraftHostDelete(host: string): void {
     pendingAction = {
-      target: "customStackDraftHost",
+      target: "customCategoryDraftHost",
       action: { host },
     };
   }
 
   function saveCustomCategory(): void {
-    customStackErrors.name = "";
-    customStackErrors.hosts = "";
-    const hostsText = customStackDraft.hosts.join(" ");
+    customCategoryErrors.name = "";
+    customCategoryErrors.hosts = "";
+    const hostsText = customCategoryDraft.hosts.join(" ");
     const result = customCategoryEditingId
-      ? distractions.updateCustomCategoryStack(
+      ? distractions.updateCustomCategory(
         customCategoryEditingId,
-        customStackDraft.name,
+        customCategoryDraft.name,
         hostsText,
       )
-      : distractions.addCustomCategoryStack(customStackDraft.name, hostsText);
+      : distractions.addCustomCategory(customCategoryDraft.name, hostsText);
     if (result === "added" || result === "updated") {
       clearCustomCategoryForm();
       customCategoryFormOpen = false;
       return;
     }
     if (result === "invalid-name") {
-      customStackErrors.name = t("settings.distractions.browser.categoryNameRequired");
+      customCategoryErrors.name = t("settings.distractions.browser.categoryNameRequired");
     } else if (result === "duplicate-name") {
-      customStackErrors.name = t("settings.distractions.browser.differentCategoryName");
+      customCategoryErrors.name = t("settings.distractions.browser.differentCategoryName");
     } else if (result === "missing") {
-      customStackErrors.name = t("settings.distractions.browser.categoryMissing");
+      customCategoryErrors.name = t("settings.distractions.browser.categoryMissing");
     } else {
-      customStackErrors.hosts = t("settings.distractions.browser.invalidDomain");
+      customCategoryErrors.hosts = t("settings.distractions.browser.invalidDomain");
     }
   }
 
@@ -425,15 +425,15 @@
       distractions.setMode(pendingAction.action.mode);
     } else if (pendingAction.target === "category") {
       distractions.setBlockedCategoryEnabled(pendingAction.action.categoryId, false);
-    } else if (pendingAction.target === "customStackDraftHost") {
+    } else if (pendingAction.target === "customCategoryDraftHost") {
       removeCustomCategoryDraftHost(pendingAction.action.host);
     } else {
-      const { type, stackId } = pendingAction.action;
+      const { type, customCategoryId } = pendingAction.action;
       if (type === "disable") {
-        distractions.setCustomCategoryStackEnabled(stackId, false);
+        distractions.setCustomCategoryEnabled(customCategoryId, false);
       } else {
-        distractions.removeCustomCategoryStack(stackId);
-        if (customCategoryEditingId === stackId) {
+        distractions.removeCustomCategory(customCategoryId);
+        if (customCategoryEditingId === customCategoryId) {
           closeCustomCategoryForm();
         }
       }
@@ -466,11 +466,11 @@
         category ? categoryLabel(category.id) : "category",
       );
     }
-    if (action.target === "customStackDraftHost") {
+    if (action.target === "customCategoryDraftHost") {
       return t("settings.distractions.browser.websiteDeleteTitle", action.action.host);
     }
-    const stack = findCustomStack(action.action.stackId);
-    const name = stack?.name ?? t("settings.distractions.browser.customCategoryFallback");
+    const customCategory = findCustomCategory(action.action.customCategoryId);
+    const name = customCategory?.name ?? t("settings.distractions.browser.customCategoryFallback");
     return action.action.type === "disable"
       ? t("settings.distractions.browser.allowCategoryTitle", name)
       : t("settings.distractions.browser.deleteCategoryTitle", name);
@@ -503,7 +503,7 @@
     if (action.target === "category") {
       return t("settings.distractions.browser.categoryDisableMessage");
     }
-    if (action.target === "customStackDraftHost") {
+    if (action.target === "customCategoryDraftHost") {
       return t("settings.distractions.shared.cannotBeUndone");
     }
     return action.action.type === "disable"
@@ -524,7 +524,7 @@
     }
     if (action.target === "mode") return t("settings.distractions.shared.switchAction");
     if (action.target === "category") return t("settings.distractions.shared.disableAction");
-    if (action.target === "customStackDraftHost") return t("settings.distractions.shared.deleteAction");
+    if (action.target === "customCategoryDraftHost") return t("settings.distractions.shared.deleteAction");
     return action.action.type === "disable"
       ? t("settings.distractions.shared.disableAction")
       : t("settings.distractions.shared.deleteAction");
@@ -607,35 +607,35 @@
         </button>
       {/each}
 
-      {#each distractions.customCategoryStacks as stack (stack.id)}
+      {#each distractions.customCategories as customCategory (customCategory.id)}
         <span
           class={cn(
             "inline-flex max-w-full overflow-hidden rounded-full border",
-            stack.enabled
+            customCategory.enabled
               ? "border-foreground/25 bg-foreground/5 text-foreground"
               : "border-border bg-transparent text-muted-foreground",
           )}
           role="group"
           aria-label={t(
             "settings.distractions.browser.customCategoryState",
-            stack.name,
-            stack.enabled
+            customCategory.name,
+            customCategory.enabled
               ? t("settings.distractions.shared.enabled")
               : t("settings.distractions.shared.disabled"),
           )}
         >
           <button
             type="button"
-            onclick={() => requestCustomStackEnabledChange(stack, !stack.enabled)}
-            aria-pressed={stack.enabled}
+            onclick={() => requestCustomCategoryEnabledChange(customCategory, !customCategory.enabled)}
+            aria-pressed={customCategory.enabled}
             class="inline-flex min-h-8 min-w-0 max-w-full items-center justify-center py-1.5 pl-3 pr-1 text-[0.8rem] font-medium leading-5"
           >
-            <span class="truncate">{stack.name}</span>
+            <span class="truncate">{customCategory.name}</span>
           </button>
           <button
             type="button"
-            onclick={() => openEditCustomCategoryForm(stack)}
-            aria-label={t("settings.distractions.shared.edit", stack.name)}
+            onclick={() => openEditCustomCategoryForm(customCategory)}
+            aria-label={t("settings.distractions.shared.edit", customCategory.name)}
             data-app-tooltip-disabled="true"
             class="flex min-h-8 w-7 shrink-0 items-center justify-center pr-2 text-muted-foreground"
           >
@@ -665,11 +665,11 @@
         class="flex min-w-0 flex-col gap-1 py-1"
       >
         <div class="flex min-w-0 flex-wrap items-center gap-2">
-          <label for="distractions-custom-stack-name" class="sr-only">{t("settings.distractions.browser.categoryName")}</label>
+          <label for="distractions-custom-category-name" class="sr-only">{t("settings.distractions.browser.categoryName")}</label>
           <input
-            id="distractions-custom-stack-name"
-            bind:value={customStackDraft.name}
-            oninput={() => clearCustomStackError("name")}
+            id="distractions-custom-category-name"
+            bind:value={customCategoryDraft.name}
+            oninput={() => clearCustomCategoryError("name")}
             onkeydown={handleCustomCategoryNameKeydown}
             type="text"
             spellcheck="false"
@@ -679,7 +679,7 @@
           <button
             type="button"
             onclick={saveCustomCategoryWithPendingHost}
-            disabled={!customStackDraft.name.trim() || customStackDraft.hosts.length === 0}
+            disabled={!customCategoryDraft.name.trim() || customCategoryDraft.hosts.length === 0}
             class="flex h-7 shrink-0 items-center justify-center gap-1.5 rounded-md border border-border bg-card px-2.5 text-[0.8rem] text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-card dark:bg-transparent dark:disabled:hover:bg-transparent"
           >
             {#if customCategoryEditingId}
@@ -693,7 +693,7 @@
           {#if customCategoryEditingId}
             <button
               type="button"
-              onclick={requestEditingCustomStackDelete}
+              onclick={requestEditingCustomCategoryDelete}
               class="flex h-7 shrink-0 items-center justify-center gap-1.5 rounded-md border border-border bg-card px-2.5 text-[0.8rem] text-foreground transition-colors hover:bg-accent dark:bg-transparent"
             >
               <Trash2 size={13} strokeWidth={2} />
@@ -716,9 +716,9 @@
               onsubmit={submitCustomCategoryDraftHost}
             >
               <input
-                id="distractions-custom-stack-hosts"
-                bind:value={customStackDraft.hostInput}
-                oninput={() => clearCustomStackError("hosts")}
+                id="distractions-custom-category-hosts"
+                bind:value={customCategoryDraft.hostInput}
+                oninput={() => clearCustomCategoryError("hosts")}
                 type="text"
                 spellcheck="false"
                 placeholder={t("settings.distractions.browser.enterDomain")}
@@ -726,7 +726,7 @@
               />
               <button
                 type="submit"
-                disabled={!customStackDraft.hostInput.trim()}
+                disabled={!customCategoryDraft.hostInput.trim()}
                 class="flex h-7 shrink-0 items-center justify-center gap-1.5 px-1 text-[0.8rem] font-medium text-muted-foreground transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <Plus size={13} strokeWidth={2.25} />
@@ -734,7 +734,7 @@
               </button>
             </form>
             <div class="flex flex-col">
-              {#each customStackDraft.hosts as host (host)}
+              {#each customCategoryDraft.hosts as host (host)}
                 <div class="flex min-w-0 items-center gap-2 border-b border-border/70 py-1.5">
                   <span class="flex h-7 min-w-0 flex-1 items-center truncate px-1 text-[0.8rem] leading-snug text-foreground">
                     {host}
@@ -757,11 +757,11 @@
             </div>
           </div>
         </div>
-        {#if customStackErrors.name}
-          <div class="text-[0.8rem] text-destructive">{customStackErrors.name}</div>
+        {#if customCategoryErrors.name}
+          <div class="text-[0.8rem] text-destructive">{customCategoryErrors.name}</div>
         {/if}
-        {#if customStackErrors.hosts}
-          <div class="text-[0.8rem] text-destructive">{customStackErrors.hosts}</div>
+        {#if customCategoryErrors.hosts}
+          <div class="text-[0.8rem] text-destructive">{customCategoryErrors.hosts}</div>
         {/if}
       </div>
     {/if}

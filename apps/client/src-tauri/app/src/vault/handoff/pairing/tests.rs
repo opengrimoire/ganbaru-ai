@@ -69,10 +69,10 @@ fn enroll_device(manager: &PairingManager, device_id: &str, device_label: &str, 
 
 #[test]
 fn invitation_is_single_use_and_not_restored_after_restart() {
-    let temp = TestDirectory::new("single-use");
+    let temporary = TestDirectory::new("single-use");
     let manager = PairingManager::default();
     manager
-        .initialize(temp.path().to_path_buf(), "device-desktop".to_string())
+        .initialize(temporary.path().to_path_buf(), "device-desktop".to_string())
         .expect("initialize");
     let invitation = manager
         .create_invitation(
@@ -97,7 +97,7 @@ fn invitation_is_single_use_and_not_restored_after_restart() {
 
     let restarted = PairingManager::default();
     restarted
-        .initialize(temp.path().to_path_buf(), "device-desktop".to_string())
+        .initialize(temporary.path().to_path_buf(), "device-desktop".to_string())
         .expect("restart");
     assert!(
         restarted
@@ -109,10 +109,10 @@ fn invitation_is_single_use_and_not_restored_after_restart() {
 
 #[test]
 fn repeated_enrollment_updates_one_existing_membership() {
-    let temp = TestDirectory::new("repeat-enrollment");
+    let temporary = TestDirectory::new("repeat-enrollment");
     let manager = PairingManager::default();
     manager
-        .initialize(temp.path().to_path_buf(), "device-desktop".to_string())
+        .initialize(temporary.path().to_path_buf(), "device-desktop".to_string())
         .expect("initialize");
     let phone = create_identity("device-phone".to_string()).expect("phone identity");
 
@@ -138,10 +138,10 @@ fn repeated_enrollment_updates_one_existing_membership() {
 
 #[test]
 fn revoked_peer_is_remembered_across_restart_and_removed_by_reenrollment() {
-    let temp = TestDirectory::new("revoked-peer");
+    let temporary = TestDirectory::new("revoked-peer");
     let manager = PairingManager::default();
     manager
-        .initialize(temp.path().to_path_buf(), "device-desktop".to_string())
+        .initialize(temporary.path().to_path_buf(), "device-desktop".to_string())
         .expect("initialize");
     let phone = create_identity("device-phone".to_string()).expect("phone identity");
     let invitation = manager
@@ -168,7 +168,7 @@ fn revoked_peer_is_remembered_across_restart_and_removed_by_reenrollment() {
 
     let restarted = PairingManager::default();
     restarted
-        .initialize(temp.path().to_path_buf(), "device-desktop".to_string())
+        .initialize(temporary.path().to_path_buf(), "device-desktop".to_string())
         .expect("restart");
     assert!(
         restarted
@@ -313,17 +313,17 @@ fn linked_client_accepts_only_its_existing_coordinator() {
 
 #[test]
 fn several_peers_survive_restart_and_can_be_unlinked_individually() {
-    let temp = TestDirectory::new("several-peers");
+    let temporary = TestDirectory::new("several-peers");
     let manager = PairingManager::default();
     manager
-        .initialize(temp.path().to_path_buf(), "device-desktop".to_string())
+        .initialize(temporary.path().to_path_buf(), "device-desktop".to_string())
         .expect("initialize");
     enroll_device(&manager, "device-phone", "Phone", 100);
     enroll_device(&manager, "device-laptop", "Laptop", 200);
 
     let restarted = PairingManager::default();
     restarted
-        .initialize(temp.path().to_path_buf(), "device-desktop".to_string())
+        .initialize(temporary.path().to_path_buf(), "device-desktop".to_string())
         .expect("restart");
     let peers = restarted.linked_peers().expect("linked peers");
     assert_eq!(peers.len(), 2);
@@ -349,14 +349,14 @@ fn several_peers_survive_restart_and_can_be_unlinked_individually() {
 
 #[test]
 fn obsolete_pairing_schema_is_rejected_without_rewriting_state() {
-    let temp = TestDirectory::new("schema-one-migration");
+    let temporary = TestDirectory::new("schema-one-migration");
     let manager = PairingManager::default();
     manager
-        .initialize(temp.path().to_path_buf(), "device-desktop".to_string())
+        .initialize(temporary.path().to_path_buf(), "device-desktop".to_string())
         .expect("initialize");
     enroll_device(&manager, "device-phone", "Phone", 100);
 
-    let state_path = temp.path().join(PAIRING_STATE_FILE);
+    let state_path = temporary.path().join(PAIRING_STATE_FILE);
     let mut value: serde_json::Value =
         serde_json::from_slice(&fs::read(&state_path).expect("read current pairing state"))
             .expect("decode current pairing state");
@@ -381,7 +381,7 @@ fn obsolete_pairing_schema_is_rejected_without_rewriting_state() {
     let original = fs::read(&state_path).expect("read unsupported state");
     let manager = PairingManager::default();
     let error = manager
-        .initialize(temp.path().to_path_buf(), "device-desktop".to_string())
+        .initialize(temporary.path().to_path_buf(), "device-desktop".to_string())
         .expect_err("reject obsolete pairing schema");
     assert_eq!(error, "pairing state schema version is unsupported");
     assert_eq!(
@@ -392,10 +392,10 @@ fn obsolete_pairing_schema_is_rejected_without_rewriting_state() {
 
 #[test]
 fn ownership_upload_request_cannot_be_downgraded_to_refresh() {
-    let temp = TestDirectory::new("upload-priority");
+    let temporary = TestDirectory::new("upload-priority");
     let manager = PairingManager::default();
     manager
-        .initialize(temp.path().to_path_buf(), "device-desktop".to_string())
+        .initialize(temporary.path().to_path_buf(), "device-desktop".to_string())
         .expect("initialize");
 
     manager
@@ -424,10 +424,10 @@ fn ownership_upload_request_cannot_be_downgraded_to_refresh() {
 
 #[test]
 fn expired_invitation_is_rejected() {
-    let temp = TestDirectory::new("expired");
+    let temporary = TestDirectory::new("expired");
     let manager = PairingManager::default();
     manager
-        .initialize(temp.path().to_path_buf(), "device-desktop".to_string())
+        .initialize(temporary.path().to_path_buf(), "device-desktop".to_string())
         .expect("initialize");
     let invitation = manager
         .create_invitation(
@@ -449,10 +449,10 @@ fn expired_invitation_is_rejected() {
 
 #[test]
 fn unlink_clears_the_peer_but_refuses_active_transfer_state() {
-    let temp = TestDirectory::new("unlink");
+    let temporary = TestDirectory::new("unlink");
     let manager = PairingManager::default();
     manager
-        .initialize(temp.path().to_path_buf(), "device-desktop".to_string())
+        .initialize(temporary.path().to_path_buf(), "device-desktop".to_string())
         .expect("initialize");
     let invitation = manager
         .create_invitation(
@@ -485,10 +485,10 @@ fn unlink_clears_the_peer_but_refuses_active_transfer_state() {
 
 #[test]
 fn activation_acknowledgement_survives_restart() {
-    let temp = TestDirectory::new("pending-ack");
+    let temporary = TestDirectory::new("pending-ack");
     let manager = PairingManager::default();
     manager
-        .initialize(temp.path().to_path_buf(), "device-phone".to_string())
+        .initialize(temporary.path().to_path_buf(), "device-phone".to_string())
         .expect("initialize");
     let pending = PendingAcknowledgement {
         vault_id: "vault-1".to_string(),
@@ -504,7 +504,7 @@ fn activation_acknowledgement_survives_restart() {
 
     let restarted = PairingManager::default();
     restarted
-        .initialize(temp.path().to_path_buf(), "device-phone".to_string())
+        .initialize(temporary.path().to_path_buf(), "device-phone".to_string())
         .expect("restart");
     assert!(restarted.replica_ready().expect("replica state"));
     assert_eq!(
@@ -526,10 +526,10 @@ fn activation_acknowledgement_survives_restart() {
 
 #[test]
 fn bidirectional_transfer_state_survives_restart() {
-    let temp = TestDirectory::new("bidirectional-restart");
+    let temporary = TestDirectory::new("bidirectional-restart");
     let manager = PairingManager::default();
     manager
-        .initialize(temp.path().to_path_buf(), "device-phone".to_string())
+        .initialize(temporary.path().to_path_buf(), "device-phone".to_string())
         .expect("initialize");
     let metadata = BundleMetadata {
         protocol_version: PROTOCOL_VERSION,
@@ -553,7 +553,7 @@ fn bidirectional_transfer_state_survives_restart() {
 
     let restarted = PairingManager::default();
     restarted
-        .initialize(temp.path().to_path_buf(), "device-phone".to_string())
+        .initialize(temporary.path().to_path_buf(), "device-phone".to_string())
         .expect("restart");
     assert_eq!(
         restarted.outgoing_transfer().expect("outgoing transfer"),
@@ -566,7 +566,7 @@ fn bidirectional_transfer_state_survives_restart() {
 
     let committed = PairingManager::default();
     committed
-        .initialize(temp.path().to_path_buf(), "device-phone".to_string())
+        .initialize(temporary.path().to_path_buf(), "device-phone".to_string())
         .expect("restart committed state");
     assert!(
         committed
@@ -589,7 +589,7 @@ fn bidirectional_transfer_state_survives_restart() {
 
     let acknowledged = PairingManager::default();
     acknowledged
-        .initialize(temp.path().to_path_buf(), "device-phone".to_string())
+        .initialize(temporary.path().to_path_buf(), "device-phone".to_string())
         .expect("restart completed transfer");
     assert_eq!(
         acknowledged.outgoing_transfer().expect("cleared outgoing"),
@@ -605,10 +605,10 @@ fn bidirectional_transfer_state_survives_restart() {
 
 #[test]
 fn incoming_transfer_and_completion_survive_restart() {
-    let temp = TestDirectory::new("incoming-restart");
+    let temporary = TestDirectory::new("incoming-restart");
     let manager = PairingManager::default();
     manager
-        .initialize(temp.path().to_path_buf(), "device-desktop".to_string())
+        .initialize(temporary.path().to_path_buf(), "device-desktop".to_string())
         .expect("initialize");
     let metadata = BundleMetadata {
         protocol_version: PROTOCOL_VERSION,
@@ -635,7 +635,7 @@ fn incoming_transfer_and_completion_survive_restart() {
 
     let restarted = PairingManager::default();
     restarted
-        .initialize(temp.path().to_path_buf(), "device-desktop".to_string())
+        .initialize(temporary.path().to_path_buf(), "device-desktop".to_string())
         .expect("restart incoming state");
     assert_eq!(
         restarted.incoming_transfer().expect("incoming transfer"),
@@ -655,7 +655,7 @@ fn incoming_transfer_and_completion_survive_restart() {
 
     let acknowledged = PairingManager::default();
     acknowledged
-        .initialize(temp.path().to_path_buf(), "device-desktop".to_string())
+        .initialize(temporary.path().to_path_buf(), "device-desktop".to_string())
         .expect("restart completed state");
     assert_eq!(
         acknowledged

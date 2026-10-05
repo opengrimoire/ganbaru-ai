@@ -14,7 +14,7 @@ pub struct IdleStatus {
 }
 
 #[cfg(target_os = "linux")]
-fn get_idle_time_ms() -> Option<u64> {
+fn mutter_idle_time_ms() -> Option<u64> {
     let stdout = fixed_command_output(
         "gdbus",
         &[
@@ -41,7 +41,7 @@ fn get_idle_time_ms() -> Option<u64> {
 
 #[cfg(target_os = "linux")]
 fn is_webcam_in_use() -> bool {
-    let my_pid = std::process::id();
+    let own_pid = std::process::id();
     let entries = match std::fs::read_dir("/proc") {
         Ok(e) => e,
         Err(_) => return false,
@@ -52,7 +52,7 @@ fn is_webcam_in_use() -> bool {
         if !name_str.chars().all(|c| c.is_ascii_digit()) {
             continue;
         }
-        if name_str == my_pid.to_string() {
+        if name_str == own_pid.to_string() {
             continue;
         }
         let fd_dir = format!("/proc/{name_str}/fd");
@@ -74,8 +74,8 @@ fn is_webcam_in_use() -> bool {
 }
 
 #[cfg(target_os = "linux")]
-fn get_idle_time_with_fallback() -> Option<u64> {
-    if let Some(ms) = get_idle_time_ms() {
+fn linux_idle_time_ms() -> Option<u64> {
+    if let Some(ms) = mutter_idle_time_ms() {
         return Some(ms);
     }
     if let Ok(stdout) = fixed_command_output("xprintidle", &[], 128) {
@@ -88,9 +88,9 @@ fn get_idle_time_with_fallback() -> Option<u64> {
 
 #[cfg(target_os = "linux")]
 #[tauri::command]
-pub fn get_idle_status() -> IdleStatus {
+pub fn focus_idle_status() -> IdleStatus {
     IdleStatus {
-        idle_ms: get_idle_time_with_fallback(),
+        idle_ms: linux_idle_time_ms(),
         webcam_in_use: is_webcam_in_use(),
     }
 }
@@ -101,22 +101,22 @@ fn windows_idle_elapsed_ms(now: u32, last_input: u32) -> u64 {
 }
 
 #[cfg(target_os = "windows")]
-fn get_idle_time_ms_windows() -> Option<u64> {
+fn windows_idle_time_ms() -> Option<u64> {
     use windows::Win32::System::SystemInformation::GetTickCount;
     use windows::Win32::UI::Input::KeyboardAndMouse::{GetLastInputInfo, LASTINPUTINFO};
 
-    let mut lii = LASTINPUTINFO {
+    let mut last_input_info = LASTINPUTINFO {
         cbSize: std::mem::size_of::<LASTINPUTINFO>() as u32,
         dwTime: 0,
     };
 
-    // SAFETY: `lii` is a valid LASTINPUTINFO output buffer with cbSize set to
+    // SAFETY: `last_input_info` is a valid LASTINPUTINFO output buffer with cbSize set to
     // the struct size required by GetLastInputInfo.
-    if unsafe { GetLastInputInfo(&mut lii) }.as_bool() {
+    if unsafe { GetLastInputInfo(&mut last_input_info) }.as_bool() {
         // SAFETY: GetTickCount reads the current Windows uptime tick and does
         // not require any pointer or handle ownership from this process.
         let now = unsafe { GetTickCount() };
-        Some(windows_idle_elapsed_ms(now, lii.dwTime))
+        Some(windows_idle_elapsed_ms(now, last_input_info.dwTime))
     } else {
         None
     }
@@ -143,15 +143,15 @@ fn is_webcam_in_use_windows() -> bool {
 
 #[cfg(target_os = "windows")]
 #[tauri::command]
-pub fn get_idle_status() -> IdleStatus {
+pub fn focus_idle_status() -> IdleStatus {
     IdleStatus {
-        idle_ms: get_idle_time_ms_windows(),
+        idle_ms: windows_idle_time_ms(),
         webcam_in_use: is_webcam_in_use_windows(),
     }
 }
 
 #[cfg(target_os = "macos")]
-fn get_idle_time_ms_macos() -> Option<u64> {
+fn macos_idle_time_ms() -> Option<u64> {
     let stdout =
         match fixed_command_output("ioreg", &["-c", "IOHIDSystem", "-d", "4", "-S"], 256 * 1024) {
             Ok(stdout) => stdout,
@@ -160,8 +160,8 @@ fn get_idle_time_ms_macos() -> Option<u64> {
     for line in stdout.lines() {
         if let Some(pos) = line.find("\"HIDIdleTime\"") {
             if let Some(eq) = line[pos..].find('=') {
-                let val_str = line[pos + eq + 1..].trim();
-                if let Ok(ns) = val_str.parse::<u64>() {
+                let value = line[pos + eq + 1..].trim();
+                if let Ok(ns) = value.parse::<u64>() {
                     return Some(ns / 1_000_000);
                 }
             }
@@ -179,16 +179,16 @@ fn is_webcam_in_use_macos() -> bool {
 
 #[cfg(target_os = "macos")]
 #[tauri::command]
-pub fn get_idle_status() -> IdleStatus {
+pub fn focus_idle_status() -> IdleStatus {
     IdleStatus {
-        idle_ms: get_idle_time_ms_macos(),
+        idle_ms: macos_idle_time_ms(),
         webcam_in_use: is_webcam_in_use_macos(),
     }
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "windows", target_os = "macos")))]
 #[tauri::command]
-pub fn get_idle_status() -> IdleStatus {
+pub fn focus_idle_status() -> IdleStatus {
     IdleStatus {
         idle_ms: None,
         webcam_in_use: false,

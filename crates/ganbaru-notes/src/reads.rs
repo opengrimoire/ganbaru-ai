@@ -173,29 +173,29 @@ pub async fn list_sidebar_pages(
     }
 
     let mut rows_by_id = HashMap::<String, NotePageSummaryDto>::new();
-    push_unique_page_rows(&mut rows_by_id, fetch_sidebar_root_page_rows(pool).await?);
+    push_unique_page_rows(&mut rows_by_id, load_sidebar_root_page_rows(pool).await?);
     push_unique_page_rows(
         &mut rows_by_id,
-        fetch_active_page_rows_by_ids(pool, &seed_page_ids).await?,
+        load_active_page_rows_by_ids(pool, &seed_page_ids).await?,
     );
     for page_id in &seed_page_ids {
         push_unique_page_rows(
             &mut rows_by_id,
-            fetch_active_ancestor_page_rows(pool, page_id).await?,
+            load_active_ancestor_page_rows(pool, page_id).await?,
         );
     }
     push_unique_page_rows(
         &mut rows_by_id,
-        fetch_active_child_page_rows(pool, &expanded_page_ids).await?,
+        load_active_child_page_rows(pool, &expanded_page_ids).await?,
     );
 
     let mut rows = rows_by_id.into_values().collect::<Vec<_>>();
     sort_page_rows(&mut rows);
     let loaded_page_ids = rows.iter().map(|row| row.id.clone()).collect::<Vec<_>>();
     let page_ids_with_children =
-        fetch_active_parent_page_ids_with_children(pool, &loaded_page_ids).await?;
+        load_active_parent_page_ids_with_children(pool, &loaded_page_ids).await?;
     let (missing_parent_page_ids, trashed_parent_page_ids) =
-        fetch_unavailable_parent_page_ids(pool, &rows, &loaded_page_ids).await?;
+        load_unavailable_parent_page_ids(pool, &rows, &loaded_page_ids).await?;
 
     Ok(NoteSidebarPageList::new(
         rows,
@@ -205,7 +205,7 @@ pub async fn list_sidebar_pages(
     ))
 }
 
-pub async fn get_page_breadcrumb(
+pub async fn page_breadcrumb(
     pool: &SqlitePool,
     page_id: &str,
 ) -> Result<Vec<NotePageBreadcrumbItemDto>, String> {
@@ -218,7 +218,7 @@ pub async fn get_page_breadcrumb(
         if !seen.insert(current_page_id.clone()) {
             break;
         }
-        let Some(row) = fetch_page_row_any_state(pool, &current_page_id).await? else {
+        let Some(row) = load_page_row_including_trashed(pool, &current_page_id).await? else {
             crumbs.push(NotePageBreadcrumbItemDto::missing(current_page_id));
             break;
         };
@@ -311,9 +311,7 @@ fn sort_page_rows(rows: &mut [NotePageSummaryDto]) {
     });
 }
 
-async fn fetch_sidebar_root_page_rows(
-    pool: &SqlitePool,
-) -> Result<Vec<NotePageSummaryDto>, String> {
+async fn load_sidebar_root_page_rows(pool: &SqlitePool) -> Result<Vec<NotePageSummaryDto>, String> {
     sqlx::query_as::<_, NotePageSummaryDto>(&format!(
         "SELECT {}
          FROM notes_pages
@@ -329,7 +327,7 @@ async fn fetch_sidebar_root_page_rows(
     .map_err(|e| format!("list notes sidebar root pages: {e}"))
 }
 
-async fn fetch_active_page_rows_by_ids(
+async fn load_active_page_rows_by_ids(
     pool: &SqlitePool,
     page_ids: &[String],
 ) -> Result<Vec<NotePageSummaryDto>, String> {
@@ -352,7 +350,7 @@ async fn fetch_active_page_rows_by_ids(
         .map_err(|e| format!("list notes sidebar pages by id: {e}"))
 }
 
-async fn fetch_active_child_page_rows(
+async fn load_active_child_page_rows(
     pool: &SqlitePool,
     parent_page_ids: &[String],
 ) -> Result<Vec<NotePageSummaryDto>, String> {
@@ -379,7 +377,7 @@ async fn fetch_active_child_page_rows(
         .map_err(|e| format!("list notes sidebar child pages: {e}"))
 }
 
-async fn fetch_active_ancestor_page_rows(
+async fn load_active_ancestor_page_rows(
     pool: &SqlitePool,
     page_id: &str,
 ) -> Result<Vec<NotePageSummaryDto>, String> {
@@ -409,7 +407,7 @@ async fn fetch_active_ancestor_page_rows(
         .map_err(|e| format!("list notes sidebar ancestor pages: {e}"))
 }
 
-async fn fetch_page_row_any_state(
+async fn load_page_row_including_trashed(
     pool: &SqlitePool,
     page_id: &str,
 ) -> Result<Option<NotePageRow>, String> {
@@ -425,7 +423,7 @@ async fn fetch_page_row_any_state(
     .map_err(|e| format!("load notes page metadata: {e}"))
 }
 
-async fn fetch_active_parent_page_ids_with_children(
+async fn load_active_parent_page_ids_with_children(
     pool: &SqlitePool,
     page_ids: &[String],
 ) -> Result<Vec<String>, String> {
@@ -453,7 +451,7 @@ async fn fetch_active_parent_page_ids_with_children(
     Ok(rows)
 }
 
-async fn fetch_unavailable_parent_page_ids(
+async fn load_unavailable_parent_page_ids(
     pool: &SqlitePool,
     rows: &[NotePageSummaryDto],
     loaded_page_ids: &[String],
@@ -523,7 +521,7 @@ pub async fn open_page(pool: &SqlitePool, page_id: &str) -> Result<NotePageOpenD
     .await
     .map_err(|error| format!("load notes page: {error}"))?
     .ok_or_else(|| "notes page not found".to_string())?;
-    let breadcrumb = get_page_breadcrumb_in_transaction(&mut transaction, page_id).await?;
+    let breadcrumb = page_breadcrumb_tx(&mut transaction, page_id).await?;
     let rows = sqlx::query_as::<_, NoteBlockRow>(
         "SELECT
             id, page_id, parent_type, parent_page_id, parent_block_id, has_children,
@@ -563,7 +561,7 @@ pub async fn open_page(pool: &SqlitePool, page_id: &str) -> Result<NotePageOpenD
     Ok(NotePageOpenDto::new(page, breadcrumb, blocks, outlines))
 }
 
-pub async fn get_block_outline_frontier(
+pub async fn block_outline_frontier(
     pool: &SqlitePool,
     page_id: &str,
     parent_ids: &[String],
@@ -650,7 +648,7 @@ fn normalize_block_ids(ids: &[String], label: &str) -> Result<Vec<String>, Strin
     Ok(normalized)
 }
 
-async fn get_page_breadcrumb_in_transaction(
+async fn page_breadcrumb_tx(
     transaction: &mut sqlx::Transaction<'_, Sqlite>,
     page_id: &str,
 ) -> Result<Vec<NotePageBreadcrumbItemDto>, String> {
@@ -689,7 +687,7 @@ async fn get_page_breadcrumb_in_transaction(
     Ok(crumbs)
 }
 
-pub async fn get_block_frontier(
+pub async fn block_frontier(
     pool: &SqlitePool,
     parent_ids: &[String],
 ) -> Result<NoteBlockFrontierDto, String> {
@@ -746,11 +744,11 @@ fn block_page_from_rows(
     } else {
         None
     };
-    let results = rows
+    let blocks = rows
         .into_iter()
         .map(NoteBlockDto::new)
         .collect::<Result<Vec<_>, _>>()?;
-    Ok(NotePaginatedBlockList::new(results, next_cursor, has_more))
+    Ok(NotePaginatedBlockList::new(blocks, next_cursor, has_more))
 }
 
 struct BlockOutlineRow {
@@ -913,7 +911,7 @@ pub async fn get_block_row(
     Ok(row)
 }
 
-pub async fn get_block_children(
+pub async fn block_children(
     pool: &SqlitePool,
     parent_id: &str,
     start_cursor: Option<&str>,
@@ -1140,9 +1138,9 @@ fn paginated_rows(
     } else {
         None
     };
-    let results = visible_rows
+    let blocks = visible_rows
         .into_iter()
         .map(NoteBlockDto::new)
         .collect::<Result<Vec<_>, _>>()?;
-    Ok(NotePaginatedBlockList::new(results, next_cursor, has_more))
+    Ok(NotePaginatedBlockList::new(blocks, next_cursor, has_more))
 }

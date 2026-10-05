@@ -21,16 +21,16 @@ const MAX_HISTORY_PAUSES = 10_000;
 const MAX_ID_BYTES = 1_036;
 const encoder = new TextEncoder();
 
-function record(value: unknown): value is Record<string, unknown> {
+function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function identity(value: unknown): value is string {
+function isBoundedId(value: unknown): value is string {
   return typeof value === "string" && value.length > 0 && value.length <= MAX_ID_BYTES
     && encoder.encode(value).byteLength <= MAX_ID_BYTES;
 }
 
-function instant(value: unknown): value is string {
+function isInstantString(value: unknown): value is string {
   if (typeof value !== "string" || value.length > 64) return false;
   try {
     Temporal.Instant.from(value);
@@ -40,7 +40,7 @@ function instant(value: unknown): value is string {
   }
 }
 
-function civilDate(value: unknown): value is string {
+function isCivilDateString(value: unknown): value is string {
   if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   try {
     Temporal.PlainDate.from(value);
@@ -50,24 +50,24 @@ function civilDate(value: unknown): value is string {
   }
 }
 
-function pause(value: unknown): value is PersistedSegment["pauseLog"][number] {
-  return record(value) && instant(value.startedAt)
-    && (value.endedAt === null || instant(value.endedAt))
+function isPauseEntry(value: unknown): value is PersistedSegment["pauseLog"][number] {
+  return isRecord(value) && isInstantString(value.startedAt)
+    && (value.endedAt === null || isInstantString(value.endedAt))
     && (value.reason === "manual" || value.reason === "idle" || value.reason === "suspend");
 }
 
-function segmentRow(value: unknown): value is DbPomodoroSegmentRow {
-  return record(value)
-    && identity(value.id) && identity(value.event_id) && identity(value.run_id)
-    && civilDate(value.event_date)
+function isSegmentRow(value: unknown): value is DbPomodoroSegmentRow {
+  return isRecord(value)
+    && isBoundedId(value.id) && isBoundedId(value.event_id) && isBoundedId(value.run_id)
+    && isCivilDateString(value.event_date)
     && typeof value.rhythm_position === "number" && Number.isSafeInteger(value.rhythm_position)
     && value.rhythm_position > 0
     && (value.phase === "focus" || value.phase === "short_break" || value.phase === "long_break")
-    && instant(value.planned_start) && instant(value.planned_end)
-    && (value.actual_start === null || instant(value.actual_start))
-    && (value.actual_end === null || instant(value.actual_end))
+    && isInstantString(value.planned_start) && isInstantString(value.planned_end)
+    && (value.actual_start === null || isInstantString(value.actual_start))
+    && (value.actual_end === null || isInstantString(value.actual_end))
     && Array.isArray(value.pauses) && value.pauses.length <= MAX_HISTORY_PAUSES
-    && value.pauses.every(pause)
+    && value.pauses.every(isPauseEntry)
     && (value.status === "planned" || value.status === "active" || value.status === "completed"
       || value.status === "skipped" || value.status === "interrupted");
 }
@@ -82,7 +82,7 @@ export function parsePomodoroSegmentRows(value: unknown, visibleIds: readonly st
   let pauses = 0;
   const rows: DbPomodoroSegmentRow[] = [];
   for (const candidate of value) {
-    if (!segmentRow(candidate) || !visible.has(candidate.event_id) || identifiers.has(candidate.id)) {
+    if (!isSegmentRow(candidate) || !visible.has(candidate.event_id) || identifiers.has(candidate.id)) {
       throw new Error("Invalid native Focus history row");
     }
     pauses += candidate.pauses.length;
@@ -116,14 +116,14 @@ export function mapPomodoroSegmentRows(
   visibleIds: readonly string[],
 ): Map<string, PersistedSegment[]> {
   const visible = new Set(visibleIds);
-  const map = new Map<string, PersistedSegment[]>();
+  const segmentsByEvent = new Map<string, PersistedSegment[]>();
 
   for (const row of rows) {
     if (!visible.has(row.event_id)) continue;
-    const mapKey = row.event_id;
+    const eventId = row.event_id;
     const segment: PersistedSegment = {
       id: row.id,
-      eventId: mapKey,
+      eventId,
       eventDate: row.event_date,
       runId: row.run_id,
       rhythmPosition: row.rhythm_position,
@@ -135,10 +135,10 @@ export function mapPomodoroSegmentRows(
       pauseLog: row.pauses,
       status: row.status,
     };
-    const segments = map.get(mapKey);
+    const segments = segmentsByEvent.get(eventId);
     if (segments) segments.push(segment);
-    else map.set(mapKey, [segment]);
+    else segmentsByEvent.set(eventId, [segment]);
   }
 
-  return map;
+  return segmentsByEvent;
 }

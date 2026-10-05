@@ -361,7 +361,7 @@ pub(crate) fn setup(app: &tauri::AppHandle) {
             subscriptions: subscriptions::Subscriptions::default(),
         };
         if let Err(error) = owner.attach_platform_lifecycle().await {
-            owner.failed(error);
+            owner.record_failure(error);
         }
         let mut next_wake = tokio::time::Instant::now();
         let mut delivery_feedback_open = true;
@@ -383,11 +383,11 @@ pub(crate) fn setup(app: &tauri::AppHandle) {
                     if lifecycle_request.intent == lifecycle::LifecycleIntent::Resume
                         && let Err(error) = owner.handle(Request::Resume { revision: lifecycle_request.revision }).await
                     {
-                        owner.failed(error);
+                        owner.record_failure(error);
                     }
                 }
                 _ = tokio::time::sleep_until(next_wake) => {
-                    if let Err(error) = owner.tick(calendar_dirty.swap(false, Ordering::AcqRel)).await { owner.failed(error); }
+                    if let Err(error) = owner.tick(calendar_dirty.swap(false, Ordering::AcqRel)).await { owner.record_failure(error); }
                     next_wake = tokio::time::Instant::now() + owner.next_delay();
                 }
                 Some(message) = receiver.recv() => {
@@ -395,7 +395,7 @@ pub(crate) fn setup(app: &tauri::AppHandle) {
                     let result = owner.handle(message.request).await;
                     if !presentation && let Err(error) = &result
                         && matches!(error.code, FocusErrorCode::Persistence | FocusErrorCode::Unavailable | FocusErrorCode::ReadOnly) {
-                        owner.failed(error.clone());
+                        owner.record_failure(error.clone());
                     }
                     if let Some(response) = message.response { let _ = response.send(result); }
                 }
@@ -410,7 +410,7 @@ pub(crate) fn setup(app: &tauri::AppHandle) {
                     if changed.is_err() { break; }
                     let observation = *foreground_receiver.borrow_and_update();
                     owner.foreground = observation.foreground;
-                    if let Err(error) = owner.observe(FocusObservation::ForegroundChanged { foreground: observation.foreground }, observation.observed_at_ms).await { owner.failed(error); }
+                    if let Err(error) = owner.observe(FocusObservation::ForegroundChanged { foreground: observation.foreground }, observation.observed_at_ms).await { owner.record_failure(error); }
                 }
                 _ = invalidation.notified() => {
                     if !owner.frozen
@@ -419,7 +419,7 @@ pub(crate) fn setup(app: &tauri::AppHandle) {
                     {
                         owner.effects.invalidate_preferences();
                         let result = async { owner.ensure_context(true).await?; owner.observe(FocusObservation::CalendarChanged, now_ms()?).await }.await;
-                        if let Err(error) = result { owner.failed(error); }
+                        if let Err(error) = result { owner.record_failure(error); }
                     }
                 }
                 else => break,
@@ -1163,7 +1163,7 @@ impl Owner {
             .map_err(|error| format!("Commit native Focus action: {error}"))?;
         self.next_boundary_ms = calendar.next_boundary_ms;
         self.calendar_commitment = calendar_commitment;
-        self.committed(snapshot.clone(), now).await?;
+        self.publish_committed(snapshot.clone(), now).await?;
         Ok(snapshot)
     }
 
@@ -1183,8 +1183,8 @@ impl Owner {
         match current {
             Ok(snapshot) if recovered => {
                 let now = snapshot.observed_at_ms;
-                if let Err(error) = self.committed(snapshot, now).await {
-                    self.failed(error);
+                if let Err(error) = self.publish_committed(snapshot, now).await {
+                    self.record_failure(error);
                 }
             }
             Ok(snapshot) => {
@@ -1199,7 +1199,7 @@ impl Owner {
                     .state::<FocusRuntimeState>()
                     .controls
                     .send_replace(None);
-                self.failed(error);
+                self.record_failure(error);
             }
         }
     }
@@ -1253,10 +1253,10 @@ impl Owner {
             .map_err(|error| format!("Commit native Focus observation: {error}"))?;
         self.next_boundary_ms = calendar.next_boundary_ms;
         self.calendar_commitment = calendar_commitment;
-        self.committed(snapshot, now).await
+        self.publish_committed(snapshot, now).await
     }
 
-    async fn committed(
+    async fn publish_committed(
         &mut self,
         snapshot: FocusExecutionSnapshot,
         now: i64,
@@ -1352,7 +1352,7 @@ impl Owner {
         }
     }
 
-    fn failed(&mut self, failure: FocusExecutionError) {
+    fn record_failure(&mut self, failure: FocusExecutionError) {
         self.clear_effect_authority();
         self.projection.error = Some(failure.to_string());
         self.next_retry_ms = now_ms().ok().map(|now| now + ERROR_RETRY_INTERVAL_MS);
@@ -1553,7 +1553,7 @@ impl Owner {
                 self.deliver_effects(now);
                 return Ok(());
             }
-            let activity = self.activity().await?;
+            let activity = self.read_activity().await?;
             self.observe(
                 if active {
                     FocusObservation::Activity(activity)
@@ -1570,10 +1570,10 @@ impl Owner {
     }
 
     #[cfg(desktop)]
-    async fn activity(&self) -> Result<FocusActivityObservation, FocusExecutionError> {
+    async fn read_activity(&self) -> Result<FocusActivityObservation, FocusExecutionError> {
         tauri::async_runtime::spawn_blocking(|| {
             let observed_at_ms = now_ms()?;
-            let status = crate::pomodoro::idle::get_idle_status();
+            let status = crate::pomodoro::idle::focus_idle_status();
             Ok(FocusActivityObservation {
                 observed_at_ms,
                 idle_ms: status.idle_ms.and_then(|value| i64::try_from(value).ok()),
@@ -1585,7 +1585,7 @@ impl Owner {
     }
 
     #[cfg(mobile)]
-    async fn activity(&self) -> Result<FocusActivityObservation, FocusExecutionError> {
+    async fn read_activity(&self) -> Result<FocusActivityObservation, FocusExecutionError> {
         Ok(FocusActivityObservation {
             observed_at_ms: now_ms()?,
             idle_ms: None,

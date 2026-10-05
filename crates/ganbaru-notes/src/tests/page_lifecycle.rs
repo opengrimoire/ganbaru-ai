@@ -140,7 +140,7 @@ fn duplicate_page_copies_nested_child_pages() {
             "Copy of Nested"
         );
 
-        let parent_blocks = reads::get_block_children(&pool, PAGE_A, None, Some(10))
+        let parent_blocks = reads::block_children(&pool, PAGE_A, None, Some(10))
             .await
             .unwrap();
         let parent_blocks_json = serde_json::to_value(parent_blocks).unwrap();
@@ -158,7 +158,7 @@ fn duplicate_page_copies_nested_child_pages() {
                 .await
                 .unwrap();
         assert_ne!(child_page_id, PAGE_C);
-        let duplicated_blocks = reads::get_block_children(&pool, duplicated_id, None, Some(10))
+        let duplicated_blocks = reads::block_children(&pool, duplicated_id, None, Some(10))
             .await
             .unwrap();
         let duplicated_blocks_json = serde_json::to_value(duplicated_blocks).unwrap();
@@ -168,10 +168,9 @@ fn duplicate_page_copies_nested_child_pages() {
             "Leaf"
         );
 
-        let duplicated_child_blocks =
-            reads::get_block_children(&pool, &child_page_id, None, Some(10))
-                .await
-                .unwrap();
+        let duplicated_child_blocks = reads::block_children(&pool, &child_page_id, None, Some(10))
+            .await
+            .unwrap();
         let duplicated_child_blocks_json = serde_json::to_value(duplicated_child_blocks).unwrap();
         assert_eq!(
             duplicated_child_blocks_json["results"][1]["paragraph"]["rich_text"][0]["plain_text"],

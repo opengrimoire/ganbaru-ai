@@ -892,12 +892,12 @@ fn copy_limited<W: Write>(
     while remaining > 0 {
         let read_limit =
             usize::try_from(remaining.min(buffer.len() as u64)).unwrap_or(buffer.len());
-        let read = file.read(&mut buffer[..read_limit])?;
-        if read == 0 {
+        let bytes_read = file.read(&mut buffer[..read_limit])?;
+        if bytes_read == 0 {
             break;
         }
-        stream.write_all(&buffer[..read])?;
-        remaining = remaining.saturating_sub(read as u64);
+        stream.write_all(&buffer[..bytes_read])?;
+        remaining = remaining.saturating_sub(bytes_read as u64);
     }
     stream.flush()
 }

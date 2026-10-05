@@ -80,11 +80,11 @@
    * old `allEventsForDay` helper, but on the pre-bucketed day slice instead
    * of scanning the full visible-event array per cell.
    */
-  function sortDayCellEvents(arr: CalendarEvent[]): CalendarEvent[] {
-    if (arr.length === 0) return arr;
+  function sortDayCellEvents(dayEvents: CalendarEvent[]): CalendarEvent[] {
+    if (dayEvents.length === 0) return dayEvents;
     const allDay: CalendarEvent[] = [];
     const timed: CalendarEvent[] = [];
-    for (const e of arr) (e.allDay ? allDay : timed).push(e);
+    for (const e of dayEvents) (e.allDay ? allDay : timed).push(e);
     if (allDay.length > 1) {
       allDay.sort((a, b) => {
         const at = (a.title || "").toLowerCase();
@@ -119,8 +119,8 @@
 
   const shadeRefs = $derived.by(() => {
     const app = resolveAppTokens(theme);
-    const cal = resolveCalendarTokens(theme);
-    return { bg: cal["--cal-bg"], ink: app["--foreground"] };
+    const calendarTokens = resolveCalendarTokens(theme);
+    return { bg: calendarTokens["--cal-bg"], ink: app["--foreground"] };
   });
 
   // Reference days for day-of-week headers (Mon-Sun from first week)
@@ -339,12 +339,12 @@
     class="grid min-h-0 flex-1 overflow-x-hidden"
     style="grid-template-rows: repeat({weeks.length}, minmax(0, 1fr));"
   >
-    {#each weeks as week, wi}
+    {#each weeks as week, weekIndex}
       <div
         class="grid grid-cols-7"
-        style="{wi < weeks.length - 1 ? `border-bottom: 1px solid var(--cal-gridline);` : ''}"
+        style="{weekIndex < weeks.length - 1 ? `border-bottom: 1px solid var(--cal-gridline);` : ''}"
       >
-        {#each week as day, di}
+        {#each week as day, dayIndex}
           {@const inMonth = day.getMonth() === currentMonth}
           {@const past = isPastDay(day)}
           {@const active = inMonth && !past}
@@ -361,13 +361,13 @@
             past,
           )}
           {@const dateStr = formatDatePart(day)}
-          {@const dayEvts = sortDayCellEvents(eventsByDay.get(dateStr) ?? EMPTY_DAY)}
-          {@const dayLayout = layoutMonthDayEvents(dayEvts, monthLayoutOptionsForColumn(di))}
+          {@const dayEvents = sortDayCellEvents(eventsByDay.get(dateStr) ?? EMPTY_DAY)}
+          {@const dayLayout = layoutMonthDayEvents(dayEvents, monthLayoutOptionsForColumn(dayIndex))}
           <!-- svelte-ignore a11y_click_events_have_key_events -->
           <!-- svelte-ignore a11y_no_static_element_interactions -->
           <div
             class="relative flex min-h-0 cursor-pointer flex-col overflow-hidden p-1"
-            style="{di < 6 ? `border-right: 1px solid var(--cal-gridline);` : ''}"
+            style="{dayIndex < 6 ? `border-right: 1px solid var(--cal-gridline);` : ''}"
             onclick={() => onDayClick(day)}
           >
             <span
@@ -439,7 +439,7 @@
                       --month-more-color: {moreColor};
                       color: var(--month-more-color);
                     "
-                    onclick={(e) => { e.stopPropagation(); openMonthMoreModal(day, dayEvts); }}
+                    onclick={(e) => { e.stopPropagation(); openMonthMoreModal(day, dayEvents); }}
                   >
                     {item.label}
                   </button>

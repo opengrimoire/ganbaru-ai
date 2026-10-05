@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { formatElapsed, pickTicks, samplesToCSV, SAMPLE_CAP, SAMPLE_INTERVAL_MS } from "./memory-samples";
+import { formatElapsed, pickTicks, samplesToCsv, SAMPLE_CAP, SAMPLE_INTERVAL_MS } from "./memory-samples";
 import type { MemorySample } from "./memory-samples";
 
 describe("formatElapsed", () => {
@@ -49,17 +49,17 @@ describe("pickTicks", () => {
   });
 });
 
-describe("samplesToCSV", () => {
+describe("samplesToCsv", () => {
   function sample(t: number, total: number, procs: { name: string; mb: number }[]): MemorySample {
     return { t, totalMb: total, processes: procs };
   }
 
   it("returns an empty string for an empty buffer", () => {
-    expect(samplesToCSV([])).toBe("");
+    expect(samplesToCsv([])).toBe("");
   });
 
   it("emits a header plus one row per sample with sorted process columns", () => {
-    const csv = samplesToCSV([
+    const csv = samplesToCsv([
       sample(0, 250.5, [
         { name: "Backend", mb: 80.1 },
         { name: "Frontend", mb: 150.2 },
@@ -76,7 +76,7 @@ describe("samplesToCSV", () => {
   });
 
   it("names the total column after the memory metric when provided", () => {
-    const csv = samplesToCSV([
+    const csv = samplesToCsv([
       sample(0, 250.5, [{ name: "Backend", mb: 250.5 }]),
     ], "working_set");
     const [header] = csv.split("\n");
@@ -85,7 +85,7 @@ describe("samplesToCSV", () => {
   });
 
   it("leaves a missing process cell empty when only some samples include it", () => {
-    const csv = samplesToCSV([
+    const csv = samplesToCsv([
       sample(0, 100, [{ name: "Backend", mb: 100 }]),
       sample(5_000, 260, [
         { name: "Backend", mb: 80 },

@@ -309,7 +309,7 @@ fn pause_should_suspend_enforcement(runtime: &RuntimeState) -> bool {
     runtime.paused && !matches!(runtime.pause_reason.as_deref(), Some("idle" | "suspend"))
 }
 
-pub(super) fn valid_local_date(value: &str) -> bool {
+pub(super) fn is_valid_local_date(value: &str) -> bool {
     let bytes = value.as_bytes();
     bytes.len() == 10
         && bytes[4] == b'-'
@@ -363,10 +363,10 @@ fn limit_state_is_fresh_at(
     checked_at: DateTime<Utc>,
     local_date: &str,
 ) -> bool {
-    if !valid_local_date(&state.local_date) {
+    if !is_valid_local_date(&state.local_date) {
         return false;
     }
-    if !valid_local_date(&state.week_start_local_date) {
+    if !is_valid_local_date(&state.week_start_local_date) {
         return false;
     }
     let Ok(date) = NaiveDate::parse_from_str(&state.local_date, "%Y-%m-%d") else {
@@ -385,8 +385,8 @@ fn limit_state_is_fresh_at(
     let mut identities = std::collections::HashSet::new();
     if state.limits.iter().any(|limit| {
         !matches!(limit.period.as_str(), "day" | "week")
-            || !valid_local_date(&limit.window_start_local_date)
-            || !valid_local_date(&limit.window_end_local_date)
+            || !is_valid_local_date(&limit.window_start_local_date)
+            || !is_valid_local_date(&limit.window_end_local_date)
             || limit.window_start_local_date > limit.window_end_local_date
             || limit.window_end_local_date != state.local_date
             || limit.window_start_local_date
@@ -474,6 +474,6 @@ mod tests {
             checked_at,
             "2026-10-02"
         ));
-        assert!(!valid_local_date("2026-02-29"));
+        assert!(!is_valid_local_date("2026-02-29"));
     }
 }

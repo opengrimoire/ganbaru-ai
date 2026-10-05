@@ -91,13 +91,13 @@ internal data class VaultTreeCopyLimits(
 )
 
 internal class VaultTreeCopyBudget(private val limits: VaultTreeCopyLimits) {
-  private var fileCount = 0
+  private var entryCount = 0
   private var byteCount = 0L
 
   fun enter(depth: Int) {
     require(depth <= limits.maxDepth) { "Selected folder is nested too deeply" }
-    fileCount += 1
-    require(fileCount <= limits.maxFiles) { "Selected folder contains too many entries" }
+    entryCount += 1
+    require(entryCount <= limits.maxFiles) { "Selected folder contains too many entries" }
   }
 
   fun addBytes(count: Int) {

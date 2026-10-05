@@ -218,7 +218,7 @@ pub fn row_page_properties(
         }
     }
 
-    let mut title_cache = requested_title.clone();
+    let mut resolved_title = requested_title.clone();
     let mut has_title_property = false;
     let mut row_properties = Map::new();
     for (name, schema_value) in schema {
@@ -238,7 +238,7 @@ pub fn row_page_properties(
         };
         if property_type == "title" {
             has_title_property = true;
-            title_cache = title_from_property_value(&value)
+            resolved_title = title_from_property_value(&value)
                 .filter(|value| !value.trim().is_empty())
                 .unwrap_or_else(|| requested_title.clone());
         }
@@ -251,7 +251,7 @@ pub fn row_page_properties(
     if row_value.to_string().len() > MAX_ROW_PROPERTIES_BYTES {
         return Err("row properties must not exceed 50KB".to_string());
     }
-    Ok((normalize_row_title(&title_cache)?, row_value))
+    Ok((normalize_row_title(&resolved_title)?, row_value))
 }
 
 fn canonical_row_property_value(

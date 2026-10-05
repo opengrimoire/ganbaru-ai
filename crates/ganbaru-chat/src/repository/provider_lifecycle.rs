@@ -118,22 +118,22 @@ fn parse_job(row: sqlx::sqlite::SqliteRow) -> ChatResult<ProviderLifecycleJobRea
             .map_err(persistence_error)?
             .map(ChatThreadId::new)
             .transpose()
-            .map_err(|_| corrupt_data())?,
+            .map_err(|_| corrupt_data_error())?,
         provider_family_id: ProviderFamilyId::new(
             row.try_get::<String, _>("provider_family_id")
                 .map_err(persistence_error)?,
         )
-        .map_err(|_| corrupt_data())?,
+        .map_err(|_| corrupt_data_error())?,
         provider_instance_id: ProviderInstanceId::new(
             row.try_get::<String, _>("provider_instance_id")
                 .map_err(persistence_error)?,
         )
-        .map_err(|_| corrupt_data())?,
+        .map_err(|_| corrupt_data_error())?,
         provider_thread_id: ProviderThreadId::new(
             row.try_get::<String, _>("provider_thread_id")
                 .map_err(persistence_error)?,
         )
-        .map_err(|_| corrupt_data())?,
+        .map_err(|_| corrupt_data_error())?,
         operation: parse_operation(
             &row.try_get::<String, _>("operation")
                 .map_err(persistence_error)?,
@@ -148,7 +148,7 @@ fn parse_job(row: sqlx::sqlite::SqliteRow) -> ChatResult<ProviderLifecycleJobRea
             row.try_get::<i64, _>("attempt_count")
                 .map_err(persistence_error)?,
         )
-        .map_err(|_| corrupt_data())?,
+        .map_err(|_| corrupt_data_error())?,
         last_error_code: row.try_get("last_error_code").map_err(persistence_error)?,
         last_error_detail: row
             .try_get("last_error_detail")
@@ -158,17 +158,17 @@ fn parse_job(row: sqlx::sqlite::SqliteRow) -> ChatResult<ProviderLifecycleJobRea
             .map_err(persistence_error)?
             .map(UtcTimestamp::new)
             .transpose()
-            .map_err(|_| corrupt_data())?,
+            .map_err(|_| corrupt_data_error())?,
         created_at: UtcTimestamp::new(
             row.try_get::<String, _>("created_at")
                 .map_err(persistence_error)?,
         )
-        .map_err(|_| corrupt_data())?,
+        .map_err(|_| corrupt_data_error())?,
         updated_at: UtcTimestamp::new(
             row.try_get::<String, _>("updated_at")
                 .map_err(persistence_error)?,
         )
-        .map_err(|_| corrupt_data())?,
+        .map_err(|_| corrupt_data_error())?,
     })
 }
 
@@ -179,7 +179,7 @@ fn parse_operation(value: &str) -> ChatResult<ProviderLifecycleOperation> {
         "delete" => Ok(ProviderLifecycleOperation::Delete),
         "unsubscribe" => Ok(ProviderLifecycleOperation::Unsubscribe),
         "cleanup" => Ok(ProviderLifecycleOperation::Cleanup),
-        _ => Err(corrupt_data()),
+        _ => Err(corrupt_data_error()),
     }
 }
 
@@ -235,7 +235,7 @@ fn serialization_error(_: serde_json::Error) -> ChatError {
     )
 }
 
-fn corrupt_data() -> ChatError {
+fn corrupt_data_error() -> ChatError {
     ChatError::new(
         ChatErrorCode::Persistence,
         "Stored provider lifecycle synchronization data is invalid",

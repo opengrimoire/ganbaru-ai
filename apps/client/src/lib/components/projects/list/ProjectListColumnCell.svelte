@@ -604,11 +604,11 @@
             small
             highlightToday={false}
             activeHighlight="primary"
-            onselect={(dateStr) => {
+            onSelect={(dateStr) => {
               if (column === "start") onSetStartDate(dateStr);
               else onSetDueDate(dateStr);
             }}
-            oncancel={() => {
+            onCancel={() => {
               if (column === "start") onCloseStartDateMenu();
               else onCloseDueDateMenu();
             }}
@@ -673,12 +673,12 @@
                     scrollTime={timeValue ?? DEFAULT_TIME_PICKER_ANCHOR}
                     emphasizedTime={timeValue ? undefined : null}
                     focusOnOpen
-                    onselect={(time) => {
+                    onSelect={(time) => {
                       if (column === "start") onSetStartTime(time);
                       else onSetDueTime(time);
                       timePickerOpen = false;
                     }}
-                    oncancel={() => {
+                    onCancel={() => {
                       timePickerOpen = false;
                     }}
                   />
@@ -817,11 +817,11 @@
                 small
                 highlightMode="none"
                 activeHighlight="primary"
-                onselect={(dateStr) => {
+                onSelect={(dateStr) => {
                   void saveCustomFieldDate(customField, dateStr);
                   customFieldPanelOpen = false;
                 }}
-                oncancel={() => { customFieldPanelOpen = false; }}
+                onCancel={() => { customFieldPanelOpen = false; }}
               />
             </div>
           {/if}

@@ -33,26 +33,26 @@
     longBreakMinutes: 10,
     longBreakAfterFocusCount: 4,
   } as const;
-  const POMO_PRESETS = COUNT_PRESET_RHYTHMS;
-  const POMO_PRESET_ORDER: BuiltInPomodoroPreset[] = [
+  const PRESET_RHYTHMS = COUNT_PRESET_RHYTHMS;
+  const PRESET_ORDER: BuiltInPomodoroPreset[] = [
     "adaptive",
     "creative",
     "balanced",
     "deep",
     "extended",
   ];
-  const POMO_PRESET_ENTRIES = POMO_PRESET_ORDER.map((key) => [key, POMO_PRESETS[key]]) as Array<[
+  const PRESET_ENTRIES = PRESET_ORDER.map((key) => [key, PRESET_RHYTHMS[key]]) as Array<[
     BuiltInPomodoroPreset,
-    typeof POMO_PRESETS[BuiltInPomodoroPreset],
+    typeof PRESET_RHYTHMS[BuiltInPomodoroPreset],
   ]>;
-  const POMO_OPTION_COUNT = POMO_PRESET_ENTRIES.length + 1;
+  const PRESET_OPTION_COUNT = PRESET_ENTRIES.length + 1;
 
   let {
     enabled,
     preset = $bindable<PomodoroPreset>("adaptive"),
-    focusDuration = $bindable(40),
-    shortBreak = $bindable(5),
-    longBreak = $bindable(10),
+    focusDurationMinutes = $bindable(40),
+    shortBreakMinutes = $bindable(5),
+    longBreakMinutes = $bindable(10),
     longBreakAfterFocusCount = $bindable(4),
     customRhythmMode = $bindable<CustomRhythmMode>("simple"),
     sequenceSteps = $bindable<SequencePomodoroRhythmStep[]>([]),
@@ -60,15 +60,15 @@
     expanded,
     readonlyInteractive = false,
     idleDetectionAvailable = true,
-    ontoggle,
-    onexpand,
-    onchange,
+    onToggle,
+    onExpand,
+    onChange,
   }: {
     enabled: boolean;
     preset: PomodoroPreset;
-    focusDuration: number;
-    shortBreak: number;
-    longBreak: number;
+    focusDurationMinutes: number;
+    shortBreakMinutes: number;
+    longBreakMinutes: number;
     longBreakAfterFocusCount: number;
     customRhythmMode: CustomRhythmMode;
     sequenceSteps: SequencePomodoroRhythmStep[];
@@ -76,9 +76,9 @@
     expanded: boolean;
     readonlyInteractive?: boolean;
     idleDetectionAvailable?: boolean;
-    ontoggle: () => void;
-    onexpand: () => void;
-    onchange: () => void;
+    onToggle: () => void;
+    onExpand: () => void;
+    onChange: () => void;
   } = $props();
 
   const localization = getLocalization();
@@ -92,15 +92,15 @@
   let longBreakAfterDraft = $state("4");
 
   $effect(() => {
-    focusDurationDraft = formatDurationSlot(focusDuration);
+    focusDurationDraft = formatDurationSlot(focusDurationMinutes);
   });
 
   $effect(() => {
-    shortBreakDraft = formatDurationSlot(shortBreak);
+    shortBreakDraft = formatDurationSlot(shortBreakMinutes);
   });
 
   $effect(() => {
-    longBreakDraft = formatDurationSlot(longBreak);
+    longBreakDraft = formatDurationSlot(longBreakMinutes);
   });
 
   $effect(() => {
@@ -109,16 +109,16 @@
 
   $effect(() => {
     const index = preset === "custom"
-      ? POMO_PRESET_ENTRIES.length
-      : POMO_PRESET_ENTRIES.findIndex(([key]) => key === preset);
+      ? PRESET_ENTRIES.length
+      : PRESET_ENTRIES.findIndex(([key]) => key === preset);
     if (index >= 0) presetFocusIndex = index;
   });
 
   const localizedPresetEntries = $derived(
-    POMO_PRESET_ENTRIES.map(([key, val]) => ({
+    PRESET_ENTRIES.map(([key, rhythm]) => ({
       key,
       label: presetLabel(key),
-      summarySlots: presetSummarySlots(key, val),
+      summarySlots: presetSummarySlots(key, rhythm),
     })),
   );
 
@@ -129,7 +129,7 @@
       value: focusDurationDraft,
       setDraft: (v: string) => { focusDurationDraft = sanitizeCustomSlotDraft(v, 2); },
       commit: commitFocusDurationDraft,
-      restore: () => { focusDurationDraft = formatDurationSlot(focusDuration); },
+      restore: () => { focusDurationDraft = formatDurationSlot(focusDurationMinutes); },
       min: MIN_FOCUS_MINUTES,
       max: Math.min(MAX_FOCUS_MINUTES, CUSTOM_DURATION_SLOT_MAX),
       maxLength: 2,
@@ -141,7 +141,7 @@
       value: shortBreakDraft,
       setDraft: (v: string) => { shortBreakDraft = sanitizeCustomSlotDraft(v, 2); },
       commit: commitShortBreakDraft,
-      restore: () => { shortBreakDraft = formatDurationSlot(shortBreak); },
+      restore: () => { shortBreakDraft = formatDurationSlot(shortBreakMinutes); },
       min: MIN_SHORT_BREAK_MINUTES,
       max: Math.min(MAX_SHORT_BREAK_MINUTES, CUSTOM_DURATION_SLOT_MAX),
       maxLength: 2,
@@ -153,7 +153,7 @@
       value: longBreakDraft,
       setDraft: (v: string) => { longBreakDraft = sanitizeCustomSlotDraft(v, 2); },
       commit: commitLongBreakDraft,
-      restore: () => { longBreakDraft = formatDurationSlot(longBreak); },
+      restore: () => { longBreakDraft = formatDurationSlot(longBreakMinutes); },
       min: MIN_LONG_BREAK_MINUTES,
       max: Math.min(MAX_LONG_BREAK_MINUTES, CUSTOM_DURATION_SLOT_MAX),
       maxLength: 2,
@@ -186,7 +186,7 @@
           formatNumber(locale, sequenceSummary.breakMinutes),
         );
       }
-      return t("calendar.pomodoro.customSummary", focusDuration, shortBreak, longBreak);
+      return t("calendar.pomodoro.customSummary", focusDurationMinutes, shortBreakMinutes, longBreakMinutes);
     }
     return presetLabel(preset) ?? t("calendar.pomodoro.custom");
   });
@@ -205,28 +205,28 @@
 
   function presetSummarySlots(
     p: BuiltInPomodoroPreset,
-    val: typeof COUNT_PRESET_RHYTHMS[BuiltInPomodoroPreset],
+    rhythm: typeof COUNT_PRESET_RHYTHMS[BuiltInPomodoroPreset],
   ): Array<{ label: string; value: string; slotClass: SummarySlotClass }> {
     if (p === "adaptive") return [];
     return [
       {
         label: t("calendar.pomodoro.focusCompact"),
-        value: formatPresetDurationSlot(val.focusDurationMinutes),
+        value: formatPresetDurationSlot(rhythm.focusDurationMinutes),
         slotClass: "duration-summary-slot",
       },
       {
         label: t("calendar.pomodoro.shortBreakCompact"),
-        value: formatPresetDurationSlot(val.shortBreakMinutes),
+        value: formatPresetDurationSlot(rhythm.shortBreakMinutes),
         slotClass: "duration-summary-slot",
       },
       {
         label: t("calendar.pomodoro.longBreakCompact"),
-        value: formatPresetDurationSlot(val.longBreakMinutes),
+        value: formatPresetDurationSlot(rhythm.longBreakMinutes),
         slotClass: "duration-summary-slot",
       },
       {
         label: t("calendar.pomodoro.cycleCompact"),
-        value: formatCycleSlot(val.longBreakAfterFocusCount),
+        value: formatCycleSlot(rhythm.longBreakAfterFocusCount),
         slotClass: "cycle-summary-slot",
       },
     ];
@@ -237,24 +237,24 @@
     if (p === "custom" && wasCustom) return;
     preset = p;
     if (p !== "custom") {
-      const vals = POMO_PRESETS[p];
-      focusDuration = vals.focusDurationMinutes;
-      shortBreak = vals.shortBreakMinutes;
-      longBreak = vals.longBreakMinutes;
-      longBreakAfterFocusCount = vals.longBreakAfterFocusCount;
+      const rhythm = PRESET_RHYTHMS[p];
+      focusDurationMinutes = rhythm.focusDurationMinutes;
+      shortBreakMinutes = rhythm.shortBreakMinutes;
+      longBreakMinutes = rhythm.longBreakMinutes;
+      longBreakAfterFocusCount = rhythm.longBreakAfterFocusCount;
     } else if (!wasCustom) {
-      focusDuration = CUSTOM_COUNT_DEFAULT.focusDurationMinutes;
-      shortBreak = CUSTOM_COUNT_DEFAULT.shortBreakMinutes;
-      longBreak = CUSTOM_COUNT_DEFAULT.longBreakMinutes;
+      focusDurationMinutes = CUSTOM_COUNT_DEFAULT.focusDurationMinutes;
+      shortBreakMinutes = CUSTOM_COUNT_DEFAULT.shortBreakMinutes;
+      longBreakMinutes = CUSTOM_COUNT_DEFAULT.longBreakMinutes;
       longBreakAfterFocusCount = CUSTOM_COUNT_DEFAULT.longBreakAfterFocusCount;
     }
     customRhythmMode = "simple";
-    onchange();
+    onChange();
   }
 
   function convertSequenceToSimpleRhythm() {
     customRhythmMode = "simple";
-    onchange();
+    onChange();
   }
 
   async function focusPresetButton(index: number) {
@@ -268,7 +268,7 @@
     if (e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
     const nextIndex = moveRovingIndex({
       currentIndex: index,
-      itemCount: POMO_OPTION_COUNT,
+      itemCount: PRESET_OPTION_COUNT,
       key: e.key,
       orientation: "vertical",
     });
@@ -282,40 +282,40 @@
   function commitFocusDurationDraft() {
     const result = commitIntegerDraft(
       focusDurationDraft,
-      focusDuration,
+      focusDurationMinutes,
       MIN_FOCUS_MINUTES,
       Math.min(MAX_FOCUS_MINUTES, CUSTOM_DURATION_SLOT_MAX),
     );
     focusDurationDraft = formatDurationSlot(result.value);
     if (!result.committed) return;
-    focusDuration = result.value;
-    onchange();
+    focusDurationMinutes = result.value;
+    onChange();
   }
 
   function commitShortBreakDraft() {
     const result = commitIntegerDraft(
       shortBreakDraft,
-      shortBreak,
+      shortBreakMinutes,
       MIN_SHORT_BREAK_MINUTES,
       Math.min(MAX_SHORT_BREAK_MINUTES, CUSTOM_DURATION_SLOT_MAX),
     );
     shortBreakDraft = formatDurationSlot(result.value);
     if (!result.committed) return;
-    shortBreak = result.value;
-    onchange();
+    shortBreakMinutes = result.value;
+    onChange();
   }
 
   function commitLongBreakDraft() {
     const result = commitIntegerDraft(
       longBreakDraft,
-      longBreak,
+      longBreakMinutes,
       MIN_LONG_BREAK_MINUTES,
       Math.min(MAX_LONG_BREAK_MINUTES, CUSTOM_DURATION_SLOT_MAX),
     );
     longBreakDraft = formatDurationSlot(result.value);
     if (!result.committed) return;
-    longBreak = result.value;
-    onchange();
+    longBreakMinutes = result.value;
+    onChange();
   }
 
   function commitLongBreakAfterDraft() {
@@ -328,7 +328,7 @@
     longBreakAfterDraft = formatCycleSlot(result.value);
     if (!result.committed) return;
     longBreakAfterFocusCount = result.value;
-    onchange();
+    onChange();
   }
 
   function formatDurationSlot(value: number): string {
@@ -369,13 +369,13 @@
 
 <div bind:this={sectionEl} class="flex flex-col overflow-hidden rounded-none" style="background-color: var(--panel-contrast);">
   <div class="section-header flex items-stretch">
-    <button onclick={ontoggle}
+    <button onclick={onToggle}
       class="flex w-10 shrink-0 items-center justify-center
         {readonlyInteractiveClass}
         {enabled ? 'bg-black/3 text-foreground dark:bg-black/30' : 'text-muted-foreground/50'}">
       <Timer size={14} />
     </button>
-    <button onclick={onexpand}
+    <button onclick={onExpand}
       class="flex flex-1 items-center gap-2.5 px-3 py-2 text-left {readonlyInteractiveClass}">
       <span class="translate-y-[1.13px] text-[0.8rem] {enabled ? 'text-foreground' : 'text-muted-foreground'}">{t("calendar.pomodoro.title")}</span>
       <span class="ml-auto translate-y-[1.13px] truncate text-[0.733333rem] text-muted-foreground">{summary}</span>
@@ -415,11 +415,11 @@
         >
           <button
             onclick={() => applyPreset("custom")}
-            onfocus={() => { presetFocusIndex = POMO_PRESET_ENTRIES.length; }}
-            onkeydown={(e) => handlePresetKeydown(e, POMO_PRESET_ENTRIES.length)}
+            onfocus={() => { presetFocusIndex = PRESET_ENTRIES.length; }}
+            onkeydown={(e) => handlePresetKeydown(e, PRESET_ENTRIES.length)}
             data-pomodoro-roving="preset"
-            data-roving-index={POMO_PRESET_ENTRIES.length}
-            tabindex={presetFocusIndex === POMO_PRESET_ENTRIES.length ? 0 : -1}
+            data-roving-index={PRESET_ENTRIES.length}
+            tabindex={presetFocusIndex === PRESET_ENTRIES.length ? 0 : -1}
             class="text-left {readonlyInteractiveClass}"
           >
             {t("calendar.pomodoro.custom")}
@@ -461,11 +461,11 @@
       {:else}
         <button
           onclick={() => applyPreset("custom")}
-          onfocus={() => { presetFocusIndex = POMO_PRESET_ENTRIES.length; }}
-          onkeydown={(e) => handlePresetKeydown(e, POMO_PRESET_ENTRIES.length)}
+          onfocus={() => { presetFocusIndex = PRESET_ENTRIES.length; }}
+          onkeydown={(e) => handlePresetKeydown(e, PRESET_ENTRIES.length)}
           data-pomodoro-roving="preset"
-          data-roving-index={POMO_PRESET_ENTRIES.length}
-          tabindex={presetFocusIndex === POMO_PRESET_ENTRIES.length ? 0 : -1}
+          data-roving-index={PRESET_ENTRIES.length}
+          tabindex={presetFocusIndex === PRESET_ENTRIES.length ? 0 : -1}
           class="flex items-center gap-2.5 rounded-none px-3 py-1.5 text-left text-[0.8rem] text-foreground {readonlyInteractiveClass}"
         >
           <span>{t("calendar.pomodoro.custom")}</span>
@@ -474,7 +474,7 @@
       {#if idleDetectionAvailable}
       <div class="mt-1 border-t border-border/40 px-0 pt-0.5">
         <button
-          onclick={() => { idleTimeoutEnabled = !idleTimeoutEnabled; onchange(); }}
+          onclick={() => { idleTimeoutEnabled = !idleTimeoutEnabled; onChange(); }}
           class="flex w-full items-center gap-2.5 rounded-none px-2.5 py-1.5 text-left text-[0.8rem] text-foreground {readonlyInteractiveClass}"
         >
           <div class="size-3 shrink-0

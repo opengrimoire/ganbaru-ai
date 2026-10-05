@@ -29,7 +29,7 @@ pub async fn focus_execute_command_tx(
     if let Some(receipt) = focus_read_command_receipt_tx(tx, command).await? {
         return Ok(receipt);
     }
-    timestamp(context.now_ms)?;
+    format_timestamp(context.now_ms)?;
     if context.now_ms < 0 {
         return Err(invalid_state("Focus clock precedes the supported epoch"));
     }
@@ -64,7 +64,7 @@ pub async fn focus_execute_command_tx(
     }
     session.state.last_transition_at_ms = session.state.last_transition_at_ms.max(context.now_ms);
     save_state(tx, &session.state, next_revision, context.now_ms).await?;
-    let result = snapshot(
+    let result = load_snapshot(
         tx,
         next_revision,
         &session.state,
@@ -84,7 +84,7 @@ pub async fn focus_apply_observation_tx(
     observation: &FocusObservation,
     context: &FocusExecutionContext,
 ) -> Result<FocusExecutionSnapshot, FocusExecutionError> {
-    timestamp(context.now_ms)?;
+    format_timestamp(context.now_ms)?;
     if context.now_ms < 0 {
         return Err(invalid_state("Focus clock precedes the supported epoch"));
     }
@@ -100,7 +100,7 @@ pub async fn focus_apply_observation_tx(
     } else {
         revision
     };
-    snapshot(
+    load_snapshot(
         tx,
         revision,
         &session.state,
@@ -180,7 +180,7 @@ async fn apply_intent(
                 && session.active_segment()?.phase != FocusPhase::Focus
             {
                 session
-                    .event(tx, "skip_break", now_ms, Some("manual"), None)
+                    .record_event(tx, "skip_break", now_ms, Some("manual"), None)
                     .await?;
                 let position = next_position(
                     &session.live_run()?.configuration,
@@ -337,7 +337,7 @@ impl Session {
         } else {
             previous.rhythm_position
         };
-        self.event(
+        self.record_event(
             tx,
             "start_focus_now",
             now_ms,
@@ -355,14 +355,14 @@ impl Session {
         &mut self,
         tx: &mut Transaction<'_, Sqlite>,
         now_ms: i64,
-        explicit: bool,
+        is_explicit: bool,
         context: &FocusExecutionContext,
     ) -> Result<(), FocusExecutionError> {
         let segment = self.active_segment()?;
         let phase = segment.phase;
         let position = segment.rhythm_position;
-        if explicit {
-            self.event(
+        if is_explicit {
+            self.record_event(
                 tx,
                 if phase == FocusPhase::Focus {
                     "go_to_break_now"
@@ -375,14 +375,14 @@ impl Session {
             )
             .await?;
         }
-        let close_at = if explicit {
+        let close_at = if is_explicit {
             now_ms
         } else {
             segment.planned_end_ms.min(now_ms)
         };
         self.close_segment(tx, close_at, "completed", "completed")
             .await?;
-        if !explicit
+        if !is_explicit
             && (phase != FocusPhase::Focus
                 || (context.platform == FocusPlatform::Android && !context.foreground))
         {
@@ -396,7 +396,7 @@ impl Session {
             self.start_segment(tx, now_ms, next_phase, position).await
         } else {
             if phase == FocusPhase::Focus {
-                self.event(tx, "skip_break", now_ms, Some("skip_next_break"), None)
+                self.record_event(tx, "skip_break", now_ms, Some("skip_next_break"), None)
                     .await?;
             }
             self.state.skip_next_break = false;
@@ -411,50 +411,50 @@ impl Session {
         tx: &mut Transaction<'_, Sqlite>,
         now_ms: i64,
         requested_ms: i64,
-        focus: bool,
+        is_focus: bool,
     ) -> Result<(), FocusExecutionError> {
         if !matches!(self.state.mode, FocusMode::Running | FocusMode::ManualPause) {
             return Err(invalid_state("This Focus state cannot be extended"));
         }
         let run = self.live_run()?;
         let segment = self.active_segment()?;
-        if (segment.phase == FocusPhase::Focus) != focus
-            || (focus && self.state.focus_extension_used)
+        if (segment.phase == FocusPhase::Focus) != is_focus
+            || (is_focus && self.state.focus_extension_used)
         {
             return Err(invalid_state(
                 "This phase cannot accept the requested extension",
             ));
         }
-        let work_remaining = segment
+        let work_remaining_ms = segment
             .chosen_duration_ms
             .saturating_sub(segment_elapsed_ms(segment, now_ms)?)
             .max(0);
-        let before = work_remaining.min(run.planned_end_ms.saturating_sub(now_ms));
-        let allowed = if focus {
+        let before = work_remaining_ms.min(run.planned_end_ms.saturating_sub(now_ms));
+        let allowed_ms = if is_focus {
             requested_ms
         } else {
             requested_ms.min(MAX_BREAK_EXTENSION_MS - self.state.break_extension_ms)
         };
-        let after = work_remaining
-            .saturating_add(allowed)
+        let after = work_remaining_ms
+            .saturating_add(allowed_ms)
             .min(run.planned_end_ms.saturating_sub(now_ms));
         if after <= before {
             return Err(invalid_state(
                 "The event deadline leaves no room for this extension",
             ));
         }
-        let added = if focus { allowed } else { after - before };
-        if focus {
-            self.event(tx, "extend_focus", now_ms, Some("manual"), Some(added))
+        let added_ms = if is_focus { allowed_ms } else { after - before };
+        if is_focus {
+            self.record_event(tx, "extend_focus", now_ms, Some("manual"), Some(added_ms))
                 .await?;
             self.state.focus_extension_used = true;
         } else {
-            self.state.break_extension_ms += added;
+            self.state.break_extension_ms += added_ms;
         }
         self.segment
             .as_mut()
             .ok_or_else(|| invalid_state("Focus phase disappeared"))?
-            .chosen_duration_ms += added;
+            .chosen_duration_ms += added_ms;
         self.update_deadline(tx, now_ms).await
     }
 }

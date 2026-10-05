@@ -15,11 +15,10 @@
     ProjectTask,
   } from "$lib/projects/types";
   import { getLocalization } from "$lib/i18n/translator.svelte";
-  import { cn } from "$lib/utils";
+  import { cn, type MaybePromise } from "$lib/utils";
   import ProjectTaskDetailDateField from "./ProjectTaskDetailDateField.svelte";
   import ProjectSettingsSectionHeading from "$lib/components/projects/settings/ProjectSettingsSectionHeading.svelte";
 
-  type ActionResult = void | Promise<void>;
 
   let {
     task,
@@ -62,7 +61,7 @@
     onCheckboxDraftChange: (fieldId: string, value: boolean) => void;
     onSelectDraftChange: (fieldId: string, value: string) => void;
     onToggleMultiOption: (field: ProjectCustomField, option: ProjectCustomFieldOption) => void;
-    onSaveField: (task: ProjectTask, field: ProjectCustomField) => ActionResult;
+    onSaveField: (task: ProjectTask, field: ProjectCustomField) => MaybePromise;
     onToggleDatePicker: (fieldId: string) => void;
     onClearDate: (fieldId: string) => void;
     onSelectDate: (date: string) => void;

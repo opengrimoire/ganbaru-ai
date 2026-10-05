@@ -3,7 +3,7 @@
   import type { HTMLInputAttributes } from "svelte/elements";
   import Plus from "@lucide/svelte/icons/plus";
   import { getLocalization } from "$lib/i18n/translator.svelte";
-  let { label, draft = $bindable(""), active = $bindable(false), disabled = false, inputAttributes, onDraftChange, onActiveChange, onsubmit, oncreate }: {
+  let { label, draft = $bindable(""), active = $bindable(false), disabled = false, inputAttributes, onDraftChange, onActiveChange, onSubmit, onCreate }: {
     label: string;
     draft?: string;
     active?: boolean;
@@ -11,8 +11,8 @@
     inputAttributes?: HTMLInputAttributes;
     onDraftChange?: (draft: string) => void;
     onActiveChange?: (active: boolean) => void;
-  } & ({ onsubmit: (title: string) => Promise<boolean>; oncreate?: never }
-    | { oncreate: () => void; onsubmit?: never }) = $props();
+  } & ({ onSubmit: (title: string) => Promise<boolean>; onCreate?: never }
+    | { onCreate: () => void; onSubmit?: never }) = $props();
   const { t } = getLocalization();
   let input: HTMLInputElement | undefined = $state();
   let trigger: HTMLButtonElement | undefined = $state();
@@ -20,7 +20,7 @@
   let error = $state<string | null>(null);
 
   async function begin(): Promise<void> {
-    if (oncreate) { oncreate(); return; }
+    if (onCreate) { onCreate(); return; }
     active = true;
     onActiveChange?.(true);
     await tick();
@@ -28,11 +28,11 @@
   }
 
   async function submit(): Promise<void> {
-    if (!onsubmit || !draft.trim() || disabled || pending) return;
+    if (!onSubmit || !draft.trim() || disabled || pending) return;
     pending = true;
     error = null;
     try {
-      if (await onsubmit(draft.trim())) { draft = ""; onDraftChange?.(""); }
+      if (await onSubmit(draft.trim())) { draft = ""; onDraftChange?.(""); }
     } catch (caught) {
       error = caught instanceof Error ? caught.message : String(caught);
     } finally {

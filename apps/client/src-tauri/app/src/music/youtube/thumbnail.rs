@@ -11,7 +11,7 @@ use tokio::sync::{Mutex, Semaphore};
 use super::metadata::fetch_video_thumbnail_url;
 
 const MAX_CACHE_AGE: Duration = Duration::from_secs(28 * 24 * 60 * 60);
-const MAX_TEMP_AGE: Duration = Duration::from_secs(60 * 60);
+const MAX_TEMPORARY_AGE: Duration = Duration::from_secs(60 * 60);
 const MAX_THUMBNAIL_BYTES: usize = 256 * 1024;
 const MAX_CACHE_BYTES: u64 = 64 * 1024 * 1024;
 const MAX_CACHE_ENTRIES: usize = 2_000;
@@ -23,9 +23,9 @@ static FETCH_LIMIT: Semaphore = Semaphore::const_new(6);
 static PRUNE_LOCK: Mutex<()> = Mutex::const_new(());
 static PRUNED_ONCE: AtomicBool = AtomicBool::new(false);
 static WRITE_COUNT: AtomicUsize = AtomicUsize::new(0);
-static TEMP_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+static TEMPORARY_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
-fn valid_video_id(video_id: &str) -> bool {
+fn is_valid_video_id(video_id: &str) -> bool {
     video_id.len() == 11
         && video_id
             .bytes()
@@ -51,7 +51,7 @@ fn validated_thumbnail_url(value: &str, video_id: &str) -> Result<Url, String> {
     Ok(url)
 }
 
-fn valid_jpeg(bytes: &[u8]) -> bool {
+fn is_valid_jpeg(bytes: &[u8]) -> bool {
     bytes.len() >= 4
         && bytes.len() <= MAX_THUMBNAIL_BYTES
         && bytes.starts_with(&[0xff, 0xd8])
@@ -67,19 +67,19 @@ fn cache_path(directory: &Path, video_id: &str) -> PathBuf {
     directory.join(format!("{video_id}.jpg"))
 }
 
-fn abandoned_temp_file(path: &Path, modified: SystemTime, now: SystemTime) -> bool {
+fn abandoned_temporary_file(path: &Path, modified: SystemTime, now: SystemTime) -> bool {
     let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
         return false;
     };
     let parts = name.split('.').collect::<Vec<_>>();
     parts.len() == 4
-        && valid_video_id(parts[0])
+        && is_valid_video_id(parts[0])
         && parts[1].bytes().all(|byte| byte.is_ascii_digit())
         && parts[2].bytes().all(|byte| byte.is_ascii_digit())
         && parts[3] == "tmp"
         && now
             .duration_since(modified)
-            .is_ok_and(|age| age >= MAX_TEMP_AGE)
+            .is_ok_and(|age| age >= MAX_TEMPORARY_AGE)
 }
 
 async fn cached_thumbnail(path: &Path) -> Result<Option<Vec<u8>>, String> {
@@ -98,7 +98,7 @@ async fn cached_thumbnail(path: &Path) -> Result<Option<Vec<u8>>, String> {
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
             Err(error) => return Err(format!("read cached YouTube thumbnail: {error}")),
         };
-        if valid_jpeg(&bytes) {
+        if is_valid_jpeg(&bytes) {
             return Ok(Some(bytes));
         }
     }
@@ -164,14 +164,14 @@ async fn fetch_thumbnail(client: &Client, video_id: &str) -> Result<Option<Vec<u
         }
         bytes.extend_from_slice(&chunk);
     }
-    if !valid_jpeg(&bytes) {
+    if !is_valid_jpeg(&bytes) {
         return Err("YouTube thumbnail is not a valid JPEG image.".to_string());
     }
     Ok(Some(bytes))
 }
 
 async fn save_thumbnail(path: &Path, bytes: &[u8]) -> Result<(), String> {
-    let sequence = TEMP_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+    let sequence = TEMPORARY_SEQUENCE.fetch_add(1, Ordering::Relaxed);
     let temporary = path.with_extension(format!("{}.{}.tmp", std::process::id(), sequence));
     tokio::fs::write(&temporary, bytes)
         .await
@@ -207,7 +207,7 @@ async fn prune_cache(directory: &Path) -> Result<(), String> {
             if metadata.is_file()
                 && metadata
                     .modified()
-                    .is_ok_and(|modified| abandoned_temp_file(&path, modified, now))
+                    .is_ok_and(|modified| abandoned_temporary_file(&path, modified, now))
             {
                 tokio::fs::remove_file(&path)
                     .await
@@ -219,7 +219,7 @@ async fn prune_cache(directory: &Path) -> Result<(), String> {
             continue;
         };
         if path.extension().and_then(|extension| extension.to_str()) != Some("jpg")
-            || !valid_video_id(video_id)
+            || !is_valid_video_id(video_id)
         {
             continue;
         }
@@ -275,7 +275,7 @@ pub async fn music_youtube_thumbnail<R: Runtime>(
     app: AppHandle<R>,
     video_id: String,
 ) -> Result<Option<String>, String> {
-    if !valid_video_id(&video_id) {
+    if !is_valid_video_id(&video_id) {
         return Err("The YouTube video id is invalid.".to_string());
     }
     let directory = app
@@ -318,8 +318,8 @@ mod tests {
 
     #[test]
     fn rejects_invalid_ids_and_unrelated_image_hosts() {
-        assert!(valid_video_id("01L4CFQdrWA"));
-        assert!(!valid_video_id("../../private"));
+        assert!(is_valid_video_id("01L4CFQdrWA"));
+        assert!(!is_valid_video_id("../../private"));
         assert!(
             validated_thumbnail_url(
                 "https://i.ytimg.com/vi/01L4CFQdrWA/hqdefault.jpg",
@@ -345,9 +345,9 @@ mod tests {
 
     #[test]
     fn only_accepts_bounded_complete_jpeg_images() {
-        assert!(valid_jpeg(&[0xff, 0xd8, 0xff, 0xd9]));
-        assert!(!valid_jpeg(&[0xff, 0xd8, 0x00, 0x00]));
-        assert!(!valid_jpeg(&vec![0xff; MAX_THUMBNAIL_BYTES + 1]));
+        assert!(is_valid_jpeg(&[0xff, 0xd8, 0xff, 0xd9]));
+        assert!(!is_valid_jpeg(&[0xff, 0xd8, 0x00, 0x00]));
+        assert!(!is_valid_jpeg(&vec![0xff; MAX_THUMBNAIL_BYTES + 1]));
     }
 
     #[test]
@@ -361,23 +361,27 @@ mod tests {
     #[test]
     fn only_prunes_old_temporary_files_from_this_cache() {
         let now = SystemTime::UNIX_EPOCH + Duration::from_secs(10_000);
-        let old = now - MAX_TEMP_AGE;
-        assert!(abandoned_temp_file(
+        let old = now - MAX_TEMPORARY_AGE;
+        assert!(abandoned_temporary_file(
             Path::new("01L4CFQdrWA.123.4.tmp"),
             old,
             now
         ));
-        assert!(!abandoned_temp_file(
+        assert!(!abandoned_temporary_file(
             Path::new("01L4CFQdrWA.123.4.tmp"),
             now,
             now
         ));
-        assert!(!abandoned_temp_file(Path::new("unrelated.tmp"), old, now));
+        assert!(!abandoned_temporary_file(
+            Path::new("unrelated.tmp"),
+            old,
+            now
+        ));
     }
 
     #[tokio::test]
     async fn removes_expired_files_without_touching_fresh_images() {
-        let sequence = TEMP_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+        let sequence = TEMPORARY_SEQUENCE.fetch_add(1, Ordering::Relaxed);
         let nonce = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
             .unwrap()

@@ -190,7 +190,7 @@ fn schema_normalizes_domain_storage_with_explicit_receipt_and_runtime_envelopes(
         .fetch_all(&pool)
         .await
         .unwrap();
-        let forbidden = [
+        let forbidden_columns = [
             "pause_log",
             "raw_jcal",
             "skip_ranges_json",
@@ -237,7 +237,7 @@ fn schema_normalizes_domain_storage_with_explicit_receipt_and_runtime_envelopes(
                 observed_envelopes.insert((table_name.clone(), column_name.clone()));
             }
             assert!(
-                !forbidden.contains(&column_name.as_str())
+                !forbidden_columns.contains(&column_name.as_str())
                     && (!column_name.ends_with("_json") || is_control),
                 "{table_name}.{column_name} should be normalized, not JSON storage",
             );

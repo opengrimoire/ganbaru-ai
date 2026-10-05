@@ -17,7 +17,7 @@ interface CalloutLayoutRow {
 }
 
 /** An empty callout with children renders its icon beside the first child. */
-export function notesCalloutOwnTextHidden(block: NotesBlock, childCount: number): boolean {
+export function notesCalloutIsOwnTextHidden(block: NotesBlock, childCount: number): boolean {
   return block.type === "callout" && blockPlainText(block).length === 0
     && (block.has_children || childCount > 0);
 }

@@ -10,7 +10,7 @@ function event(id: string, start = "2026-07-12 09:00", end = "2026-07-12 10:00")
 function setup(state: EditSessionState = { mode: "closed" }, dirty = false) {
   const updateChanges = vi.fn();
   const openEdit = vi.fn();
-  const updateBlock = vi.fn(async () => undefined);
+  const updateEvent = vi.fn(async () => undefined);
   const confirmDiscard = vi.fn();
   const original = event("event-a");
   const controller = new CalendarDragCommitController({
@@ -24,10 +24,10 @@ function setup(state: EditSessionState = { mode: "closed" }, dirty = false) {
     loadPanel: async () => undefined,
     confirmDiscard,
     getTemplate: () => original,
-    updateBlock,
+    updateEvent,
     now: () => 42,
   });
-  return { controller, updateChanges, openEdit, updateBlock, confirmDiscard, original };
+  return { controller, updateChanges, openEdit, updateEvent, confirmDiscard, original };
 }
 
 describe("CalendarDragCommitController", () => {
@@ -37,18 +37,18 @@ describe("CalendarDragCommitController", () => {
     const anchor = event("__pending_create__");
     const following = event("__pending_create__::native::2026-07-13", "2026-07-13 09:00", "2026-07-13 10:00");
     const updateChanges = vi.fn();
-    const updateBlock = vi.fn();
+    const updateEvent = vi.fn();
     const controller = new CalendarDragCommitController({
       session: { state, dirty: true, changes: { start: "2026-07-12 09:15", end: "2026-07-12 10:15" },
         openEdit: vi.fn(), updateChanges },
       isCommitHidden: () => false, editingId: () => anchor.id, visibleEvents: () => [anchor, following],
       isRecurring: () => true, isActivePomodoroEvent: () => false,
       panelAnchor: () => state.anchor, loadPanel: async () => undefined, confirmDiscard: vi.fn(),
-      getTemplate: () => undefined, updateBlock,
+      getTemplate: () => undefined, updateEvent,
     });
     await controller.handle({ ...following, start: "2026-07-13 23:30", end: "2026-07-14 00:30" });
     expect(updateChanges).toHaveBeenCalledWith({ start: "2026-07-12 23:45", end: "2026-07-13 00:45" });
-    expect(updateBlock).not.toHaveBeenCalled();
+    expect(updateEvent).not.toHaveBeenCalled();
   });
 
   it("routes an open edit drag through the session without persistence", async () => {
@@ -62,13 +62,13 @@ describe("CalendarDragCommitController", () => {
       detailsLoaded: true,
       anchor: { x: 0, y: 0, width: 0, height: 0 },
     };
-    const { controller, updateChanges, updateBlock } = setup(state);
+    const { controller, updateChanges, updateEvent } = setup(state);
     await controller.handle(event("event-a", "2026-07-12 11:00", "2026-07-12 12:00"));
     expect(updateChanges).toHaveBeenCalledWith({
       start: "2026-07-12 11:00",
       end: "2026-07-12 12:00",
     });
-    expect(updateBlock).not.toHaveBeenCalled();
+    expect(updateEvent).not.toHaveBeenCalled();
   });
 
   it("opens recurring drags in a session and preserves the original baseline", async () => {
@@ -86,7 +86,7 @@ describe("CalendarDragCommitController", () => {
       loadPanel: async () => undefined,
       confirmDiscard: vi.fn(),
       getTemplate: () => recurring,
-      updateBlock: vi.fn(async () => undefined),
+      updateEvent: vi.fn(async () => undefined),
     });
     await optionsRecurring.handle(event("event-a", "2026-07-13 09:00", "2026-07-13 10:00"));
     expect(openEdit).toHaveBeenCalledWith(recurring, expect.any(Object), recurring);
@@ -97,9 +97,9 @@ describe("CalendarDragCommitController", () => {
   });
 
   it("does not persist a drag that ends at its original position", async () => {
-    const { controller, original, updateBlock } = setup();
+    const { controller, original, updateEvent } = setup();
     await controller.handle({ ...original });
-    expect(updateBlock).not.toHaveBeenCalled();
+    expect(updateEvent).not.toHaveBeenCalled();
     expect(controller.lastDragEndTime).toBe(42);
   });
 });

@@ -58,7 +58,7 @@ export async function getDistractionsExtensionStatus(
   freshAfter?: string,
 ): Promise<DistractionsExtensionStatus> {
   return await invoke<DistractionsExtensionStatus>(
-    "distractions_get_extension_status",
+    "distractions_extension_status",
     { freshAfter: freshAfter ?? null },
   );
 }

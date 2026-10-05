@@ -161,14 +161,10 @@ fn board_database_view_groups_filters_sorts_and_moves_rows() {
         .await
         .unwrap();
 
-        let default_board = data_sources::layouts::board::get_data_source_board_view(
-            &pool,
-            DATA_SOURCE_A,
-            None,
-            None,
-        )
-        .await
-        .unwrap();
+        let default_board =
+            data_sources::layouts::board::data_source_board_view(&pool, DATA_SOURCE_A, None, None)
+                .await
+                .unwrap();
         let default_json = serde_json::to_value(default_board).unwrap();
         assert_eq!(default_json["view"]["type"], "board");
         assert_eq!(

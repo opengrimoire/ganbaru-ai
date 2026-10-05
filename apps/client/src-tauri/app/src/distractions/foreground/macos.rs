@@ -1,7 +1,7 @@
 use super::*;
 
 #[cfg(target_os = "macos")]
-fn ns_string_to_string(
+fn normalized_ns_app_name(
     value: Option<objc2::rc::Retained<objc2_foundation::NSString>>,
 ) -> Option<String> {
     value
@@ -18,8 +18,8 @@ pub(in crate::distractions) fn foreground_desktop_app_status()
     let Some(app) = workspace.frontmostApplication() else {
         return unavailable_foreground_desktop_app_status("no foreground app is active");
     };
-    let app_name = ns_string_to_string(app.localizedName())
-        .or_else(|| ns_string_to_string(app.bundleIdentifier()));
+    let app_name = normalized_ns_app_name(app.localizedName())
+        .or_else(|| normalized_ns_app_name(app.bundleIdentifier()));
     let Some(app_name) = app_name else {
         return unavailable_foreground_desktop_app_status("foreground app name is unavailable");
     };
@@ -29,7 +29,7 @@ pub(in crate::distractions) fn foreground_desktop_app_status()
     } else {
         None
     };
-    let bundle_id = ns_string_to_string(app.bundleIdentifier());
+    let bundle_id = normalized_ns_app_name(app.bundleIdentifier());
     let mut match_names = Vec::new();
     if let Some(bundle_id) = bundle_id {
         match_names.push(bundle_id);

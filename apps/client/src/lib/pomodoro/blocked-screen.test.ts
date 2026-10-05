@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  delayUntil,
+  delayMsUntil,
   elapsedSecondsSince,
   formatBreakEndEarlyShortcut,
   formatBreakExtensionHint,
@@ -138,9 +138,9 @@ describe("blocked pomodoro screen helpers", () => {
   });
 
   it("computes non-negative delay to a target", () => {
-    expect(delayUntil(10_000, 9_250)).toBe(750);
-    expect(delayUntil(10_000, 10_000)).toBe(0);
-    expect(delayUntil(10_000, 11_000)).toBe(0);
+    expect(delayMsUntil(10_000, 9_250)).toBe(750);
+    expect(delayMsUntil(10_000, 10_000)).toBe(0);
+    expect(delayMsUntil(10_000, 11_000)).toBe(0);
   });
 
   it("skips missed interval targets after a delayed callback", () => {

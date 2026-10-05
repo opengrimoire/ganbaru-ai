@@ -257,7 +257,7 @@ async fn authorize_thread(
 fn replay_restore(receipt: CommandReceiptRead) -> ChatResult<ChatRestoreResultRead> {
     match receipt.state {
         CommandReceiptState::Completed => {
-            let result = receipt.result.ok_or_else(corrupt_data)?;
+            let result = receipt.result.ok_or_else(corrupt_data_error)?;
             serde_json::from_value(serde_json::to_value(result.value).map_err(json_error)?)
                 .map_err(json_error)
         }
@@ -337,7 +337,7 @@ fn json_error<T>(_error: T) -> ChatError {
     )
 }
 
-fn corrupt_data() -> ChatError {
+fn corrupt_data_error() -> ChatError {
     ChatError::new(
         ChatErrorCode::Persistence,
         "Stored checkpoint restore data is invalid",

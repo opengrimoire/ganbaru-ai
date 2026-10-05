@@ -11,7 +11,7 @@ impl CursorEventNormalizer {
     ) -> ChatResult<Vec<CanonicalRuntimeEvent>> {
         let mut events = self.close_text_items(state)?;
         let item_id = text(update, "toolCallId")
-            .filter(|value| valid_identifier(value, 512))
+            .filter(|value| is_valid_identifier(value, 512))
             .ok_or_else(|| protocol_error("tool call ID"))?
             .to_string();
         let previous = state.tools.get(&item_id).cloned();

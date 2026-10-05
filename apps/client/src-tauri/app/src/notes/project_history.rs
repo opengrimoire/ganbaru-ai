@@ -99,14 +99,14 @@ pub mod retention {
     use super::*;
 
     #[tauri::command]
-    pub async fn notes_get_history_retention_impact<R: Runtime>(
+    pub async fn notes_history_retention_impact<R: Runtime>(
         app: AppHandle<R>,
         db_url: String,
         project_id: Option<String>,
         retention_days: i64,
     ) -> Result<NotesHistoryRetentionImpactDto, String> {
         let pool = connect_sqlite(app, db_url).await?;
-        ganbaru_notes::project_history::retention::notes_get_history_retention_impact(
+        ganbaru_notes::project_history::retention::notes_history_retention_impact(
             &pool,
             project_id,
             retention_days,

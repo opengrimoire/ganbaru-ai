@@ -57,7 +57,7 @@ fn command_adapters_are_registered_at_their_defining_modules() {
     ));
     for command in [
         "distractions::commands::distractions_open_extension_install_docs",
-        "distractions::state_files::distractions_get_extension_status",
+        "distractions::state_files::distractions_extension_status",
         "distractions::limits_read::distractions_load_usage_projection",
     ] {
         assert!(handlers.contains(command), "missing handler {command}");

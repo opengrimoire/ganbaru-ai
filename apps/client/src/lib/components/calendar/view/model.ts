@@ -32,7 +32,7 @@ export interface CalendarViewModelBuilder {
   readonly buildCount: number;
 }
 
-function sameBuildInput(previous: CalendarViewModelBuildInput, next: CalendarViewModelBuildInput): boolean {
+function isSameBuildInput(previous: CalendarViewModelBuildInput, next: CalendarViewModelBuildInput): boolean {
   if (previous.events !== next.events) return false;
   if (previous.key.storeVersion !== next.key.storeVersion
     || previous.key.windowStart !== next.key.windowStart
@@ -52,7 +52,7 @@ export function createCalendarViewModelBuilder(): CalendarViewModelBuilder {
   let buildCount = 0;
   return {
     build(input) {
-      if (previousInput && previousModel && sameBuildInput(previousInput, input)) return previousModel;
+      if (previousInput && previousModel && isSameBuildInput(previousInput, input)) return previousModel;
       previousInput = input;
       previousModel = buildCalendarViewModel(input);
       buildCount += 1;

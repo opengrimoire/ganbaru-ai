@@ -402,21 +402,21 @@ fn evaluate_call(
         "prop" => evaluate_prop(args, properties, schema_by_name),
         "if" => evaluate_if(args, properties, schema_by_name, depth),
         "empty" => {
-            let values = eval_args(args, properties, schema_by_name, depth)?;
+            let values = evaluate_args(args, properties, schema_by_name, depth)?;
             let [value] = values.as_slice() else {
                 return Err("empty() expects one argument".to_string());
             };
             Ok(FormulaValue::Boolean(is_empty(value)))
         }
         "format" => {
-            let values = eval_args(args, properties, schema_by_name, depth)?;
+            let values = evaluate_args(args, properties, schema_by_name, depth)?;
             let [value] = values.as_slice() else {
                 return Err("format() expects one argument".to_string());
             };
             Ok(FormulaValue::String(value_to_text(value)))
         }
         "length" => {
-            let values = eval_args(args, properties, schema_by_name, depth)?;
+            let values = evaluate_args(args, properties, schema_by_name, depth)?;
             let [value] = values.as_slice() else {
                 return Err("length() expects one argument".to_string());
             };
@@ -427,7 +427,7 @@ fn evaluate_call(
             Ok(FormulaValue::Number(length as f64))
         }
         "contains" => {
-            let values = eval_args(args, properties, schema_by_name, depth)?;
+            let values = evaluate_args(args, properties, schema_by_name, depth)?;
             let [value, search] = values.as_slice() else {
                 return Err("contains() expects two arguments".to_string());
             };
@@ -436,7 +436,7 @@ fn evaluate_call(
             ))
         }
         "lower" | "upper" => {
-            let values = eval_args(args, properties, schema_by_name, depth)?;
+            let values = evaluate_args(args, properties, schema_by_name, depth)?;
             let [value] = values.as_slice() else {
                 return Err(format!("{name}() expects one argument"));
             };
@@ -448,7 +448,7 @@ fn evaluate_call(
             }))
         }
         "abs" | "round" | "floor" | "ceil" => {
-            let values = eval_args(args, properties, schema_by_name, depth)?;
+            let values = evaluate_args(args, properties, schema_by_name, depth)?;
             let [value] = values.as_slice() else {
                 return Err(format!("{name}() expects one argument"));
             };
@@ -462,7 +462,7 @@ fn evaluate_call(
             Ok(FormulaValue::Number(result))
         }
         "min" | "max" => {
-            let values = eval_args(args, properties, schema_by_name, depth)?;
+            let values = evaluate_args(args, properties, schema_by_name, depth)?;
             if values.is_empty() {
                 return Err(format!("{name}() expects at least one argument"));
             }
@@ -481,7 +481,7 @@ fn evaluate_call(
             Ok(FormulaValue::Number(result))
         }
         "add" | "subtract" | "multiply" | "divide" | "mod" => {
-            let values = eval_args(args, properties, schema_by_name, depth)?;
+            let values = evaluate_args(args, properties, schema_by_name, depth)?;
             let [left, right] = values.as_slice() else {
                 return Err(format!("{name}() expects two arguments"));
             };
@@ -502,14 +502,14 @@ fn evaluate_call(
             )
         }
         "not" => {
-            let values = eval_args(args, properties, schema_by_name, depth)?;
+            let values = evaluate_args(args, properties, schema_by_name, depth)?;
             let [value] = values.as_slice() else {
                 return Err("not() expects one argument".to_string());
             };
             Ok(FormulaValue::Boolean(!truthy(value)))
         }
         "and" | "or" => {
-            let values = eval_args(args, properties, schema_by_name, depth)?;
+            let values = evaluate_args(args, properties, schema_by_name, depth)?;
             if values.len() != 2 {
                 return Err(format!("{name}() expects two arguments"));
             }
@@ -565,7 +565,7 @@ fn evaluate_if(
     }
 }
 
-fn eval_args(
+fn evaluate_args(
     args: &[FormulaExpr],
     properties: &Map<String, Value>,
     schema_by_name: &HashMap<String, SchemaProperty>,

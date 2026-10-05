@@ -78,8 +78,8 @@
   const notes = getNotes();
   const { t } = getLocalization();
   const explorerIconStrokeWidth = 1.5;
-  const sortMenuViewportGap = 8;
-  const sortMenuTriggerGap = 4;
+  const sortMenuViewportGapPx = 8;
+  const sortMenuTriggerGapPx = 4;
   const navigationFolderOpenDelayMs = 520;
   const navigationAutoScrollEdgePx = 36;
   const navigationAutoScrollStepPx = 12;
@@ -679,13 +679,13 @@
   function positionSortMenu(): void {
     if (!sortButtonElement) return;
     const triggerRect = sortButtonElement.getBoundingClientRect();
-    const availableWidth = Math.max(0, window.innerWidth - sortMenuViewportGap * 2);
+    const availableWidth = Math.max(0, window.innerWidth - sortMenuViewportGapPx * 2);
     const measuredWidth = sortMenuElement?.getBoundingClientRect().width ?? 0;
     const width = Math.min(measuredWidth, availableWidth);
-    const maxLeft = Math.max(sortMenuViewportGap, window.innerWidth - width - sortMenuViewportGap);
-    const left = Math.min(Math.max(sortMenuViewportGap, triggerRect.left), maxLeft);
-    const top = triggerRect.bottom + sortMenuTriggerGap;
-    const maxHeight = Math.max(0, window.innerHeight - top - sortMenuViewportGap);
+    const maxLeft = Math.max(sortMenuViewportGapPx, window.innerWidth - width - sortMenuViewportGapPx);
+    const left = Math.min(Math.max(sortMenuViewportGapPx, triggerRect.left), maxLeft);
+    const top = triggerRect.bottom + sortMenuTriggerGapPx;
+    const maxHeight = Math.max(0, window.innerHeight - top - sortMenuViewportGapPx);
     sortMenuStyle = `left: ${left}px; top: ${top}px; width: max-content; max-width: ${availableWidth}px; max-height: ${maxHeight}px;`;
   }
 

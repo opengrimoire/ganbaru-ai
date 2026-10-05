@@ -10,7 +10,7 @@
   const PREVIEW_INDICES: readonly number[] = [2, 5, 8, 11, 14, 17, 20, 23, 27, 31];
 
   const appTokens = $derived(resolveAppTokens(theme));
-  const calTokens = $derived(resolveCalendarTokens(theme));
+  const calendarTokens = $derived(resolveCalendarTokens(theme));
   const previewGradient = $derived(
     `linear-gradient(to right, ${PREVIEW_INDICES.map(
       (i) => theme.eventPalette[i],
@@ -40,6 +40,6 @@
   </div>
   <div
     class="h-2 w-full rounded-sm"
-    style="background-color: {calTokens['--cal-bg']}; background-image: {previewGradient};"
+    style="background-color: {calendarTokens['--cal-bg']}; background-image: {previewGradient};"
   ></div>
 </div>

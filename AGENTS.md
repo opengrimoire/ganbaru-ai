@@ -60,7 +60,7 @@ apps/
         mobile/: Android shell back handling, layout, and persistence lifecycle helpers
         stores/: Svelte rune stores and domain controllers for runtime state; large stores keep private modules in a same-named subfolder (calendar/, chat/, music-player/, notes/, projects/)
         themes/: theme definitions, derivation, serialization, operations, editor session, and theme JSON file access
-        utils/, vault/, windows/: shared helpers, data folder state, and detached window and cross-window sync helpers
+        utils/, vault/, windows/: shared helpers, vault state, and detached window and cross-window sync helpers
     static/: static assets
     scripts/: repo-owned scripts grouped by purpose (release/, bundle-contracts/, checks/, provider-protocols/, codegen/, browser-extension/); tauri-cli.mjs wraps the Tauri CLI
     test-fixtures/: shared test fixtures such as sample .ics files

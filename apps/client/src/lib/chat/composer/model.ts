@@ -53,7 +53,7 @@ export interface DefaultProviderModelSelection {
 }
 
 /** Reports whether a configured provider can currently accept Chat work. */
-export function providerAvailable(provider: ProviderInstanceRead): boolean {
+export function isProviderAvailable(provider: ProviderInstanceRead): boolean {
   return provider.configuration.enabled && provider.lastProbe?.state === "healthy";
 }
 
@@ -63,7 +63,7 @@ export function availableProvidersInDefaultOrder(
 ): ProviderInstanceRead[] {
   return providers
     .map((provider, index) => ({ provider, index }))
-    .filter(({ provider }) => providerAvailable(provider))
+    .filter(({ provider }) => isProviderAvailable(provider))
     .sort((left, right) => (
       integrationCompany(left.provider.configuration.familyId).order
       - integrationCompany(right.provider.configuration.familyId).order
@@ -75,7 +75,7 @@ export function availableProvidersInDefaultOrder(
 /** Selects the strongest visible built-in model exposed by one provider. */
 export function recommendedProviderModel(
   provider: ProviderInstanceRead,
-  candidates: readonly ProviderModel[] = visibleProviderModels(provider),
+  candidates: readonly ProviderModel[] = configuredVisibleModels(provider),
 ): ProviderModel | null {
   const selectable = candidates.filter((model) => (
     model.availability === "available" || model.availability === "stale"
@@ -188,7 +188,8 @@ export function resolveDefaultProviderModel(
   };
 }
 
-function visibleProviderModels(provider: ProviderInstanceRead): ProviderModel[] {
+/** Lists non-deprecated models allowed by the provider visibility setting, without keeping a hidden current selection. */
+function configuredVisibleModels(provider: ProviderInstanceRead): ProviderModel[] {
   const visibleIds = provider.configuration.visibleModelIds;
   return provider.modelCatalog?.models.filter((model) => (
     model.availability !== "deprecated"
@@ -196,7 +197,8 @@ function visibleProviderModels(provider: ProviderInstanceRead): ProviderModel[] 
   )) ?? [];
 }
 
-function modelOptionRole(
+/** Classifies a known model option as the effort, speed, or other control. */
+export function modelOptionRole(
   definition: Exclude<ModelOptionDefinition, { kind: "unknown" }>,
 ): "effort" | "speed" | "other" {
   const identity = `${definition.key} ${definition.label}`.toLowerCase();

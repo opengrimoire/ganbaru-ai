@@ -51,23 +51,23 @@ export interface CustomFieldOptionSaveDraft {
   creates: CustomFieldOptionCreateDraft[];
 }
 
-export type ProjectSettingsCustomFieldDraftError =
+export type CustomFieldDraftError =
   | "name_required"
   | "name_exists"
   | "option_name_required"
   | "option_name_exists";
 
-export type ProjectSettingsCustomFieldDraftResult<T> =
+export type CustomFieldDraftResult<T> =
   | { ok: true; value: T }
-  | { ok: false; error: ProjectSettingsCustomFieldDraftError };
+  | { ok: false; error: CustomFieldDraftError };
 
-export interface ProjectSettingsCustomFieldSaveInput {
+export interface CustomFieldSaveInput {
   fields: readonly ProjectCustomField[];
   fieldNameDrafts: Readonly<Record<string, string>>;
   createDraftRows: readonly NewCustomFieldDraft[];
 }
 
-export interface ProjectSettingsCustomFieldOptionSaveInput {
+export interface CustomFieldOptionSaveInput {
   fields: readonly ProjectCustomField[];
   fieldOptions: (fieldId: string) => readonly ProjectCustomFieldOption[];
   optionNameDrafts: Readonly<Record<string, string>>;
@@ -78,42 +78,42 @@ function normalizedDraftName(value: string): string {
   return value.trim().toLowerCase();
 }
 
-export function projectSettingsCustomFieldNameDraftValue(
+export function draftCustomFieldName(
   field: ProjectCustomField,
   fieldNameDrafts: Readonly<Record<string, string>>,
 ): string {
   return fieldNameDrafts[field.id] ?? field.name;
 }
 
-export function projectSettingsCustomFieldDraftDirty(
+export function customFieldDraftDirty(
   field: ProjectCustomField,
   fieldNameDrafts: Readonly<Record<string, string>>,
 ): boolean {
-  return projectSettingsCustomFieldNameDraftValue(field, fieldNameDrafts) !== field.name;
+  return draftCustomFieldName(field, fieldNameDrafts) !== field.name;
 }
 
-export function projectSettingsCustomFieldOptionNameDraftValue(
+export function draftCustomFieldOptionName(
   option: ProjectCustomFieldOption,
   optionNameDrafts: Readonly<Record<string, string>>,
 ): string {
   return optionNameDrafts[option.id] ?? option.name;
 }
 
-export function projectSettingsCustomFieldOptionDraftDirty(
+export function customFieldOptionDraftDirty(
   option: ProjectCustomFieldOption,
   optionNameDrafts: Readonly<Record<string, string>>,
 ): boolean {
-  return projectSettingsCustomFieldOptionNameDraftValue(option, optionNameDrafts) !== option.name;
+  return draftCustomFieldOptionName(option, optionNameDrafts) !== option.name;
 }
 
-export function projectSettingsCustomFieldOptionCreateDraftRows(
+export function newCustomFieldOptionDraftRows(
   rowsByField: Readonly<Record<string, readonly NewCustomFieldOptionDraft[]>>,
   fieldId: string,
 ): NewCustomFieldOptionDraft[] {
   return [...(rowsByField[fieldId] ?? [])];
 }
 
-export function projectSettingsSetCustomFieldOptionCreateDraftName(
+export function setNewCustomFieldOptionDraftName(
   rowsByField: Readonly<Record<string, readonly NewCustomFieldOptionDraft[]>>,
   fieldId: string,
   optionId: string,
@@ -122,17 +122,17 @@ export function projectSettingsSetCustomFieldOptionCreateDraftName(
   const nextRowsByField: Record<string, NewCustomFieldOptionDraft[]> = Object.fromEntries(
     Object.entries(rowsByField).map(([currentFieldId, rows]) => [currentFieldId, [...rows]]),
   );
-  nextRowsByField[fieldId] = projectSettingsCustomFieldOptionCreateDraftRows(rowsByField, fieldId)
+  nextRowsByField[fieldId] = newCustomFieldOptionDraftRows(rowsByField, fieldId)
     .map((option) => option.id === optionId ? { ...option, name } : option);
   return nextRowsByField;
 }
 
-export function projectSettingsRemoveCustomFieldOptionCreateDraft(
+export function removeNewCustomFieldOptionDraft(
   rowsByField: Readonly<Record<string, readonly NewCustomFieldOptionDraft[]>>,
   fieldId: string,
   optionId: string,
 ): Record<string, NewCustomFieldOptionDraft[]> {
-  const remainingRows = projectSettingsCustomFieldOptionCreateDraftRows(rowsByField, fieldId)
+  const remainingRows = newCustomFieldOptionDraftRows(rowsByField, fieldId)
     .filter((option) => option.id !== optionId);
   const nextRowsByField: Record<string, NewCustomFieldOptionDraft[]> = Object.fromEntries(
     Object.entries(rowsByField).map(([currentFieldId, rows]) => [currentFieldId, [...rows]]),
@@ -145,7 +145,7 @@ export function projectSettingsRemoveCustomFieldOptionCreateDraft(
   return nextRowsByField;
 }
 
-export function projectSettingsSetCustomFieldCreateDraftName(
+export function setNewCustomFieldDraftName(
   rows: readonly NewCustomFieldDraft[],
   fieldId: string,
   name: string,
@@ -153,7 +153,7 @@ export function projectSettingsSetCustomFieldCreateDraftName(
   return rows.map((field) => field.id === fieldId ? { ...field, name } : field);
 }
 
-export function projectSettingsSetCustomFieldCreateDraftOptionName(
+export function setNewCustomFieldDraftOptionName(
   rows: readonly NewCustomFieldDraft[],
   fieldId: string,
   optionId: string,
@@ -171,7 +171,7 @@ export function projectSettingsSetCustomFieldCreateDraftOptionName(
   );
 }
 
-export function projectSettingsSetCustomFieldCreateDraftPendingOptionName(
+export function setNewCustomFieldDraftPendingOptionName(
   rows: readonly NewCustomFieldDraft[],
   fieldId: string,
   optionName: string,
@@ -179,14 +179,14 @@ export function projectSettingsSetCustomFieldCreateDraftPendingOptionName(
   return rows.map((field) => field.id === fieldId ? { ...field, optionName } : field);
 }
 
-export function projectSettingsRemoveCustomFieldCreateDraft(
+export function removeNewCustomFieldDraft(
   rows: readonly NewCustomFieldDraft[],
   fieldId: string,
 ): NewCustomFieldDraft[] {
   return rows.filter((field) => field.id !== fieldId);
 }
 
-export function projectSettingsRemoveCustomFieldCreateDraftOption(
+export function removeNewCustomFieldDraftOption(
   rows: readonly NewCustomFieldDraft[],
   fieldId: string,
   optionId: string,
@@ -198,11 +198,11 @@ export function projectSettingsRemoveCustomFieldCreateDraftOption(
   );
 }
 
-export function projectSettingsCustomFieldOptionNamesForCreate(
+export function newCustomFieldOptionNames(
   fieldType: ProjectCustomFieldType,
   optionRows: readonly NewCustomFieldOptionDraft[],
   pendingOptionName: string,
-): ProjectSettingsCustomFieldDraftResult<string[]> {
+): CustomFieldDraftResult<string[]> {
   if (!projectCustomFieldUsesOptions(fieldType)) return { ok: true, value: [] };
   const names: string[] = [];
   const seenNames = new Set<string>();
@@ -223,19 +223,19 @@ export function projectSettingsCustomFieldOptionNamesForCreate(
   return { ok: true, value: names };
 }
 
-export function projectSettingsCustomFieldSaveDrafts(
-  input: ProjectSettingsCustomFieldSaveInput,
-): ProjectSettingsCustomFieldDraftResult<CustomFieldSaveDraft> {
+export function customFieldSaveDrafts(
+  input: CustomFieldSaveInput,
+): CustomFieldDraftResult<CustomFieldSaveDraft> {
   const updates: CustomFieldUpdateSaveDraft[] = [];
   const creates: CustomFieldCreateSaveDraft[] = [];
   const seenNames = new Set<string>();
   for (const field of input.fields) {
-    const name = projectSettingsCustomFieldNameDraftValue(field, input.fieldNameDrafts).trim();
+    const name = draftCustomFieldName(field, input.fieldNameDrafts).trim();
     if (!name) return { ok: false, error: "name_required" };
     const normalizedName = normalizedDraftName(name);
     if (seenNames.has(normalizedName)) return { ok: false, error: "name_exists" };
     seenNames.add(normalizedName);
-    if (!projectSettingsCustomFieldDraftDirty(field, input.fieldNameDrafts)) continue;
+    if (!customFieldDraftDirty(field, input.fieldNameDrafts)) continue;
     updates.push({ field, name });
   }
   for (const field of input.createDraftRows) {
@@ -244,7 +244,7 @@ export function projectSettingsCustomFieldSaveDrafts(
     const normalizedName = normalizedDraftName(name);
     if (seenNames.has(normalizedName)) return { ok: false, error: "name_exists" };
     seenNames.add(normalizedName);
-    const optionNames = projectSettingsCustomFieldOptionNamesForCreate(
+    const optionNames = newCustomFieldOptionNames(
       field.fieldType,
       field.optionRows,
       "",
@@ -260,21 +260,21 @@ export function projectSettingsCustomFieldSaveDrafts(
   return { ok: true, value: { updates, creates } };
 }
 
-export function projectSettingsCustomFieldOptionSaveDrafts(
-  input: ProjectSettingsCustomFieldOptionSaveInput,
-): ProjectSettingsCustomFieldDraftResult<CustomFieldOptionSaveDraft> {
+export function customFieldOptionSaveDrafts(
+  input: CustomFieldOptionSaveInput,
+): CustomFieldDraftResult<CustomFieldOptionSaveDraft> {
   const updates: CustomFieldOptionUpdateDraft[] = [];
   const creates: CustomFieldOptionCreateDraft[] = [];
   for (const field of input.fields) {
     if (!projectCustomFieldUsesOptions(field.fieldType)) continue;
     const seenNames = new Set<string>();
     for (const option of input.fieldOptions(field.id)) {
-      const name = projectSettingsCustomFieldOptionNameDraftValue(option, input.optionNameDrafts).trim();
+      const name = draftCustomFieldOptionName(option, input.optionNameDrafts).trim();
       if (!name) return { ok: false, error: "option_name_required" };
       const normalizedName = normalizedDraftName(name);
       if (seenNames.has(normalizedName)) return { ok: false, error: "option_name_exists" };
       seenNames.add(normalizedName);
-      if (!projectSettingsCustomFieldOptionDraftDirty(option, input.optionNameDrafts)) continue;
+      if (!customFieldOptionDraftDirty(option, input.optionNameDrafts)) continue;
       updates.push({ option, name });
     }
     for (const option of input.optionCreateDraftRowsByField[field.id] ?? []) {

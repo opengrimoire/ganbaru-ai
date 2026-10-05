@@ -157,11 +157,11 @@ pub fn resolve_claude_executable(
     let candidate = if path_has_separator(configured) {
         resolve_absolute_path(configured, "executable")?
     } else {
-        find_on_path(configured, environment).ok_or_else(executable_missing)?
+        find_on_path(configured, environment).ok_or_else(executable_missing_error)?
     };
-    let candidate = fs::canonicalize(candidate).map_err(|_| executable_missing())?;
+    let candidate = fs::canonicalize(candidate).map_err(|_| executable_missing_error())?;
     if !candidate.is_file() || !is_executable(&candidate) {
-        return Err(executable_missing());
+        return Err(executable_missing_error());
     }
     resolve_windows_command_shim(candidate, environment)
 }
@@ -317,7 +317,7 @@ fn resolve_windows_command_shim(
     }
     if candidate
         .metadata()
-        .map_err(|_| executable_missing())?
+        .map_err(|_| executable_missing_error())?
         .len()
         > MAX_SHIM_BYTES
     {
@@ -327,7 +327,7 @@ fn resolve_windows_command_shim(
             true,
         ));
     }
-    let parent = candidate.parent().ok_or_else(executable_missing)?;
+    let parent = candidate.parent().ok_or_else(executable_missing_error)?;
     let candidates = [
         parent.join("node_modules/@anthropic-ai/claude-code/bin/claude.exe"),
         parent.join("node_modules/@anthropic-ai/claude-code/cli.js"),
@@ -336,7 +336,7 @@ fn resolve_windows_command_shim(
         if !entry.is_file() {
             continue;
         }
-        let entry = fs::canonicalize(entry).map_err(|_| executable_missing())?;
+        let entry = fs::canonicalize(entry).map_err(|_| executable_missing_error())?;
         if entry.extension().and_then(OsStr::to_str) == Some("exe") {
             return Ok(ResolvedClaudeExecutable {
                 executable: entry,
@@ -347,10 +347,10 @@ fn resolve_windows_command_shim(
         let node = if sibling_node.is_file() {
             sibling_node
         } else {
-            find_on_path("node", environment).ok_or_else(executable_missing)?
+            find_on_path("node", environment).ok_or_else(executable_missing_error)?
         };
         return Ok(ResolvedClaudeExecutable {
-            executable: fs::canonicalize(node).map_err(|_| executable_missing())?,
+            executable: fs::canonicalize(node).map_err(|_| executable_missing_error())?,
             prefix_arguments: vec![entry.to_string_lossy().into_owned()],
         });
     }
@@ -372,7 +372,7 @@ fn resolve_windows_command_shim(
     })
 }
 
-fn executable_missing() -> ChatError {
+fn executable_missing_error() -> ChatError {
     ChatError::new(
         ChatErrorCode::ExecutableMissing,
         "Claude executable could not be resolved",

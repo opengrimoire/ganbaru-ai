@@ -156,10 +156,10 @@ export function createNotesBlockNavigationController(options: NotesBlockNavigati
 
   function handleKeydown(event: KeyboardEvent, blockId: string): boolean {
     if (event.isComposing) return false;
-    const atomic = options.readBlock(blockId)?.type === "child_page"
+    const isAtomicTarget = options.readBlock(blockId)?.type === "child_page"
       && event.target instanceof Element
       && (event.target.matches("[data-notes-selectable-block-id]") || !!event.target.closest("[data-notes-atomic-block]"));
-    if (atomic && !event.ctrlKey && !event.metaKey && !event.altKey && event.key === "Enter") {
+    if (isAtomicTarget && !event.ctrlKey && !event.metaKey && !event.altKey && event.key === "Enter") {
       event.preventDefault();
       options.insertParagraphAdjacent?.(blockId, event.shiftKey ? "previous" : "next");
       return true;
@@ -190,9 +190,9 @@ export function createNotesBlockNavigationController(options: NotesBlockNavigati
       event.preventDefault();
       return true;
     }
-    const databaseTitle = options.readBlock(blockId)?.type === "child_database"
+    const isDatabaseTitleTarget = options.readBlock(blockId)?.type === "child_database"
       && event.target instanceof HTMLInputElement && event.target.hasAttribute("data-notes-database-title");
-    if ((!atomic && !databaseTitle && targetIsEditable(event.target))
+    if ((!isAtomicTarget && !isDatabaseTitleTarget && targetIsEditable(event.target))
       || !focusAdjacent(blockId, direction, verticalGoalX)) return false;
     event.preventDefault();
     return true;

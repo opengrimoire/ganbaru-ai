@@ -41,11 +41,10 @@
   } from "$lib/projects/types";
   import { getProjects } from "$lib/stores/projects.svelte";
   import { getMobileBackStack } from "$lib/stores/mobile-back-stack.svelte";
-  import { cn } from "$lib/utils";
+  import { cn, type MaybePromise } from "$lib/utils";
   import type { ProjectNavigatorPanelMode } from "$lib/projects/toolbar";
   import ProjectIcon from "$lib/components/projects/ProjectIcon.svelte";
 
-  type MaybePromise<T> = T | Promise<T>;
 
   interface ProjectSearchResultGroup {
     group: ProjectGroup;
@@ -126,16 +125,16 @@
   const mobileBackStack = getMobileBackStack();
   const { t } = getLocalization();
   const iconSize = $derived(mobileLayout ? 18 : 13);
-  const emojiScale = 0.94;
-  const panelFallbackHeaderHeight = 40;
-  const panelFallbackFooterHeight = 44;
-  const panelListPadding = 6;
-  const panelRowHeightRem = 2;
-  const panelFallbackRowHeight = 30;
-  const subpanelListPadding = 8;
-  const subpanelFallbackFooterHeight = 44;
-  const subpanelRowHeight = 32;
-  const subpanelGap = 4;
+  const EMOJI_SCALE = 0.94;
+  const PANEL_FALLBACK_HEADER_HEIGHT = 40;
+  const PANEL_FALLBACK_FOOTER_HEIGHT = 44;
+  const PANEL_LIST_PADDING = 6;
+  const PANEL_ROW_HEIGHT_REM = 2;
+  const PANEL_FALLBACK_ROW_HEIGHT = 30;
+  const SUBPANEL_LIST_PADDING = 8;
+  const SUBPANEL_FALLBACK_FOOTER_HEIGHT = 44;
+  const SUBPANEL_ROW_HEIGHT = 32;
+  const SUBPANEL_GAP = 4;
 
   let groupDraft = $state("");
   let createGroupOpen = $state(false);
@@ -230,8 +229,8 @@
   function rowHeight(): number {
     const rootFontSize = Number.parseFloat(getComputedStyle(document.documentElement).fontSize);
     return Number.isFinite(rootFontSize)
-      ? rootFontSize * panelRowHeightRem
-      : panelFallbackRowHeight;
+      ? rootFontSize * PANEL_ROW_HEIGHT_REM
+      : PANEL_FALLBACK_ROW_HEIGHT;
   }
 
   function cssPixelValue(value: string): number {
@@ -256,7 +255,7 @@
     return projectPickerPanelEstimatedListHeight({
       itemCount,
       visibleRows: mainVisibleRows,
-      listPadding: panelListPadding,
+      listPadding: PANEL_LIST_PADDING,
       rowHeight: rowHeight(),
     });
   }
@@ -267,14 +266,14 @@
       panelStyle = "height: 100%; max-height: 100%";
       return;
     }
-    const headerHeight = panelHeaderElement?.offsetHeight ?? panelFallbackHeaderHeight;
+    const headerHeight = panelHeaderElement?.offsetHeight ?? PANEL_FALLBACK_HEADER_HEIGHT;
     const footerHeight = searchActive
       ? 0
-      : panelFooterElement?.offsetHeight ?? panelFallbackFooterHeight;
+      : panelFooterElement?.offsetHeight ?? PANEL_FALLBACK_FOOTER_HEIGHT;
     const measuredListHeight = groupScrollContentElement
       ? groupScrollContentElement.scrollHeight + scrollAreaVerticalPadding(
         groupScrollElement,
-        panelListPadding,
+        PANEL_LIST_PADDING,
       )
       : undefined;
     const listHeight = measuredListHeight ?? mainListEstimatedHeight();
@@ -284,7 +283,7 @@
       listHeight,
       maxHeight: panelMaxHeight,
       visibleRows: mainVisibleRows,
-      listPadding: panelListPadding,
+      listPadding: PANEL_LIST_PADDING,
       rowHeight: rowHeight(),
     });
     panelStyle = [
@@ -338,25 +337,25 @@
     const anchorRect = activeGroupAnchorElement.getBoundingClientRect();
     const panelRect = panelRootElement.getBoundingClientRect();
     const bounds = currentPanelBounds();
-    const footerHeight = projectSubpanelFooterElement?.offsetHeight ?? subpanelFallbackFooterHeight;
+    const footerHeight = projectSubpanelFooterElement?.offsetHeight ?? SUBPANEL_FALLBACK_FOOTER_HEIGHT;
     const projectCount = activeGroup ? projectsInGroup(activeGroup).length : 0;
     const measuredListHeight = projectScrollContentElement
       ? projectScrollContentElement.scrollHeight + scrollAreaVerticalPadding(
         projectScrollElement,
-        subpanelListPadding,
+        SUBPANEL_LIST_PADDING,
       )
       : undefined;
     const geometry = projectPickerSubpanelGeometry({
       anchorRect,
       panelRect,
       bounds,
-      gap: subpanelGap,
+      gap: SUBPANEL_GAP,
       footerHeight,
       projectCount,
       visibleRows: subpanelVisibleRows,
       listHeight: measuredListHeight,
-      listPadding: subpanelListPadding,
-      rowHeight: subpanelRowHeight,
+      listPadding: SUBPANEL_LIST_PADDING,
+      rowHeight: SUBPANEL_ROW_HEIGHT,
     });
 
     projectSubpanelStyle = projectPickerPanelFrameStyle(geometry.panel);
@@ -859,7 +858,7 @@
                       aria-label={t("projects.actions.selectProject", project.name, resultGroup.group.name)}
                       onclick={() => { void activateProject(project); }}
                     >
-                      <ProjectIcon name={project.icon} size={iconSize} strokeWidth={iconStrokeWidth} emojiScale={emojiScale} class="shrink-0" />
+                      <ProjectIcon name={project.icon} size={iconSize} strokeWidth={iconStrokeWidth} emojiScale={EMOJI_SCALE} class="shrink-0" />
                       <span class="min-w-0 flex-1 truncate">{project.name}</span>
                       {#if showLifecycleBadges && project.status !== "active"}
                         <span class={cn("shrink-0 rounded border px-1.5 py-0.5 text-[0.666667rem]", projectLifecycleBadgeClass(project.status))}>
@@ -904,7 +903,7 @@
                     }}
                     onclick={(event) => showProjectSubpanel(group, event.currentTarget)}
                   >
-                    <ProjectIcon name={group.icon} size={iconSize} strokeWidth={iconStrokeWidth} emojiScale={emojiScale} class="shrink-0" />
+                    <ProjectIcon name={group.icon} size={iconSize} strokeWidth={iconStrokeWidth} emojiScale={EMOJI_SCALE} class="shrink-0" />
                     <span class={cn("truncate", mobileLayout ? "text-sm" : "text-[0.8rem]")}>{group.name}</span>
                     <ChevronRight size={mobileLayout ? 18 : 13} strokeWidth={iconStrokeWidth} class="justify-self-end text-popover-foreground/60" />
                   </button>
@@ -944,7 +943,7 @@
                   onfocus={(event) => previewProject(project, event.currentTarget)}
                   onclick={() => { void activateProject(project); }}
                 >
-                  <ProjectIcon name={project.icon} size={iconSize} strokeWidth={iconStrokeWidth} emojiScale={emojiScale} class="shrink-0" />
+                  <ProjectIcon name={project.icon} size={iconSize} strokeWidth={iconStrokeWidth} emojiScale={EMOJI_SCALE} class="shrink-0" />
                   <span class="min-w-0 flex-1 truncate">{project.name}</span>
                   {#if projectRowsHaveChildren || (showLifecycleBadges && project.status !== "active")}
                     <span class="flex min-w-0 items-center justify-end gap-1">
@@ -1164,7 +1163,7 @@
                   onfocus={(event) => previewProject(project, event.currentTarget)}
                   onclick={() => { void activateProject(project); }}
                 >
-                  <ProjectIcon name={project.icon} size={iconSize} strokeWidth={iconStrokeWidth} emojiScale={emojiScale} class="shrink-0" />
+                  <ProjectIcon name={project.icon} size={iconSize} strokeWidth={iconStrokeWidth} emojiScale={EMOJI_SCALE} class="shrink-0" />
                   <span class="min-w-0 flex-1 truncate">{project.name}</span>
                   {#if showProjectChildren || (showLifecycleBadges && project.status !== "active")}
                     <span class="flex min-w-0 items-center justify-end gap-1">

@@ -584,7 +584,7 @@ function collectSegments(
       const explicitMarker = directChildren.find((element) => element.hasAttribute("data-notes-callout-marker"));
       const firstChild = directChildren[0];
       const implicitMarker = !explicitMarker && firstChild && normalizedTagName(firstChild) === "p"
-        && singleEmoji(firstChild.textContent ?? "") ? firstChild : null;
+        && isSingleEmoji(firstChild.textContent ?? "") ? firstChild : null;
       const marker = explicitMarker ?? implicitMarker;
       const label = directChildren.find((element) => element.hasAttribute("data-notes-callout-label"));
       const labelRichText: NotesRichText[] = [];
@@ -703,7 +703,7 @@ function collectSegments(
   return segments;
 }
 
-function singleEmoji(value: string): boolean {
+function isSingleEmoji(value: string): boolean {
   const text = value.trim();
   return /\p{Extended_Pictographic}/u.test(text)
     && [...new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(text)].length === 1;
@@ -719,7 +719,7 @@ function calloutIconFromElement(element: Element, marker: Element | null): Notes
     }
   }
   const emoji = marker?.textContent?.trim();
-  return emoji && singleEmoji(emoji) ? { type: "emoji", emoji } : createCalloutPayload("").icon;
+  return emoji && isSingleEmoji(emoji) ? { type: "emoji", emoji } : createCalloutPayload("").icon;
 }
 
 /** Sanitize clipboard markup before reading semantic content or reconciling formats. */

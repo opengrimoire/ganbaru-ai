@@ -198,8 +198,8 @@ impl ChatVaultConfig {
                 ));
             }
         }
-        for provider_id in self.working_folder_provider_preferences.values() {
-            if !instance_ids.contains(provider_id.as_str()) {
+        for provider_instance_id in self.working_folder_provider_preferences.values() {
+            if !instance_ids.contains(provider_instance_id.as_str()) {
                 return Err(ChatError::validation(
                     "chat.workingFolderProviderPreferences",
                     "working-folder provider preference references an unknown provider instance",
@@ -284,7 +284,7 @@ fn validate_provider(provider: &ChatPortableProviderConfig, index: usize) -> Cha
         ));
     }
     for (name, value) in &provider.environment {
-        if !valid_environment_name(name) {
+        if !is_valid_environment_name(name) {
             return Err(ChatError::validation(
                 format!("chat.providers[{index}].environment"),
                 "environment variable names use ASCII letters, digits, and underscores",
@@ -297,7 +297,7 @@ fn validate_provider(provider: &ChatPortableProviderConfig, index: usize) -> Cha
         )?;
     }
     for name in provider.credential_references.keys() {
-        if !valid_environment_name(name) || provider.environment.contains_key(name) {
+        if !is_valid_environment_name(name) || provider.environment.contains_key(name) {
             return Err(ChatError::validation(
                 format!("chat.providers[{index}].credentialReferences"),
                 "credential environment names must be valid and have one source",
@@ -324,7 +324,7 @@ fn validate_provider(provider: &ChatPortableProviderConfig, index: usize) -> Cha
     Ok(())
 }
 
-fn valid_environment_name(name: &str) -> bool {
+fn is_valid_environment_name(name: &str) -> bool {
     let mut characters = name.chars();
     characters
         .next()

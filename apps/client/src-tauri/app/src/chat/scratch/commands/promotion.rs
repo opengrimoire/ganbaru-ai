@@ -2,7 +2,7 @@
 
 use super::inspection::{read_scratch_file, validate_required_relative_path};
 use super::{
-    ScratchIdentity, corrupt_scratch, parse_id, read_scratch_identity,
+    ScratchIdentity, corrupt_scratch_error, parse_id, read_scratch_identity,
     require_current_scratch_authority, require_local_owner,
 };
 use crate::chat::channels::{chat_pool, now_timestamp, persistence_error, timestamp};
@@ -389,7 +389,7 @@ async fn read_idempotent_promotion(
     .fetch_optional(pool)
     .await
     .map_err(persistence_error)?
-    .ok_or_else(corrupt_scratch)?;
+    .ok_or_else(corrupt_scratch_error)?;
     let stored_digest: Option<String> = row.try_get("request_digest").map_err(persistence_error)?;
     if stored_digest.as_deref() != Some(request_digest) {
         return Err(ChatError::new(
@@ -425,7 +425,7 @@ async fn read_idempotent_promotion(
             )?,
             attachment_id: parse_id(row.try_get("attachment_id").map_err(persistence_error)?)?,
         },
-        _ => return Err(corrupt_scratch()),
+        _ => return Err(corrupt_scratch_error()),
     };
     Ok(ChatScratchPromotionResultRead {
         id: promotion_id.clone(),
@@ -439,7 +439,7 @@ async fn read_idempotent_promotion(
         source_sha256: row
             .try_get::<Option<String>, _>("source_sha256")
             .map_err(persistence_error)?
-            .ok_or_else(corrupt_scratch)?,
+            .ok_or_else(corrupt_scratch_error)?,
         destination,
         created_at: timestamp(row.try_get("created_at").map_err(persistence_error)?)?,
     })
@@ -538,7 +538,7 @@ fn folder_capability_rank(value: &str) -> ChatResult<u8> {
         "edit" => Ok(2),
         "execute" => Ok(3),
         "publish" => Ok(4),
-        _ => Err(corrupt_scratch()),
+        _ => Err(corrupt_scratch_error()),
     }
 }
 

@@ -18,7 +18,7 @@ use value::*;
 
 const MAX_DEDUPLICATION_EVENTS: usize = 4_096;
 const MAX_TEXT_BYTES: usize = 2 * 1024 * 1024;
-const MAX_SAFE_COLLECTION: usize = 256;
+const MAX_SAFE_COLLECTION_ITEMS: usize = 256;
 const MAX_QUESTIONS: usize = 16;
 const MAX_OPTIONS: usize = 64;
 
@@ -287,11 +287,11 @@ impl OpenCodeEventNormalizer {
         )
     }
 
-    fn unknown(
+    fn unknown_event(
         &self,
         state: &OpenCodeRouteState,
         source: &str,
-        unknown: &str,
+        unknown_type: &str,
         value: &Map<String, Value>,
     ) -> ChatResult<CanonicalRuntimeEvent> {
         self.event(
@@ -300,7 +300,7 @@ impl OpenCodeEventNormalizer {
             None,
             None,
             CanonicalEvent::Unknown(UnknownEvent {
-                source_type: format!("opencode/{unknown}"),
+                source_type: format!("opencode/{unknown_type}"),
                 summary: "OpenCode emitted an unsupported protocol value".to_string(),
                 safe_payload: Some(safe_shape(&Value::Object(value.clone()))),
             }),

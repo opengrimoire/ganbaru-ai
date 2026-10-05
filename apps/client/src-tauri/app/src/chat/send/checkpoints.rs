@@ -1,6 +1,6 @@
 //! Best-effort pre-turn and post-turn checkpoint coordination.
 
-use super::support::{corrupt_data, persistence_error};
+use super::support::{corrupt_data_error, persistence_error};
 use crate::chat::workspace::AuthorizedWorkingFolder;
 use ganbaru_chat_contracts::models::{
     ChatError, ChatErrorCode, ChatResult, ChatThreadId, ChatTurnId, RepositoryKind, UtcTimestamp,
@@ -124,7 +124,7 @@ async fn turn_ordinal(
             .ok_or_else(|| {
                 ChatError::new(ChatErrorCode::NotFound, "Chat turn was not found", true)
             })?;
-    u64::try_from(ordinal).map_err(|_| corrupt_data())
+    u64::try_from(ordinal).map_err(|_| corrupt_data_error())
 }
 
 async fn update_user_checkpoint_context(

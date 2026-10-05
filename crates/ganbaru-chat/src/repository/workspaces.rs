@@ -34,7 +34,7 @@ pub async fn read_workspace(
     .map_err(persistence_error)?
     .map(row_to_workspace)
     .transpose()?
-    .ok_or_else(not_found)
+    .ok_or_else(not_found_error)
 }
 
 pub async fn create_workspace(
@@ -154,7 +154,7 @@ pub async fn remove_external_working_folder(
             "Managed project working folders cannot be removed",
         )
     } else {
-        not_found()
+        not_found_error()
     })
 }
 
@@ -179,7 +179,7 @@ async fn require_updated(
             true,
         )
     } else {
-        not_found()
+        not_found_error()
     })
 }
 
@@ -188,13 +188,13 @@ fn row_to_workspace(row: sqlx::sqlite::SqliteRow) -> ChatResult<ProjectWorkingFo
     let repository_kind: String = row.try_get("repository_kind").map_err(persistence_error)?;
     Ok(ProjectWorkingFolder {
         id: ProjectWorkingFolderId::new(row.try_get::<String, _>("id").map_err(persistence_error)?)
-            .map_err(|_| corrupt_data())?,
+            .map_err(|_| corrupt_data_error())?,
         project_id: row.try_get("project_id").map_err(persistence_error)?,
         display_name: row.try_get("display_name").map_err(persistence_error)?,
         kind: match folder_kind.as_str() {
             "managed" => WorkingFolderKind::Managed,
             "external" => WorkingFolderKind::External,
-            _ => return Err(corrupt_data()),
+            _ => return Err(corrupt_data_error()),
         },
         managed_relative_path: row
             .try_get("managed_relative_path")
@@ -203,11 +203,11 @@ fn row_to_workspace(row: sqlx::sqlite::SqliteRow) -> ChatResult<ProjectWorkingFo
             row.try_get::<i64, _>("sort_order")
                 .map_err(persistence_error)?,
         )
-        .map_err(|_| corrupt_data())?,
+        .map_err(|_| corrupt_data_error())?,
         repository_kind: match repository_kind.as_str() {
             "git" => RepositoryKind::Git,
             "none" => RepositoryKind::None,
-            _ => return Err(corrupt_data()),
+            _ => return Err(corrupt_data_error()),
         },
         repository_identity: row
             .try_get("repository_identity")
@@ -229,7 +229,7 @@ fn row_to_workspace(row: sqlx::sqlite::SqliteRow) -> ChatResult<ProjectWorkingFo
             row.try_get::<i64, _>("revision")
                 .map_err(persistence_error)?,
         )
-        .map_err(|_| corrupt_data())?,
+        .map_err(|_| corrupt_data_error())?,
     })
 }
 
@@ -244,9 +244,9 @@ fn validate_name(value: &str) -> ChatResult<()> {
     }
 }
 fn timestamp(value: String) -> ChatResult<UtcTimestamp> {
-    UtcTimestamp::new(value).map_err(|_| corrupt_data())
+    UtcTimestamp::new(value).map_err(|_| corrupt_data_error())
 }
-fn not_found() -> ChatError {
+fn not_found_error() -> ChatError {
     ChatError::new(
         ChatErrorCode::NotFound,
         "Project working folder was not found",
@@ -260,7 +260,7 @@ fn persistence_error<T>(_error: T) -> ChatError {
         true,
     )
 }
-fn corrupt_data() -> ChatError {
+fn corrupt_data_error() -> ChatError {
     ChatError::new(
         ChatErrorCode::Persistence,
         "Stored project working folder is invalid",

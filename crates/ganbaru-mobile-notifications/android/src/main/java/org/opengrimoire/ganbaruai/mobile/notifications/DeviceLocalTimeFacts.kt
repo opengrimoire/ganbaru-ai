@@ -15,13 +15,13 @@ internal data class DeviceLocalTimeFact(
 /** Historical instants use each date's actual offset, including timezone transitions. */
 internal object DeviceLocalTimeFacts {
   const val MAX_INSTANTS = 4096
-  private val dateString = DateTimeFormatter.ofPattern("EEE MMM dd uuuu", Locale.US)
+  private val dateStringFormatter = DateTimeFormatter.ofPattern("EEE MMM dd uuuu", Locale.US)
 
   fun resolve(instants: List<Long>, zone: ZoneId = ZoneId.systemDefault()): List<DeviceLocalTimeFact> {
     require(instants.size <= MAX_INSTANTS) { "Device local time request exceeds its instant limit" }
     return instants.map { epochMs ->
       val local = Instant.ofEpochMilli(epochMs).atZone(zone)
-      DeviceLocalTimeFact(epochMs, local.toLocalDate().toString(), local.format(dateString), local.hour)
+      DeviceLocalTimeFact(epochMs, local.toLocalDate().toString(), local.format(dateStringFormatter), local.hour)
     }
   }
 }

@@ -119,7 +119,7 @@ impl ProviderProcessHandle {
                 self.signal_process_tree(true).await?;
                 tokio::time::timeout(force_deadline, self.child.wait())
                     .await
-                    .map_err(|_| process_timeout())?
+                    .map_err(|_| process_timeout_error())?
                     .map_err(process_io_error)?;
             }
         }
@@ -500,7 +500,7 @@ fn process_state_error() -> ChatError {
         false,
     )
 }
-fn process_timeout() -> ChatError {
+fn process_timeout_error() -> ChatError {
     ChatError::new(
         ChatErrorCode::DriverUnavailable,
         "Provider process did not stop before the force deadline",

@@ -42,8 +42,8 @@ pub(super) fn normalize_desktop_block_event(
     })
 }
 
-pub(super) fn validate_local_date(value: &str) -> bool {
-    crate::distractions::limits::validate_local_date(value)
+pub(super) fn is_valid_local_date(value: &str) -> bool {
+    crate::distractions::limits::is_valid_local_date(value)
 }
 
 pub(super) fn normalize_usage_sample(
@@ -65,7 +65,7 @@ pub(super) fn normalize_usage_sample(
     if sample.started_at_ms < 0 {
         return Err("started_at_ms must be non-negative".to_string());
     }
-    if !validate_local_date(&sample.local_date) {
+    if !is_valid_local_date(&sample.local_date) {
         return Err("local_date must use yyyy-mm-dd".to_string());
     }
     let id = sample.id.unwrap_or_else(|| {

@@ -80,7 +80,7 @@ export type CalendarColorDefaultMode =
 /**
  * Engine version stamp written onto every user theme at create, clone, or
  * import time. Bump whenever the derivation engine (APP_DERIVATION,
- * APP_FRACTIONS, CAL_DERIVATION, CAL_FRACTIONS, or any token-key list)
+ * APP_FRACTIONS, CALENDAR_DERIVATION, CALENDAR_FRACTIONS, or any token-key list)
  * changes such that derived output shifts. The editor uses the gap between
  * a stored theme's stamp and this constant to render an opt-in "rebake"
  * banner so non-pinned colors do not silently drift across app updates.

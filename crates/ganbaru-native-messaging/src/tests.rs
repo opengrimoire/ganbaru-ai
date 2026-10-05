@@ -159,7 +159,7 @@ fn decision_reasons_preserve_wire_labels_and_typed_event_metadata() {
         ),
     ];
     for (decision, blocked, label, kind) in cases {
-        assert_eq!(decision.blocked(), blocked);
+        assert_eq!(decision.is_blocked(), blocked);
         assert_eq!(decision.matched_rule_name().as_deref(), label);
         assert_eq!(decision.rule_kind(), kind);
         let is_limit = matches!(
@@ -607,7 +607,7 @@ fn distractions_mode_and_rule_enabled_flags_are_explicit() {
 #[test]
 fn lets_exceptions_override_blocked_parent_domains() {
     let decision = decide_url("music.youtube.com", None, &config());
-    assert!(!decision.blocked());
+    assert!(!decision.is_blocked());
     assert_eq!(
         decision.matched_rule_name().as_deref(),
         Some("exception: music.youtube.com")
@@ -617,7 +617,7 @@ fn lets_exceptions_override_blocked_parent_domains() {
 #[test]
 fn blocks_matching_parent_domain() {
     let decision = decide_url("old.reddit.com", None, &config());
-    assert!(decision.blocked());
+    assert!(decision.is_blocked());
     assert_eq!(
         decision.matched_rule_name().as_deref(),
         Some("blocked host: reddit.com")
@@ -668,7 +668,7 @@ fn blocks_exhausted_daily_website_limits_without_active_pomodoro_rules() {
         false,
     );
 
-    assert!(decision.blocked());
+    assert!(decision.is_blocked());
     assert_eq!(
         decision.matched_rule_name().as_deref(),
         Some("daily limit: YouTube")
@@ -683,7 +683,7 @@ fn blocks_exhausted_daily_website_limits_without_active_pomodoro_rules() {
             Some(&limit_state),
             false
         )
-        .blocked()
+        .is_blocked()
     );
     limit_state.configuration_digest = Some("obsolete-configuration".into());
     assert!(
@@ -694,7 +694,7 @@ fn blocks_exhausted_daily_website_limits_without_active_pomodoro_rules() {
             Some(&limit_state),
             false
         )
-        .blocked()
+        .is_blocked()
     );
     limit_state.configuration_digest = None;
     assert!(
@@ -705,7 +705,7 @@ fn blocks_exhausted_daily_website_limits_without_active_pomodoro_rules() {
             Some(&limit_state),
             false
         )
-        .blocked()
+        .is_blocked()
     );
 }
 
@@ -752,7 +752,7 @@ fn active_focus_rules_win_over_limit_blocks() {
         true,
     );
 
-    assert!(decision.blocked());
+    assert!(decision.is_blocked());
     assert_eq!(
         decision.matched_rule_name().as_deref(),
         Some("blocked host: reddit.com")
@@ -825,7 +825,7 @@ fn blocks_enabled_built_in_categories() {
     config.blocked_hosts.clear();
     config.blocked_category_ids = vec!["social-media".to_string()];
     let decision = decide_url("old.reddit.com", None, &config);
-    assert!(decision.blocked());
+    assert!(decision.is_blocked());
     assert_eq!(
         decision.matched_rule_name().as_deref(),
         Some("category: Social media")
@@ -842,7 +842,7 @@ fn blocks_streaming_category_keyword_matches_in_domains() {
         Some("https://watch-anime.example/episode/1"),
         &config,
     );
-    assert!(decision.blocked());
+    assert!(decision.is_blocked());
     assert_eq!(
         decision.matched_rule_name().as_deref(),
         Some("category: Streaming")
@@ -900,7 +900,7 @@ fn blocks_built_in_category_keyword_matches_in_domains() {
         config.blocked_hosts.clear();
         config.blocked_category_ids = vec![category_id.to_string()];
         let decision = decide_url(host, Some(url), &config);
-        assert!(decision.blocked());
+        assert!(decision.is_blocked());
         assert_eq!(
             decision.matched_rule_name().as_deref(),
             Some(matched_rule_name)
@@ -918,7 +918,7 @@ fn blocks_porn_category_keyword_matches_in_domains() {
         Some("https://example-porn-site.test/watch"),
         &config,
     );
-    assert!(decision.blocked());
+    assert!(decision.is_blocked());
     assert_eq!(
         decision.matched_rule_name().as_deref(),
         Some("category: Porn")
@@ -935,7 +935,7 @@ fn blocks_porn_category_keyword_matches_in_reddit_subreddits() {
         Some("https://old.reddit.com/r/gwstories/comments/123/title"),
         &config,
     );
-    assert!(decision.blocked());
+    assert!(decision.is_blocked());
     assert_eq!(
         decision.matched_rule_name().as_deref(),
         Some("category: Porn")
@@ -952,7 +952,7 @@ fn ignores_reddit_post_titles_for_porn_category_keyword_matching() {
         Some("https://reddit.com/r/productivity/comments/123/nsfw_post_title"),
         &config,
     );
-    assert!(!decision.blocked());
+    assert!(!decision.is_blocked());
     assert_eq!(decision.matched_rule_name(), None);
 }
 
@@ -966,7 +966,7 @@ fn blocks_enabled_custom_category_stacks() {
         hosts: vec!["news.ycombinator.com".to_string()],
     }];
     let decision = decide_url("news.ycombinator.com", None, &config);
-    assert!(decision.blocked());
+    assert!(decision.is_blocked());
     assert_eq!(
         decision.matched_rule_name().as_deref(),
         Some("custom stack: Research traps")
@@ -1094,7 +1094,7 @@ fn blocks_hosts_outside_whitelist_mode() {
     let mut config = config();
     config.mode = DistractionsMode::Whitelist;
     let decision = decide_url("reddit.com", None, &config);
-    assert!(decision.blocked());
+    assert!(decision.is_blocked());
     assert_eq!(
         decision.matched_rule_name().as_deref(),
         Some("not in whitelist")
@@ -1106,7 +1106,7 @@ fn allows_hosts_inside_whitelist_mode() {
     let mut config = config();
     config.mode = DistractionsMode::Whitelist;
     let decision = decide_url("docs.github.com", None, &config);
-    assert!(!decision.blocked());
+    assert!(!decision.is_blocked());
     assert_eq!(
         decision.matched_rule_name().as_deref(),
         Some("whitelist: github.com")

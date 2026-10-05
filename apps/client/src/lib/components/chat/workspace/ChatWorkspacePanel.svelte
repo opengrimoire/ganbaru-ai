@@ -116,7 +116,7 @@
   let terminalLayoutSaveTimer: number | null = null;
   let reviewOpenRequest = 0;
   let destroyed = false;
-  let splitTerminals = $state(false);
+  let isTerminalSplit = $state(false);
   const threadId = $derived(chat.selectedThreadId ?? chat.draftThreadId);
   const workingFolderId = $derived(chat.selectedWorkingFolderId);
   const sessionKey = $derived(inspectorSessionKey(threadId, workingFolderId));
@@ -316,7 +316,7 @@
         terminalNames,
         selectedIndex: selectedIndex >= 0 ? selectedIndex : null,
         splitDirection: placement === "bottom" ? "horizontal" : "vertical",
-        splitSizes: splitTerminals ? terminalNames.map(() => 1) : [],
+        splitSizes: isTerminalSplit ? terminalNames.map(() => 1) : [],
       }).catch((reason: unknown) => { error = message(reason); });
     }, 250);
   }
@@ -423,7 +423,7 @@
       terminals = loaded.terminals;
       const savedPanel = loaded.layout.groups.find((group) => group.placement === placement);
       if (savedPanel) {
-        splitTerminals = savedPanel.splitSizes.length > 1;
+        isTerminalSplit = savedPanel.splitSizes.length > 1;
         const tabNames = { ...panelState.tabNames };
         loaded.terminals.forEach((terminal, index) => {
           const name = savedPanel.terminalNames[index];
@@ -512,7 +512,7 @@
   }
 
   function toggleTerminalSplit(): void {
-    splitTerminals = !splitTerminals;
+    isTerminalSplit = !isTerminalSplit;
     scheduleTerminalLayoutSave();
   }
 
@@ -788,7 +788,7 @@
       onkeydown={handlePanelPickerTriggerKeydown}
     ><Plus size={14} /></button>
     {#if panelState.tab === "terminal" && terminals.length > 1}
-      <button type="button" class="panel-add-button" class:active={splitTerminals} aria-pressed={splitTerminals} title={t("chat.inspector.toggleTerminalSplit")} aria-label={t("chat.inspector.toggleTerminalSplit")} onclick={toggleTerminalSplit}><Columns2 size={14} /></button>
+      <button type="button" class="panel-add-button" class:active={isTerminalSplit} aria-pressed={isTerminalSplit} title={t("chat.inspector.toggleTerminalSplit")} aria-label={t("chat.inspector.toggleTerminalSplit")} onclick={toggleTerminalSplit}><Columns2 size={14} /></button>
     {/if}
     {#if panelPickerOpen}
       <div
@@ -903,7 +903,7 @@
     {#if panelState.tab === "terminal"}
       {#if terminalsLoading}
         <p class="grid h-full place-items-center text-xs text-muted-foreground">{t("common.loading")}</p>
-      {:else if splitTerminals && terminals.length > 1}
+      {:else if isTerminalSplit && terminals.length > 1}
         <div class="terminal-split" data-direction={placement === "bottom" ? "horizontal" : "vertical"}>
           {#each terminals as terminal (terminal.id)}
             <section aria-label={workspacePanelTabLabel(terminalWorkspacePanelTabKey(terminal.id))}>

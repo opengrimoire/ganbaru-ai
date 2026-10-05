@@ -1,8 +1,8 @@
 use crate::data_sources;
 use crate::data_sources::views::{
-    ViewProperty as BoardProperty, canonical_filter, canonical_sorts, generated_uuid_tx,
+    ViewProperty, canonical_filter, canonical_sorts, generate_uuid_tx,
     load_active_data_source_and_database_tx, normalized_row_for_schema, parse_json, stored_filters,
-    stored_sorts, view_schema as board_schema,
+    stored_sorts, view_schema,
 };
 use crate::models::{
     NoteDataSourceGalleryConfigurationUpdate, NoteDataSourceGalleryViewDto,
@@ -20,13 +20,13 @@ const GALLERY_CARD_SIZES: &[&str] = &["small", "medium", "large"];
 const GALLERY_ROW_OPEN_MODES: &[&str] = &["full_page", "side_panel"];
 
 #[cfg(test)]
-pub async fn get_data_source_gallery_view(
+pub async fn data_source_gallery_view(
     pool: &SqlitePool,
     data_source_id: &str,
     database_id: Option<&str>,
     view_id: Option<&str>,
 ) -> Result<NoteDataSourceGalleryViewDto, String> {
-    get_data_source_gallery_view_window(
+    data_source_gallery_view_window(
         pool,
         data_source_id,
         database_id,
@@ -36,7 +36,7 @@ pub async fn get_data_source_gallery_view(
     .await
 }
 
-pub async fn get_data_source_gallery_view_window(
+pub async fn data_source_gallery_view_window(
     pool: &SqlitePool,
     data_source_id: &str,
     database_id: Option<&str>,
@@ -77,7 +77,7 @@ pub async fn update_data_source_gallery_view(
     .await?;
     let (data_source, _database) =
         load_active_data_source_and_database_tx(&mut tx, data_source_id, "board").await?;
-    let schema = board_schema(&parse_json(
+    let schema = view_schema(&parse_json(
         &data_source.properties,
         "data source properties",
     )?)?;
@@ -131,12 +131,12 @@ async fn load_gallery_view_tx(
     let (data_source, database) =
         load_active_data_source_and_database_tx(tx, data_source_id, "board").await?;
     let schema_properties = parse_json(&data_source.properties, "data source properties")?;
-    let schema = board_schema(&schema_properties)?;
+    let schema = view_schema(&schema_properties)?;
     let view = ensure_gallery_view_row_tx(tx, &data_source, database_id, view_id, &schema).await?;
     validate_gallery_configuration(view.configuration.as_deref(), &schema)?;
     let filters = stored_filters(view.filter.as_deref(), "database board filter", "board")?;
     let sorts = stored_sorts(&view.sorts, "database board sorts", "board")?;
-    let window_schema = data_sources::window::table_properties_from_board(&schema);
+    let window_schema = data_sources::window::table_properties_from_view(&schema);
     let mut window = data_sources::window::load_row_window_tx(
         tx,
         data_source_id,
@@ -173,14 +173,14 @@ async fn ensure_gallery_view_row_tx(
     data_source: &NoteDataSourceRow,
     database_id: Option<&str>,
     view_id: Option<&str>,
-    schema: &[BoardProperty],
+    schema: &[ViewProperty],
 ) -> Result<NoteDatabaseViewRow, String> {
     if let Some(view) = load_gallery_view_row_tx(tx, &data_source.id, database_id, view_id).await? {
         return Ok(view);
     }
     let database_id = data_sources::views::scoped_database_id(data_source, database_id);
     crate::databases::editing_lock::ensure_unlocked_tx(tx, database_id).await?;
-    let id = generated_uuid_tx(tx, "generate gallery view id", "generated_gallery_view_id").await?;
+    let id = generate_uuid_tx(tx, "generate gallery view id", "generated_gallery_view_id").await?;
     let sort_order = data_sources::views::next_view_sort_order_tx(tx, database_id).await?;
     sqlx::query(
         "INSERT INTO notes_database_views (
@@ -225,7 +225,7 @@ async fn load_gallery_view_row_tx(
     .await
 }
 
-fn default_gallery_configuration(schema: &[BoardProperty]) -> Value {
+fn default_gallery_configuration(schema: &[ViewProperty]) -> Value {
     json!({
         "type": "gallery",
         "gallery": {
@@ -241,7 +241,7 @@ fn default_gallery_configuration(schema: &[BoardProperty]) -> Value {
 
 fn canonical_gallery_configuration(
     update: &NoteDataSourceGalleryConfigurationUpdate,
-    schema: &[BoardProperty],
+    schema: &[ViewProperty],
 ) -> Result<Value, String> {
     let cover_source = update.cover_source.trim();
     if !GALLERY_COVER_SOURCES.contains(&cover_source) {
@@ -277,7 +277,7 @@ fn canonical_gallery_configuration(
 
 fn validate_gallery_configuration(
     configuration: Option<&str>,
-    schema: &[BoardProperty],
+    schema: &[ViewProperty],
 ) -> Result<(), String> {
     let value = configuration
         .map(|configuration| parse_json(configuration, "gallery view configuration"))
@@ -319,7 +319,7 @@ fn validate_gallery_configuration(
 fn canonical_cover_property_id(
     cover_source: &str,
     raw_property_id: Option<&str>,
-    schema: &[BoardProperty],
+    schema: &[ViewProperty],
 ) -> Result<Value, String> {
     if cover_source != "files_property" {
         return Ok(Value::Null);
@@ -340,7 +340,7 @@ fn canonical_cover_property_id(
     Ok(Value::String(property_id.to_string()))
 }
 
-fn visible_gallery_property_ids(schema: &[BoardProperty]) -> Vec<String> {
+fn visible_gallery_property_ids(schema: &[ViewProperty]) -> Vec<String> {
     schema
         .iter()
         .filter(|property| property.property_type != "title")
@@ -349,10 +349,7 @@ fn visible_gallery_property_ids(schema: &[BoardProperty]) -> Vec<String> {
         .collect()
 }
 
-fn canonical_visible_property_ids(
-    property_ids: &[String],
-    schema: &[BoardProperty],
-) -> Vec<String> {
+fn canonical_visible_property_ids(property_ids: &[String], schema: &[ViewProperty]) -> Vec<String> {
     let known: HashSet<&str> = schema.iter().map(|property| property.id.as_str()).collect();
     let mut seen = HashSet::new();
     let mut visible = Vec::new();

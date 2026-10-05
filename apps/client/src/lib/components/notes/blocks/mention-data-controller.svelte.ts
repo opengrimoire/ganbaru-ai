@@ -20,7 +20,7 @@ export function createNotesMentionDataController(
   let dataSources = $state.raw<NotesDataSource[]>([]);
   let rowPages = $state.raw<NotesPage[]>([]);
   let requestId = 0;
-  let consumers = 0;
+  let consumerCount = 0;
 
   async function reload(): Promise<void> {
     const currentRequestId = ++requestId;
@@ -39,12 +39,12 @@ export function createNotesMentionDataController(
 
   /** Share one request across open menus and release the catalog after the last closes. */
   function acquire(): () => void {
-    if (consumers++ === 0) void reload();
+    if (consumerCount++ === 0) void reload();
     let released = false;
     return () => {
       if (released) return;
       released = true;
-      if (--consumers === 0) reset();
+      if (--consumerCount === 0) reset();
     };
   }
 
@@ -56,7 +56,7 @@ export function createNotesMentionDataController(
 
   function switchVault(): void {
     reset();
-    if (consumers > 0) void reload();
+    if (consumerCount > 0) void reload();
   }
 
   return {

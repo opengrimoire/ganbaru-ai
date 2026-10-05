@@ -4,11 +4,11 @@
   import NotesCalloutLayers from "./NotesCalloutLayers.svelte";
 
   let { layers, body }: { layers: readonly NotesCalloutLayer[]; body: Snippet } = $props();
-  const firstCallout = $derived(layers[0]?.first ?? false);
-  const lastCallout = $derived(layers[0]?.last ?? false);
+  const isFirstCallout = $derived(layers[0]?.first ?? false);
+  const isLastCallout = $derived(layers[0]?.last ?? false);
 </script>
 
-<div class:notes-callout-first={firstCallout} class:notes-callout-last={lastCallout} class:notes-ordinary-block={!layers.length}>
+<div class:notes-callout-first={isFirstCallout} class:notes-callout-last={isLastCallout} class:notes-ordinary-block={!layers.length}>
   <NotesCalloutLayers {layers} {body} />
 </div>
 

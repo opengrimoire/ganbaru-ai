@@ -2,7 +2,7 @@ use crate::validation::require_uuid;
 use serde_json::Value;
 use sqlx::{Sqlite, Transaction};
 
-pub struct NotesCollaborationOperation<'a> {
+pub struct CollaborationOperation<'a> {
     pub entity_type: &'static str,
     pub entity_id: &'a str,
     pub operation_type: &'static str,
@@ -18,7 +18,7 @@ pub struct NotesCollaborationOperation<'a> {
 
 pub async fn record_tx(
     tx: &mut Transaction<'_, Sqlite>,
-    operation: NotesCollaborationOperation<'_>,
+    operation: CollaborationOperation<'_>,
 ) -> Result<(), String> {
     require_uuid(operation.entity_id, "operation.entity_id")?;
     require_uuid(operation.page_id, "operation.page_id")?;

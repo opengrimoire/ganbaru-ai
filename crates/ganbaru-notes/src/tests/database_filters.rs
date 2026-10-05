@@ -2,7 +2,7 @@ use super::helpers::*;
 use crate::data_sources;
 use serde_json::Value;
 
-async fn filter_source() -> SqlitePool {
+async fn filter_pool() -> SqlitePool {
     let pool = migrated_memory_pool().await;
     create_page(&pool, PAGE_A, BLOCK_A).await;
     databases::create_database(
@@ -106,7 +106,7 @@ async fn view_csv(pool: &SqlitePool) -> crate::models::NoteDataSourceCsvExportDt
 #[test]
 fn database_filters_match_ascii_case_only_in_sql_and_csv_export() {
     crate::test_block_on(async {
-        let pool = filter_source().await;
+        let pool = filter_pool().await;
         let titles = ["ÁRBOL", "árbol", "alpha", "ALPHA", "Beta"];
         for (index, title) in titles.iter().enumerate() {
             set_filter_row_title(&pool, index, title).await;
@@ -164,7 +164,7 @@ fn database_filters_match_ascii_case_only_in_sql_and_csv_export() {
 #[test]
 fn database_filters_use_relation_ids_for_empty_target_titles_in_sql_and_csv_export() {
     crate::test_block_on(async {
-        let pool = filter_source().await;
+        let pool = filter_pool().await;
         let raw_schema: String =
             sqlx::query_scalar("SELECT properties FROM notes_data_sources WHERE id = ?")
                 .bind(DATA_SOURCE_A)
@@ -266,7 +266,7 @@ fn database_filters_use_relation_ids_for_empty_target_titles_in_sql_and_csv_expo
 #[test]
 fn database_filters_use_explicit_unicode_whitespace_for_sql_and_export_emptiness() {
     crate::test_block_on(async {
-        let pool = filter_source().await;
+        let pool = filter_pool().await;
         let whitespace = "\u{0009}\u{000a}\u{000b}\u{000c}\u{000d}\u{0020}\u{0085}\u{00a0}\u{1680}\u{2000}\u{2001}\u{2002}\u{2003}\u{2004}\u{2005}\u{2006}\u{2007}\u{2008}\u{2009}\u{200a}\u{2028}\u{2029}\u{202f}\u{205f}\u{3000}";
         for (index, text) in [whitespace, "\n\t", "", "\u{200b}", "\u{feff}"]
             .into_iter()
@@ -337,7 +337,7 @@ fn database_filters_use_explicit_unicode_whitespace_for_sql_and_export_emptiness
 #[test]
 fn database_filter_pagination_preserves_accented_and_empty_text_sort_keys() {
     crate::test_block_on(async {
-        let pool = filter_source().await;
+        let pool = filter_pool().await;
         let titles = ["", "Árbol", "École", "árbol", "écume"];
         for (index, title) in titles.iter().enumerate() {
             set_filter_row_title(&pool, index, title).await;
@@ -366,7 +366,7 @@ fn database_filter_pagination_preserves_accented_and_empty_text_sort_keys() {
             let mut actual = Vec::new();
             let mut cursor = None;
             for index in 0..expected.len() {
-                let window = data_sources::layouts::table::get_data_source_table_view_window(
+                let window = data_sources::layouts::table::data_source_table_view_window(
                     &pool,
                     DATA_SOURCE_A,
                     None,
@@ -411,12 +411,12 @@ fn database_filter_pagination_preserves_accented_and_empty_text_sort_keys() {
 #[test]
 fn database_filters_reject_stale_computed_empty_predicates_in_windows_and_view_exports() {
     crate::test_block_on(async {
-        let pool = filter_source().await;
+        let pool = filter_pool().await;
         for condition in ["is_empty", "is_not_empty"] {
             sqlx::query("UPDATE notes_database_views SET filter = ? WHERE id = ?")
                 .bind(json!({ "type": "and", "filters": [{ "property_id": "computed", "condition": condition, "value": null }] }).to_string())
                 .bind(DATABASE_VIEW_A).execute(&pool).await.unwrap();
-            let window_error = data_sources::layouts::table::get_data_source_table_view_window(
+            let window_error = data_sources::layouts::table::data_source_table_view_window(
                 &pool,
                 DATA_SOURCE_A,
                 None,
@@ -468,7 +468,7 @@ fn database_filters_reject_stale_computed_empty_predicates_in_windows_and_view_e
 #[test]
 fn database_filters_preserve_boolean_groups_across_all_six_layouts_and_pagination() {
     crate::test_block_on(async {
-        let pool = filter_source().await;
+        let pool = filter_pool().await;
         let filters = mixed_filters();
         let table = data_sources::layouts::table::update_data_source_table_view(
             &pool,
@@ -489,7 +489,7 @@ fn database_filters_preserve_boolean_groups_across_all_six_layouts_and_paginatio
             table["group_counts"]["tag"], 2,
             "repeated multivalue membership must count a row once"
         );
-        let first = data_sources::layouts::table::get_data_source_table_view_window(
+        let first = data_sources::layouts::table::data_source_table_view_window(
             &pool,
             DATA_SOURCE_A,
             None,
@@ -508,7 +508,7 @@ fn database_filters_preserve_boolean_groups_across_all_six_layouts_and_paginatio
             "60000000-0000-4000-8000-000000000000"
         );
         assert_eq!(first["has_more"], true);
-        let second = data_sources::layouts::table::get_data_source_table_view_window(
+        let second = data_sources::layouts::table::data_source_table_view_window(
             &pool,
             DATA_SOURCE_A,
             None,
@@ -601,7 +601,7 @@ fn database_filters_preserve_boolean_groups_across_all_six_layouts_and_paginatio
 #[test]
 fn database_filters_use_numeric_and_date_types_and_reject_invalid_writes_atomically() {
     crate::test_block_on(async {
-        let pool = filter_source().await;
+        let pool = filter_pool().await;
         for (filter, expected) in [
             (
                 json!({ "property_id": "amount", "condition": "greater_than", "value": 9 }),
@@ -673,7 +673,7 @@ fn database_filters_use_numeric_and_date_types_and_reject_invalid_writes_atomica
 #[test]
 fn database_filter_reconciliation_and_group_counts_preserve_query_meaning_and_range() {
     crate::test_block_on(async {
-        let pool = filter_source().await;
+        let pool = filter_pool().await;
         let source: String =
             sqlx::query_scalar("SELECT properties FROM notes_data_sources WHERE id = ?")
                 .bind(DATA_SOURCE_A)
@@ -682,7 +682,7 @@ fn database_filter_reconciliation_and_group_counts_preserve_query_meaning_and_ra
                 .unwrap();
         let schema =
             data_sources::views::view_schema(&serde_json::from_str(&source).unwrap()).unwrap();
-        let window_schema = data_sources::window::table_properties_from_board(&schema);
+        let window_schema = data_sources::window::table_properties_from_view(&schema);
         let mut tx = pool.begin().await.unwrap();
         let window = data_sources::window::load_row_window_tx(
             &mut tx,

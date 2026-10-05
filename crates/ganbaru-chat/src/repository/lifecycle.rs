@@ -105,8 +105,8 @@ pub async fn permanently_delete_thread(
             .await
             .map_err(persistence_error)?;
     match revision {
-        None => return Err(not_found()),
-        Some(value) if value != i64_value(expected_revision) => return Err(stale()),
+        None => return Err(not_found_error()),
+        Some(value) if value != i64_value(expected_revision) => return Err(stale_error()),
         Some(_) => {}
     }
     let working_folder_id: String =
@@ -257,8 +257,8 @@ pub async fn resolve_project_deletion(
     for (thread_id, revision) in &thread_rows {
         permanently_delete_thread(
             pool,
-            &ChatThreadId::new(thread_id.clone()).map_err(|_| corrupt_data())?,
-            u64::try_from(*revision).map_err(|_| corrupt_data())?,
+            &ChatThreadId::new(thread_id.clone()).map_err(|_| corrupt_data_error())?,
+            u64::try_from(*revision).map_err(|_| corrupt_data_error())?,
             cleanup_available_at,
             now,
         )
@@ -338,23 +338,27 @@ async fn require_updated(
             .fetch_one(pool)
             .await
             .map_err(persistence_error)
-            .and_then(|value| u64::try_from(value).map_err(|_| corrupt_data()));
+            .and_then(|value| u64::try_from(value).map_err(|_| corrupt_data_error()));
     }
     let exists: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM chat_threads WHERE id = ?)")
         .bind(thread_id.as_str())
         .fetch_one(pool)
         .await
         .map_err(persistence_error)?;
-    Err(if exists { stale() } else { not_found() })
+    Err(if exists {
+        stale_error()
+    } else {
+        not_found_error()
+    })
 }
 
 fn i64_value(value: u64) -> i64 {
     i64::try_from(value).unwrap_or(i64::MAX)
 }
-fn not_found() -> ChatError {
+fn not_found_error() -> ChatError {
     ChatError::new(ChatErrorCode::NotFound, "Chat thread was not found", true)
 }
-fn stale() -> ChatError {
+fn stale_error() -> ChatError {
     ChatError::new(
         ChatErrorCode::StaleRevision,
         "Chat thread revision is stale",
@@ -368,7 +372,7 @@ fn persistence_error<T>(_error: T) -> ChatError {
         true,
     )
 }
-fn corrupt_data() -> ChatError {
+fn corrupt_data_error() -> ChatError {
     ChatError::new(
         ChatErrorCode::Persistence,
         "Stored Chat lifecycle data is invalid",

@@ -7,7 +7,7 @@ import { buildBulkImportPayload } from "./bulk-import";
 
 const NOW = "2026-04-29 10:00:00";
 const ZONE = "UTC";
-const CAL = "cal-1";
+const CALENDAR_ID = "cal-1";
 
 function makeEvent(overrides: Partial<CalendarEvent> = {}): CalendarEvent {
   return {
@@ -16,7 +16,7 @@ function makeEvent(overrides: Partial<CalendarEvent> = {}): CalendarEvent {
     start: "2026-05-01 10:00",
     end: "2026-05-01 11:00",
     timezone: ZONE,
-    calendarId: CAL,
+    calendarId: CALENDAR_ID,
     sourceUid: "uid-1@example.com",
     sequence: 0,
     ...overrides,
@@ -35,13 +35,13 @@ describe("buildBulkImportPayload", () => {
         makeEvent({ sourceUid: "a" }),
         makeEvent({ sourceUid: "b" }),
       ],
-      CAL,
+      CALENDAR_ID,
       NOW,
       ZONE,
       deterministicIds(),
     );
 
-    expect(payload.targetCalendarId).toBe(CAL);
+    expect(payload.targetCalendarId).toBe(CALENDAR_ID);
     expect(payload.now).toBe(NOW);
     expect(payload.events.map((event) => event.candidateId)).toEqual([
       "new-1",
@@ -77,7 +77,7 @@ describe("buildBulkImportPayload", () => {
           },
         }),
       ],
-      CAL,
+      CALENDAR_ID,
       NOW,
       ZONE,
       deterministicIds(),
@@ -109,7 +109,7 @@ describe("buildBulkImportPayload", () => {
   it("preserves an explicitly enabled empty meeting section", () => {
     const payload = buildBulkImportPayload(
       [makeEvent({ meetingEnabled: true })],
-      CAL,
+      CALENDAR_ID,
       NOW,
       ZONE,
       deterministicIds(),
@@ -162,7 +162,7 @@ describe("buildBulkImportPayload", () => {
           ],
         }),
       ],
-      CAL,
+      CALENDAR_ID,
       NOW,
       ZONE,
       deterministicIds(),
@@ -216,7 +216,7 @@ describe("buildBulkImportPayload", () => {
           end: "2026-05-15 20:15",
         }),
       ],
-      CAL,
+      CALENDAR_ID,
       NOW,
       "America/Mexico_City",
       deterministicIds(),
@@ -245,7 +245,7 @@ describe("buildBulkImportPayload", () => {
           ],
         }),
       ],
-      CAL,
+      CALENDAR_ID,
       NOW,
       "America/Mexico_City",
       deterministicIds(),
@@ -277,7 +277,7 @@ describe("buildBulkImportPayload", () => {
           ],
         }),
       ],
-      CAL,
+      CALENDAR_ID,
       NOW,
       "Asia/Tokyo",
       deterministicIds(),
@@ -291,7 +291,7 @@ describe("buildBulkImportPayload", () => {
   it("omits empty optional JSON fields", () => {
     const payload = buildBulkImportPayload(
       [makeEvent({ notifications: [], categories: [], extendedProperties: {} })],
-      CAL,
+      CALENDAR_ID,
       NOW,
       ZONE,
       deterministicIds(),
@@ -319,7 +319,7 @@ describe("buildBulkImportPayload", () => {
           ],
         }),
       ],
-      CAL,
+      CALENDAR_ID,
       NOW,
       ZONE,
       deterministicIds(),
@@ -357,7 +357,7 @@ describe("buildBulkImportPayload", () => {
 
     const payload = buildBulkImportPayload(
       [],
-      CAL,
+      CALENDAR_ID,
       NOW,
       ZONE,
       deterministicIds(),
@@ -481,7 +481,7 @@ describe("buildBulkImportPayload", () => {
           ],
         }),
       ],
-      CAL,
+      CALENDAR_ID,
       NOW,
       ZONE,
       deterministicIds(),
@@ -531,7 +531,7 @@ describe("buildBulkImportPayload", () => {
 
     const payload = buildBulkImportPayload(
       [makeEvent({ sourceUid: "duplicate@example.com" })],
-      CAL,
+      CALENDAR_ID,
       NOW,
       ZONE,
       deterministicIds(),

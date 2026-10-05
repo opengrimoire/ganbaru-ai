@@ -1,6 +1,6 @@
 //! Atomic turn persistence, attachment loading, and send receipt replay.
 
-use super::support::{corrupt_data, i64_value, json_error, persistence_error};
+use super::support::{corrupt_data_error, i64_value, json_error, persistence_error};
 use super::validation::{prompt_preview, prompt_title, wire_interaction, wire_safety};
 use crate::chat::send_commands::{SendChatTurnCommand, SendChatTurnResult, SteerChatTurnCommand};
 use crate::vault;
@@ -46,10 +46,10 @@ pub(super) async fn read_thread_runtime_data(
     ) {
         (None, None) => None,
         (Some(version), Some(data)) => Some(VersionedJson {
-            schema_version: u32::try_from(version).map_err(|_| corrupt_data())?,
+            schema_version: u32::try_from(version).map_err(|_| corrupt_data_error())?,
             value: serde_json::from_str(&data).map_err(json_error)?,
         }),
-        _ => return Err(corrupt_data()),
+        _ => return Err(corrupt_data_error()),
     };
     Ok(ThreadRuntimeData {
         working_folder_id: row
@@ -57,7 +57,7 @@ pub(super) async fn read_thread_runtime_data(
             .map_err(persistence_error)?
             .map(ProjectWorkingFolderId::new)
             .transpose()
-            .map_err(|_| corrupt_data())?,
+            .map_err(|_| corrupt_data_error())?,
         scratch_generation_id: row
             .try_get("scratch_generation_id")
             .map_err(persistence_error)?,
@@ -65,24 +65,24 @@ pub(super) async fn read_thread_runtime_data(
             row.try_get::<String, _>("provider_instance_id")
                 .map_err(persistence_error)?,
         )
-        .map_err(|_| corrupt_data())?,
+        .map_err(|_| corrupt_data_error())?,
         continuation_group_id: ContinuationGroupId::new(
             row.try_get::<String, _>("continuation_group_id")
                 .map_err(persistence_error)?,
         )
-        .map_err(|_| corrupt_data())?,
+        .map_err(|_| corrupt_data_error())?,
         provider_thread_id: row
             .try_get::<Option<String>, _>("provider_thread_id")
             .map_err(persistence_error)?
             .map(ProviderThreadId::new)
             .transpose()
-            .map_err(|_| corrupt_data())?,
+            .map_err(|_| corrupt_data_error())?,
         resume_cursor,
         revision: u64::try_from(
             row.try_get::<i64, _>("revision")
                 .map_err(persistence_error)?,
         )
-        .map_err(|_| corrupt_data())?,
+        .map_err(|_| corrupt_data_error())?,
         execution_environment_id: row
             .try_get("execution_environment_id")
             .map_err(persistence_error)?,
@@ -519,7 +519,7 @@ pub(super) async fn replay_send_receipt(
                 receipt
                     .result
                     .as_ref()
-                    .ok_or_else(corrupt_data)?
+                    .ok_or_else(corrupt_data_error)?
                     .value
                     .clone(),
             )
@@ -535,7 +535,7 @@ fn receipt_error(receipt: &CommandReceiptRead) -> ChatResult<ChatError> {
         receipt
             .error
             .as_ref()
-            .ok_or_else(corrupt_data)?
+            .ok_or_else(corrupt_data_error)?
             .value
             .clone(),
     )

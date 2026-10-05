@@ -115,7 +115,7 @@ fn context_assignments_enforce_owner_provenance_and_unique_phases() {
         .unwrap_err();
         assert_eq!(duplicate.field.as_deref(), Some("assignments"));
         assert!(
-            crate::music::assignments::assignments(
+            crate::music::assignments::load_assignments(
                 &pool,
                 MusicAssignmentOwnerKind::ProjectDefault,
                 "project-1",

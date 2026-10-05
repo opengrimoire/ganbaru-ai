@@ -1,6 +1,6 @@
 use super::block_comments::duplicate_block_comment_threads;
 use super::block_tree::{
-    load_block_subtree_rows, load_block_subtree_rows_with_trash, load_blocks_by_ids,
+    load_block_subtree_rows, load_block_subtree_rows_including_trashed, load_blocks_by_ids,
     normalize_selection_root_ids, refresh_duplicated_has_children,
 };
 use super::copy_budget::{CopyBudget, CopyContext};
@@ -282,9 +282,13 @@ pub(super) async fn duplicate_blocks_tx(
     let mut source_rows = Vec::new();
     let mut root_rows = Vec::with_capacity(root_ids.len());
     for block_id in &root_ids {
-        let subtree_rows =
-            load_block_subtree_rows_with_trash(tx, block_id, include_trashed_sources, budget)
-                .await?;
+        let subtree_rows = load_block_subtree_rows_including_trashed(
+            tx,
+            block_id,
+            include_trashed_sources,
+            budget,
+        )
+        .await?;
         let source_root = subtree_rows
             .first()
             .ok_or_else(|| "notes block not found".to_string())?;

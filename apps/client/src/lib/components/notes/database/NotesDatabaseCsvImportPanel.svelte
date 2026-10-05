@@ -32,11 +32,11 @@
   const { t } = getLocalization();
   let csvText = $state("");
   let hasHeader = $state(true);
-  let running = $state<"preview" | "import" | null>(null);
+  let runningAction = $state<"preview" | "import" | null>(null);
   let error = $state<string | null>(null);
   let result = $state<NotesDataSourceCsvImportResult | null>(null);
 
-  const canRun = $derived(!disabled && !running && csvText.trim().length > 0);
+  const canRun = $derived(!disabled && !runningAction && csvText.trim().length > 0);
   const roundTripDiagnostics = $derived(
     result?.diagnostics.map((diagnostic) =>
       toRoundTripDiagnosticItem({
@@ -109,7 +109,7 @@
 
   async function runImport(dryRun: boolean): Promise<void> {
     if (!canRun) return;
-    running = dryRun ? "preview" : "import";
+    runningAction = dryRun ? "preview" : "import";
     error = null;
     try {
       const next = await importNotesDataSourceCsv(dataSourceId, {
@@ -124,7 +124,7 @@
     } catch (caught) {
       error = caught instanceof Error ? caught.message : String(caught);
     } finally {
-      running = null;
+      runningAction = null;
     }
   }
 </script>
@@ -140,7 +140,7 @@
           class="sr-only"
           type="file"
           accept=".csv,text/csv"
-          disabled={disabled || running !== null}
+          disabled={disabled || runningAction !== null}
           onchange={(event) => {
             void loadFile(event);
           }}
@@ -150,7 +150,7 @@
         <input
           type="checkbox"
           checked={hasHeader}
-          disabled={disabled || running !== null}
+          disabled={disabled || runningAction !== null}
           onchange={(event) => {
             hasHeader = event.currentTarget.checked;
             result = null;
@@ -167,7 +167,7 @@
         class="min-h-28 w-full min-w-0 resize-y rounded-md border border-input bg-background px-2 py-1.5 font-mono text-[0.8rem] text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
         value={csvText}
         placeholder={t("notes.databaseCsvImportPlaceholder")}
-        disabled={disabled || running !== null}
+        disabled={disabled || runningAction !== null}
         oninput={(event) => {
           csvText = event.currentTarget.value;
           result = null;
@@ -186,7 +186,7 @@
         }}
       >
         <Eye class="size-3.5" aria-hidden="true" />
-        <span>{running === "preview" ? t("notes.databaseCsvImportPreviewing") : t("notes.databaseCsvImportPreview")}</span>
+        <span>{runningAction === "preview" ? t("notes.databaseCsvImportPreviewing") : t("notes.databaseCsvImportPreview")}</span>
       </button>
       <button
         type="button"
@@ -197,7 +197,7 @@
         }}
       >
         <Check class="size-3.5" aria-hidden="true" />
-        <span>{running === "import" ? t("notes.databaseCsvImportImporting") : t("notes.databaseCsvImportImport")}</span>
+        <span>{runningAction === "import" ? t("notes.databaseCsvImportImporting") : t("notes.databaseCsvImportImport")}</span>
       </button>
     </div>
 

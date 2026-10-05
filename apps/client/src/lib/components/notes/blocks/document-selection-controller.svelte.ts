@@ -12,8 +12,8 @@ import { notesDocumentRange, type NotesDocumentPoint, type NotesDocumentSelectio
 import type { NotesBlock } from "$lib/notes/types";
 import { notesCaretOffsetOnVisualLine, notesCaretRectAtOffset, notesCaretVisualLineIndex, notesEditableVisualLines } from "./visual-line-navigation";
 
-const EDITOR = "[contenteditable='true'][data-notes-block-id][role='textbox']";
-const ATOMIC = "[data-notes-atomic-block]";
+const EDITABLE_BLOCK_SELECTOR = "[contenteditable='true'][data-notes-block-id][role='textbox']";
+const ATOMIC_BLOCK_SELECTOR = "[data-notes-atomic-block]";
 interface DocumentSelectionOptions {
   readIds: () => readonly string[];
   readPageId: () => string;
@@ -41,12 +41,12 @@ export function createNotesDocumentSelectionController(options: DocumentSelectio
   let list: HTMLDivElement | null = null;
   let pointerAnchor: NotesDocumentPoint | null = null;
   let pointerFromRow = false;
-  let suppressAtomicClick = false;
-  let request = 0;
+  let shouldSuppressAtomicClick = false;
+  let selectionRequestId = 0;
   let replacementText: string | null = null;
   let alive = true;
   let composing = false;
-  let pasteAsPlainText = false;
+  let shouldPasteAsPlainText = false;
   let verticalGoalX: number | null = null;
   let verticalFocusLine: { blockId: string; offset: number; index: number } | null = null;
   let extensionInProgress = false;
@@ -62,14 +62,14 @@ export function createNotesDocumentSelectionController(options: DocumentSelectio
   }
 
   function editor(id: string): HTMLElement | undefined {
-    return Array.from(list?.querySelectorAll<HTMLElement>(EDITOR) ?? []).find((node) => node.dataset.notesBlockId === id);
+    return Array.from(list?.querySelectorAll<HTMLElement>(EDITABLE_BLOCK_SELECTOR) ?? []).find((node) => node.dataset.notesBlockId === id);
   }
 
   function point(node: Node | null, offset: number): NotesDocumentPoint | null {
     const element = node instanceof Element ? node : node?.parentElement;
-    const atomic = element?.closest<HTMLElement>(ATOMIC);
+    const atomic = element?.closest<HTMLElement>(ATOMIC_BLOCK_SELECTOR);
     if (atomic && list?.contains(atomic)) return { blockId: atomic.dataset.notesAtomicBlock!, offset: offset === 0 ? 0 : 1 };
-    const root = element?.closest<HTMLElement>(EDITOR);
+    const root = element?.closest<HTMLElement>(EDITABLE_BLOCK_SELECTOR);
     if (!root || !node || !list?.contains(root)) return null;
     const textOffset = notesEditableOffsetFromDomPoint(root, node, offset);
     return textOffset === null ? null : { blockId: root.dataset.notesBlockId!, offset: textOffset };
@@ -82,7 +82,7 @@ export function createNotesDocumentSelectionController(options: DocumentSelectio
     return anchor && focus ? { anchor, focus } : null;
   }
 
-  function length(id: string): number {
+  function blockTextLength(id: string): number {
     const block = options.readBlock(id);
     if (block?.type === "child_page" || block?.type === "child_database") return 1;
     return block ? blockPlainText(block).length : 0;
@@ -114,7 +114,7 @@ export function createNotesDocumentSelectionController(options: DocumentSelectio
   }
 
   function clear(preserveVerticalGoal = false): void {
-    request += 1;
+    selectionRequestId += 1;
     cancelScheduledPaint();
     if (!preserveVerticalGoal) resetVerticalNavigation();
     selection = null;
@@ -145,7 +145,7 @@ export function createNotesDocumentSelectionController(options: DocumentSelectio
     const selected = notesDocumentRange(ids, selection);
     if (!selected) { painter?.clear(); return; }
     const selectedIds = new Set(selected.blockIds);
-    const editors = new Map(Array.from(list.querySelectorAll<HTMLElement>(EDITOR))
+    const editors = new Map(Array.from(list.querySelectorAll<HTMLElement>(EDITABLE_BLOCK_SELECTOR))
       .map((root) => [root.dataset.notesBlockId!, root] as const));
     const roots = Array.from(list.querySelectorAll<HTMLElement>("[data-notes-selectable-block-id]"))
       .filter((node) => selectedIds.has(node.dataset.notesSelectableBlockId ?? ""));
@@ -155,13 +155,13 @@ export function createNotesDocumentSelectionController(options: DocumentSelectio
       const range = list!.ownerDocument.createRange();
       if (root) {
         const start = findEditableDomPoint(root, id === selected.start.blockId ? selected.start.offset : 0);
-        const end = findEditableDomPoint(root, id === selected.end.blockId ? selected.end.offset : length(id));
+        const end = findEditableDomPoint(root, id === selected.end.blockId ? selected.end.offset : blockTextLength(id));
         range.setStart(start.node, start.offset);
         range.setEnd(end.node, end.offset);
       } else {
         if ((id === selected.end.blockId && selected.end.offset === 0)
-          || (id === selected.start.blockId && selected.start.offset >= length(id))) return [];
-        range.selectNodeContents(row.querySelector(ATOMIC) ?? row.querySelector(".notes-block-surface") ?? row);
+          || (id === selected.start.blockId && selected.start.offset >= blockTextLength(id))) return [];
+        range.selectNodeContents(row.querySelector(ATOMIC_BLOCK_SELECTOR) ?? row.querySelector(".notes-block-surface") ?? row);
       }
       return range.collapsed ? [] : [range];
     });
@@ -174,7 +174,7 @@ export function createNotesDocumentSelectionController(options: DocumentSelectio
     const startEditor = editors.get(startId);
     const endEditor = editors.get(endId);
     const startOffset = startId === selected.start.blockId ? selected.start.offset : 0;
-    const endOffset = endId === selected.end.blockId ? selected.end.offset : length(endId);
+    const endOffset = endId === selected.end.blockId ? selected.end.offset : blockTextLength(endId);
     const start = startEditor ? findEditableDomPoint(startEditor, startOffset) : { node: startRow, offset: 0 };
     const end = endEditor ? findEditableDomPoint(endEditor, endOffset) : { node: endRow, offset: endRow.childNodes.length };
     const forward = selected.start === selection.anchor;
@@ -186,7 +186,7 @@ export function createNotesDocumentSelectionController(options: DocumentSelectio
   async function select(next: NotesDocumentSelection, keepKeyboardAnchor = false): Promise<void> {
     const ids = options.readIds();
     if (!ids.includes(next.anchor.blockId) || !ids.includes(next.focus.blockId)) return;
-    request += 1;
+    selectionRequestId += 1;
     if (!keepKeyboardAnchor) resetVerticalNavigation();
     options.clearBlockSelection();
     if (next.anchor.blockId === next.focus.blockId && next.anchor.offset === next.focus.offset) {
@@ -204,7 +204,7 @@ export function createNotesDocumentSelectionController(options: DocumentSelectio
       list?.setAttribute("data-notes-document-selection", "");
       schedulePaint();
     } else paint();
-    if (!keepKeyboardAnchor && next.anchor.blockId === next.focus.blockId && editor(next.anchor.blockId) && !entireDocument()) {
+    if (!keepKeyboardAnchor && next.anchor.blockId === next.focus.blockId && editor(next.anchor.blockId) && !selectsEntireDocument()) {
       clear(); return;
     }
   }
@@ -214,7 +214,7 @@ export function createNotesDocumentSelectionController(options: DocumentSelectio
     catch (reason) { error = reason instanceof Error ? reason.message : String(reason); }
   }
 
-  function entireDocument(): boolean {
+  function selectsEntireDocument(): boolean {
     const selected = range();
     return !!selected && selected.start.offset === 0 && selected.end.offset === Number.MAX_SAFE_INTEGER
       && selected.blockIds.length === options.readIds().length;
@@ -222,11 +222,11 @@ export function createNotesDocumentSelectionController(options: DocumentSelectio
 
   async function hydrateSelection(ids: readonly string[]): Promise<void> {
     if (ids.every((id) => options.readBlock(id))) return;
-    const token = request;
+    const token = selectionRequestId;
     const page = options.readPageId();
     pinnedIds = [...ids];
     await tick();
-    if (!alive || token !== request || page !== options.readPageId()) return;
+    if (!alive || token !== selectionRequestId || page !== options.readPageId()) return;
     await options.hydrate(ids);
   }
 
@@ -259,17 +259,17 @@ export function createNotesDocumentSelectionController(options: DocumentSelectio
     const selected = range();
     if (!selected) return;
     const page = options.readPageId();
-    const token = request;
+    const token = selectionRequestId;
     replacementText = value;
     try {
       if (selected.blockIds.some((id) => !options.readBlock(id))) await hydrateSelection(selected.blockIds);
-      if (!alive || token !== request || page !== options.readPageId()) return;
+      if (!alive || token !== selectionRequestId || page !== options.readPageId()) return;
       const applied = await options.replace(selected.blockIds, selected.start.offset, selected.end.offset, replacementText ?? value, html, selection ?? undefined);
       if (applied === false) return;
-      if (!alive || token !== request || page !== options.readPageId()) return;
+      if (!alive || token !== selectionRequestId || page !== options.readPageId()) return;
       clear();
       options.restoreFocusAfterEdit?.();
-    } finally { if (token === request) replacementText = null; }
+    } finally { if (token === selectionRequestId) replacementText = null; }
   }
 
   /** Apply a copied destination to the selected words, hydrating only the selected block content. */
@@ -277,14 +277,14 @@ export function createNotesDocumentSelectionController(options: DocumentSelectio
     const url = notesPastedTextLinkUrl(value, list?.ownerDocument.defaultView?.location.href);
     const selected = range();
     if (!url || !selected || !options.link) return false;
-    const token = request;
+    const token = selectionRequestId;
     const pageId = options.readPageId();
     await hydrateSelection(selected.blockIds);
-    if (!alive || token !== request || pageId !== options.readPageId()) return true;
+    if (!alive || token !== selectionRequestId || pageId !== options.readPageId()) return true;
     const hasText = selected.blockIds.some((id) => {
       const block = options.readBlock(id);
       return block && isTextEditableBlock(block.type) && block.type !== "code"
-        && (id === selected.end.blockId ? selected.end.offset : length(id))
+        && (id === selected.end.blockId ? selected.end.offset : blockTextLength(id))
           > (id === selected.start.blockId ? selected.start.offset : 0);
     });
     if (!hasText) return false;
@@ -297,14 +297,14 @@ export function createNotesDocumentSelectionController(options: DocumentSelectio
     const selected = range();
     if (!selected) return;
     const page = options.readPageId();
-    const token = request;
+    const token = selectionRequestId;
     if (selected.blockIds.some((id) => !options.readBlock(id))) await hydrateSelection(selected.blockIds);
-    if (!alive || token !== request || page !== options.readPageId()) return;
+    if (!alive || token !== selectionRequestId || page !== options.readPageId()) return;
     const blockIds = clipboardBlockIds();
     if (blockIds.some((id) => !options.readBlock(id))) await hydrateSelection(blockIds);
-    if (!alive || token !== request || page !== options.readPageId()) return;
+    if (!alive || token !== selectionRequestId || page !== options.readPageId()) return;
     await writeNotesClipboard(clipboardContent(blockIds));
-    if (token !== request) return;
+    if (token !== selectionRequestId) return;
     if (cut) await replace("");
     menu = null;
   }
@@ -312,9 +312,9 @@ export function createNotesDocumentSelectionController(options: DocumentSelectio
   async function format(annotation: NotesRichTextAnnotationName): Promise<void> {
     const selected = range();
     if (!selected) return;
-    const token = request;
+    const token = selectionRequestId;
     await hydrateSelection(selected.blockIds);
-    if (!alive || token !== request) return;
+    if (!alive || token !== selectionRequestId) return;
     await options.format(selected.blockIds, selected.start.offset, selected.end.offset, annotation, selection ?? undefined);
     await tick();
     paint();
@@ -333,7 +333,7 @@ export function createNotesDocumentSelectionController(options: DocumentSelectio
   /** Treat noninteractive space in a text row as part of its editing surface. */
   function pointerEditor(target: EventTarget | null): HTMLElement | null {
     if (!(target instanceof Element) || !list?.contains(target)) return null;
-    const root = target.closest<HTMLElement>(`${EDITOR}, ${ATOMIC}`);
+    const root = target.closest<HTMLElement>(`${EDITABLE_BLOCK_SELECTOR}, ${ATOMIC_BLOCK_SELECTOR}`);
     if (root) return root;
     if (target.closest("input, textarea, select, button, a, [role='button'], [role='menu'], [role='dialog'], [contenteditable='true']")) return null;
     const row = target.closest<HTMLElement>("[data-notes-selectable-block-id]");
@@ -342,7 +342,7 @@ export function createNotesDocumentSelectionController(options: DocumentSelectio
 
   /** Clamp padding and marker hits to the nearest caret position in the same editor. */
   function pointerPoint(root: HTMLElement, x: number, y: number): NotesDocumentPoint {
-    if (root.matches(ATOMIC)) {
+    if (root.matches(ATOMIC_BLOCK_SELECTOR)) {
       const rect = root.getBoundingClientRect();
       return { blockId: root.dataset.notesAtomicBlock!, offset: x < rect.left + rect.width / 2 ? 0 : 1 };
     }
@@ -357,14 +357,14 @@ export function createNotesDocumentSelectionController(options: DocumentSelectio
       Math.min(Math.max(y, rect.top + insetY), rect.bottom - insetY),
     );
     if (clamped?.blockId === id) return clamped;
-    return { blockId: id, offset: y < rect.top || x <= rect.left ? 0 : length(id) };
+    return { blockId: id, offset: y < rect.top || x <= rect.left ? 0 : blockTextLength(id) };
   }
 
   function pointerDown(event: PointerEvent): void {
     if (event.defaultPrevented || event.button !== 0 || !(event.target instanceof Element) || event.target.closest("[data-notes-selection-menu]")) return;
     pointerAnchor = null;
     pointerFromRow = false;
-    suppressAtomicClick = false;
+    shouldSuppressAtomicClick = false;
     resetVerticalNavigation();
     const root = pointerEditor(event.target);
     if (!root) { clear(); return; }
@@ -397,7 +397,7 @@ export function createNotesDocumentSelectionController(options: DocumentSelectio
     if (!hit || (hit.blockId === pointerAnchor.blockId && !selection && !pointerFromRow
       && options.readBlock(hit.blockId)?.type !== "child_page")) return;
     event.preventDefault();
-    suppressAtomicClick = true;
+    shouldSuppressAtomicClick = true;
     void run(() => select({ anchor: pointerAnchor!, focus: hit }));
   }
 
@@ -438,25 +438,25 @@ export function createNotesDocumentSelectionController(options: DocumentSelectio
       }
       if (!options.readBlock(adjacent) || !editor(adjacent)) {
         extensionInProgress = true;
-        const token = request;
+        const token = selectionRequestId;
         const page = options.readPageId();
         pinnedIds = [adjacent];
-        if (!editor(adjacent)) options.focus({ blockId: adjacent, offset: forward ? 0 : length(adjacent) });
+        if (!editor(adjacent)) options.focus({ blockId: adjacent, offset: forward ? 0 : blockTextLength(adjacent) });
         await tick();
-        if (!alive || epoch !== extensionEpoch || token !== request || page !== options.readPageId()) return null;
+        if (!alive || epoch !== extensionEpoch || token !== selectionRequestId || page !== options.readPageId()) return null;
         if (!options.readBlock(adjacent)) await options.hydrate([adjacent]);
         await tick();
-        if (!alive || epoch !== extensionEpoch || token !== request || page !== options.readPageId()) return null;
+        if (!alive || epoch !== extensionEpoch || token !== selectionRequestId || page !== options.readPageId()) return null;
       }
       const target = editor(adjacent);
       const targetLines = target ? notesEditableVisualLines(target) : [];
       const targetLine = forward ? targetLines[0] : targetLines.at(-1);
       const offset = target && targetLine ? notesCaretOffsetOnVisualLine(target, targetLine, goalX) : null;
-      const nextOffset = offset ?? (forward ? 0 : length(adjacent));
+      const nextOffset = offset ?? (forward ? 0 : blockTextLength(adjacent));
       verticalFocusLine = targetLine ? { blockId: adjacent, offset: nextOffset, index: forward ? 0 : targetLines.length - 1 } : null;
       return { blockId: adjacent, offset: nextOffset };
     }
-    const boundaryOffset = forward ? length(current.blockId) : 0;
+    const boundaryOffset = forward ? blockTextLength(current.blockId) : 0;
     verticalFocusLine = lineIndex === null ? null : { blockId: current.blockId, offset: boundaryOffset, index: lineIndex };
     return { blockId: current.blockId, offset: boundaryOffset };
   }
@@ -474,7 +474,7 @@ export function createNotesDocumentSelectionController(options: DocumentSelectio
           focus = { blockId: focus.blockId, offset: forward ? 1 : 0 };
         } else {
           const adjacent = adjacentTextId(focus.blockId, forward);
-          focus = adjacent ? { blockId: adjacent, offset: forward ? 0 : length(adjacent) }
+          focus = adjacent ? { blockId: adjacent, offset: forward ? 0 : blockTextLength(adjacent) }
             : { blockId: focus.blockId, offset: forward ? 1 : 0 };
         }
         await select({ anchor: current.anchor, focus }, true);
@@ -482,13 +482,13 @@ export function createNotesDocumentSelectionController(options: DocumentSelectio
       }
       if (!editor(focus.blockId)) {
         extensionInProgress = true;
-        const token = request;
+        const token = selectionRequestId;
         options.focus(focus);
         await tick();
-        if (!alive || epoch !== extensionEpoch || token !== request) return;
+        if (!alive || epoch !== extensionEpoch || token !== selectionRequestId) return;
         if (!options.readBlock(focus.blockId)) await options.hydrate([focus.blockId]);
         await tick();
-        if (!alive || epoch !== extensionEpoch || token !== request) return;
+        if (!alive || epoch !== extensionEpoch || token !== selectionRequestId) return;
       }
       const root = editor(focus.blockId);
       if (!root) {
@@ -515,17 +515,17 @@ export function createNotesDocumentSelectionController(options: DocumentSelectio
           if (adjacent) {
             if (!options.readBlock(adjacent) || !editor(adjacent)) {
               extensionInProgress = true;
-              const token = request;
+              const token = selectionRequestId;
               const page = options.readPageId();
               pinnedIds = [adjacent];
-              if (!editor(adjacent)) options.focus({ blockId: adjacent, offset: forward ? 0 : length(adjacent) });
+              if (!editor(adjacent)) options.focus({ blockId: adjacent, offset: forward ? 0 : blockTextLength(adjacent) });
               await tick();
-              if (!alive || epoch !== extensionEpoch || token !== request || page !== options.readPageId()) return;
+              if (!alive || epoch !== extensionEpoch || token !== selectionRequestId || page !== options.readPageId()) return;
               if (!options.readBlock(adjacent)) await options.hydrate([adjacent]);
               await tick();
-              if (!alive || epoch !== extensionEpoch || token !== request || page !== options.readPageId()) return;
+              if (!alive || epoch !== extensionEpoch || token !== selectionRequestId || page !== options.readPageId()) return;
             }
-            focus = { blockId: adjacent, offset: forward ? 0 : length(adjacent) };
+            focus = { blockId: adjacent, offset: forward ? 0 : blockTextLength(adjacent) };
           }
         }
       }
@@ -538,9 +538,9 @@ export function createNotesDocumentSelectionController(options: DocumentSelectio
 
   function keydown(event: KeyboardEvent): void {
     if (event.defaultPrevented || event.isComposing || !(event.target instanceof Element)) return;
-    if (!event.target.closest(`${EDITOR}, ${ATOMIC}`) && !event.target.matches("[data-notes-selectable-block-id]") && !selection) return;
+    if (!event.target.closest(`${EDITABLE_BLOCK_SELECTOR}, ${ATOMIC_BLOCK_SELECTOR}`) && !event.target.matches("[data-notes-selectable-block-id]") && !selection) return;
     if (event.target.closest("[data-notes-selection-menu]")) return;
-    pasteAsPlainText = (event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === "v";
+    shouldPasteAsPlainText = (event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === "v";
     if (!["ArrowUp", "ArrowDown", "Shift"].includes(event.key) || !event.shiftKey) resetVerticalNavigation();
     const modifier = event.ctrlKey || event.metaKey;
     if (replacementText !== null && !modifier && !event.altKey) {
@@ -557,7 +557,7 @@ export function createNotesDocumentSelectionController(options: DocumentSelectio
       if (ids.length) void run(() => select({ anchor: { blockId: ids[0], offset: 0 }, focus: { blockId: ids[ids.length - 1], offset: Number.MAX_SAFE_INTEGER } }));
       return;
     }
-    const atomic = event.target.closest<HTMLElement>(ATOMIC);
+    const atomic = event.target.closest<HTMLElement>(ATOMIC_BLOCK_SELECTOR);
     const atomicPoint = atomic ? { blockId: atomic.dataset.notesAtomicBlock!, offset: 0 } : null;
     const current = selection ?? (atomicPoint ? { anchor: atomicPoint, focus: atomicPoint } : nativeSelection());
     if (!selection && atomicPoint && !modifier && !event.shiftKey && !event.altKey
@@ -566,7 +566,7 @@ export function createNotesDocumentSelectionController(options: DocumentSelectio
       const adjacent = adjacentTextId(atomicPoint.blockId, forward);
       if (adjacent) {
         event.preventDefault(); event.stopPropagation();
-        options.focus({ blockId: adjacent, offset: forward ? 0 : length(adjacent) });
+        options.focus({ blockId: adjacent, offset: forward ? 0 : blockTextLength(adjacent) });
       }
       return;
     }
@@ -583,7 +583,7 @@ export function createNotesDocumentSelectionController(options: DocumentSelectio
       && current.anchor.blockId === current.focus.blockId && current.anchor.offset === current.focus.offset
       && ["ArrowLeft", "ArrowRight"].includes(event.key)) {
       const forward = event.key === "ArrowRight";
-      if (current.focus.offset === (forward ? length(current.focus.blockId) : 0)) {
+      if (current.focus.offset === (forward ? blockTextLength(current.focus.blockId) : 0)) {
         const adjacent = adjacentTextId(current.focus.blockId, forward);
         if (adjacent) {
           event.preventDefault(); event.stopPropagation();
@@ -606,9 +606,9 @@ export function createNotesDocumentSelectionController(options: DocumentSelectio
       event.preventDefault(); event.stopPropagation();
       const selected = range();
       if (selected) void run(async () => {
-        const token = request;
+        const token = selectionRequestId;
         await hydrateSelection(selected.blockIds);
-        if (!alive || token !== request) return;
+        if (!alive || token !== selectionRequestId) return;
         await options.indent?.(selected.rowBlockIds, event.shiftKey ? "outdent" : "nest", selection ?? undefined);
         await tick(); paint();
       });
@@ -646,14 +646,14 @@ export function createNotesDocumentSelectionController(options: DocumentSelectio
     resetVerticalNavigation();
     if (event.key !== "Shift") return;
     if (!selection || selection.anchor.blockId !== selection.focus.blockId) return;
-    if (editor(selection.anchor.blockId) && !entireDocument()) clear();
+    if (editor(selection.anchor.blockId) && !selectsEntireDocument()) clear();
   }
 
   function clipboard(event: ClipboardEvent): void {
-    const plainOnly = event.type === "paste" && pasteAsPlainText;
-    if (event.type === "paste") pasteAsPlainText = false;
+    const plainOnly = event.type === "paste" && shouldPasteAsPlainText;
+    if (event.type === "paste") shouldPasteAsPlainText = false;
     if (!selection && event.target instanceof Element) {
-      const atomic = event.target.closest<HTMLElement>(ATOMIC);
+      const atomic = event.target.closest<HTMLElement>(ATOMIC_BLOCK_SELECTOR);
       const id = atomic?.dataset.notesAtomicBlock;
       if (id) {
         if (event.type === "paste") {
@@ -703,7 +703,7 @@ export function createNotesDocumentSelectionController(options: DocumentSelectio
 
   function compositionStart(event: CompositionEvent): void {
     if (!selection || !(event.target instanceof Element)) return;
-    const root = event.target.closest<HTMLElement>(EDITOR);
+    const root = event.target.closest<HTMLElement>(EDITABLE_BLOCK_SELECTOR);
     if (!root) return;
     composing = true;
     list?.setAttribute("data-notes-document-selection-composing", "");
@@ -740,14 +740,14 @@ export function createNotesDocumentSelectionController(options: DocumentSelectio
     clear, select, copy, replace, format, run,
     closeMenu() {
       menu = null;
-      const root = selection ? editor(selection.anchor.blockId) ?? list?.querySelector<HTMLElement>(EDITOR) : null;
+      const root = selection ? editor(selection.anchor.blockId) ?? list?.querySelector<HTMLElement>(EDITABLE_BLOCK_SELECTOR) : null;
       root?.focus({ preventScroll: true });
       paint();
     },
     async paste() {
-      const token = request;
+      const token = selectionRequestId;
       const { plainText, html } = await readNotesClipboard();
-      if (token === request && (plainText || html) && !await pasteLink(plainText)) await replace(plainText, notesClipboardPasteHtml(plainText, html) || undefined);
+      if (token === selectionRequestId && (plainText || html) && !await pasteLink(plainText)) await replace(plainText, notesClipboardPasteHtml(plainText, html) || undefined);
     },
     delegation(node: HTMLDivElement) {
       list = node; alive = true;
@@ -758,12 +758,12 @@ export function createNotesDocumentSelectionController(options: DocumentSelectio
       resizeObserver?.observe(node);
       node.ownerDocument.addEventListener("scroll", repaint, true);
       view?.addEventListener("resize", repaint);
-      const stop = () => { pointerAnchor = null; pointerFromRow = false; };
+      const endPointerGesture = () => { pointerAnchor = null; pointerFromRow = false; };
       const click = (event: MouseEvent) => {
-        if (suppressAtomicClick && event.target instanceof Element && event.target.closest(ATOMIC)) {
+        if (shouldSuppressAtomicClick && event.target instanceof Element && event.target.closest(ATOMIC_BLOCK_SELECTOR)) {
           event.preventDefault(); event.stopPropagation();
         }
-        suppressAtomicClick = false;
+        shouldSuppressAtomicClick = false;
       };
       node.addEventListener("click", click, true);
       node.addEventListener("keydown", keydown, true);
@@ -776,8 +776,8 @@ export function createNotesDocumentSelectionController(options: DocumentSelectio
       node.addEventListener("input", input, true);
       for (const type of ["copy", "cut", "paste"] as const) node.addEventListener(type, clipboard, true);
       node.ownerDocument.addEventListener("pointermove", pointerMove);
-      node.ownerDocument.addEventListener("pointerup", stop);
-      node.ownerDocument.addEventListener("pointercancel", stop);
+      node.ownerDocument.addEventListener("pointerup", endPointerGesture);
+      node.ownerDocument.addEventListener("pointercancel", endPointerGesture);
       return { destroy() {
         alive = false; clear();
         resizeObserver?.disconnect();
@@ -795,8 +795,8 @@ export function createNotesDocumentSelectionController(options: DocumentSelectio
         node.removeEventListener("input", input, true);
         for (const type of ["copy", "cut", "paste"] as const) node.removeEventListener(type, clipboard, true);
         node.ownerDocument.removeEventListener("pointermove", pointerMove);
-        node.ownerDocument.removeEventListener("pointerup", stop);
-        node.ownerDocument.removeEventListener("pointercancel", stop);
+        node.ownerDocument.removeEventListener("pointerup", endPointerGesture);
+        node.ownerDocument.removeEventListener("pointercancel", endPointerGesture);
         list = null;
       } };
     },

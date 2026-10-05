@@ -19,7 +19,7 @@ use std::{
 };
 use tauri::{Manager, Runtime};
 
-const INTERVAL: Duration = Duration::from_secs(5);
+const REFRESH_INTERVAL: Duration = Duration::from_secs(5);
 const MAX_VIEW_AGE: Duration = Duration::from_secs(10);
 const DRAIN_WAIT: Duration = Duration::from_secs(5);
 const MAX_CONFIG_BYTES: u64 = 1024 * 1024;
@@ -115,7 +115,7 @@ pub(crate) fn setup<R: Runtime>(app: &tauri::AppHandle<R>) {
                 }
             };
             let Some((generation, active)) = context else {
-                tokio::select! { _ = control.wake.notified() => {}, _ = tokio::time::sleep(INTERVAL) => {} }
+                tokio::select! { _ = control.wake.notified() => {}, _ = tokio::time::sleep(REFRESH_INTERVAL) => {} }
                 continue;
             };
             if active {
@@ -133,7 +133,7 @@ pub(crate) fn setup<R: Runtime>(app: &tauri::AppHandle<R>) {
                     previous_error = None;
                 }
             }
-            tokio::select! { _ = control.wake.notified() => {}, _ = tokio::time::sleep(INTERVAL) => {} }
+            tokio::select! { _ = control.wake.notified() => {}, _ = tokio::time::sleep(REFRESH_INTERVAL) => {} }
         }
     });
 }

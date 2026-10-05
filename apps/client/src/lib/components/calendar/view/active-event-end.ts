@@ -1,8 +1,8 @@
 import type { CalendarEvent, PomodoroConfig } from "$lib/calendar/types";
 import { parseCalendarDate } from "$lib/calendar/utils";
-import { sameConcreteOccurrence } from "$lib/components/calendar/occurrence-protection";
+import { isSameConcreteOccurrence } from "$lib/components/calendar/occurrence-protection";
 
-export { sameConcreteOccurrence };
+export { isSameConcreteOccurrence };
 
 export function eventCoversInstant(event: CalendarEvent, instant: Date): boolean {
   const startMs = parseCalendarDate(event.start).getTime();
@@ -30,7 +30,7 @@ export function endActiveEventWouldStopProductivity(
   return !visibleEvents.some((event) =>
     !!event.pomodoroConfig
     && !event.allDay
-    && !sameConcreteOccurrence(event, selectedEvent)
+    && !isSameConcreteOccurrence(event, selectedEvent)
     && eventCoversInstant(event, now),
   );
 }

@@ -13,7 +13,7 @@
   import Plus from "@lucide/svelte/icons/plus";
   import X from "@lucide/svelte/icons/x";
   import * as chatApi from "$lib/api/chat";
-  import type { PreviewBounds, PreviewTabRead } from "$lib/chat/contracts";
+  import type { BrowserTabBounds, BrowserTabRead } from "$lib/chat/contracts";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import { getChat } from "$lib/stores/chat.svelte";
 
@@ -22,8 +22,8 @@
   const { t } = getLocalization();
   const chat = getChat();
   let viewport: HTMLDivElement | undefined = $state();
-  let preview: PreviewTabRead | null = $state(null);
-  let tabs = $state<PreviewTabRead[]>([]);
+  let browserTab: BrowserTabRead | null = $state(null);
+  let tabs = $state<BrowserTabRead[]>([]);
   let tabId: string | null = $state(null);
   let loadedThreadId: string | null = null;
   let url = $state("");
@@ -47,23 +47,23 @@
     if (selectedThreadId === loadedThreadId) return;
     const previousThreadId = loadedThreadId;
     const previousTabId = tabId;
-    const previousTabVisible = preview?.visible ?? false;
+    const previousTabVisible = browserTab?.visible ?? false;
     if (recording && previousThreadId && previousTabId) {
       recording = false;
       void finishRecording(previousThreadId, previousTabId, false);
     }
     loadedThreadId = selectedThreadId;
     if (previousThreadId && previousTabId && previousTabVisible) {
-      void chatApi.setPreviewVisible(previousThreadId, previousTabId, false).catch(() => undefined);
+      void chatApi.setBrowserTabVisible(previousThreadId, previousTabId, false).catch(() => undefined);
     }
-    void loadStoredPreview(selectedThreadId);
+    void loadStoredBrowserTab(selectedThreadId);
   });
 
   onDestroy(() => {
     resizeObserver?.disconnect();
     if (resizeFrame !== null) cancelAnimationFrame(resizeFrame);
-    if (threadId && tabId && preview?.visible) {
-      void chatApi.setPreviewVisible(threadId, tabId, false);
+    if (threadId && tabId && browserTab?.visible) {
+      void chatApi.setBrowserTabVisible(threadId, tabId, false);
     }
     if (recording && threadId && tabId) {
       recording = false;
@@ -80,20 +80,20 @@
     return t("chat.browser.unavailable");
   }
 
-  async function loadStoredPreview(selectedThreadId: string | null): Promise<void> {
-    preview = null;
+  async function loadStoredBrowserTab(selectedThreadId: string | null): Promise<void> {
+    browserTab = null;
     tabs = [];
     url = "";
     tabId = selectedThreadId ? `preview:${selectedThreadId}:main` : null;
     if (!selectedThreadId) return;
     try {
-      const stored = await chatApi.readPreviewStatus(selectedThreadId);
+      const stored = await chatApi.readBrowserStatus(selectedThreadId);
       if (selectedThreadId !== loadedThreadId) return;
       tabs = stored;
       const selected = stored.find((tab) => tab.visible) ?? stored[0] ?? null;
       if (selected) {
         tabId = selected.tabId;
-        preview = selected;
+        browserTab = selected;
         url = selected.currentUrl;
       }
     } catch (reason) {
@@ -124,11 +124,11 @@
     loading = true;
     error = null;
     try {
-      if (preview?.visible) {
-        preview = await chatApi.navigatePreview(threadId, tabId, destination, externalConfirmed);
+      if (browserTab?.visible) {
+        browserTab = await chatApi.navigateBrowserTab(threadId, tabId, destination, externalConfirmed);
       } else {
         await tick();
-        preview = await chatApi.openPreview({
+        browserTab = await chatApi.openBrowserTab({
           threadId,
           tabId,
           url: destination,
@@ -136,8 +136,8 @@
           externalNavigationConfirmed: externalConfirmed,
         });
       }
-      url = preview.currentUrl;
-      upsertTab(preview);
+      url = browserTab.currentUrl;
+      upsertTab(browserTab);
     } catch (reason) {
       error = message(reason);
     } finally {
@@ -145,53 +145,53 @@
     }
   }
 
-  function upsertTab(tab: PreviewTabRead): void {
+  function upsertTab(tab: BrowserTabRead): void {
     tabs = [...tabs.filter((entry) => entry.tabId !== tab.tabId), tab];
   }
 
-  async function selectTab(tab: PreviewTabRead): Promise<void> {
+  async function selectTab(tab: BrowserTabRead): Promise<void> {
     if (!threadId || tab.tabId === tabId) return;
     if (recording && tabId) await finishRecording(threadId, tabId, true);
-    if (preview?.visible && tabId) {
-      await chatApi.setPreviewVisible(threadId, tabId, false).catch(() => undefined);
-      preview = { ...preview, visible: false };
-      upsertTab(preview);
+    if (browserTab?.visible && tabId) {
+      await chatApi.setBrowserTabVisible(threadId, tabId, false).catch(() => undefined);
+      browserTab = { ...browserTab, visible: false };
+      upsertTab(browserTab);
     }
     tabId = tab.tabId;
-    preview = tab;
+    browserTab = tab;
     url = tab.currentUrl;
     if (tab.visible) return;
     try {
-      preview = await chatApi.setPreviewVisible(threadId, tab.tabId, true);
-      upsertTab(preview);
+      browserTab = await chatApi.setBrowserTabVisible(threadId, tab.tabId, true);
+      upsertTab(browserTab);
     } catch {
-      preview = { ...tab, visible: false };
+      browserTab = { ...tab, visible: false };
     }
   }
 
   async function newTab(): Promise<void> {
     if (!threadId) return;
     if (recording && tabId) await finishRecording(threadId, tabId, true);
-    if (preview?.visible && tabId) {
-      await chatApi.setPreviewVisible(threadId, tabId, false).catch(() => undefined);
-      preview = { ...preview, visible: false };
-      upsertTab(preview);
+    if (browserTab?.visible && tabId) {
+      await chatApi.setBrowserTabVisible(threadId, tabId, false).catch(() => undefined);
+      browserTab = { ...browserTab, visible: false };
+      upsertTab(browserTab);
     }
     tabId = `preview:${threadId}:${crypto.randomUUID()}`;
-    preview = null;
+    browserTab = null;
     url = "";
   }
 
-  async function closeTab(event: MouseEvent, tab: PreviewTabRead): Promise<void> {
+  async function closeTab(event: MouseEvent, tab: BrowserTabRead): Promise<void> {
     event.stopPropagation();
     if (!threadId) return;
     try {
       if (recording && tab.tabId === tabId) await finishRecording(threadId, tab.tabId, true);
-      await chatApi.closePreview(threadId, tab.tabId);
+      await chatApi.closeBrowserTab(threadId, tab.tabId);
       tabs = tabs.filter((entry) => entry.tabId !== tab.tabId);
       if (tab.tabId === tabId) {
         const next = tabs[0] ?? null;
-        preview = null;
+        browserTab = null;
         tabId = next ? null : `preview:${threadId}:${crypto.randomUUID()}`;
         url = next?.currentUrl ?? "";
         if (next) await selectTab(next);
@@ -201,7 +201,7 @@
     }
   }
 
-  function currentBounds(): PreviewBounds {
+  function currentBounds(): BrowserTabBounds {
     if (!viewport) throw new Error(t("chat.browser.unavailable"));
     const container = viewport.getBoundingClientRect();
     const target = presetSize(container.width, container.height, preset);
@@ -229,9 +229,9 @@
   }
 
   async function resize(): Promise<void> {
-    if (!preview?.visible || !threadId || !tabId || !viewport) return;
+    if (!browserTab?.visible || !threadId || !tabId || !viewport) return;
     try {
-      preview = await chatApi.resizePreview(threadId, tabId, currentBounds());
+      browserTab = await chatApi.resizeBrowserTab(threadId, tabId, currentBounds());
     } catch (reason) {
       error = message(reason);
     }
@@ -252,11 +252,11 @@
   }
 
   async function captureScreenshot(): Promise<void> {
-    if (!threadId || !tabId || !preview?.visible || loading) return;
+    if (!threadId || !tabId || !browserTab?.visible || loading) return;
     loading = true;
     error = null;
     try {
-      const artifact = await chatApi.capturePreviewScreenshot(threadId, tabId);
+      const artifact = await chatApi.captureBrowserScreenshot(threadId, tabId);
       artifactStatus = t("chat.browser.artifactSaved", artifact.displayName);
     } catch (reason) {
       error = message(reason);
@@ -266,7 +266,7 @@
   }
 
   async function toggleRecording(): Promise<void> {
-    if (!threadId || !tabId || !preview?.visible || loading) return;
+    if (!threadId || !tabId || !browserTab?.visible || loading) return;
     const selectedThread = threadId;
     const selectedTab = tabId;
     if (!recording && !window.confirm(t("chat.browser.recordingConfirm"))) return;
@@ -276,7 +276,7 @@
       if (recording) {
         await finishRecording(selectedThread, selectedTab, true);
       } else {
-        await chatApi.startPreviewRecording(selectedThread, selectedTab);
+        await chatApi.startBrowserRecording(selectedThread, selectedTab);
         recording = true;
       }
     } catch (reason) {
@@ -293,7 +293,7 @@
   ): Promise<void> {
     recording = false;
     try {
-      const artifact = await chatApi.stopPreviewRecording(selectedThread, selectedTab);
+      const artifact = await chatApi.stopBrowserRecording(selectedThread, selectedTab);
       if (reportResult) artifactStatus = t("chat.browser.artifactSaved", artifact.displayName);
     } catch (reason) {
       if (reportResult) error = message(reason);
@@ -326,9 +326,9 @@
     <button type="button" class="new-tab" aria-label={t("chat.browser.newTab")} title={t("chat.browser.newTab")} onclick={() => void newTab()}><Plus size={13} /></button>
   </div>
   <form class="browser-toolbar" onsubmit={(event) => { event.preventDefault(); void navigate(); }}>
-    <button type="button" class="chat-icon-button" disabled={!preview?.visible} aria-label={t("chat.browser.back")} title={t("chat.browser.back")} onclick={() => { const selectedThread = threadId; const selectedTab = tabId; if (selectedThread && selectedTab) void control(() => chatApi.previewBack(selectedThread, selectedTab)); }}><ArrowLeft size={14} /></button>
-    <button type="button" class="chat-icon-button" disabled={!preview?.visible} aria-label={t("chat.browser.forward")} title={t("chat.browser.forward")} onclick={() => { const selectedThread = threadId; const selectedTab = tabId; if (selectedThread && selectedTab) void control(() => chatApi.previewForward(selectedThread, selectedTab)); }}><ArrowRight size={14} /></button>
-    <button type="button" class="chat-icon-button" disabled={!preview?.visible} aria-label={t("chat.browser.refresh")} title={t("chat.browser.refresh")} onclick={() => { const selectedThread = threadId; const selectedTab = tabId; if (selectedThread && selectedTab) void control(() => chatApi.refreshPreview(selectedThread, selectedTab)); }}><RefreshCw size={14} /></button>
+    <button type="button" class="chat-icon-button" disabled={!browserTab?.visible} aria-label={t("chat.browser.back")} title={t("chat.browser.back")} onclick={() => { const selectedThread = threadId; const selectedTab = tabId; if (selectedThread && selectedTab) void control(() => chatApi.browserBack(selectedThread, selectedTab)); }}><ArrowLeft size={14} /></button>
+    <button type="button" class="chat-icon-button" disabled={!browserTab?.visible} aria-label={t("chat.browser.forward")} title={t("chat.browser.forward")} onclick={() => { const selectedThread = threadId; const selectedTab = tabId; if (selectedThread && selectedTab) void control(() => chatApi.browserForward(selectedThread, selectedTab)); }}><ArrowRight size={14} /></button>
+    <button type="button" class="chat-icon-button" disabled={!browserTab?.visible} aria-label={t("chat.browser.refresh")} title={t("chat.browser.refresh")} onclick={() => { const selectedThread = threadId; const selectedTab = tabId; if (selectedThread && selectedTab) void control(() => chatApi.refreshBrowserTab(selectedThread, selectedTab)); }}><RefreshCw size={14} /></button>
     <input bind:value={url} autocomplete="url" spellcheck="false" aria-label={t("chat.browser.url")} placeholder={t("chat.browser.urlPlaceholder")} />
     <button type="button" class="chat-icon-button" disabled={!threadId || loading} aria-label={t("chat.browser.discoverServers")} title={t("chat.browser.discoverServers")} onclick={() => void discoverServers()}><Search size={14} /></button>
     <button type="submit" class="chat-icon-button" disabled={!url.trim() || loading} aria-label={t("chat.browser.open")} title={t("chat.browser.open")}><ExternalLink size={14} /></button>
@@ -345,18 +345,18 @@
     <button type="button" class:active={preset === "mobile"} aria-label={t("chat.browser.mobile")} title={t("chat.browser.mobile")} onclick={() => setPreset("mobile")}><Smartphone size={13} /></button>
     <button type="button" class:active={preset === "tablet"} aria-label={t("chat.browser.tablet")} title={t("chat.browser.tablet")} onclick={() => setPreset("tablet")}><Tablet size={13} /></button>
     <button type="button" class:active={preset === "desktop"} aria-label={t("chat.browser.desktop")} title={t("chat.browser.desktop")} onclick={() => setPreset("desktop")}><Monitor size={13} /></button>
-    <button type="button" disabled={!preview?.visible || loading} aria-label={t("chat.browser.screenshot")} title={t("chat.browser.screenshot")} onclick={() => void captureScreenshot()}><Camera size={13} /></button>
-    <button type="button" class:active={recording} disabled={!preview?.visible || loading} aria-label={recording ? t("chat.browser.recordingStop") : t("chat.browser.recordingStart")} title={recording ? t("chat.browser.recordingStop") : t("chat.browser.recordingStart")} onclick={() => void toggleRecording()}><Video size={13} /></button>
-    {#if preview}<span>{preview.viewportWidth} × {preview.viewportHeight}</span>{/if}
+    <button type="button" disabled={!browserTab?.visible || loading} aria-label={t("chat.browser.screenshot")} title={t("chat.browser.screenshot")} onclick={() => void captureScreenshot()}><Camera size={13} /></button>
+    <button type="button" class:active={recording} disabled={!browserTab?.visible || loading} aria-label={recording ? t("chat.browser.recordingStop") : t("chat.browser.recordingStart")} title={recording ? t("chat.browser.recordingStop") : t("chat.browser.recordingStart")} onclick={() => void toggleRecording()}><Video size={13} /></button>
+    {#if browserTab}<span>{browserTab.viewportWidth} × {browserTab.viewportHeight}</span>{/if}
   </div>
   {#if artifactStatus}<p role="status" class="artifact-status">{artifactStatus}</p>{/if}
   {#if error}<p role="alert" class="error">{error}</p>{/if}
   <div bind:this={viewport} class="browser-viewport">
-    {#if !preview?.visible}
+    {#if !browserTab?.visible}
       <div class="empty">
         <Monitor size={24} />
-        <p>{preview ? t("chat.browser.reopen") : t("chat.inspector.browserUnavailable")}</p>
-        {#if preview}<button type="button" class="chat-secondary-button" onclick={() => void navigate()}>{t("chat.browser.open")}</button>{/if}
+        <p>{browserTab ? t("chat.browser.reopen") : t("chat.inspector.browserUnavailable")}</p>
+        {#if browserTab}<button type="button" class="chat-secondary-button" onclick={() => void navigate()}>{t("chat.browser.open")}</button>{/if}
       </div>
     {/if}
   </div>

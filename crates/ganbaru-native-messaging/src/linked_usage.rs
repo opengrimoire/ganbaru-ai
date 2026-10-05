@@ -131,7 +131,7 @@ async fn compact(pool: &sqlx::SqlitePool, vault_id: &str, device_id: &str) -> Re
     .fetch_one(pool)
     .await
     .map_err(|e| format!("plan Distractions spool compaction: {e}"))?;
-    let unsafe_total: i64 = sqlx::query_scalar(
+    let overlong_group_count: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM (
             SELECT 1 FROM pending_usage_samples
             WHERE vault_id = ? AND device_id = ?
@@ -144,7 +144,7 @@ async fn compact(pool: &sqlx::SqlitePool, vault_id: &str, device_id: &str) -> Re
     .fetch_one(pool)
     .await
     .map_err(|e| format!("validate Distractions spool compaction: {e}"))?;
-    if compacted_count >= MAX_PENDING_SAMPLES || unsafe_total > 0 {
+    if compacted_count >= MAX_PENDING_SAMPLES || overlong_group_count > 0 {
         return Err("the linked-device Distractions spool cannot be compacted safely".to_string());
     }
     let mut transaction = pool
@@ -202,13 +202,13 @@ pub(super) fn native_vault_is_writable(config_dir: &Path, vault_path: Option<&Pa
     else {
         return false;
     };
-    let Some(state) = std::fs::read(config_dir.join(OWNERSHIP_STATE_FILE))
+    let Some(ownership) = std::fs::read(config_dir.join(OWNERSHIP_STATE_FILE))
         .ok()
         .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok())
     else {
         return false;
     };
-    let Some(record) = state
+    let Some(record) = ownership
         .get("vaults")
         .and_then(|vaults| vaults.get(&manifest.vault_id))
     else {

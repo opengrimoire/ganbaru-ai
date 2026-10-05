@@ -26,7 +26,7 @@ pub enum CheckpointKind {
 }
 
 impl CheckpointKind {
-    pub(super) fn wire(self) -> &'static str {
+    pub(super) fn as_str(self) -> &'static str {
         match self {
             Self::Initial => "initial",
             Self::PreTurn => "pre_turn",

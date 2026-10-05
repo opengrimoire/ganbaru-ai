@@ -211,10 +211,10 @@ fn normalize_progress(progress: f64) -> f64 {
     }
 }
 
-fn format_tray_time(secs: u32) -> String {
-    let mins = secs / 60;
-    let s = secs % 60;
-    format!("{mins}:{s:02}")
+fn format_tray_time(total_seconds: u32) -> String {
+    let minutes = total_seconds / 60;
+    let seconds = total_seconds % 60;
+    format!("{minutes}:{seconds:02}")
 }
 
 fn phase_id(phase: &str) -> u8 {
@@ -255,7 +255,7 @@ fn music_status_label(status: &str) -> &'static str {
     }
 }
 
-fn pomodoro_active(state: &PomodoroTrayState) -> bool {
+fn is_pomodoro_active(state: &PomodoroTrayState) -> bool {
     state.is_active
 }
 
@@ -282,7 +282,7 @@ fn tray_icon_key(progress: f64, active: bool, paused_pulse_frame: Option<u8>) ->
 }
 
 fn pomodoro_status_text(state: &PomodoroTrayState) -> String {
-    if pomodoro_active(state) {
+    if is_pomodoro_active(state) {
         format!("{} left", format_tray_time(state.remaining_seconds))
     } else {
         "No active session".to_string()
@@ -323,7 +323,7 @@ fn music_menu_status_text(state: &MusicTrayState) -> String {
 }
 
 fn tray_tooltip(state: &TrayState) -> String {
-    let pomodoro = if pomodoro_active(&state.pomodoro) {
+    let pomodoro = if is_pomodoro_active(&state.pomodoro) {
         format!(
             "{} {}",
             phase_label(&state.pomodoro.phase),
@@ -341,7 +341,7 @@ fn tray_tooltip(state: &TrayState) -> String {
 
 fn menu_shape(state: &TrayState) -> MenuShape {
     MenuShape {
-        pomodoro_active: pomodoro_active(&state.pomodoro),
+        pomodoro_active: is_pomodoro_active(&state.pomodoro),
         pomodoro_phase_id: phase_id(&state.pomodoro.phase),
         pomodoro_running: state.pomodoro.is_running,
         pomodoro_can_pause_resume: state.pomodoro.can_pause_resume,
@@ -382,7 +382,7 @@ fn build_menu(app: &AppHandle, state: &TrayState) -> Result<Menu<tauri::Wry>, St
         *stored = Some(music_status.clone());
     }
 
-    let pomodoro_active = pomodoro_active(&state.pomodoro);
+    let pomodoro_active = is_pomodoro_active(&state.pomodoro);
     let pause_resume_label = if state.pomodoro.is_running {
         "Pause focus"
     } else {
@@ -464,7 +464,7 @@ fn apply_tray_state(app: &AppHandle, state: &TrayState) -> Result<(), String> {
     let tray = app.tray_by_id("main").ok_or("No tray icon found")?;
 
     let progress = pomodoro_progress(&state.pomodoro);
-    let active = pomodoro_active(&state.pomodoro);
+    let active = is_pomodoro_active(&state.pomodoro);
     let paused_pulse_frame = pomodoro_paused_pulse_frame(&state.pomodoro);
     let icon_key = tray_icon_key(progress, active, paused_pulse_frame);
     {

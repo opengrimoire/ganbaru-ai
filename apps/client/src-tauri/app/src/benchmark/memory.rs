@@ -100,7 +100,7 @@ fn detect_platform_label() -> String {
 }
 
 #[tauri::command]
-pub(crate) fn get_memory_report() -> MemoryReport {
+pub(crate) fn memory_report() -> MemoryReport {
     #[cfg(target_os = "linux")]
     {
         struct LinuxMemoryReading {
@@ -115,9 +115,9 @@ pub(crate) fn get_memory_report() -> MemoryReport {
             let path = format!("/proc/{pid}/smaps_rollup");
             if let Ok(content) = std::fs::read_to_string(&path) {
                 for line in content.lines() {
-                    if let Some(val) = line.strip_prefix("Pss:") {
+                    if let Some(value) = line.strip_prefix("Pss:") {
                         return LinuxMemoryReading {
-                            kb: val
+                            kb: value
                                 .trim()
                                 .trim_end_matches(" kB")
                                 .trim()
@@ -132,9 +132,9 @@ pub(crate) fn get_memory_report() -> MemoryReport {
             let path = format!("/proc/{pid}/status");
             if let Ok(content) = std::fs::read_to_string(path) {
                 for line in content.lines() {
-                    if let Some(val) = line.strip_prefix("VmRSS:") {
+                    if let Some(value) = line.strip_prefix("VmRSS:") {
                         return LinuxMemoryReading {
-                            kb: val
+                            kb: value
                                 .trim()
                                 .trim_end_matches(" kB")
                                 .trim()
@@ -189,15 +189,15 @@ pub(crate) fn get_memory_report() -> MemoryReport {
         // Walk /proc to find child processes (WebKitWebProcess, WebKitNetworkProcess, etc.)
         if let Ok(entries) = std::fs::read_dir("/proc") {
             for entry in entries.flatten() {
-                let fname = entry.file_name();
-                let fname_str = fname.to_string_lossy();
-                if !fname_str.chars().all(|c| c.is_ascii_digit()) {
+                let file_name = entry.file_name();
+                let entry_pid = file_name.to_string_lossy();
+                if !entry_pid.chars().all(|c| c.is_ascii_digit()) {
                     continue;
                 }
-                if *fname_str == *my_pid_str {
+                if *entry_pid == *my_pid_str {
                     continue;
                 }
-                let stat_path = format!("/proc/{fname_str}/stat");
+                let stat_path = format!("/proc/{entry_pid}/stat");
                 if let Ok(stat) = std::fs::read_to_string(&stat_path) {
                     // Format: pid (comm) state ppid ...
                     // Find closing ')' to skip comm which may contain spaces
@@ -207,8 +207,8 @@ pub(crate) fn get_memory_report() -> MemoryReport {
                         if let Some(ppid) = fields.get(1) {
                             if *ppid == my_pid_str {
                                 processes.push(process_memory(
-                                    process_label(&fname_str),
-                                    &fname_str,
+                                    process_label(&entry_pid),
+                                    &entry_pid,
                                     &mut all_pss,
                                 ));
                             }
@@ -282,7 +282,7 @@ pub(crate) fn get_memory_report() -> MemoryReport {
             unsafe { Owned::new(snapshot) }
         };
 
-        let mut proc_list: Vec<(u32, u32, String)> = Vec::new();
+        let mut process_entries: Vec<(u32, u32, String)> = Vec::new();
         let mut entry = PROCESSENTRY32W {
             dwSize: size_of::<PROCESSENTRY32W>() as u32,
             ..Default::default()
@@ -299,7 +299,7 @@ pub(crate) fn get_memory_report() -> MemoryReport {
                     .position(|&c| c == 0)
                     .unwrap_or(entry.szExeFile.len());
                 let exe = String::from_utf16_lossy(&entry.szExeFile[..end]);
-                proc_list.push((entry.th32ProcessID, entry.th32ParentProcessID, exe));
+                process_entries.push((entry.th32ProcessID, entry.th32ParentProcessID, exe));
 
                 // SAFETY: The snapshot handle is still open and `entry` remains a
                 // valid output buffer for the next process entry.
@@ -324,7 +324,7 @@ pub(crate) fn get_memory_report() -> MemoryReport {
         let mut i = 0;
         while i < pids.len() {
             let parent = pids[i];
-            for &(pid, ppid, _) in &proc_list {
+            for &(pid, ppid, _) in &process_entries {
                 if ppid == parent && !pids.contains(&pid) {
                     pids.push(pid);
                 }
@@ -333,7 +333,7 @@ pub(crate) fn get_memory_report() -> MemoryReport {
         }
 
         let mut processes = Vec::new();
-        let mut webview_idx = 0u32;
+        let mut webview_index = 0u32;
         for &pid in &pids {
             // SAFETY: The process ID comes from the current process or the Windows
             // process snapshot. No pointers are passed, handle inheritance is
@@ -344,26 +344,26 @@ pub(crate) fn get_memory_report() -> MemoryReport {
                 // SAFETY: `OpenProcess` returned a fresh owning handle above.
                 // Ownership is transferred exactly once and released on drop.
                 let handle = unsafe { Owned::new(handle) };
-                let mut pmc = PROCESS_MEMORY_COUNTERS {
+                let mut counters = PROCESS_MEMORY_COUNTERS {
                     cb: size_of::<PROCESS_MEMORY_COUNTERS>() as u32,
                     ..Default::default()
                 };
-                // SAFETY: `handle` is an open process handle and `pmc` is a valid
+                // SAFETY: `handle` is an open process handle and `counters` is a valid
                 // writable output buffer whose cb field matches its struct size.
                 // Windows does not retain the handle or output pointer.
-                if unsafe { GetProcessMemoryInfo(*handle, &mut pmc, pmc.cb) }.is_ok() {
-                    let mb = pmc.WorkingSetSize as f64 / (1024.0 * 1024.0);
+                if unsafe { GetProcessMemoryInfo(*handle, &mut counters, counters.cb) }.is_ok() {
+                    let mb = counters.WorkingSetSize as f64 / (1024.0 * 1024.0);
                     let name = if pid == my_pid {
                         "Backend".to_string()
                     } else {
-                        let exe = proc_list
+                        let exe = process_entries
                             .iter()
                             .find(|(p, _, _)| *p == pid)
                             .map(|(_, _, e)| e.as_str())
                             .unwrap_or("unknown");
                         if exe.contains("msedgewebview2") || exe.contains("WebView") {
-                            webview_idx += 1;
-                            format!("WebView2 #{webview_idx}")
+                            webview_index += 1;
+                            format!("WebView2 #{webview_index}")
                         } else {
                             exe.to_string()
                         }

@@ -53,7 +53,7 @@ function button(label: string): HTMLButtonElement {
 }
 
 /** Mount one page's picker with a focus-return target. */
-async function open(onSelect = vi.fn(async (_cover: NotesPageCover | null) => {}), cover: NotesPageCover | null = createNotesDesignCover("contours", 4)) {
+async function mountCoverMenu(onSelect = vi.fn(async (_cover: NotesPageCover | null) => {}), cover: NotesPageCover | null = createNotesDesignCover("contours", 4)) {
   const trigger = document.createElement("button");
   const onClose = vi.fn();
   document.body.append(trigger);
@@ -64,7 +64,7 @@ async function open(onSelect = vi.fn(async (_cover: NotesPageCover | null) => {}
 
 describe("Notes cover selection", () => {
   it("lists Simple first and keeps the requested illustration order", async () => {
-    await open();
+    await mountCoverMenu();
     const sections = [...document.querySelectorAll("section")];
     expect(sections).toHaveLength(2);
     expect(sections[0].textContent).toContain("Simple");
@@ -77,7 +77,7 @@ describe("Notes cover selection", () => {
   });
 
   it("fades only overflowing edges and refreshes when filtered content changes size", async () => {
-    await open();
+    await mountCoverMenu();
     const scroll = document.querySelector<HTMLDivElement>(".cover-design-scroll")!;
     let contentHeight = 600;
     Object.defineProperties(scroll, {
@@ -111,7 +111,7 @@ describe("Notes cover selection", () => {
   });
 
   it("applies a design on selection with removal in the header and no preview or confirmation footer", async () => {
-    const { onSelect, onClose } = await open();
+    const { onSelect, onClose } = await mountCoverMenu();
     expect(document.querySelector('[aria-label="Cover preview"]')).toBeNull();
     const simple = button("Contours").closest("section");
     expect(simple?.textContent).toContain("Simple");
@@ -146,14 +146,14 @@ describe("Notes cover selection", () => {
     ["Programming", "programming"],
     ["Finance", "finance"],
   ] as const)("applies the %s design with the chosen theme color", async (label, pattern) => {
-    const { onSelect, onClose } = await open();
+    const { onSelect, onClose } = await mountCoverMenu();
     button(label).click();
     await vi.waitFor(() => expect(onClose).toHaveBeenCalledOnce());
     expect(onSelect).toHaveBeenCalledExactlyOnceWith(createNotesDesignCover(pattern, 4));
   });
 
   it("uses the shared color palette to recolor the existing design immediately and keeps the picker open", async () => {
-    const { onSelect, onClose } = await open();
+    const { onSelect, onClose } = await mountCoverMenu();
     button("Theme colors").click();
     await tick();
     expect(document.querySelectorAll(".swatch-selected")).toHaveLength(1);
@@ -170,7 +170,7 @@ describe("Notes cover selection", () => {
 
   it("offers a color beside the selected design when Ask every time is enabled", async () => {
     preferences.values.set("notes.coverPicker.askEveryTime", true);
-    const { onSelect, onClose } = await open();
+    const { onSelect, onClose } = await mountCoverMenu();
     await tick();
     button("Studio").click();
     await tick();
@@ -183,7 +183,7 @@ describe("Notes cover selection", () => {
 
   it("allows retrying a failed immediate save by selecting the design again", async () => {
     const onSelect = vi.fn(async (_cover: NotesPageCover | null) => {}).mockRejectedValueOnce(new Error("Storage unavailable"));
-    const { onClose } = await open(onSelect);
+    const { onClose } = await mountCoverMenu(onSelect);
     button("Grid").click();
     await vi.waitFor(() => expect(document.querySelector('[role="alert"]')?.textContent).toContain("Storage unavailable"));
     expect(onClose).not.toHaveBeenCalled();
@@ -194,7 +194,7 @@ describe("Notes cover selection", () => {
 
   it("uses the icon upload panel and immediately applies a chosen image", async () => {
     images.pick.mockResolvedValueOnce(asset);
-    const { onSelect, onClose } = await open();
+    const { onSelect, onClose } = await mountCoverMenu();
     button("Upload").click();
     await tick();
     button("Upload an image").click();
@@ -206,7 +206,7 @@ describe("Notes cover selection", () => {
   it("ignores file selection after Escape closes the page's picker", async () => {
     let finish: ((value: NotesPageCoverAssetMetadata) => void) | undefined;
     images.pick.mockReturnValueOnce(new Promise<NotesPageCoverAssetMetadata>((resolve) => { finish = resolve; }));
-    const { trigger, onSelect, onClose } = await open();
+    const { trigger, onSelect, onClose } = await mountCoverMenu();
     button("Upload").click();
     await tick();
     button("Upload an image").click();

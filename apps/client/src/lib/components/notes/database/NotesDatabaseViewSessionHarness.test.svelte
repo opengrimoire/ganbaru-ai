@@ -40,7 +40,7 @@
 </script>
 
 <div data-session-view={viewId} data-source-id={dataSourceId} data-editing-locked={editingLocked} data-layout-snapshot={snapshot} data-new-row-request={newRowRequest}></div>
-{#if settingsOpen}<CollectionSettings label="View settings" onclose={onCloseSettings}>{@render settingsHeader?.()}</CollectionSettings>{/if}
+{#if settingsOpen}<CollectionSettings label="View settings" onClose={onCloseSettings}>{@render settingsHeader?.()}</CollectionSettings>{/if}
 <input aria-label="Layout draft" bind:value={draft} />
 <button type="button" data-start-save disabled={saving} onclick={() => { void save(); }}>Save layout</button>
 <button type="button" data-finish-view onclick={onReady}>Finish view loading</button>

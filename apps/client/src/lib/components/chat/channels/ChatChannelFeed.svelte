@@ -30,16 +30,16 @@
     channel?.unreadCount ?? 0,
   ));
 
-  function sameDay(left: string, right: string): boolean {
+  function isSameDay(left: string, right: string): boolean {
     return new Date(left).toDateString() === new Date(right).toDateString();
   }
 
-  function grouped(index: number): boolean {
+  function shouldGroupWithPrevious(index: number): boolean {
     const current = chat.channelMessages[index];
     const previous = chat.channelMessages[index - 1];
     if (!current || !previous) return false;
     return current.author.id === previous.author.id
-      && sameDay(current.createdAt, previous.createdAt)
+      && isSameDay(current.createdAt, previous.createdAt)
       && Date.parse(current.createdAt) - Date.parse(previous.createdAt) < 5 * 60_000;
   }
 
@@ -153,10 +153,10 @@
       {#if chat.channelPages[0]?.previousCursor}<button type="button" class="load-older" onclick={() => void chat.loadOlderChannelMessages()}>{t("chat.organization.loadOlder")}</button>{/if}
       {#each chat.channelMessages as message, index (message.itemId)}
         {#if index === unreadStart && (channel?.unreadCount ?? 0) > 0}<div class="divider unread"><span>{t("chat.organization.unreadMessages")}</span></div>{/if}
-        {#if index === 0 || !sameDay(chat.channelMessages[index - 1].createdAt, message.createdAt)}
+        {#if index === 0 || !isSameDay(chat.channelMessages[index - 1].createdAt, message.createdAt)}
           <div class="divider" class:first-date={index === 0}><span>{formatDateTime(localization.locale, Date.parse(message.createdAt), { dateStyle: "full" })}</span></div>
         {/if}
-        <ChatOrganizationalMessage {message} grouped={grouped(index)} onOpenThread={(trigger) => { if (message.replyThread) void openThread(message.replyThread.id, trigger); }} />
+        <ChatOrganizationalMessage {message} grouped={shouldGroupWithPrevious(index)} onOpenThread={(trigger) => { if (message.replyThread) void openThread(message.replyThread.id, trigger); }} />
       {/each}
       {#if chat.channelMessagesLoading && chat.channelMessages.length === 0}<p class="loading" role="status">{t("common.loading")}</p>{/if}
     </div>

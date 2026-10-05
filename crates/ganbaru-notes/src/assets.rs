@@ -8,25 +8,25 @@ use sqlx::{Sqlite, SqlitePool, Transaction};
 use std::collections::HashSet;
 use std::path::{Component, Path};
 
-pub const NOTES_ASSET_SOURCE_LOCAL_UPLOAD: &str = "local_upload";
-pub const NOTES_ASSET_SOURCE_IMPORTED: &str = "imported";
-pub const NOTES_ASSET_STATE_AVAILABLE: &str = "available";
-pub const NOTES_ASSET_STATE_MISSING: &str = "missing";
+pub const ASSET_SOURCE_LOCAL_UPLOAD: &str = "local_upload";
+pub const ASSET_SOURCE_IMPORTED: &str = "imported";
+pub const ASSET_STATE_AVAILABLE: &str = "available";
+pub const ASSET_STATE_MISSING: &str = "missing";
 
-const NOTES_ASSET_PAGE_ICON_PREFIX: &str = "notes/page-icons/";
-const NOTES_ASSET_PAGE_COVER_PREFIX: &str = "notes/page-covers/";
-const NOTES_ASSET_FILE_PREFIX: &str = "notes/files/";
-const NOTES_ASSET_ALLOWED_IMAGE_CONTENT_TYPES: &[&str] = &["image/png", "image/jpeg", "image/webp"];
-const NOTES_ASSET_ALLOWED_IMAGE_EXTENSIONS: &[&str] = &["png", "jpg", "jpeg", "webp"];
-const NOTES_ASSET_SOURCE_TYPES: &[&str] = &[
+const ASSET_PAGE_ICON_PREFIX: &str = "notes/page-icons/";
+const ASSET_PAGE_COVER_PREFIX: &str = "notes/page-covers/";
+const ASSET_FILE_PREFIX: &str = "notes/files/";
+const ASSET_ALLOWED_IMAGE_CONTENT_TYPES: &[&str] = &["image/png", "image/jpeg", "image/webp"];
+const ASSET_ALLOWED_IMAGE_EXTENSIONS: &[&str] = &["png", "jpg", "jpeg", "webp"];
+const ASSET_SOURCE_TYPES: &[&str] = &[
     "local_upload",
     "generated",
     "imported",
     "external_reference",
 ];
-const NOTES_ASSET_STORAGE_STATES: &[&str] = &["available", "missing"];
+const ASSET_STORAGE_STATES: &[&str] = &["available", "missing"];
 
-pub struct NotesManagedAssetWrite<'a> {
+pub struct ManagedAssetWrite<'a> {
     pub relative_path: &'a str,
     pub original_name: Option<&'a str>,
     pub content_type: &'a str,
@@ -39,7 +39,7 @@ pub struct NotesManagedAssetWrite<'a> {
 
 pub async fn upsert_managed_asset_tx(
     tx: &mut Transaction<'_, Sqlite>,
-    asset: NotesManagedAssetWrite<'_>,
+    asset: ManagedAssetWrite<'_>,
 ) -> Result<(), String> {
     let kind = validate_managed_asset(&asset)?;
     let original_name = asset
@@ -95,9 +95,9 @@ pub async fn mark_managed_asset_storage_state(
     context: &str,
 ) -> Result<(), String> {
     let storage_state = if missing {
-        NOTES_ASSET_STATE_MISSING
+        ASSET_STATE_MISSING
     } else {
-        NOTES_ASSET_STATE_AVAILABLE
+        ASSET_STATE_AVAILABLE
     };
     sqlx::query(
         "UPDATE notes_assets
@@ -133,7 +133,7 @@ pub async fn sync_page_asset_references_tx(
             "page_icon",
             icon,
             "icon",
-            NOTES_ASSET_PAGE_ICON_PREFIX,
+            ASSET_PAGE_ICON_PREFIX,
         )
         .await?;
     }
@@ -144,7 +144,7 @@ pub async fn sync_page_asset_references_tx(
             "page_cover",
             cover,
             "cover",
-            NOTES_ASSET_PAGE_COVER_PREFIX,
+            ASSET_PAGE_COVER_PREFIX,
         )
         .await?;
     }
@@ -170,11 +170,7 @@ pub async fn sync_block_asset_reference_tx(
     let (role, asset) = if block_type == "callout" {
         (
             "callout_icon",
-            page_local_file_asset(
-                payload.get("icon"),
-                "callout.icon",
-                NOTES_ASSET_PAGE_ICON_PREFIX,
-            )?,
+            page_local_file_asset(payload.get("icon"), "callout.icon", ASSET_PAGE_ICON_PREFIX)?,
         )
     } else if matches!(block_type, "image" | "video" | "audio" | "file" | "pdf") {
         ("block_file", media_local_file_asset(payload, block_type)?)
@@ -398,7 +394,7 @@ fn page_local_file_asset<'a>(
     value: Option<&'a Value>,
     field: &str,
     expected_prefix: &str,
-) -> Result<Option<NotesManagedAssetWrite<'a>>, String> {
+) -> Result<Option<ManagedAssetWrite<'a>>, String> {
     let Some(Value::Object(object)) = value else {
         return Ok(None);
     };
@@ -419,7 +415,7 @@ fn page_local_file_asset<'a>(
 fn media_local_file_asset<'a>(
     payload: &'a Value,
     block_type: &str,
-) -> Result<Option<NotesManagedAssetWrite<'a>>, String> {
+) -> Result<Option<ManagedAssetWrite<'a>>, String> {
     let Value::Object(object) = payload else {
         return Ok(None);
     };
@@ -432,7 +428,7 @@ fn media_local_file_asset<'a>(
     managed_file_asset_from_file_object(
         file,
         &format!("{block_type}.file"),
-        NOTES_ASSET_FILE_PREFIX,
+        ASSET_FILE_PREFIX,
         file.get("name").and_then(Value::as_str),
     )
 }
@@ -465,7 +461,7 @@ fn file_property_ids(schema_properties: &Value) -> Result<Vec<String>, String> {
 fn data_source_property_local_file_assets<'a>(
     properties: &'a Value,
     property_id: &str,
-) -> Result<Vec<NotesManagedAssetWrite<'a>>, String> {
+) -> Result<Vec<ManagedAssetWrite<'a>>, String> {
     let object = properties
         .as_object()
         .ok_or_else(|| "row properties must be an object".to_string())?;
@@ -492,7 +488,7 @@ fn property_file_local_asset<'a>(
     value: &'a Value,
     property_id: &str,
     index: usize,
-) -> Result<Option<NotesManagedAssetWrite<'a>>, String> {
+) -> Result<Option<ManagedAssetWrite<'a>>, String> {
     let Some(object) = value.as_object() else {
         return Err("row files property items must be objects".to_string());
     };
@@ -506,7 +502,7 @@ fn property_file_local_asset<'a>(
     managed_file_asset_from_file_object(
         file,
         &format!("row property {property_id}.files[{index}].file"),
-        NOTES_ASSET_FILE_PREFIX,
+        ASSET_FILE_PREFIX,
         file.get("name").and_then(Value::as_str).or(fallback_name),
     )
 }
@@ -514,7 +510,7 @@ fn property_file_local_asset<'a>(
 fn comment_attachment_local_file_asset<'a>(
     value: &'a Value,
     index: usize,
-) -> Result<Option<NotesManagedAssetWrite<'a>>, String> {
+) -> Result<Option<ManagedAssetWrite<'a>>, String> {
     let Some(object) = value.as_object() else {
         return Err("comment attachments must be objects".to_string());
     };
@@ -532,7 +528,7 @@ fn comment_attachment_local_file_asset<'a>(
     managed_file_asset_from_file_object(
         file,
         &format!("comment.attachments[{index}].file"),
-        NOTES_ASSET_FILE_PREFIX,
+        ASSET_FILE_PREFIX,
         file.get("name").and_then(Value::as_str).or(fallback_name),
     )
 }
@@ -542,7 +538,7 @@ fn managed_file_asset_from_file_object<'a>(
     field: &str,
     expected_prefix: &str,
     original_name: Option<&'a str>,
-) -> Result<Option<NotesManagedAssetWrite<'a>>, String> {
+) -> Result<Option<ManagedAssetWrite<'a>>, String> {
     let Some(relative_path) = file.get("ganbaru_asset_path").and_then(Value::as_str) else {
         if file
             .get("url")
@@ -578,24 +574,24 @@ fn managed_file_asset_from_file_object<'a>(
         .get("sha256")
         .and_then(Value::as_str)
         .ok_or_else(|| format!("{field}.sha256 must be a string"))?;
-    Ok(Some(NotesManagedAssetWrite {
+    Ok(Some(ManagedAssetWrite {
         relative_path,
         original_name,
         content_type,
         byte_size,
         sha256,
-        source_type: NOTES_ASSET_SOURCE_LOCAL_UPLOAD,
-        storage_state: NOTES_ASSET_STATE_AVAILABLE,
+        source_type: ASSET_SOURCE_LOCAL_UPLOAD,
+        storage_state: ASSET_STATE_AVAILABLE,
         missing_at: None,
     }))
 }
 
-fn validate_managed_asset(asset: &NotesManagedAssetWrite<'_>) -> Result<&'static str, String> {
+fn validate_managed_asset(asset: &ManagedAssetWrite<'_>) -> Result<&'static str, String> {
     let relative_path = asset.relative_path.trim();
     validate_managed_asset_path(relative_path)?;
     let kind = asset_kind_for_content_type(asset.content_type.trim())?;
-    let is_page_media_asset = relative_path.starts_with(NOTES_ASSET_PAGE_ICON_PREFIX)
-        || relative_path.starts_with(NOTES_ASSET_PAGE_COVER_PREFIX);
+    let is_page_media_asset = relative_path.starts_with(ASSET_PAGE_ICON_PREFIX)
+        || relative_path.starts_with(ASSET_PAGE_COVER_PREFIX);
     if is_page_media_asset && kind != "image" {
         return Err("page icon and cover assets must be images".to_string());
     }
@@ -603,12 +599,12 @@ fn validate_managed_asset(asset: &NotesManagedAssetWrite<'_>) -> Result<&'static
     validate_sha256(asset.sha256.trim())?;
     validate_allowed_value(
         asset.source_type.trim(),
-        NOTES_ASSET_SOURCE_TYPES,
+        ASSET_SOURCE_TYPES,
         "notes asset source_type",
     )?;
     validate_allowed_value(
         asset.storage_state.trim(),
-        NOTES_ASSET_STORAGE_STATES,
+        ASSET_STORAGE_STATES,
         "notes asset storage_state",
     )?;
     match (asset.storage_state.trim(), asset.missing_at.map(str::trim)) {
@@ -630,9 +626,9 @@ fn validate_managed_asset(asset: &NotesManagedAssetWrite<'_>) -> Result<&'static
 
 fn validate_managed_asset_path(relative_path: &str) -> Result<(), String> {
     let prefix = [
-        NOTES_ASSET_PAGE_ICON_PREFIX,
-        NOTES_ASSET_PAGE_COVER_PREFIX,
-        NOTES_ASSET_FILE_PREFIX,
+        ASSET_PAGE_ICON_PREFIX,
+        ASSET_PAGE_COVER_PREFIX,
+        ASSET_FILE_PREFIX,
     ]
     .iter()
     .find(|prefix| relative_path.starts_with(**prefix))
@@ -656,7 +652,7 @@ fn validate_managed_asset_path(relative_path: &str) -> Result<(), String> {
     {
         return Err("notes asset path cannot contain nested or parent paths".to_string());
     }
-    if (*prefix == NOTES_ASSET_PAGE_ICON_PREFIX || *prefix == NOTES_ASSET_PAGE_COVER_PREFIX)
+    if (*prefix == ASSET_PAGE_ICON_PREFIX || *prefix == ASSET_PAGE_COVER_PREFIX)
         && !has_allowed_image_extension(path)
     {
         return Err("page icon and cover assets must be PNG, JPG, or WebP".to_string());
@@ -666,7 +662,7 @@ fn validate_managed_asset_path(relative_path: &str) -> Result<(), String> {
 
 fn asset_kind_for_content_type(content_type: &str) -> Result<&'static str, String> {
     validate_mime_type(content_type)?;
-    if NOTES_ASSET_ALLOWED_IMAGE_CONTENT_TYPES.contains(&content_type) {
+    if ASSET_ALLOWED_IMAGE_CONTENT_TYPES.contains(&content_type) {
         return Ok("image");
     }
     if content_type == "image/svg+xml" {
@@ -739,7 +735,7 @@ fn has_allowed_image_extension(path: &Path) -> bool {
     path.extension()
         .and_then(|value| value.to_str())
         .is_some_and(|extension| {
-            NOTES_ASSET_ALLOWED_IMAGE_EXTENSIONS
+            ASSET_ALLOWED_IMAGE_EXTENSIONS
                 .iter()
                 .any(|allowed| extension.eq_ignore_ascii_case(allowed))
         })
@@ -749,15 +745,15 @@ fn has_allowed_image_extension(path: &Path) -> bool {
 mod tests {
     use super::*;
 
-    fn valid_asset(relative_path: &str) -> NotesManagedAssetWrite<'_> {
-        NotesManagedAssetWrite {
+    fn valid_asset(relative_path: &str) -> ManagedAssetWrite<'_> {
+        ManagedAssetWrite {
             relative_path,
             original_name: Some("focus.png"),
             content_type: "image/png",
             byte_size: 42,
             sha256: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            source_type: NOTES_ASSET_SOURCE_LOCAL_UPLOAD,
-            storage_state: NOTES_ASSET_STATE_AVAILABLE,
+            source_type: ASSET_SOURCE_LOCAL_UPLOAD,
+            storage_state: ASSET_STATE_AVAILABLE,
             missing_at: None,
         }
     }
@@ -771,7 +767,7 @@ mod tests {
             .unwrap(),
             "image",
         );
-        let asset = NotesManagedAssetWrite {
+        let asset = ManagedAssetWrite {
             relative_path: "notes/files/report.pdf",
             original_name: Some("report.pdf"),
             content_type: "application/pdf",
@@ -788,42 +784,42 @@ mod tests {
     fn validate_managed_asset_rejects_unsafe_asset_shapes() {
         for (asset, expected) in [
             (
-                NotesManagedAssetWrite {
+                ManagedAssetWrite {
                     relative_path: "notes/files/../secret.pdf",
                     ..valid_asset("notes/files/../secret.pdf")
                 },
                 "notes asset path cannot contain nested or parent paths",
             ),
             (
-                NotesManagedAssetWrite {
+                ManagedAssetWrite {
                     relative_path: "notes/page-icons/icon.svg",
                     ..valid_asset("notes/page-icons/icon.svg")
                 },
                 "page icon and cover assets must be PNG, JPG, or WebP",
             ),
             (
-                NotesManagedAssetWrite {
+                ManagedAssetWrite {
                     content_type: "image/svg+xml",
                     ..valid_asset("notes/files/icon.svg")
                 },
                 "SVG assets are blocked because they can contain active content",
             ),
             (
-                NotesManagedAssetWrite {
+                ManagedAssetWrite {
                     byte_size: 0,
                     ..valid_asset("notes/files/empty.txt")
                 },
                 "notes asset byte_size must be positive",
             ),
             (
-                NotesManagedAssetWrite {
+                ManagedAssetWrite {
                     sha256: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
                     ..valid_asset("notes/files/file.bin")
                 },
                 "notes asset sha256 must be lowercase",
             ),
             (
-                NotesManagedAssetWrite {
+                ManagedAssetWrite {
                     storage_state: "missing",
                     missing_at: None,
                     ..valid_asset("notes/files/file.bin")

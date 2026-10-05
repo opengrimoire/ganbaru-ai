@@ -7,9 +7,9 @@
   import Shuffle from "@lucide/svelte/icons/shuffle";
   import type { EventColor } from "$lib/calendar/types";
   import type {
-    ProjectIconPickerGroupVirtualWindow,
-    ProjectIconPickerLucideCategoryOption,
-    ProjectIconPickerColor,
+    IconPickerGroupVirtualWindow,
+    IconPickerLucideCategoryOption,
+    IconPickerColor,
   } from "$lib/projects/icons/picker";
   import type {
     ProjectLucideCategory,
@@ -28,7 +28,7 @@
     iconCategory,
     iconCategoryMenuOpen,
     iconCategoryOverflowActive,
-    iconColor = $bindable<ProjectIconPickerColor>(),
+    iconColor = $bindable<IconPickerColor>(),
     iconColorPanelOpen = $bindable(false),
     skinTonePanelOpen = $bindable(false),
     askIconColorEveryTime,
@@ -62,7 +62,7 @@
     iconCategory: ProjectLucideCategory | "all";
     iconCategoryMenuOpen: boolean;
     iconCategoryOverflowActive: boolean;
-    iconColor: ProjectIconPickerColor;
+    iconColor: IconPickerColor;
     iconColorPanelOpen: boolean;
     skinTonePanelOpen: boolean;
     askIconColorEveryTime: boolean;
@@ -72,11 +72,11 @@
     gridCanScrollDown: boolean;
     gridColumnCount: number;
     lucideRecentValues: readonly string[];
-    lucideGroupVirtual: ProjectIconPickerGroupVirtualWindow<ProjectLucideCategory, ProjectLucideIconEntry>;
+    lucideGroupVirtual: IconPickerGroupVirtualWindow<ProjectLucideCategory, ProjectLucideIconEntry>;
     lucideLoading: boolean;
-    primaryLucideCategoryOptions: readonly ProjectIconPickerLucideCategoryOption[];
+    primaryLucideCategoryOptions: readonly IconPickerLucideCategoryOption[];
     automaticIconColor: string;
-    iconColorLabel: (color: ProjectIconPickerColor) => string;
+    iconColorLabel: (color: IconPickerColor) => string;
     iconColorSwatch: (color: EventColor) => string;
     iconColorStyle: (color: EventColor) => string;
     lucideRecentPreviewValue: (rawValue: string) => string;
@@ -89,7 +89,7 @@
       iconNode: readonly ProjectLucideIconNode[] | null,
       target: EventTarget | null,
     ) => void;
-    onSelectIconColor: (color: ProjectIconPickerColor) => void;
+    onSelectIconColor: (color: IconPickerColor) => void;
     onDefaultIconColorPanelOpen: () => void;
     onAskIconColorEveryTimeChange: (enabled: boolean) => void;
     onSelectIconCategory: (category: ProjectLucideCategory | "all") => void;

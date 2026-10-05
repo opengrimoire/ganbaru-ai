@@ -61,7 +61,7 @@ fn replay_gate_workflows_match_shared_fixtures() {
 
 fn normalize(actual: &mut CandidateWorkflow, expected: &CandidateWorkflow) {
     for (a, b) in actual.evaluations.iter_mut().zip(&expected.evaluations) {
-        evaluation(a, b);
+        normalize_evaluation(a, b);
     }
     for (a, b) in actual
         .context_reports
@@ -69,22 +69,22 @@ fn normalize(actual: &mut CandidateWorkflow, expected: &CandidateWorkflow) {
         .zip(&expected.context_reports)
     {
         for (a, b) in a.evaluations.iter_mut().zip(&b.evaluations) {
-            evaluation(&mut a.evaluation, &b.evaluation);
+            normalize_evaluation(&mut a.evaluation, &b.evaluation);
         }
     }
     for (a, b) in actual.interactions.iter_mut().zip(&expected.interactions) {
-        interaction(a, b);
+        normalize_interaction(a, b);
     }
     for (a, b) in actual.reviews.iter_mut().zip(&expected.reviews) {
-        evaluation(&mut a.evaluation, &b.evaluation);
+        normalize_evaluation(&mut a.evaluation, &b.evaluation);
         if let (Some(a), Some(b)) = (&mut a.interaction, &b.interaction) {
-            interaction(a, b);
+            normalize_interaction(a, b);
         }
     }
 }
 
-fn interaction(actual: &mut Interaction, expected: &Interaction) {
-    evaluation(
+fn normalize_interaction(actual: &mut Interaction, expected: &Interaction) {
+    normalize_evaluation(
         &mut actual.combined_evaluation,
         &expected.combined_evaluation,
     );
@@ -93,17 +93,17 @@ fn interaction(actual: &mut Interaction, expected: &Interaction) {
         .iter_mut()
         .zip(&expected.component_evaluations)
     {
-        evaluation(a, b);
+        normalize_evaluation(a, b);
     }
     if let (Some(a), Some(b)) = (
         &mut actual.best_component_evaluation,
         &expected.best_component_evaluation,
     ) {
-        evaluation(a, b);
+        normalize_evaluation(a, b);
     }
 }
 
-fn evaluation(actual: &mut PolicyEvaluation, expected: &PolicyEvaluation) {
+fn normalize_evaluation(actual: &mut PolicyEvaluation, expected: &PolicyEvaluation) {
     for (a, b) in actual.results.iter_mut().zip(&expected.results) {
         state_near(a.decision.state_scores, b.decision.state_scores);
         a.decision.state_scores = b.decision.state_scores;

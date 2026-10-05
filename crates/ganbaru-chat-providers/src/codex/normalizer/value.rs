@@ -220,11 +220,11 @@ pub(super) fn bounded_keys(object: &Map<String, Value>) -> Vec<String> {
         .collect()
 }
 
-pub(super) fn bounded_text(value: &str, maximum_bytes: usize) -> String {
-    if value.len() <= maximum_bytes {
+pub(super) fn bounded_text(value: &str, max_bytes: usize) -> String {
+    if value.len() <= max_bytes {
         return value.to_string();
     }
-    let mut boundary = maximum_bytes;
+    let mut boundary = max_bytes;
     while !value.is_char_boundary(boundary) {
         boundary -= 1;
     }

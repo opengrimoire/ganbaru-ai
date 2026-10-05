@@ -1,11 +1,11 @@
 <script lang="ts">
+  import type { MaybePromise } from "$lib/utils";
   import ArrowLeft from "@lucide/svelte/icons/arrow-left";
   import Select from "$lib/components/ui/Select.svelte";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import type { ProjectTask } from "$lib/projects/types";
   import ProjectSettingsSectionHeading from "$lib/components/projects/settings/ProjectSettingsSectionHeading.svelte";
 
-  type ActionResult = void | Promise<void>;
 
   let {
     task,
@@ -23,8 +23,8 @@
     parentSearch: string;
     hasSubtasks: boolean;
     onParentSearchChange: (value: string) => void;
-    onPromoteSubtask: (task: ProjectTask) => ActionResult;
-    onDemoteTask: (task: ProjectTask, parentTask: ProjectTask) => ActionResult;
+    onPromoteSubtask: (task: ProjectTask) => MaybePromise;
+    onDemoteTask: (task: ProjectTask, parentTask: ProjectTask) => MaybePromise;
   } = $props();
 
   const { t } = getLocalization();

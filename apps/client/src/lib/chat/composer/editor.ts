@@ -264,24 +264,24 @@ export class ChatComposerEditor {
   /** Handles formatting, history, and soft-break shortcuts before the parent handles sending. */
   public handleKeydown(event: KeyboardEvent): boolean {
     if (this.composing || event.isComposing || event.keyCode === 229) return false;
-    const command = (event.ctrlKey || event.metaKey) && !event.altKey;
-    if (command && event.key.toLowerCase() === "b") {
+    const hasCommandModifier = (event.ctrlKey || event.metaKey) && !event.altKey;
+    if (hasCommandModifier && event.key.toLowerCase() === "b") {
       event.preventDefault();
       this.toggleMark("bold");
       return true;
     }
-    if (command && event.key.toLowerCase() === "i") {
+    if (hasCommandModifier && event.key.toLowerCase() === "i") {
       event.preventDefault();
       this.toggleMark("italic");
       return true;
     }
-    if (command && event.key.toLowerCase() === "z") {
+    if (hasCommandModifier && event.key.toLowerCase() === "z") {
       event.preventDefault();
       if (event.shiftKey) this.redo();
       else this.undo();
       return true;
     }
-    if (command && event.key.toLowerCase() === "y") {
+    if (hasCommandModifier && event.key.toLowerCase() === "y") {
       event.preventDefault();
       this.redo();
       return true;
@@ -537,9 +537,9 @@ export class ChatComposerEditor {
 
 /** Reads the supported rich-text subset from browser-owned editor DOM. */
 export function readChatComposerDocument(root: ParentNode): ChatComposerDocument {
-  const meaningful = [...root.childNodes];
-  const blockChildren = meaningful.filter(isEditorBlock);
-  if (blockChildren.length > 0 && blockChildren.length === meaningful.length) {
+  const childNodes = [...root.childNodes];
+  const blockChildren = childNodes.filter(isEditorBlock);
+  if (blockChildren.length > 0 && blockChildren.length === childNodes.length) {
     return normalizeChatComposerDocument({
       lines: blockChildren.flatMap((block) => readInlineLines(block)),
     });
@@ -557,7 +557,7 @@ export function renderChatComposerDocument(
   const normalized = normalizeChatComposerDocument(document);
   const plainText = chatComposerPlainText(normalized);
   let documentOffset = 0;
-  const references = normalizeChatMessageReferences(
+  const referenceRanges = normalizeChatMessageReferences(
     plainText,
     messageReferences,
   ).map((reference) => ({
@@ -579,7 +579,7 @@ export function renderChatComposerDocument(
     for (const run of line.runs) {
       const runStart = documentOffset;
       const runEnd = runStart + run.text.length;
-      lineElement.append(renderRunWithReferences(owner, run, runStart, runEnd, references));
+      lineElement.append(renderRunWithReferences(owner, run, runStart, runEnd, referenceRanges));
       documentOffset = runEnd;
     }
     if (lineIndex < normalized.lines.length - 1) documentOffset += 1;
@@ -679,8 +679,8 @@ function textPointAtOffset(root: HTMLElement, offset: number): { node: Node; off
 }
 
 function readInlineLines(root: ParentNode): import("./rich-text").ChatComposerLine[] {
-  const meaningful = [...root.childNodes];
-  if (meaningful.length === 0 || (meaningful.length === 1 && meaningful[0] instanceof HTMLBRElement)) {
+  const childNodes = [...root.childNodes];
+  if (childNodes.length === 0 || (childNodes.length === 1 && childNodes[0] instanceof HTMLBRElement)) {
     return [{ runs: [] }];
   }
   const lines: import("./rich-text").ChatComposerLine[] = [{ runs: [] }];
@@ -748,11 +748,11 @@ function renderRunWithReferences(
   run: ChatComposerTextRun,
   runStart: number,
   runEnd: number,
-  references: readonly EditorReferenceRange[],
+  referenceRanges: readonly EditorReferenceRange[],
 ): DocumentFragment {
   const fragment = owner.createDocumentFragment();
   let cursor = runStart;
-  for (const range of references) {
+  for (const range of referenceRanges) {
     if (range.start < runStart || range.end > runEnd || range.start < cursor) continue;
     if (range.start > cursor) {
       fragment.append(renderRun(owner, {

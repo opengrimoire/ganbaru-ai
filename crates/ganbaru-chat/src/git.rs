@@ -501,9 +501,9 @@ pub async fn review_output_to_file_in_storage(
             alternate_object_directory,
         },
     )?;
-    let mut child = command.spawn().map_err(|_| git_unavailable())?;
-    let stdout = child.stdout.take().ok_or_else(git_unavailable)?;
-    let stderr = child.stderr.take().ok_or_else(git_unavailable)?;
+    let mut child = command.spawn().map_err(|_| git_unavailable_error())?;
+    let stdout = child.stdout.take().ok_or_else(git_unavailable_error)?;
+    let stderr = child.stderr.take().ok_or_else(git_unavailable_error)?;
     let output_path = output_path.to_path_buf();
     let stdout_task = tokio::spawn(write_bounded_file(
         stdout,
@@ -512,7 +512,7 @@ pub async fn review_output_to_file_in_storage(
     ));
     let stderr_task = tokio::spawn(read_bounded(stderr, MAX_GIT_OUTPUT_BYTES));
     let status = match tokio::time::timeout(GIT_TIMEOUT, child.wait()).await {
-        Ok(status) => status.map_err(|_| git_unavailable())?,
+        Ok(status) => status.map_err(|_| git_unavailable_error())?,
         Err(_) => {
             let _ = child.kill().await;
             let _ = child.wait().await;
@@ -525,8 +525,8 @@ pub async fn review_output_to_file_in_storage(
             ));
         }
     };
-    let byte_size = stdout_task.await.map_err(|_| git_unavailable())??;
-    let stderr = stderr_task.await.map_err(|_| git_unavailable())??;
+    let byte_size = stdout_task.await.map_err(|_| git_unavailable_error())??;
+    let stderr = stderr_task.await.map_err(|_| git_unavailable_error())??;
     if !status.success() {
         let detail = String::from_utf8_lossy(&stderr).trim().to_string();
         return Err(ChatError {
@@ -584,17 +584,17 @@ async fn run_bounded_with_storage(
         .stderr(Stdio::piped())
         .kill_on_drop(true);
     apply_storage_environment(&mut command, storage)?;
-    let mut child = command.spawn().map_err(|_| git_unavailable())?;
-    let stdout = child.stdout.take().ok_or_else(git_unavailable)?;
-    let stderr = child.stderr.take().ok_or_else(git_unavailable)?;
+    let mut child = command.spawn().map_err(|_| git_unavailable_error())?;
+    let stdout = child.stdout.take().ok_or_else(git_unavailable_error)?;
+    let stderr = child.stderr.take().ok_or_else(git_unavailable_error)?;
     let stdout_task = tokio::spawn(read_bounded(stdout, maximum_output_bytes));
     let stderr_task = tokio::spawn(read_bounded(stderr, maximum_output_bytes));
     if let Some(bytes) = input {
-        let mut stdin = child.stdin.take().ok_or_else(git_unavailable)?;
+        let mut stdin = child.stdin.take().ok_or_else(git_unavailable_error)?;
         tokio::time::timeout(GIT_TIMEOUT, stdin.write_all(bytes))
             .await
             .map_err(|_| ChatError::new(ChatErrorCode::Timeout, "Git input timed out", true))?
-            .map_err(|_| git_unavailable())?;
+            .map_err(|_| git_unavailable_error())?;
         drop(stdin);
     }
     let timeout = if network {
@@ -603,7 +603,7 @@ async fn run_bounded_with_storage(
         GIT_TIMEOUT
     };
     let status = match tokio::time::timeout(timeout, child.wait()).await {
-        Ok(status) => status.map_err(|_| git_unavailable())?,
+        Ok(status) => status.map_err(|_| git_unavailable_error())?,
         Err(_) => {
             let _ = child.kill().await;
             return Err(ChatError::new(
@@ -613,8 +613,8 @@ async fn run_bounded_with_storage(
             ));
         }
     };
-    let stdout = stdout_task.await.map_err(|_| git_unavailable())??;
-    let stderr = stderr_task.await.map_err(|_| git_unavailable())??;
+    let stdout = stdout_task.await.map_err(|_| git_unavailable_error())??;
+    let stderr = stderr_task.await.map_err(|_| git_unavailable_error())??;
     if !status.success() {
         let detail = String::from_utf8_lossy(&stderr).trim().to_string();
         return Err(ChatError {
@@ -657,7 +657,7 @@ async fn read_bounded<R: tokio::io::AsyncRead + Unpin>(
         .take((maximum_bytes + 1) as u64)
         .read_to_end(&mut bytes)
         .await
-        .map_err(|_| git_unavailable())?;
+        .map_err(|_| git_unavailable_error())?;
     if bytes.len() > maximum_bytes {
         return Err(ChatError::new(
             ChatErrorCode::Protocol,
@@ -678,14 +678,14 @@ async fn write_bounded_file<R: tokio::io::AsyncRead + Unpin>(
         .write(true)
         .open(path)
         .await
-        .map_err(|_| git_unavailable())?;
+        .map_err(|_| git_unavailable_error())?;
     let mut buffer = [0_u8; 64 * 1024];
     let mut total = 0_usize;
     loop {
         let read = reader
             .read(&mut buffer)
             .await
-            .map_err(|_| git_unavailable())?;
+            .map_err(|_| git_unavailable_error())?;
         if read == 0 {
             break;
         }
@@ -699,10 +699,10 @@ async fn write_bounded_file<R: tokio::io::AsyncRead + Unpin>(
         }
         file.write_all(&buffer[..read])
             .await
-            .map_err(|_| git_unavailable())?;
+            .map_err(|_| git_unavailable_error())?;
     }
-    file.flush().await.map_err(|_| git_unavailable())?;
-    u64::try_from(total).map_err(|_| git_unavailable())
+    file.flush().await.map_err(|_| git_unavailable_error())?;
+    u64::try_from(total).map_err(|_| git_unavailable_error())
 }
 
 fn parse_status(bytes: &[u8]) -> ChatResult<GitStatusRead> {
@@ -728,8 +728,8 @@ fn parse_status(bytes: &[u8]) -> ChatResult<GitStatusRead> {
             }
         } else if let Some(upstream) = field.strip_prefix("# branch.upstream ") {
             status.upstream = Some(upstream.to_string());
-        } else if let Some(ab) = field.strip_prefix("# branch.ab ") {
-            for value in ab.split_whitespace() {
+        } else if let Some(ahead_behind) = field.strip_prefix("# branch.ab ") {
+            for value in ahead_behind.split_whitespace() {
                 if let Some(ahead) = value.strip_prefix('+') {
                     status.ahead = ahead.parse().unwrap_or(0);
                 } else if let Some(behind) = value.strip_prefix('-') {
@@ -826,7 +826,7 @@ fn parse_track(value: &str) -> (u64, u64) {
     (ahead, behind)
 }
 
-fn git_unavailable() -> ChatError {
+fn git_unavailable_error() -> ChatError {
     ChatError::new(
         ChatErrorCode::DriverUnavailable,
         "Git is unavailable for this workspace",

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CalendarEvent } from "$lib/calendar/types";
-import { eventMatchesActiveOccurrence, exactOccurrenceId, rootIdForEvent, sameConcreteOccurrence } from "./occurrence-protection";
+import { eventMatchesActiveOccurrence, exactOccurrenceId, rootIdForEvent, isSameConcreteOccurrence } from "./occurrence-protection";
 
 /** Native provenance deliberately differs from the moved display date. */
 function occurrence(overrides: Partial<CalendarEvent> = {}): CalendarEvent {
@@ -36,8 +36,8 @@ describe("native occurrence presentation identity", () => {
     const template = occurrence({ id: "source", recurringParentId: undefined,
       recurrence: { frequency: "daily", interval: 1, end: { type: "never" } } });
     const synthetic = occurrence({ start: "2026-05-21 03:30", end: "2026-05-21 04:30" });
-    expect(sameConcreteOccurrence(template, synthetic)).toBe(true);
-    expect(sameConcreteOccurrence(template, occurrence({ id: "source::2026-05-21", recurrenceDate: "2026-05-21" }))).toBe(false);
+    expect(isSameConcreteOccurrence(template, synthetic)).toBe(true);
+    expect(isSameConcreteOccurrence(template, occurrence({ id: "source::2026-05-21", recurrenceDate: "2026-05-21" }))).toBe(false);
   });
 
   it("preserves opaque source IDs containing separators", () => {
@@ -46,6 +46,6 @@ describe("native occurrence presentation identity", () => {
     const member = occurrence({ id: "import::preserved::2026-05-20", recurringParentId: "import::preserved" });
     expect(rootIdForEvent(template)).toBe("import::preserved");
     expect(exactOccurrenceId(template)).toBe(member.id);
-    expect(sameConcreteOccurrence(template, member)).toBe(true);
+    expect(isSameConcreteOccurrence(template, member)).toBe(true);
   });
 });

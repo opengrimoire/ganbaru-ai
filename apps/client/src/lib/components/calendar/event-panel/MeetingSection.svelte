@@ -36,11 +36,11 @@
     readOnly = false,
     allowReadOnlyExpand = false,
     expanded,
-    onchange,
-    ondescriptionchange,
-    onexpand,
-    onsurfacestatuschange,
-    ontoggle,
+    onChange,
+    onDescriptionChange,
+    onExpand,
+    onSurfaceStatusChange,
+    onToggle,
   }: {
     enabled: boolean;
     url: string;
@@ -57,11 +57,11 @@
     readOnly?: boolean;
     allowReadOnlyExpand?: boolean;
     expanded: boolean;
-    onchange: () => void;
-    ondescriptionchange: (html: string) => void;
-    onexpand: () => void;
-    onsurfacestatuschange?: (status: EventSurfaceStatus | undefined) => void;
-    ontoggle: () => void;
+    onChange: () => void;
+    onDescriptionChange: (html: string) => void;
+    onExpand: () => void;
+    onSurfaceStatusChange?: (status: EventSurfaceStatus | undefined) => void;
+    onToggle: () => void;
   } = $props();
 
   const localization = getLocalization();
@@ -139,7 +139,7 @@
   let attendeeInput = $state("");
 
   $effect(() => {
-    onsurfacestatuschange?.(surfaceStatus);
+    onSurfaceStatusChange?.(surfaceStatus);
   });
 
   function addAttendee() {
@@ -154,12 +154,12 @@
       rsvp: true,
     }];
     attendeeInput = "";
-    onchange();
+    onChange();
   }
 
   function removeAttendee(id: string) {
     attendees = attendees.filter((a) => a.id !== id);
-    onchange();
+    onChange();
   }
 
   function toggleAttendeeOptional(id: string) {
@@ -168,7 +168,7 @@
         ? { ...a, role: a.role === "opt-participant" ? "req-participant" : "opt-participant" }
         : a,
     );
-    onchange();
+    onChange();
   }
 
   function attendeeStatusLabel(status: EventAttendee["status"]): string {
@@ -198,7 +198,7 @@
   function toggleLocalSelfRsvp() {
     const nextStatus = nextRsvpStatus(effectiveLocalSelfStatus);
     localParticipationStatus = nextStatus === "accepted" ? undefined : nextStatus;
-    onchange();
+    onChange();
   }
 
   let scrollEl: HTMLDivElement | undefined = $state();
@@ -213,9 +213,9 @@
   }
 
   function observeResize(node: HTMLElement) {
-    const ro = new ResizeObserver(() => updateFade());
-    ro.observe(node);
-    return { destroy: () => ro.disconnect() };
+    const observer = new ResizeObserver(() => updateFade());
+    observer.observe(node);
+    return { destroy: () => observer.disconnect() };
   }
 
   const onWheel = createSmoothScroll(() => scrollEl, 2, 8);
@@ -223,13 +223,13 @@
 
 <div class="flex flex-col rounded-none overflow-hidden" style="background-color: var(--panel-contrast);">
   <div class="section-header flex items-stretch">
-    <button onclick={ontoggle}
+    <button onclick={onToggle}
       disabled={readOnly}
       class="flex w-10 shrink-0 items-center justify-center
         {enabled ? 'bg-black/3 dark:bg-black/30 text-foreground' : 'text-muted-foreground/50'}">
       <Users size={14} />
     </button>
-    <button onclick={onexpand}
+    <button onclick={onExpand}
       disabled={readOnly && !allowReadOnlyExpand}
       class="flex flex-1 items-center gap-2.5 px-3 py-2 text-left {allowReadOnlyExpand ? 'readonly-interactive' : ''}">
       <span class="translate-y-[1.13px] text-[0.8rem] {enabled ? 'text-foreground' : 'text-muted-foreground'}">{t("calendar.meeting.title")}</span>
@@ -246,7 +246,7 @@
         <input bind:this={urlInput} type="url" bind:value={url} placeholder={t("calendar.meeting.addCallLink")}
           disabled={readOnly}
           class="min-w-0 flex-1 bg-transparent leading-none text-foreground outline-none placeholder:text-muted-foreground/40"
-          oninput={onchange} onkeydown={panelInputKeydown} />
+          oninput={onChange} onkeydown={panelInputKeydown} />
       </div>
       <!-- Location -->
       <div class="meeting-detail-row flex items-center gap-3 text-[0.8rem] leading-none">
@@ -254,7 +254,7 @@
         <input type="text" bind:value={location} placeholder={t("calendar.meeting.addLocation")}
           disabled={readOnly}
           class="min-w-0 flex-1 bg-transparent leading-none text-foreground outline-none placeholder:text-muted-foreground/40"
-          oninput={onchange} onkeydown={panelInputKeydown} />
+          oninput={onChange} onkeydown={panelInputKeydown} />
         {#if geo}
           <span class="shrink-0 text-[0.733333rem] text-muted-foreground/60">({geo.lat.toFixed(2)}, {geo.lng.toFixed(2)})</span>
         {/if}
@@ -262,7 +262,7 @@
       <!-- Description -->
       <div class="meeting-detail-row flex items-center">
         <div class="min-w-0 flex-1">
-          <DescriptionEditor {description} {readOnly} onchange={ondescriptionchange} />
+          <DescriptionEditor {description} {readOnly} onChange={onDescriptionChange} />
         </div>
       </div>
       <!-- Guests divider -->
@@ -274,17 +274,17 @@
           {#if canEditGuests && guestAttendees.length > 0}
             <div class="ml-auto flex flex-wrap items-center justify-end gap-1">
               {#each [
-                { icon: Pencil, label: t("calendar.meeting.edit"), title: t("calendar.meeting.modifyEvent"), get: () => guestCanModify, set: (v: boolean) => { guestCanModify = v; onchange(); } },
-                { icon: UserPlus, label: t("calendar.meeting.invite"), title: t("calendar.meeting.inviteOthers"), get: () => guestCanInviteOthers, set: (v: boolean) => { guestCanInviteOthers = v; onchange(); } },
-                { icon: Eye, label: t("calendar.meeting.seeList"), title: t("calendar.meeting.seeGuestList"), get: () => guestCanSeeOtherGuests, set: (v: boolean) => { guestCanSeeOtherGuests = v; onchange(); } },
-              ] as perm}
-                <button onclick={() => perm.set(!perm.get())}
-                  title={perm.title}
-                  aria-label={perm.title}
+                { icon: Pencil, label: t("calendar.meeting.edit"), title: t("calendar.meeting.modifyEvent"), get: () => guestCanModify, set: (v: boolean) => { guestCanModify = v; onChange(); } },
+                { icon: UserPlus, label: t("calendar.meeting.invite"), title: t("calendar.meeting.inviteOthers"), get: () => guestCanInviteOthers, set: (v: boolean) => { guestCanInviteOthers = v; onChange(); } },
+                { icon: Eye, label: t("calendar.meeting.seeList"), title: t("calendar.meeting.seeGuestList"), get: () => guestCanSeeOtherGuests, set: (v: boolean) => { guestCanSeeOtherGuests = v; onChange(); } },
+              ] as permission}
+                <button onclick={() => permission.set(!permission.get())}
+                  title={permission.title}
+                  aria-label={permission.title}
                   class="flex items-center gap-1 rounded px-1.5 py-0.5 active:scale-95
-                    {perm.get() ? 'bg-foreground/10 text-foreground' : 'bg-foreground/5 text-muted-foreground/30 hover:text-muted-foreground/50'}">
-                  <perm.icon size={12} strokeWidth={2} />
-                  <span class="text-[0.666667rem] max-[320px]:hidden">{perm.label}</span>
+                    {permission.get() ? 'bg-foreground/10 text-foreground' : 'bg-foreground/5 text-muted-foreground/30 hover:text-muted-foreground/50'}">
+                  <permission.icon size={12} strokeWidth={2} />
+                  <span class="text-[0.666667rem] max-[320px]:hidden">{permission.label}</span>
                 </button>
               {/each}
             </div>
@@ -389,31 +389,31 @@
             class="relative max-h-18 overflow-y-auto"
             style:mask-image={fadeTop && fadeBottom ? 'linear-gradient(to bottom, transparent, black 10px, black calc(100% - 10px), transparent)' : fadeTop ? 'linear-gradient(to bottom, transparent, black 10px)' : fadeBottom ? 'linear-gradient(to bottom, black calc(100% - 10px), transparent)' : 'none'}
             style:-webkit-mask-image={fadeTop && fadeBottom ? 'linear-gradient(to bottom, transparent, black 10px, black calc(100% - 10px), transparent)' : fadeTop ? 'linear-gradient(to bottom, transparent, black 10px)' : fadeBottom ? 'linear-gradient(to bottom, black calc(100% - 10px), transparent)' : 'none'}>
-            {#each guestAttendees as att (att.id)}
-              {@const sqBg = att.status === "accepted" ? "bg-status-accepted" : att.status === "tentative" ? "bg-status-tentative" : att.status === "declined" ? "bg-status-declined" : "bg-muted-foreground/30"}
-              {@const sqFg = att.status === "accepted" ? "text-status-accepted-foreground" : att.status === "tentative" ? "text-status-tentative-foreground" : att.status === "declined" ? "text-status-declined-foreground" : "text-foreground"}
-              {@const StatusIcon = att.status === "accepted" ? Check : att.status === "tentative" ? CircleHelp : att.status === "declined" ? X : Minus}
-              {@const statusLabel = attendeeStatusLabel(att.status)}
+            {#each guestAttendees as attendee (attendee.id)}
+              {@const statusBgClass = attendee.status === "accepted" ? "bg-status-accepted" : attendee.status === "tentative" ? "bg-status-tentative" : attendee.status === "declined" ? "bg-status-declined" : "bg-muted-foreground/30"}
+              {@const statusFgClass = attendee.status === "accepted" ? "text-status-accepted-foreground" : attendee.status === "tentative" ? "text-status-tentative-foreground" : attendee.status === "declined" ? "text-status-declined-foreground" : "text-foreground"}
+              {@const StatusIcon = attendee.status === "accepted" ? Check : attendee.status === "tentative" ? CircleHelp : attendee.status === "declined" ? X : Minus}
+              {@const statusLabel = attendeeStatusLabel(attendee.status)}
               {@const guestActionsDisabled = !canEditGuests}
               <div class="flex items-center gap-2.5 py-0.5 text-[0.8rem]">
                 <span
-                  class="flex h-4 w-4 shrink-0 items-center justify-center rounded-[3px] {sqBg}">
-                  <StatusIcon size={11} strokeWidth={2.5} class="block {sqFg}" />
+                  class="flex h-4 w-4 shrink-0 items-center justify-center rounded-[3px] {statusBgClass}">
+                  <StatusIcon size={11} strokeWidth={2.5} class="block {statusFgClass}" />
                 </span>
-                <span class="min-w-0 flex-1 truncate text-foreground">{att.name ?? att.email}</span>
+                <span class="min-w-0 flex-1 truncate text-foreground">{attendee.name ?? attendee.email}</span>
                 <span class="shrink-0 text-[0.733333rem] text-muted-foreground/60">{statusLabel}</span>
-                {#if att.role === "opt-participant"}
+                {#if attendee.role === "opt-participant"}
                   <span class="shrink-0 text-[0.733333rem] text-muted-foreground/60 italic">{t("calendar.meeting.optional")}</span>
                 {/if}
                 <div class="flex shrink-0 items-center gap-0.5">
-                  <button onclick={() => toggleAttendeeOptional(att.id)}
+                  <button onclick={() => toggleAttendeeOptional(attendee.id)}
                     disabled={guestActionsDisabled}
-                    title={guestActionsDisabled ? t("calendar.meeting.attendeeRolesReadOnly") : att.role === "opt-participant" ? t("calendar.meeting.markRequired") : t("calendar.meeting.markOptional")}
-                    aria-label={guestActionsDisabled ? t("calendar.meeting.attendeeRolesReadOnly") : att.role === "opt-participant" ? t("calendar.meeting.markRequired") : t("calendar.meeting.markOptional")}
-                    class={optionalActionClass(guestActionsDisabled, att.role === "opt-participant")}>
+                    title={guestActionsDisabled ? t("calendar.meeting.attendeeRolesReadOnly") : attendee.role === "opt-participant" ? t("calendar.meeting.markRequired") : t("calendar.meeting.markOptional")}
+                    aria-label={guestActionsDisabled ? t("calendar.meeting.attendeeRolesReadOnly") : attendee.role === "opt-participant" ? t("calendar.meeting.markRequired") : t("calendar.meeting.markOptional")}
+                    class={optionalActionClass(guestActionsDisabled, attendee.role === "opt-participant")}>
                     <Flag size={12} />
                   </button>
-                  <button onclick={() => removeAttendee(att.id)}
+                  <button onclick={() => removeAttendee(attendee.id)}
                     disabled={guestActionsDisabled}
                     title={guestActionsDisabled ? t("calendar.meeting.attendeesCannotBeRemoved") : t("calendar.meeting.removeAttendee")}
                     aria-label={guestActionsDisabled ? t("calendar.meeting.attendeesCannotBeRemoved") : t("calendar.meeting.removeAttendee")}

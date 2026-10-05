@@ -26,12 +26,12 @@ export function flattenChatFileTree(
   childrenByDirectory: Readonly<Record<string, readonly ProjectWorkingFolderFileEntry[]>>,
   expandedPaths: readonly string[],
 ): ChatFileTreeRow[] {
-  const expanded = new Set(expandedPaths);
+  const expandedPathSet = new Set(expandedPaths);
   const rows: ChatFileTreeRow[] = [];
 
   function append(entries: readonly ProjectWorkingFolderFileEntry[], depth: number): void {
     for (const entry of entries) {
-      const isExpanded = entry.kind === "directory" && expanded.has(entry.relativePath);
+      const isExpanded = entry.kind === "directory" && expandedPathSet.has(entry.relativePath);
       rows.push({ entry, depth, expanded: isExpanded });
       if (isExpanded) append(childrenByDirectory[entry.relativePath] ?? [], depth + 1);
     }

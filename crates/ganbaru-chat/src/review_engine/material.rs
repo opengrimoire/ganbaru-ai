@@ -7,8 +7,8 @@ use super::patch_store::ReviewObjectStore;
 use super::registry::ReviewFileInternal;
 use super::validation::validate_path;
 use super::{
-    corrupt_data, empty_tree, git_text, optional_head, path_field, review_error, review_output,
-    review_storage_text,
+    corrupt_data_error, empty_tree, git_text, optional_head, path_field, review_error,
+    review_output, review_storage_text,
 };
 use crate::git;
 use std::collections::{BTreeMap, HashMap};
@@ -160,19 +160,21 @@ fn parse_raw_metadata(bytes: &[u8]) -> HashMap<String, RawFileMetadata> {
         if parts.len() < 5 {
             continue;
         }
-        let rename = parts[4].starts_with('R') || parts[4].starts_with('C');
-        let final_path = if rename {
+        let is_rename_or_copy = parts[4].starts_with('R') || parts[4].starts_with('C');
+        let destination_path = if is_rename_or_copy {
             let _ = fields.next();
             fields.next()
         } else {
             fields.next()
         };
-        let Some(final_path) = final_path else { break };
-        let Ok(final_path) = std::str::from_utf8(final_path) else {
+        let Some(destination_path) = destination_path else {
+            break;
+        };
+        let Ok(destination_path) = std::str::from_utf8(destination_path) else {
             continue;
         };
         result.insert(
-            final_path.to_string(),
+            destination_path.to_string(),
             RawFileMetadata {
                 old_mode: parts[0].to_string(),
                 new_mode: parts[1].to_string(),
@@ -269,7 +271,7 @@ pub fn parse_name_status(
         .filter(|field| !field.is_empty());
     let mut files = Vec::new();
     while let Some(status_field) = fields.next() {
-        let status = std::str::from_utf8(status_field).map_err(|_| corrupt_data())?;
+        let status = std::str::from_utf8(status_field).map_err(|_| corrupt_data_error())?;
         let previous = if status.starts_with('R') || status.starts_with('C') {
             Some(path_field(fields.next())?)
         } else {
@@ -313,12 +315,12 @@ fn parse_numstat(bytes: &[u8]) -> ChatResult<ReviewNumstat> {
         if field.is_empty() {
             continue;
         }
-        let text = std::str::from_utf8(field).map_err(|_| corrupt_data())?;
+        let text = std::str::from_utf8(field).map_err(|_| corrupt_data_error())?;
         let mut parts = text.splitn(3, '\t');
         let additions = parts.next().and_then(|value| value.parse().ok());
         let deletions = parts.next().and_then(|value| value.parse().ok());
         let path = parts.next().unwrap_or_default();
-        let final_path = if path.is_empty() {
+        let destination_path = if path.is_empty() {
             let _ = fields.next();
             fields
                 .next()
@@ -327,9 +329,9 @@ fn parse_numstat(bytes: &[u8]) -> ChatResult<ReviewNumstat> {
         } else {
             path
         };
-        if !final_path.is_empty() {
-            validate_path(final_path)?;
-            values.insert(final_path.to_string(), (additions, deletions));
+        if !destination_path.is_empty() {
+            validate_path(destination_path)?;
+            values.insert(destination_path.to_string(), (additions, deletions));
         }
     }
     Ok(values)

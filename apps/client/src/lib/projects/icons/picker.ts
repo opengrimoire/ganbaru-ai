@@ -34,9 +34,9 @@ export const PROJECT_EMOJI_SKIN_TONES = [
 ] as const;
 
 export type ProjectEmojiSkinTone = (typeof PROJECT_EMOJI_SKIN_TONES)[number];
-export type ProjectIconPickerColor = EventColor | "default";
+export type IconPickerColor = EventColor | "default";
 
-export const PROJECT_ICON_PICKER_SKIN_TONE_OPTIONS: readonly { value: ProjectEmojiSkinTone }[] = [
+export const ICON_PICKER_SKIN_TONE_OPTIONS: readonly { value: ProjectEmojiSkinTone }[] = [
   { value: "default" },
   { value: "light" },
   { value: "medium-light" },
@@ -45,7 +45,7 @@ export const PROJECT_ICON_PICKER_SKIN_TONE_OPTIONS: readonly { value: ProjectEmo
   { value: "dark" },
 ];
 
-export const PROJECT_ICON_PICKER_VISIBLE_EMOJI_CATEGORY_IDS: readonly ProjectEmojiCategoryId[] = [
+export const ICON_PICKER_VISIBLE_EMOJI_CATEGORY_IDS: readonly ProjectEmojiCategoryId[] = [
   "smileys",
   "people",
   "nature",
@@ -56,7 +56,7 @@ export const PROJECT_ICON_PICKER_VISIBLE_EMOJI_CATEGORY_IDS: readonly ProjectEmo
   "symbols",
 ];
 
-export const PROJECT_ICON_PICKER_LUCIDE_CATEGORY_ICON_SLUGS: Partial<Record<ProjectLucideCategory, string>> = {
+export const ICON_PICKER_LUCIDE_CATEGORY_ICON_SLUGS: Partial<Record<ProjectLucideCategory, string>> = {
   Accessibility: "accessibility",
   "Accounts and access": "user-round",
   Animals: "paw-print",
@@ -101,7 +101,7 @@ export const PROJECT_ICON_PICKER_LUCIDE_CATEGORY_ICON_SLUGS: Partial<Record<Proj
   Weather: "cloud-sun",
 };
 
-export const PROJECT_ICON_PICKER_PRIMARY_LUCIDE_CATEGORIES: readonly ProjectLucideCategory[] = [
+export const ICON_PICKER_PRIMARY_LUCIDE_CATEGORIES: readonly ProjectLucideCategory[] = [
   "File icons",
   "Tools",
   "Coding and development",
@@ -123,22 +123,22 @@ const PROJECT_EMOJI_SKIN_TONE_MODIFIERS: Record<ProjectEmojiSkinTone, string> = 
 
 const PROJECT_EMOJI_SKIN_TONE_PATTERN = /[\u{1f3fb}-\u{1f3ff}]/gu;
 const PROJECT_EMOJI_SKIN_TONE_SUPPORTED = new Set<string>(PROJECT_EMOJI_SKIN_TONE_BASES);
-const PROJECT_ICON_PICKER_VISIBLE_EMOJI_CATEGORY_ID_SET = new Set<ProjectEmojiCategoryId>(
-  PROJECT_ICON_PICKER_VISIBLE_EMOJI_CATEGORY_IDS,
+const ICON_PICKER_VISIBLE_EMOJI_CATEGORY_ID_SET = new Set<ProjectEmojiCategoryId>(
+  ICON_PICKER_VISIBLE_EMOJI_CATEGORY_IDS,
 );
-const PROJECT_ICON_PICKER_PRIMARY_LUCIDE_CATEGORY_SET = new Set<ProjectLucideCategory>(
-  PROJECT_ICON_PICKER_PRIMARY_LUCIDE_CATEGORIES,
+const ICON_PICKER_PRIMARY_LUCIDE_CATEGORY_SET = new Set<ProjectLucideCategory>(
+  ICON_PICKER_PRIMARY_LUCIDE_CATEGORIES,
 );
 type ProjectEmojiVariantSkinTone = Exclude<ProjectEmojiSkinTone, "default">;
 
-export interface ProjectIconVirtualWindow {
+export interface IconPickerVirtualWindow {
   startIndex: number;
   endIndex: number;
   beforeHeight: number;
   afterHeight: number;
 }
 
-export interface ProjectIconPickerRect {
+export interface IconPickerRect {
   top: number;
   right: number;
   bottom: number;
@@ -147,55 +147,55 @@ export interface ProjectIconPickerRect {
   height: number;
 }
 
-export interface ProjectIconPickerPanelPlacement {
+export interface IconPickerPanelPlacement {
   left: number;
   top: number;
   width: number;
   height: number;
 }
 
-export interface ProjectIconPickerAnchoredPanelPlacement {
+export interface IconPickerAnchoredPanelPlacement {
   left: number;
   top: number;
   maxHeight: number;
 }
 
-export interface ProjectIconPickerPointPlacement {
+export interface IconPickerPointPlacement {
   left: number;
   top: number;
 }
 
-export interface ProjectIconPickerVirtualGroup<TCategory extends string, TEntry> {
+export interface IconPickerVirtualGroup<TCategory extends string, TEntry> {
   category: TCategory;
   entries: readonly TEntry[];
   beforeRowsHeight: number;
   afterRowsHeight: number;
 }
 
-export interface ProjectIconPickerGroupVirtualWindow<TCategory extends string, TEntry> {
-  groups: readonly ProjectIconPickerVirtualGroup<TCategory, TEntry>[];
+export interface IconPickerGroupVirtualWindow<TCategory extends string, TEntry> {
+  groups: readonly IconPickerVirtualGroup<TCategory, TEntry>[];
   beforeHeight: number;
   afterHeight: number;
 }
 
-export interface ProjectIconPickerVirtualGroupInput<TCategory extends string, TEntry> {
+export interface IconPickerVirtualGroupInput<TCategory extends string, TEntry> {
   category: TCategory;
   entries: readonly TEntry[];
 }
 
-export interface ProjectIconPickerVisibleEmojiCategory {
+export interface IconPickerVisibleEmojiCategory {
   id: ProjectEmojiCategoryId;
   label: string;
 }
 
-export interface ProjectIconPickerLucideCategoryOption {
+export interface IconPickerLucideCategoryOption {
   category: ProjectLucideCategory;
   icon: ProjectLucideIconEntry | undefined;
 }
 
-interface ProjectIconPickerPanelPlacementInput {
-  triggerRect: ProjectIconPickerRect;
-  boundaryRect: ProjectIconPickerRect;
+interface IconPickerPanelPlacementInput {
+  triggerRect: IconPickerRect;
+  boundaryRect: IconPickerRect;
   preferredWidth: number;
   preferredHeight: number;
   align?: "start" | "end";
@@ -203,9 +203,9 @@ interface ProjectIconPickerPanelPlacementInput {
   inset?: number;
 }
 
-interface ProjectIconPickerAnchoredPanelPlacementInput {
-  anchorRect: ProjectIconPickerRect;
-  viewportRect: ProjectIconPickerRect;
+interface IconPickerAnchoredPanelPlacementInput {
+  anchorRect: IconPickerRect;
+  viewportRect: IconPickerRect;
   panelWidth: number;
   preferredHeight: number;
   minimumUsefulHeight?: number;
@@ -213,9 +213,9 @@ interface ProjectIconPickerAnchoredPanelPlacementInput {
   margin?: number;
 }
 
-interface ProjectIconPickerMenuPlacementInput {
-  anchorRect: ProjectIconPickerRect;
-  viewportRect: ProjectIconPickerRect;
+interface IconPickerMenuPlacementInput {
+  anchorRect: IconPickerRect;
+  viewportRect: IconPickerRect;
   menuWidth: number;
   menuMaxHeight: number;
   minimumUsefulHeight?: number;
@@ -223,17 +223,17 @@ interface ProjectIconPickerMenuPlacementInput {
   margin?: number;
 }
 
-interface ProjectIconPickerPointPlacementInput {
-  anchorRect: ProjectIconPickerRect;
-  viewportRect: ProjectIconPickerRect;
+interface IconPickerPointPlacementInput {
+  anchorRect: IconPickerRect;
+  viewportRect: IconPickerRect;
   panelWidth: number;
   panelHeight: number;
   gap?: number;
   margin?: number;
 }
 
-interface ProjectIconPickerGroupVirtualWindowInput<TCategory extends string, TEntry> {
-  groups: readonly ProjectIconPickerVirtualGroupInput<TCategory, TEntry>[];
+interface IconPickerGroupVirtualWindowInput<TCategory extends string, TEntry> {
+  groups: readonly IconPickerVirtualGroupInput<TCategory, TEntry>[];
   columnCount: number;
   viewportHeight: number;
   scrollTop: number;
@@ -243,13 +243,13 @@ interface ProjectIconPickerGroupVirtualWindowInput<TCategory extends string, TEn
   overscanRows?: number;
 }
 
-interface ProjectIconPickerLucideRecentPreviewInput {
+interface IconPickerLucideRecentPreviewInput {
   rawValue: string;
-  iconColor: ProjectIconPickerColor;
+  iconColor: IconPickerColor;
 }
 
-interface ProjectIconPickerRandomLucideInput {
-  iconColor: ProjectIconPickerColor;
+interface IconPickerRandomLucideInput {
+  iconColor: IconPickerColor;
   random?: () => number;
 }
 
@@ -266,7 +266,7 @@ export function readProjectIconAskEveryTime(value: unknown): boolean {
   return value === true;
 }
 
-export function readProjectIconDefaultColor(value: unknown): ProjectIconPickerColor {
+export function readProjectIconDefaultColor(value: unknown): IconPickerColor {
   if (value === "default") return value;
   return typeof value === "number"
     && Number.isInteger(value)
@@ -333,46 +333,46 @@ export function filterProjectLucideIcons(
   );
 }
 
-export function projectIconPickerVisibleEmojiCategories(
+export function iconPickerVisibleEmojiCategories(
   symbolsAndFlagsLabel: string,
-): ProjectIconPickerVisibleEmojiCategory[] {
+): IconPickerVisibleEmojiCategory[] {
   return PROJECT_EMOJI_CATEGORIES
-    .filter((category) => PROJECT_ICON_PICKER_VISIBLE_EMOJI_CATEGORY_ID_SET.has(category.id))
+    .filter((category) => ICON_PICKER_VISIBLE_EMOJI_CATEGORY_ID_SET.has(category.id))
     .map((category) => ({
       id: category.id,
       label: category.id === "symbols" ? symbolsAndFlagsLabel : category.label,
     }));
 }
 
-export function projectIconPickerLucideCategoryIcon(
+export function iconPickerLucideCategoryIcon(
   category: ProjectLucideCategory,
   entries: readonly ProjectLucideIconEntry[],
 ): ProjectLucideIconEntry | undefined {
-  const preferredSlug = PROJECT_ICON_PICKER_LUCIDE_CATEGORY_ICON_SLUGS[category];
+  const preferredSlug = ICON_PICKER_LUCIDE_CATEGORY_ICON_SLUGS[category];
   return entries.find((entry) => entry.slug === preferredSlug)
     ?? entries.find((entry) => entry.category === category);
 }
 
-export function projectIconPickerLucideCategoryOptions(
+export function iconPickerLucideCategoryOptions(
   categories: readonly ProjectLucideCategory[],
   entries: readonly ProjectLucideIconEntry[],
-): ProjectIconPickerLucideCategoryOption[] {
+): IconPickerLucideCategoryOption[] {
   return categories.map((category) => ({
     category,
-    icon: projectIconPickerLucideCategoryIcon(category, entries),
+    icon: iconPickerLucideCategoryIcon(category, entries),
   }));
 }
 
-export function projectIconPickerPrimaryLucideCategoryOptions(
-  options: readonly ProjectIconPickerLucideCategoryOption[],
-): ProjectIconPickerLucideCategoryOption[] {
-  return PROJECT_ICON_PICKER_PRIMARY_LUCIDE_CATEGORIES
+export function iconPickerPrimaryLucideCategoryOptions(
+  options: readonly IconPickerLucideCategoryOption[],
+): IconPickerLucideCategoryOption[] {
+  return ICON_PICKER_PRIMARY_LUCIDE_CATEGORIES
     .map((category) => options.find((option) => option.category === category))
-    .filter((option): option is ProjectIconPickerLucideCategoryOption => option !== undefined);
+    .filter((option): option is IconPickerLucideCategoryOption => option !== undefined);
 }
 
-export function projectIconPickerIsPrimaryLucideCategory(category: ProjectLucideCategory): boolean {
-  return PROJECT_ICON_PICKER_PRIMARY_LUCIDE_CATEGORY_SET.has(category);
+export function iconPickerIsPrimaryLucideCategory(category: ProjectLucideCategory): boolean {
+  return ICON_PICKER_PRIMARY_LUCIDE_CATEGORY_SET.has(category);
 }
 
 export function readProjectIconRecentValues(value: unknown): string[] {
@@ -391,7 +391,7 @@ export function projectIconLucideRecentValues(values: readonly string[]): string
   return values.filter((rawValue) => parseProjectIcon(rawValue).kind === "lucide");
 }
 
-export function projectIconPickerVisibleCustomEmojis(
+export function iconPickerVisibleCustomEmojis(
   customEmojis: readonly ProjectCustomEmoji[],
   query: string,
 ): readonly ProjectCustomEmoji[] {
@@ -400,10 +400,10 @@ export function projectIconPickerVisibleCustomEmojis(
   return customEmojis.filter((emoji) => emoji.name.toLowerCase().includes(normalized));
 }
 
-export function projectIconPickerLucideGroups(
+export function iconPickerLucideGroups(
   entries: readonly ProjectLucideIconEntry[],
   categories: readonly ProjectLucideCategory[],
-): ProjectIconPickerVirtualGroupInput<ProjectLucideCategory, ProjectLucideIconEntry>[] {
+): IconPickerVirtualGroupInput<ProjectLucideCategory, ProjectLucideIconEntry>[] {
   const groups = new Map<ProjectLucideCategory, ProjectLucideIconEntry[]>();
   for (const category of categories) {
     groups.set(category, []);
@@ -419,17 +419,17 @@ export function projectIconPickerLucideGroups(
     .filter((group) => group.entries.length > 0);
 }
 
-export function projectIconPickerLucideRecentPreviewValue({
+export function iconPickerLucideRecentPreviewValue({
   rawValue,
   iconColor,
-}: ProjectIconPickerLucideRecentPreviewInput): string {
+}: IconPickerLucideRecentPreviewInput): string {
   const icon = parseProjectIcon(rawValue);
   return icon.kind === "lucide"
     ? serializeProjectIcon({ ...icon, color: iconColor })
     : rawValue;
 }
 
-function projectIconPickerRandomEntry<TEntry>(
+function iconPickerRandomEntry<TEntry>(
   entries: readonly TEntry[],
   random: () => number,
 ): TEntry | undefined {
@@ -441,22 +441,22 @@ function projectIconPickerRandomEntry<TEntry>(
   return entries[index] ?? firstEntry;
 }
 
-export function projectIconPickerRandomEmojiIcon(
+export function iconPickerRandomEmojiIcon(
   entries: readonly ProjectEmojiEntry[],
   skinTone: ProjectEmojiSkinTone,
   random: () => number = Math.random,
 ): ProjectIconValue | null {
-  const entry = projectIconPickerRandomEntry(entries, random);
+  const entry = iconPickerRandomEntry(entries, random);
   return entry
     ? { kind: "emoji", emoji: applyProjectEmojiSkinTone(entry.emoji, skinTone) }
     : null;
 }
 
-export function projectIconPickerRandomLucideIcon(
+export function iconPickerRandomLucideIcon(
   entries: readonly ProjectLucideIconEntry[],
-  { iconColor, random = Math.random }: ProjectIconPickerRandomLucideInput,
+  { iconColor, random = Math.random }: IconPickerRandomLucideInput,
 ): ProjectIconValue | null {
-  const entry = projectIconPickerRandomEntry(entries, random);
+  const entry = iconPickerRandomEntry(entries, random);
   return entry
     ? { kind: "lucide", slug: entry.slug, color: iconColor }
     : null;
@@ -495,14 +495,14 @@ export function prependProjectIconRecentValue(
   return cleanupProjectIconRecentValues([recentValue, ...values], customEmojiIds, limit);
 }
 
-export function projectIconVirtualWindow(
+export function iconPickerVirtualWindow(
   itemCount: number,
   columnCount: number,
   rowHeight: number,
   viewportHeight: number,
   scrollTop: number,
   overscanRows = 2,
-): ProjectIconVirtualWindow {
+): IconPickerVirtualWindow {
   const safeColumnCount = Math.max(1, Math.floor(columnCount));
   const safeRowHeight = Math.max(1, rowHeight);
   const rowCount = Math.ceil(itemCount / safeColumnCount);
@@ -520,7 +520,7 @@ export function projectIconVirtualWindow(
   };
 }
 
-export function projectIconPickerPanelPlacement({
+export function iconPickerPanelPlacement({
   triggerRect,
   boundaryRect,
   preferredWidth,
@@ -528,7 +528,7 @@ export function projectIconPickerPanelPlacement({
   align = "end",
   gap = 4,
   inset = 8,
-}: ProjectIconPickerPanelPlacementInput): ProjectIconPickerPanelPlacement {
+}: IconPickerPanelPlacementInput): IconPickerPanelPlacement {
   const safeGap = finiteOrZero(gap);
   const safeInset = finiteOrZero(inset);
   const leftBound = boundaryRect.left + safeInset;
@@ -554,7 +554,7 @@ export function projectIconPickerPanelPlacement({
   };
 }
 
-export function projectIconPickerAnchoredPanelPlacement({
+export function iconPickerAnchoredPanelPlacement({
   anchorRect,
   viewportRect,
   panelWidth,
@@ -562,7 +562,7 @@ export function projectIconPickerAnchoredPanelPlacement({
   minimumUsefulHeight = 180,
   gap = 4,
   margin = 8,
-}: ProjectIconPickerAnchoredPanelPlacementInput): ProjectIconPickerAnchoredPanelPlacement {
+}: IconPickerAnchoredPanelPlacementInput): IconPickerAnchoredPanelPlacement {
   const safeGap = finiteOrZero(gap);
   const safeMargin = finiteOrZero(margin);
   const safePanelWidth = finiteOrZero(panelWidth);
@@ -592,7 +592,7 @@ export function projectIconPickerAnchoredPanelPlacement({
   };
 }
 
-export function projectIconPickerMenuPlacement({
+export function iconPickerMenuPlacement({
   anchorRect,
   viewportRect,
   menuWidth,
@@ -600,7 +600,7 @@ export function projectIconPickerMenuPlacement({
   minimumUsefulHeight = 180,
   gap = 4,
   margin = 8,
-}: ProjectIconPickerMenuPlacementInput): ProjectIconPickerAnchoredPanelPlacement {
+}: IconPickerMenuPlacementInput): IconPickerAnchoredPanelPlacement {
   const safeGap = finiteOrZero(gap);
   const safeMargin = finiteOrZero(margin);
   const safeMenuWidth = finiteOrZero(menuWidth);
@@ -619,14 +619,14 @@ export function projectIconPickerMenuPlacement({
   };
 }
 
-export function projectIconPickerPointPlacement({
+export function iconPickerPointPlacement({
   anchorRect,
   viewportRect,
   panelWidth,
   panelHeight,
   gap = 4,
   margin = 8,
-}: ProjectIconPickerPointPlacementInput): ProjectIconPickerPointPlacement {
+}: IconPickerPointPlacementInput): IconPickerPointPlacement {
   const safeGap = finiteOrZero(gap);
   const safeMargin = finiteOrZero(margin);
   const safePanelWidth = finiteOrZero(panelWidth);
@@ -648,7 +648,7 @@ export function projectIconPickerPointPlacement({
   };
 }
 
-export function projectIconPickerGroupVirtualWindow<TCategory extends string, TEntry>({
+export function iconPickerGroupVirtualWindow<TCategory extends string, TEntry>({
   groups,
   columnCount,
   viewportHeight,
@@ -657,7 +657,7 @@ export function projectIconPickerGroupVirtualWindow<TCategory extends string, TE
   groupHeaderHeight,
   groupGapHeight,
   overscanRows = 2,
-}: ProjectIconPickerGroupVirtualWindowInput<TCategory, TEntry>): ProjectIconPickerGroupVirtualWindow<TCategory, TEntry> {
+}: IconPickerGroupVirtualWindowInput<TCategory, TEntry>): IconPickerGroupVirtualWindow<TCategory, TEntry> {
   const safeColumnCount = Math.max(1, Math.floor(columnCount));
   const safeRowHeight = Math.max(1, rowHeight);
   const safeHeaderHeight = Math.max(0, groupHeaderHeight);
@@ -665,7 +665,7 @@ export function projectIconPickerGroupVirtualWindow<TCategory extends string, TE
   const overscanHeight = Math.max(0, overscanRows) * safeRowHeight;
   const viewportStart = Math.max(0, scrollTop - overscanHeight);
   const viewportEnd = Math.max(0, scrollTop) + Math.max(0, viewportHeight) + overscanHeight;
-  const visibleGroups: ProjectIconPickerVirtualGroup<TCategory, TEntry>[] = [];
+  const visibleGroups: IconPickerVirtualGroup<TCategory, TEntry>[] = [];
   let offset = 0;
   let beforeHeight = 0;
   let afterHeight = 0;

@@ -51,21 +51,22 @@ pub struct ChatTimelineCursor {
 
 pub fn parse_timeline_cursor(value: &str) -> ChatResult<ChatTimelineCursor> {
     if value.len() > 1_200 || value.chars().any(char::is_control) {
-        return Err(invalid_cursor());
+        return Err(invalid_cursor_error());
     }
     if !value.is_empty() && value.bytes().all(|byte| byte.is_ascii_digit()) {
         return Ok(ChatTimelineCursor {
-            sequence: value.parse().map_err(|_| invalid_cursor())?,
+            sequence: value.parse().map_err(|_| invalid_cursor_error())?,
             row_id: None,
         });
     }
-    let cursor: ChatTimelineCursor = serde_json::from_str(value).map_err(|_| invalid_cursor())?;
+    let cursor: ChatTimelineCursor =
+        serde_json::from_str(value).map_err(|_| invalid_cursor_error())?;
     if cursor
         .row_id
         .as_ref()
         .is_some_and(|row_id| row_id.is_empty() || row_id.len() > 1_024)
     {
-        return Err(invalid_cursor());
+        return Err(invalid_cursor_error());
     }
     Ok(cursor)
 }
@@ -176,7 +177,7 @@ pub async fn read_thread_shell(
     .map_err(persistence_error)?
     .map(row_to_thread_shell)
     .transpose()?
-    .ok_or_else(not_found)
+    .ok_or_else(not_found_error)
 }
 
 pub async fn search_thread_titles(
@@ -232,7 +233,7 @@ pub async fn read_timeline_page(
         .fetch_optional(pool)
         .await
         .map_err(persistence_error)?
-        .ok_or_else(not_found)?;
+        .ok_or_else(not_found_error)?;
     let revision = unsigned(thread.try_get("revision").map_err(persistence_error)?)?;
     let last_sequence = unsigned(
         thread
@@ -351,7 +352,7 @@ pub async fn read_timeline_turn(
     .fetch_optional(pool)
     .await
     .map_err(persistence_error)?
-    .ok_or_else(turn_not_found)
+    .ok_or_else(turn_not_found_error)
     .and_then(unsigned)?;
     let rows = sqlx::query(
         "SELECT row_id, turn_id, sequence_anchor, item_kind, schema_version, item_data
@@ -410,13 +411,13 @@ fn row_to_timeline_item(
     let row_id: String = row.try_get("row_id").map_err(persistence_error)?;
     let data: String = row.try_get("item_data").map_err(persistence_error)?;
     Ok(ChatTimelineItemRead {
-        activity_id: ChatActivityId::new(row_id).map_err(|_| corrupt_data())?,
+        activity_id: ChatActivityId::new(row_id).map_err(|_| corrupt_data_error())?,
         turn_id: row
             .try_get::<Option<String>, _>("turn_id")
             .map_err(persistence_error)?
             .map(ChatTurnId::new)
             .transpose()
-            .map_err(|_| corrupt_data())?,
+            .map_err(|_| corrupt_data_error())?,
         sequence_anchor: unsigned(row.try_get("sequence_anchor").map_err(persistence_error)?)?,
         kind: row.try_get("item_kind").map_err(persistence_error)?,
         data: VersionedJson {
@@ -424,7 +425,7 @@ fn row_to_timeline_item(
                 row.try_get::<i64, _>("schema_version")
                     .map_err(persistence_error)?,
             )
-            .map_err(|_| corrupt_data())?,
+            .map_err(|_| corrupt_data_error())?,
             value: serde_json::from_str(&data).map_err(serialization_error)?,
         },
         source_thread_id,
@@ -457,7 +458,7 @@ pub async fn read_timeline_turns_by_ids(
     .collect()
 }
 
-fn invalid_cursor() -> ChatError {
+fn invalid_cursor_error() -> ChatError {
     ChatError::validation("cursor", "Chat timeline cursor is invalid")
 }
 
@@ -482,7 +483,7 @@ fn row_to_timeline_turn(row: sqlx::sqlite::SqliteRow) -> ChatResult<ChatTimeline
         .unwrap_or_default();
     Ok(ChatTimelineTurnRead {
         turn_id: ChatTurnId::new(row.try_get::<String, _>("id").map_err(persistence_error)?)
-            .map_err(|_| corrupt_data())?,
+            .map_err(|_| corrupt_data_error())?,
         state: parse_turn_state(
             &row.try_get::<String, _>("state")
                 .map_err(persistence_error)?,
@@ -522,22 +523,22 @@ fn row_to_thread_shell(row: sqlx::sqlite::SqliteRow) -> ChatResult<ChatThreadShe
         row.try_get::<String, _>("execution_environment_id")
             .map_err(persistence_error)?,
     )
-    .map_err(|_| corrupt_data())?;
+    .map_err(|_| corrupt_data_error())?;
     let scratch_generation_id = row
         .try_get::<Option<String>, _>("scratch_generation_id")
         .map_err(persistence_error)?
         .map(ChatScratchGenerationId::new)
         .transpose()
-        .map_err(|_| corrupt_data())?;
+        .map_err(|_| corrupt_data_error())?;
     if !matches!(
         (&working_folder_id, &scratch_generation_id),
         (Some(_), None) | (None, Some(_))
     ) {
-        return Err(corrupt_data());
+        return Err(corrupt_data_error());
     }
     Ok(ChatThreadShellRead {
         id: ChatThreadId::new(row.try_get::<String, _>("id").map_err(persistence_error)?)
-            .map_err(|_| corrupt_data())?,
+            .map_err(|_| corrupt_data_error())?,
         working_folder_id,
         execution_environment_id,
         scratch_generation_id,
@@ -547,18 +548,18 @@ fn row_to_thread_shell(row: sqlx::sqlite::SqliteRow) -> ChatResult<ChatThreadShe
             row.try_get::<String, _>("provider_family_id")
                 .map_err(persistence_error)?,
         )
-        .map_err(|_| corrupt_data())?,
+        .map_err(|_| corrupt_data_error())?,
         provider_instance_id: ProviderInstanceId::new(
             row.try_get::<String, _>("provider_instance_id")
                 .map_err(persistence_error)?,
         )
-        .map_err(|_| corrupt_data())?,
+        .map_err(|_| corrupt_data_error())?,
         provider_thread_id: row
             .try_get::<Option<String>, _>("provider_thread_id")
             .map_err(persistence_error)?
             .map(ProviderThreadId::new)
             .transpose()
-            .map_err(|_| corrupt_data())?,
+            .map_err(|_| corrupt_data_error())?,
         model_id: model.model_id,
         model_options: model.model_options,
         modes: TurnModeSnapshot {
@@ -591,7 +592,7 @@ fn row_to_thread_shell(row: sqlx::sqlite::SqliteRow) -> ChatResult<ChatThreadShe
             row.try_get::<String, _>("last_activity_at")
                 .map_err(persistence_error)?,
         )
-        .map_err(|_| corrupt_data())?,
+        .map_err(|_| corrupt_data_error())?,
         unread_at: timestamp(row.try_get("unread_at").map_err(persistence_error)?)?,
         archived_at: timestamp(row.try_get("archived_at").map_err(persistence_error)?)?,
     })
@@ -604,16 +605,16 @@ fn escape_like(value: &str) -> String {
         .replace('_', "\\_")
 }
 fn id(value: String) -> ChatResult<ProjectWorkingFolderId> {
-    ProjectWorkingFolderId::new(value).map_err(|_| corrupt_data())
+    ProjectWorkingFolderId::new(value).map_err(|_| corrupt_data_error())
 }
 fn timestamp(value: Option<String>) -> ChatResult<Option<UtcTimestamp>> {
     value
         .map(UtcTimestamp::new)
         .transpose()
-        .map_err(|_| corrupt_data())
+        .map_err(|_| corrupt_data_error())
 }
 fn unsigned(value: i64) -> ChatResult<u64> {
-    u64::try_from(value).map_err(|_| corrupt_data())
+    u64::try_from(value).map_err(|_| corrupt_data_error())
 }
 fn i64_value(value: u64) -> ChatResult<i64> {
     i64::try_from(value)
@@ -625,14 +626,14 @@ fn parse_safety(value: &str) -> ChatResult<SafetyMode> {
         "approve_for_me" => Ok(SafetyMode::ApproveForMe),
         "full_access" => Ok(SafetyMode::FullAccess),
         "custom" => Ok(SafetyMode::Custom),
-        _ => Err(corrupt_data()),
+        _ => Err(corrupt_data_error()),
     }
 }
 fn parse_interaction(value: &str) -> ChatResult<InteractionMode> {
     match value {
         "build" => Ok(InteractionMode::Build),
         "plan" => Ok(InteractionMode::Plan),
-        _ => Err(corrupt_data()),
+        _ => Err(corrupt_data_error()),
     }
 }
 fn parse_thread_state(value: &str) -> ChatResult<ChatThreadState> {
@@ -644,7 +645,7 @@ fn parse_thread_state(value: &str) -> ChatResult<ChatThreadState> {
         "error" => Ok(ChatThreadState::Error),
         "archived" => Ok(ChatThreadState::Archived),
         "closed" => Ok(ChatThreadState::Closed),
-        _ => Err(corrupt_data()),
+        _ => Err(corrupt_data_error()),
     }
 }
 fn parse_turn_state(value: &str) -> ChatResult<ChatTurnState> {
@@ -657,13 +658,13 @@ fn parse_turn_state(value: &str) -> ChatResult<ChatTurnState> {
         "completed" => Ok(ChatTurnState::Completed),
         "interrupted" => Ok(ChatTurnState::Interrupted),
         "failed" => Ok(ChatTurnState::Failed),
-        _ => Err(corrupt_data()),
+        _ => Err(corrupt_data_error()),
     }
 }
-fn not_found() -> ChatError {
+fn not_found_error() -> ChatError {
     ChatError::new(ChatErrorCode::NotFound, "Chat thread was not found", true)
 }
-fn turn_not_found() -> ChatError {
+fn turn_not_found_error() -> ChatError {
     ChatError::new(ChatErrorCode::NotFound, "Chat turn was not found", true)
 }
 fn persistence_error<T>(_error: T) -> ChatError {
@@ -680,7 +681,7 @@ fn serialization_error<T>(_error: T) -> ChatError {
         false,
     )
 }
-fn corrupt_data() -> ChatError {
+fn corrupt_data_error() -> ChatError {
     ChatError::new(
         ChatErrorCode::Persistence,
         "Stored Chat record is invalid",

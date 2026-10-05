@@ -35,7 +35,7 @@
     subtasks,
     scheduled,
     taskTags,
-    hiddenTags,
+    hiddenTagCount,
     blockedByCount,
     blocksCount,
     taskListColumns,
@@ -94,7 +94,7 @@
     subtasks: ProjectTask[];
     scheduled: string | null;
     taskTags: ProjectTag[];
-    hiddenTags: number;
+    hiddenTagCount: number;
     blockedByCount: number;
     blocksCount: number;
     taskListColumns: ProjectTaskListColumn[];
@@ -234,9 +234,9 @@
               <span class="truncate">{tag.name}</span>
             </span>
           {/each}
-          {#if hiddenTags > 0}
+          {#if hiddenTagCount > 0}
             <span class="rounded border border-border bg-muted/50 px-1.5 py-0.5 text-[0.666667rem] text-muted-foreground">
-              {t("projects.list.moreTags", hiddenTags)}
+              {t("projects.list.moreTags", hiddenTagCount)}
             </span>
           {/if}
         </div>

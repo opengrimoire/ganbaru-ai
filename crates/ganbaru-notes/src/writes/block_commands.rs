@@ -1,5 +1,5 @@
 use super::block_tree::{
-    load_block_row_in_tx, load_blocks_by_ids, load_blocks_by_ids_with_trash,
+    load_block_row_tx, load_blocks_by_ids, load_blocks_by_ids_including_trashed,
     normalize_selection_root_ids, set_block_subtree_trash,
 };
 use super::pages::load_page_row;
@@ -97,7 +97,7 @@ pub(super) async fn update_block_tx(
     record_history: bool,
 ) -> Result<(), String> {
     require_uuid(block_id, "block_id")?;
-    let current = load_block_row_in_tx(tx, block_id, false).await?;
+    let current = load_block_row_tx(tx, block_id, false).await?;
     let (block_type, payload) = validate_block_update(&current.block_type, &update)?;
     if (current.block_type == "child_page") != (block_type == "child_page") {
         return Err(
@@ -191,7 +191,7 @@ pub(super) async fn trash_block_tx(
     record_history: bool,
 ) -> Result<(), String> {
     require_uuid(block_id, "block_id")?;
-    let current = load_block_row_in_tx(tx, block_id, true).await?;
+    let current = load_block_row_tx(tx, block_id, true).await?;
     if record_history {
         page_history::record_page_snapshot_tx(tx, &current.page_id, "trash_block").await?;
     }
@@ -227,7 +227,7 @@ pub async fn trash_blocks(
     let mut parents = Vec::with_capacity(root_ids.len());
     let mut touched_pages = HashSet::new();
     for block_id in &root_ids {
-        let row = load_block_row_in_tx(&mut tx, block_id, true).await?;
+        let row = load_block_row_tx(&mut tx, block_id, true).await?;
         parents.push(parent_target_from_block_row(&row));
         touched_pages.insert(row.page_id.clone());
         root_rows.push(row);
@@ -247,7 +247,7 @@ pub async fn trash_blocks(
     tx.commit()
         .await
         .map_err(|e| format!("commit trash notes blocks: {e}"))?;
-    load_blocks_by_ids_with_trash(
+    load_blocks_by_ids_including_trashed(
         pool,
         root_rows.into_iter().map(|row| row.id).collect(),
         true,

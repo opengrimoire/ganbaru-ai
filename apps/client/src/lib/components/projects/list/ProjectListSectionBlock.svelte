@@ -16,13 +16,12 @@
     ProjectTaskListColumn,
   } from "$lib/projects/types";
   import type { Theme } from "$lib/themes";
-  import { cn } from "$lib/utils";
+  import { cn, type MaybePromise } from "$lib/utils";
   import ProjectListColumnHeaders from "./ProjectListColumnHeaders.svelte";
   import ProjectListSectionHeader from "./ProjectListSectionHeader.svelte";
   import ProjectListTaskAddRow from "./ProjectListTaskAddRow.svelte";
   import ProjectListTaskRows from "./ProjectListTaskRows.svelte";
 
-  type MaybePromise = Promise<void> | void;
 
   let {
     section,

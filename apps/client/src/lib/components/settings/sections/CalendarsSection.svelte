@@ -111,8 +111,8 @@
 
   async function refreshCounts() {
     const next: Record<string, number> = {};
-    for (const cal of calendarsStore.list) {
-      next[cal.id] = await calendarsStore.countEvents(cal.id);
+    for (const calendar of calendarsStore.list) {
+      next[calendar.id] = await calendarsStore.countEvents(calendar.id);
     }
     counts = next;
   }
@@ -289,9 +289,9 @@
   {/if}
 
   <div class="flex flex-col gap-3">
-    {#each calendarsStore.list as cal (cal.id)}
-      {@const displayName = calendarDisplayName(cal)}
-      {@const importDate = calendarImportDate(cal, locale)}
+    {#each calendarsStore.list as calendar (calendar.id)}
+      {@const displayName = calendarDisplayName(calendar)}
+      {@const importDate = calendarImportDate(calendar, locale)}
       <div class="flex items-center gap-3 px-1 py-1 max-[520px]:flex-col max-[520px]:items-stretch">
         <div class="min-w-0 flex-1">
           <div class="flex items-center gap-2">
@@ -301,11 +301,11 @@
             <span
               class="shrink-0 text-[0.733333rem] font-medium uppercase tracking-wide text-muted-foreground"
             >
-              {cal.source}
+              {calendar.source}
             </span>
           </div>
           <div class="mt-0.5 flex items-center gap-2 text-[0.733333rem] text-muted-foreground">
-            <span>{t("settings.calendars.eventCount", counts[cal.id] ?? 0)}</span>
+            <span>{t("settings.calendars.eventCount", counts[calendar.id] ?? 0)}</span>
             {#if importDate}
               <span>{t("settings.calendars.importedOn", importDate)}</span>
             {/if}
@@ -315,15 +315,15 @@
           {#if fileTransfersAvailable}
             <button
               type="button"
-              onclick={() => handleExport(cal)}
-              disabled={(counts[cal.id] ?? 0) === 0}
+              onclick={() => handleExport(calendar)}
+              disabled={(counts[calendar.id] ?? 0) === 0}
               class="flex h-7 items-center gap-1.5 rounded-md border border-border bg-card px-2.5 text-[0.8rem] font-medium text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50 dark:bg-transparent"
             >
               <Download size={12} strokeWidth={2.25} />
               <span>{t("settings.calendars.export")}</span>
             </button>
           {/if}
-          {#if cal.id === "local"}
+          {#if calendar.id === "local"}
             <button
               type="button"
               disabled
@@ -336,7 +336,7 @@
           {:else}
             <button
               type="button"
-              onclick={() => handleDelete(cal)}
+              onclick={() => handleDelete(calendar)}
               aria-label={t("settings.calendars.deleteCalendar", displayName)}
               data-app-tooltip-disabled="true"
               class="flex h-7 w-7 items-center justify-center rounded-md border border-border bg-card text-destructive transition-colors hover:bg-destructive/10 dark:bg-transparent"

@@ -27,7 +27,7 @@ pub(in crate::cursor) fn resolve_configuration_updates(
     }
     let mut updates = Vec::new();
     if let Some(model) = model_id {
-        let option = model_config_id(config_options).ok_or_else(|| {
+        let option = model_config_option(config_options).ok_or_else(|| {
             ChatError::validation("modelId", "Cursor did not advertise model selection")
         })?;
         ensure_select_value(option, model.as_str())?;
@@ -65,7 +65,7 @@ pub(in crate::cursor) fn resolve_configuration_updates(
     Ok(updates)
 }
 
-pub(super) fn model_config_id(options: &[AcpConfigOption]) -> Option<&AcpConfigOption> {
+pub(super) fn model_config_option(options: &[AcpConfigOption]) -> Option<&AcpConfigOption> {
     options.iter().find(|option| {
         option.category.as_deref() == Some("model") || option.id.eq_ignore_ascii_case("model")
     })
@@ -146,7 +146,7 @@ pub(super) fn validate_config_options(options: &[AcpConfigOption]) -> ChatResult
     }
     let mut ids = BTreeSet::new();
     for option in options {
-        if !valid_identifier(&option.id, 256)
+        if !is_valid_identifier(&option.id, 256)
             || option.name.trim().is_empty()
             || option.name.len() > 256
             || option.name.chars().any(char::is_control)
@@ -189,9 +189,11 @@ pub(super) fn validate_config_options(options: &[AcpConfigOption]) -> ChatResult
 pub(super) fn validate_modes(modes: &AcpModeState) -> ChatResult<()> {
     if modes.available_modes.is_empty()
         || modes.available_modes.len() > MAX_MODE_OPTIONS
-        || !valid_identifier(&modes.current_mode_id, 256)
+        || !is_valid_identifier(&modes.current_mode_id, 256)
         || modes.available_modes.iter().any(|mode| {
-            !valid_identifier(&mode.id, 256) || mode.name.trim().is_empty() || mode.name.len() > 256
+            !is_valid_identifier(&mode.id, 256)
+                || mode.name.trim().is_empty()
+                || mode.name.len() > 256
         })
     {
         return Err(protocol_error("session modes"));
@@ -247,7 +249,7 @@ fn flattened_select_options(option: &AcpConfigOption) -> Vec<ModelChoiceOption> 
             Vec::new()
         })
         .filter(|entry| {
-            valid_identifier(&entry.value, 256)
+            is_valid_identifier(&entry.value, 256)
                 && !entry.label.trim().is_empty()
                 && entry.label.len() <= 256
                 && !entry.label.chars().any(char::is_control)

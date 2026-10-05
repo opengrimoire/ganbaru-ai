@@ -121,7 +121,7 @@ pub async fn probe_grok_about(
     let output = tokio::time::timeout(ABOUT_TIMEOUT, output)
         .await
         .map_err(|_| ChatError::new(ChatErrorCode::Timeout, "Grok version probe timed out", true))?
-        .map_err(|_| grok_executable_missing())?;
+        .map_err(|_| grok_executable_missing_error())?;
     if output.stdout.len() as u64 > VERSION_OUTPUT_LIMIT_BYTES
         || output.stderr.len() as u64 > VERSION_OUTPUT_LIMIT_BYTES
     {
@@ -177,11 +177,11 @@ pub fn resolve_executable(
         }
         path
     } else {
-        find_on_path(configured, environment).ok_or_else(executable_missing)?
+        find_on_path(configured, environment).ok_or_else(executable_missing_error)?
     };
-    let resolved = fs::canonicalize(candidate).map_err(|_| executable_missing())?;
+    let resolved = fs::canonicalize(candidate).map_err(|_| executable_missing_error())?;
     if !resolved.is_file() || !is_executable(&resolved) {
-        return Err(executable_missing());
+        return Err(executable_missing_error());
     }
     if matches!(
         resolved.extension().and_then(|value| value.to_str()),
@@ -213,7 +213,7 @@ pub async fn probe_about(
     let output = tokio::time::timeout(ABOUT_TIMEOUT, output)
         .await
         .map_err(|_| ChatError::new(ChatErrorCode::Timeout, "Cursor about probe timed out", true))?
-        .map_err(|_| executable_missing())?;
+        .map_err(|_| executable_missing_error())?;
     if output.stdout.len() as u64 > VERSION_OUTPUT_LIMIT_BYTES
         || output.stderr.len() as u64 > VERSION_OUTPUT_LIMIT_BYTES
     {
@@ -372,7 +372,7 @@ pub fn spawn_acp_connection_process(
             let mut environment = process_environment_for(configuration, "Grok")?;
             environment.insert("GROK_OAUTH2_REFERRER".to_string(), "ganbaru-ai".to_string());
             let executable = resolve_executable(&configuration.executable, &environment)
-                .map_err(|_| grok_executable_missing())?;
+                .map_err(|_| grok_executable_missing_error())?;
             let arguments = grok_launch_arguments(&configuration.launch_arguments)?;
             spawn_provider_process(ProviderProcessConfig {
                 executable,
@@ -520,7 +520,7 @@ fn inherited_environment_names() -> &'static [&'static str] {
     }
 }
 
-fn executable_missing() -> ChatError {
+fn executable_missing_error() -> ChatError {
     ChatError::new(
         ChatErrorCode::ExecutableMissing,
         "Cursor Agent executable is unavailable",
@@ -528,7 +528,7 @@ fn executable_missing() -> ChatError {
     )
 }
 
-fn grok_executable_missing() -> ChatError {
+fn grok_executable_missing_error() -> ChatError {
     ChatError::new(
         ChatErrorCode::ExecutableMissing,
         "Grok CLI executable is unavailable",

@@ -73,7 +73,7 @@ async fn optional_task_label(
     }
 }
 
-pub(in crate::projects) async fn insert_task_change_event_owned(
+pub(in crate::projects) async fn insert_task_field_change_event(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     task_id: &str,
     event_type: &str,
@@ -126,7 +126,7 @@ pub(in crate::projects) async fn insert_task_update_change_events(
     let next_title = next.title.trim().to_string();
     let change_reason = normalized_task_change_reason(next.change_reason.as_deref());
     if previous.title != next_title {
-        insert_task_change_event_owned(
+        insert_task_field_change_event(
             tx,
             task_id,
             "updated",
@@ -138,7 +138,7 @@ pub(in crate::projects) async fn insert_task_update_change_events(
         .await?;
     }
     if previous.description != next.description {
-        insert_task_change_event_owned(
+        insert_task_field_change_event(
             tx,
             task_id,
             "updated",
@@ -161,7 +161,7 @@ pub(in crate::projects) async fn insert_task_update_change_events(
         };
         let old_status = label_for_project_status(tx, &previous.status_id).await?;
         let new_status = label_for_project_status(tx, &next.status_id).await?;
-        insert_task_change_event_owned(
+        insert_task_field_change_event(
             tx,
             task_id,
             event_type,
@@ -175,7 +175,7 @@ pub(in crate::projects) async fn insert_task_update_change_events(
     if previous.section_id != next.section_id {
         let old_section = label_for_project_section(tx, &previous.section_id).await?;
         let new_section = label_for_project_section(tx, &next.section_id).await?;
-        insert_task_change_event_owned(
+        insert_task_field_change_event(
             tx,
             task_id,
             "updated",
@@ -189,7 +189,7 @@ pub(in crate::projects) async fn insert_task_update_change_events(
     if previous.parent_task_id != next.parent_task_id {
         let old_parent = optional_task_label(tx, previous.parent_task_id.as_deref()).await?;
         let new_parent = optional_task_label(tx, next.parent_task_id.as_deref()).await?;
-        insert_task_change_event_owned(
+        insert_task_field_change_event(
             tx,
             task_id,
             "updated",
@@ -201,7 +201,7 @@ pub(in crate::projects) async fn insert_task_update_change_events(
         .await?;
     }
     if previous.priority != next.priority {
-        insert_task_change_event_owned(
+        insert_task_field_change_event(
             tx,
             task_id,
             "updated",
@@ -213,7 +213,7 @@ pub(in crate::projects) async fn insert_task_update_change_events(
         .await?;
     }
     if previous.task_type != next.task_type {
-        insert_task_change_event_owned(
+        insert_task_field_change_event(
             tx,
             task_id,
             "updated",
@@ -225,7 +225,7 @@ pub(in crate::projects) async fn insert_task_update_change_events(
         .await?;
     }
     if previous.estimate_minutes != next.estimate_minutes {
-        insert_task_change_event_owned(
+        insert_task_field_change_event(
             tx,
             task_id,
             "updated",
@@ -237,7 +237,7 @@ pub(in crate::projects) async fn insert_task_update_change_events(
         .await?;
     }
     if previous.due_date != next.due_date {
-        insert_task_change_event_owned(
+        insert_task_field_change_event(
             tx,
             task_id,
             "updated",
@@ -249,7 +249,7 @@ pub(in crate::projects) async fn insert_task_update_change_events(
         .await?;
     }
     if previous.due_time != next.due_time {
-        insert_task_change_event_owned(
+        insert_task_field_change_event(
             tx,
             task_id,
             "updated",
@@ -261,7 +261,7 @@ pub(in crate::projects) async fn insert_task_update_change_events(
         .await?;
     }
     if previous.start_date != next.start_date {
-        insert_task_change_event_owned(
+        insert_task_field_change_event(
             tx,
             task_id,
             "updated",
@@ -273,7 +273,7 @@ pub(in crate::projects) async fn insert_task_update_change_events(
         .await?;
     }
     if previous.start_time != next.start_time {
-        insert_task_change_event_owned(
+        insert_task_field_change_event(
             tx,
             task_id,
             "updated",
@@ -285,7 +285,7 @@ pub(in crate::projects) async fn insert_task_update_change_events(
         .await?;
     }
     if previous.target_end_date != next.target_end_date {
-        insert_task_change_event_owned(
+        insert_task_field_change_event(
             tx,
             task_id,
             "updated",
@@ -302,7 +302,7 @@ pub(in crate::projects) async fn insert_task_update_change_events(
         } else {
             "updated"
         };
-        insert_task_change_event_owned(
+        insert_task_field_change_event(
             tx,
             task_id,
             event_type,
@@ -314,7 +314,7 @@ pub(in crate::projects) async fn insert_task_update_change_events(
         .await?;
     }
     if previous.blocker_reason != next.blocker_reason {
-        insert_task_change_event_owned(
+        insert_task_field_change_event(
             tx,
             task_id,
             "updated",
@@ -326,7 +326,7 @@ pub(in crate::projects) async fn insert_task_update_change_events(
         .await?;
     }
     if (previous.milestone != 0) != next.milestone {
-        insert_task_change_event_owned(
+        insert_task_field_change_event(
             tx,
             task_id,
             "updated",

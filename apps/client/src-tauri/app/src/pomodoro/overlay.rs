@@ -18,7 +18,7 @@ use enforcement::{
     start_overlay_enforcement,
 };
 
-fn run_main_thread_setup<T, F>(app: &tauri::AppHandle, setup: F) -> Result<T, String>
+fn run_on_main_thread_blocking<T, F>(app: &tauri::AppHandle, setup: F) -> Result<T, String>
 where
     T: Send + 'static,
     F: FnOnce() -> Result<T, String> + Send + 'static,
@@ -103,12 +103,12 @@ struct LinuxNativeBlocker {
 
 #[cfg(target_os = "linux")]
 thread_local! {
-    static POMODORO_GTK_BLOCKERS: std::cell::RefCell<Vec<LinuxNativeBlocker>> =
+    static LINUX_NATIVE_BLOCKERS: std::cell::RefCell<Vec<LinuxNativeBlocker>> =
         const { std::cell::RefCell::new(Vec::new()) };
 }
 
 #[derive(Clone, Copy)]
-enum PomodoroOverlayKind {
+enum OverlayKind {
     Break {
         ends_at_ms: u64,
         end_esc_presses: Option<u32>,
@@ -118,12 +118,12 @@ enum PomodoroOverlayKind {
         seconds: u32,
     },
     Completion {
-        visual_state: PomodoroOverlayVisualState,
+        visual_state: OverlayVisualState,
     },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum PomodoroOverlayVisualState {
+enum OverlayVisualState {
     Idle,
     IdleFailed,
     BreakCountdown,
@@ -166,17 +166,17 @@ impl OverlayColor {
     }
 }
 
-impl PomodoroOverlayKind {
-    fn initial_visual_state(self) -> PomodoroOverlayVisualState {
+impl OverlayKind {
+    fn initial_visual_state(self) -> OverlayVisualState {
         match self {
-            Self::Break { .. } => PomodoroOverlayVisualState::BreakCountdown,
-            Self::Idle { .. } => PomodoroOverlayVisualState::Idle,
+            Self::Break { .. } => OverlayVisualState::BreakCountdown,
+            Self::Idle { .. } => OverlayVisualState::Idle,
             Self::Completion { visual_state } => visual_state,
         }
     }
 }
 
-impl PomodoroOverlayVisualState {
+impl OverlayVisualState {
     fn from_id(id: &str) -> Result<Self, String> {
         match id {
             "idle" => Ok(Self::Idle),
@@ -242,7 +242,7 @@ pub(crate) struct PomodoroOverlayState {
     active: AtomicBool,
     shutting_down: AtomicBool,
     lifecycle: Mutex<()>,
-    cleanup: Mutex<Option<PomodoroOverlayCleanup>>,
+    session: Mutex<Option<OverlaySession>>,
 }
 
 impl Default for PomodoroOverlayState {
@@ -251,27 +251,27 @@ impl Default for PomodoroOverlayState {
             active: AtomicBool::new(false),
             shutting_down: AtomicBool::new(false),
             lifecycle: Mutex::new(()),
-            cleanup: Mutex::new(None),
+            session: Mutex::new(None),
         }
     }
 }
 
-struct PomodoroOverlayCleanup {
+struct OverlaySession {
     labels: Vec<String>,
-    kind: PomodoroOverlayKind,
+    kind: OverlayKind,
     context: crate::pomodoro::FocusNativeContext,
-    visual_state: PomodoroOverlayVisualState,
+    visual_state: OverlayVisualState,
     monitor_signature: Option<MonitorSignature>,
     enforcement: OverlayEnforcementGuard,
     reconcile_guard: Option<OverlayReconcileGuard>,
 }
 
 #[derive(Clone)]
-struct PomodoroOverlaySnapshot {
+struct OverlaySessionSnapshot {
     labels: Vec<String>,
-    kind: PomodoroOverlayKind,
+    kind: OverlayKind,
     context: crate::pomodoro::FocusNativeContext,
-    visual_state: PomodoroOverlayVisualState,
+    visual_state: OverlayVisualState,
     monitor_signature: Option<MonitorSignature>,
 }
 
@@ -292,8 +292,8 @@ impl PomodoroOverlayState {
     fn begin_locked(
         &self,
         app: &tauri::AppHandle,
-        kind: PomodoroOverlayKind,
-        visual_state: PomodoroOverlayVisualState,
+        kind: OverlayKind,
+        visual_state: OverlayVisualState,
         context: crate::pomodoro::FocusNativeContext,
     ) -> Result<(), String> {
         if self.shutting_down.load(Ordering::SeqCst) {
@@ -323,7 +323,7 @@ impl PomodoroOverlayState {
             }
         };
 
-        let cleanup = PomodoroOverlayCleanup {
+        let session = OverlaySession {
             labels: Vec::new(),
             kind,
             context,
@@ -333,9 +333,9 @@ impl PomodoroOverlayState {
             reconcile_guard: None,
         };
         *self
-            .cleanup
+            .session
             .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(cleanup);
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(session);
         self.active.store(true, Ordering::SeqCst);
         Ok(())
     }
@@ -346,20 +346,20 @@ impl PomodoroOverlayState {
         labels: Vec<String>,
         monitor_signature: MonitorSignature,
     ) {
-        let mut cleanup = self
-            .cleanup
+        let mut session = self
+            .session
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
         if !self.active.load(Ordering::SeqCst) {
             return;
         }
-        if let Some(cleanup) = cleanup.as_mut() {
-            cleanup
+        if let Some(session) = session.as_mut() {
+            session
                 .enforcement
                 .set_window_labels(labels.clone(), POMODORO_OVERLAY_MAIN_LABEL);
-            cleanup.labels = labels;
-            cleanup.monitor_signature = Some(monitor_signature);
-            if cleanup.reconcile_guard.is_none() {
+            session.labels = labels;
+            session.monitor_signature = Some(monitor_signature);
+            if session.reconcile_guard.is_none() {
                 let app_for_reconcile = app.clone();
                 match OverlayReconcileGuard::start(move || {
                     let overlays = app_for_reconcile.state::<PomodoroOverlayState>();
@@ -369,7 +369,7 @@ impl PomodoroOverlayState {
                     overlays.reconcile(&app_for_reconcile);
                     true
                 }) {
-                    Ok(guard) => cleanup.reconcile_guard = Some(guard),
+                    Ok(guard) => session.reconcile_guard = Some(guard),
                     Err(err) => {
                         eprintln!("failed to start Pomodoro overlay monitor reconciler: {err}");
                     }
@@ -379,36 +379,36 @@ impl PomodoroOverlayState {
     }
 
     fn labels(&self) -> Vec<String> {
-        self.cleanup
+        self.session
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
             .as_ref()
-            .map(|cleanup| cleanup.labels.clone())
+            .map(|session| session.labels.clone())
             .unwrap_or_default()
     }
 
-    fn snapshot(&self) -> Option<PomodoroOverlaySnapshot> {
-        self.cleanup
+    fn snapshot(&self) -> Option<OverlaySessionSnapshot> {
+        self.session
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
             .as_ref()
-            .map(|cleanup| PomodoroOverlaySnapshot {
-                labels: cleanup.labels.clone(),
-                kind: cleanup.kind,
-                context: cleanup.context.clone(),
-                visual_state: cleanup.visual_state,
-                monitor_signature: cleanup.monitor_signature.clone(),
+            .map(|session| OverlaySessionSnapshot {
+                labels: session.labels.clone(),
+                kind: session.kind,
+                context: session.context.clone(),
+                visual_state: session.visual_state,
+                monitor_signature: session.monitor_signature.clone(),
             })
     }
 
-    fn set_visual_state(&self, visual_state: PomodoroOverlayVisualState) {
-        if let Some(cleanup) = self
-            .cleanup
+    fn set_visual_state(&self, visual_state: OverlayVisualState) {
+        if let Some(session) = self
+            .session
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
             .as_mut()
         {
-            cleanup.visual_state = visual_state;
+            session.visual_state = visual_state;
         }
     }
 
@@ -431,7 +431,7 @@ impl PomodoroOverlayState {
         let existing_labels = snapshot.labels.clone();
         let app_for_setup = app.clone();
 
-        let setup_result = run_main_thread_setup(app, move || {
+        let setup_result = run_on_main_thread_blocking(app, move || {
             if !crate::pomodoro::native_runtime::overlay_context_is_current(
                 &app_for_setup,
                 &snapshot.context,
@@ -444,8 +444,8 @@ impl PomodoroOverlayState {
             if monitors.is_empty() {
                 return Ok(None);
             }
-            let primary_idx = primary_monitor_index(&app_for_setup, &monitors)?;
-            let signature = monitor_signature(&monitors, primary_idx);
+            let primary_index = primary_monitor_index(&app_for_setup, &monitors)?;
+            let signature = monitor_signature(&monitors, primary_index);
             let missing_overlay_window = snapshot
                 .labels
                 .iter()
@@ -459,7 +459,7 @@ impl PomodoroOverlayState {
                 snapshot.visual_state,
                 &snapshot.labels,
                 &monitors,
-                primary_idx,
+                primary_index,
                 &snapshot.context,
             )?;
             Ok(Some((labels, signature)))
@@ -506,34 +506,34 @@ impl PomodoroOverlayState {
     fn close_locked(&self, app: &tauri::AppHandle) {
         self.active.store(false, Ordering::SeqCst);
         let reconcile_guard = self
-            .cleanup
+            .session
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
             .as_mut()
-            .and_then(|cleanup| cleanup.reconcile_guard.take());
+            .and_then(|session| session.reconcile_guard.take());
         if let Some(mut reconcile_guard) = reconcile_guard {
             if let Err(err) = reconcile_guard.stop() {
                 eprintln!("failed to stop Pomodoro overlay monitor reconciler: {err}");
             }
         }
-        let cleanup = self
-            .cleanup
+        let session = self
+            .session
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
             .take();
-        let Some(cleanup) = cleanup else {
+        let Some(session) = session else {
             return;
         };
 
-        destroy_overlay_windows(app, &cleanup.labels);
-        restore_overlay_cleanup(cleanup);
+        destroy_overlay_windows(app, &session.labels);
+        stop_session_enforcement(session);
     }
 }
 
 fn destroy_overlay_windows(app: &tauri::AppHandle, labels: &[String]) {
     let labels = labels.to_vec();
     let app_for_setup = app.clone();
-    if let Err(err) = run_main_thread_setup(app, move || {
+    if let Err(err) = run_on_main_thread_blocking(app, move || {
         destroy_overlay_windows_on_main_thread(&app_for_setup, &labels);
         Ok(())
     }) {
@@ -552,16 +552,13 @@ fn destroy_overlay_windows_on_main_thread(app: &tauri::AppHandle, labels: &[Stri
     }
 }
 
-fn restore_overlay_cleanup(mut cleanup: PomodoroOverlayCleanup) {
-    cleanup.enforcement.stop();
+fn stop_session_enforcement(mut session: OverlaySession) {
+    session.enforcement.stop();
 }
 
-fn overlay_url(
-    kind: PomodoroOverlayKind,
-    context: &crate::pomodoro::FocusNativeContext,
-) -> WebviewUrl {
+fn overlay_url(kind: OverlayKind, context: &crate::pomodoro::FocusNativeContext) -> WebviewUrl {
     let query = match kind {
-        PomodoroOverlayKind::Break {
+        OverlayKind::Break {
             ends_at_ms,
             end_esc_presses,
             extension_limit,
@@ -576,12 +573,12 @@ fn overlay_url(
                 "index.html?ganbaruWindow=pomodoroOverlay&overlayKind=break&breakEndsAtMs={ends_at_ms}&breakEndEscPresses={end_esc_presses}&breakExtensionLimit={extension_limit}"
             )
         }
-        PomodoroOverlayKind::Idle { seconds } => {
+        OverlayKind::Idle { seconds } => {
             format!(
                 "index.html?ganbaruWindow=pomodoroOverlay&overlayKind=idle&idleSeconds={seconds}"
             )
         }
-        PomodoroOverlayKind::Completion { visual_state } => {
+        OverlayKind::Completion { visual_state } => {
             format!(
                 "index.html?ganbaruWindow=pomodoroOverlay&overlayKind=completion&screenState={}",
                 visual_state.id()
@@ -610,7 +607,7 @@ fn overlay_url(
 }
 
 #[cfg(not(target_os = "linux"))]
-fn blocker_url(state: PomodoroOverlayVisualState) -> WebviewUrl {
+fn blocker_url(state: OverlayVisualState) -> WebviewUrl {
     WebviewUrl::App(
         format!(
             "index.html?ganbaruWindow=pomodoroOverlayBlocker&screenState={}",
@@ -622,7 +619,7 @@ fn blocker_url(state: PomodoroOverlayVisualState) -> WebviewUrl {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct MonitorSignature {
-    primary_idx: usize,
+    primary_index: usize,
     monitors: Vec<MonitorSnapshot>,
 }
 
@@ -657,9 +654,12 @@ fn primary_monitor_index(
         .unwrap_or(0))
 }
 
-fn monitor_signature(monitors: &[tauri::window::Monitor], primary_idx: usize) -> MonitorSignature {
+fn monitor_signature(
+    monitors: &[tauri::window::Monitor],
+    primary_index: usize,
+) -> MonitorSignature {
     MonitorSignature {
-        primary_idx,
+        primary_index,
         monitors: monitors
             .iter()
             .map(|monitor| MonitorSnapshot {
@@ -752,7 +752,7 @@ fn build_svelte_overlay_window(
 fn destroy_linux_native_blocker_windows() {
     use gtk::prelude::*;
 
-    POMODORO_GTK_BLOCKERS.with(|blockers| {
+    LINUX_NATIVE_BLOCKERS.with(|blockers| {
         for blocker in blockers.borrow_mut().drain(..) {
             blocker.window.hide();
             blocker.window.close();
@@ -764,7 +764,7 @@ fn destroy_linux_native_blocker_windows() {
 fn repaint_linux_native_blocker_windows(background_color: OverlayColor) {
     use gtk::prelude::WidgetExt;
 
-    POMODORO_GTK_BLOCKERS.with(|blockers| {
+    LINUX_NATIVE_BLOCKERS.with(|blockers| {
         for blocker in blockers.borrow().iter() {
             blocker.color.set(background_color);
             blocker.window.queue_draw();
@@ -829,11 +829,11 @@ fn build_linux_native_blocker_windows(
         return Ok(());
     }
 
-    let primary_idx = linux_primary_monitor_index(&display, primary_monitor);
+    let primary_index = linux_primary_monitor_index(&display, primary_monitor);
     let mut windows = Vec::new();
 
     for index in 0..n_monitors {
-        if index == primary_idx {
+        if index == primary_index {
             continue;
         }
 
@@ -871,7 +871,7 @@ fn build_linux_native_blocker_windows(
         windows.push(LinuxNativeBlocker { window, color });
     }
 
-    POMODORO_GTK_BLOCKERS.with(|blockers| {
+    LINUX_NATIVE_BLOCKERS.with(|blockers| {
         *blockers.borrow_mut() = windows;
     });
 
@@ -880,20 +880,20 @@ fn build_linux_native_blocker_windows(
 
 fn reconcile_overlay_windows(
     app: &tauri::AppHandle,
-    kind: PomodoroOverlayKind,
-    visual_state: PomodoroOverlayVisualState,
-    old_labels: &[String],
+    kind: OverlayKind,
+    visual_state: OverlayVisualState,
+    previous_labels: &[String],
     monitors: &[tauri::window::Monitor],
-    primary_idx: usize,
+    primary_index: usize,
     context: &crate::pomodoro::FocusNativeContext,
 ) -> Result<Vec<String>, String> {
     let background_color = visual_state.background_color();
-    let primary_monitor = &monitors[primary_idx];
+    let primary_monitor = &monitors[primary_index];
     let mut labels = Vec::with_capacity(monitors.len());
     #[cfg(not(target_os = "linux"))]
     let mut created_labels = Vec::new();
     #[cfg(target_os = "linux")]
-    let _ = old_labels;
+    let _ = previous_labels;
 
     #[cfg(target_os = "linux")]
     if let Err(err) = build_linux_native_blocker_windows(app, primary_monitor, background_color) {
@@ -904,7 +904,7 @@ fn reconcile_overlay_windows(
     {
         let mut desired_blocker_labels = Vec::new();
         for (index, monitor) in monitors.iter().enumerate() {
-            if index == primary_idx {
+            if index == primary_index {
                 continue;
             }
             let label = format!("{POMODORO_OVERLAY_BLOCKER_PREFIX}-{index}");
@@ -928,7 +928,7 @@ fn reconcile_overlay_windows(
             labels.push(label);
         }
 
-        for label in old_labels {
+        for label in previous_labels {
             if label.starts_with(POMODORO_OVERLAY_BLOCKER_PREFIX)
                 && !desired_blocker_labels
                     .iter()
@@ -979,11 +979,7 @@ fn reconcile_overlay_windows(
     Ok(labels)
 }
 
-fn show_pomodoro_overlay(
-    app: tauri::AppHandle,
-    kind: PomodoroOverlayKind,
-    scope: (u64, i64),
-) -> Result<(), String> {
+fn show_overlay(app: tauri::AppHandle, kind: OverlayKind, scope: (u64, i64)) -> Result<(), String> {
     let context = crate::pomodoro::capture_native_context(&app)
         .map_err(|error| format!("Read native Focus overlay context: {error}"))?;
     if context.vault_generation != scope.0 || context.revision != scope.1 {
@@ -999,7 +995,7 @@ fn show_pomodoro_overlay(
     let background_color = visual_state.background_color();
 
     let app_for_setup = app.clone();
-    let setup_result = run_main_thread_setup(&app, move || {
+    let setup_result = run_on_main_thread_blocking(&app, move || {
         if !crate::pomodoro::native_runtime::presentation_is_current(
             &app_for_setup,
             scope.0,
@@ -1013,11 +1009,11 @@ fn show_pomodoro_overlay(
         if monitors.is_empty() {
             return Err("no monitors are available for the pomodoro overlay".to_string());
         }
-        let primary_idx = primary_monitor_index(&app_for_setup, &monitors)?;
-        let signature = monitor_signature(&monitors, primary_idx);
+        let primary_index = primary_monitor_index(&app_for_setup, &monitors)?;
+        let signature = monitor_signature(&monitors, primary_index);
 
         let mut labels = Vec::with_capacity(monitors.len());
-        let primary_monitor = &monitors[primary_idx];
+        let primary_monitor = &monitors[primary_index];
 
         #[cfg(target_os = "linux")]
         if let Err(err) =
@@ -1028,7 +1024,7 @@ fn show_pomodoro_overlay(
 
         #[cfg(not(target_os = "linux"))]
         for (index, monitor) in monitors.iter().enumerate() {
-            if index == primary_idx {
+            if index == primary_index {
                 continue;
             }
             let label = format!("{POMODORO_OVERLAY_BLOCKER_PREFIX}-{index}");
@@ -1127,16 +1123,16 @@ pub(crate) fn dismiss_pomodoro_completion(
         .lock()
         .map_err(|error| format!("Lock native completion lifecycle: {error}"))?;
     let allowed = overlays
-        .cleanup
+        .session
         .lock()
         .map_err(|error| format!("Read native completion surface: {error}"))?
         .as_ref()
-        .is_some_and(|cleanup| {
-            matches!(cleanup.kind, PomodoroOverlayKind::Completion { .. })
+        .is_some_and(|session| {
+            matches!(session.kind, OverlayKind::Completion { .. })
                 && scope.matches_retained(
-                    cleanup.context.vault_generation,
-                    cleanup.context.run_id.as_deref(),
-                    cleanup.context.segment_id.as_deref(),
+                    session.context.vault_generation,
+                    session.context.run_id.as_deref(),
+                    session.context.segment_id.as_deref(),
                 )
         });
     if !allowed {
@@ -1159,14 +1155,14 @@ pub(crate) fn set_pomodoro_overlay_state(
     if overlays.shutting_down.load(Ordering::SeqCst) {
         return Err("the application is shutting down".to_string());
     }
-    let visual_state = PomodoroOverlayVisualState::from_id(&state)?;
+    let visual_state = OverlayVisualState::from_id(&state)?;
     overlays.set_visual_state(visual_state);
     let background_color = visual_state.background_color();
     let labels = overlays.labels();
     let labels_for_reinforce = labels.clone();
     let app_for_setup = app.clone();
 
-    run_main_thread_setup(&app, move || {
+    run_on_main_thread_blocking(&app, move || {
         if !crate::pomodoro::native_runtime::presentation_is_current(
             &app_for_setup,
             scope.0,
@@ -1203,9 +1199,9 @@ pub(crate) fn show_break_overlay(
     break_extension_limit: Option<u32>,
     scope: (u64, i64),
 ) -> Result<(), String> {
-    show_pomodoro_overlay(
+    show_overlay(
         app,
-        PomodoroOverlayKind::Break {
+        OverlayKind::Break {
             ends_at_ms: break_ends_at_ms,
             end_esc_presses: normalize_break_end_esc_presses(break_end_esc_presses),
             extension_limit: normalize_break_extension_limit(break_extension_limit),
@@ -1235,9 +1231,9 @@ pub(crate) fn show_idle_overlay(
     idle_seconds: u32,
     scope: (u64, i64),
 ) -> Result<bool, String> {
-    show_pomodoro_overlay(
+    show_overlay(
         app,
-        PomodoroOverlayKind::Idle {
+        OverlayKind::Idle {
             seconds: idle_seconds,
         },
         scope,
@@ -1245,11 +1241,11 @@ pub(crate) fn show_idle_overlay(
     Ok(true)
 }
 
-fn completion_visual_state_from_kind(kind: &str) -> Result<PomodoroOverlayVisualState, String> {
+fn completion_visual_state_from_kind(kind: &str) -> Result<OverlayVisualState, String> {
     match kind {
-        "event" => Ok(PomodoroOverlayVisualState::EventFinished),
-        "day" => Ok(PomodoroOverlayVisualState::DayComplete),
-        "workweek" => Ok(PomodoroOverlayVisualState::WorkweekComplete),
+        "event" => Ok(OverlayVisualState::EventFinished),
+        "day" => Ok(OverlayVisualState::DayComplete),
+        "workweek" => Ok(OverlayVisualState::WorkweekComplete),
         _ => Err(format!("unknown pomodoro completion kind: {kind}")),
     }
 }
@@ -1259,9 +1255,9 @@ pub(crate) fn show_pomodoro_completion_overlay(
     kind: String,
     scope: (u64, i64),
 ) -> Result<bool, String> {
-    show_pomodoro_overlay(
+    show_overlay(
         app,
-        PomodoroOverlayKind::Completion {
+        OverlayKind::Completion {
             visual_state: completion_visual_state_from_kind(&kind)?,
         },
         scope,
@@ -1324,7 +1320,7 @@ mod tests {
     #[test]
     fn pomodoro_overlay_visual_states_have_expected_backgrounds() {
         assert_eq!(
-            PomodoroOverlayVisualState::from_id("idle")
+            OverlayVisualState::from_id("idle")
                 .unwrap()
                 .background_color(),
             OverlayColor {
@@ -1334,7 +1330,7 @@ mod tests {
             }
         );
         assert_eq!(
-            PomodoroOverlayVisualState::from_id("break_countdown")
+            OverlayVisualState::from_id("break_countdown")
                 .unwrap()
                 .background_color(),
             OverlayColor {
@@ -1344,7 +1340,7 @@ mod tests {
             }
         );
         assert_eq!(
-            PomodoroOverlayVisualState::from_id("break_finished")
+            OverlayVisualState::from_id("break_finished")
                 .unwrap()
                 .background_color(),
             OverlayColor {
@@ -1354,7 +1350,7 @@ mod tests {
             }
         );
         assert_eq!(
-            PomodoroOverlayVisualState::from_id("event_finished")
+            OverlayVisualState::from_id("event_finished")
                 .unwrap()
                 .background_color(),
             OverlayColor {
@@ -1364,7 +1360,7 @@ mod tests {
             }
         );
         assert_eq!(
-            PomodoroOverlayVisualState::from_id("day_complete")
+            OverlayVisualState::from_id("day_complete")
                 .unwrap()
                 .background_color(),
             OverlayColor {
@@ -1374,7 +1370,7 @@ mod tests {
             }
         );
         assert_eq!(
-            PomodoroOverlayVisualState::from_id("workweek_complete")
+            OverlayVisualState::from_id("workweek_complete")
                 .unwrap()
                 .background_color(),
             OverlayColor {
@@ -1389,15 +1385,15 @@ mod tests {
     fn pomodoro_completion_kinds_map_to_visual_states() {
         assert_eq!(
             completion_visual_state_from_kind("event").unwrap(),
-            PomodoroOverlayVisualState::EventFinished
+            OverlayVisualState::EventFinished
         );
         assert_eq!(
             completion_visual_state_from_kind("day").unwrap(),
-            PomodoroOverlayVisualState::DayComplete
+            OverlayVisualState::DayComplete
         );
         assert_eq!(
             completion_visual_state_from_kind("workweek").unwrap(),
-            PomodoroOverlayVisualState::WorkweekComplete
+            OverlayVisualState::WorkweekComplete
         );
         assert!(completion_visual_state_from_kind("unknown").is_err());
     }

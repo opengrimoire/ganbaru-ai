@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   notesDatabaseFilterConditions,
   notesDatabaseNewFilter,
-  notesDatabaseSortedColumn,
+  notesDatabaseSortsWithColumn,
   notesDatabaseUpdatedFilters,
   NOTES_DATABASE_QUERY_MAX_SORTS,
   type NotesDatabaseQueryProperty,
@@ -56,16 +56,16 @@ describe("Notes database property sorts", () => {
     const sorts = Array.from({ length: NOTES_DATABASE_QUERY_MAX_SORTS }, (_, index) => ({
       property_id: `property-${index}`, direction: "ascending" as const,
     }));
-    expect(notesDatabaseSortedColumn(sorts, "another", "descending")).toEqual(sorts);
-    expect(notesDatabaseSortedColumn(sorts, "property-2", "descending")).toEqual(sorts.map((sort, index) =>
+    expect(notesDatabaseSortsWithColumn(sorts, "another", "descending")).toEqual(sorts);
+    expect(notesDatabaseSortsWithColumn(sorts, "property-2", "descending")).toEqual(sorts.map((sort, index) =>
       index === 2 ? { ...sort, direction: "descending" } : sort));
   });
 
   it("changes direction in place and appends each new property only once", () => {
     const sorts = [{ property_id: "title", direction: "ascending" as const }, { property_id: "due", direction: "ascending" as const }];
-    const descending = notesDatabaseSortedColumn(sorts, "due", "descending");
+    const descending = notesDatabaseSortsWithColumn(sorts, "due", "descending");
     expect(descending).toEqual([sorts[0], { property_id: "due", direction: "descending" }]);
-    expect(notesDatabaseSortedColumn(descending, "done", "ascending")).toEqual([
+    expect(notesDatabaseSortsWithColumn(descending, "done", "ascending")).toEqual([
       ...descending, { property_id: "done", direction: "ascending" },
     ]);
     expect(sorts[1].direction).toBe("ascending");

@@ -192,7 +192,7 @@ pub async fn apply_compound_edit(
         preimages
             .capture(&mut tx, std::slice::from_ref(id), &BTreeSet::new())
             .await?;
-        let row = block_tree::load_block_row_in_tx(&mut tx, id, true).await?;
+        let row = block_tree::load_block_row_tx(&mut tx, id, true).await?;
         if row.page_id != request.page_id && foreign_references.get(id) != Some(&row.page_id) {
             return Err("Notes edit preconditions cannot reference another page".to_string());
         }
@@ -465,7 +465,7 @@ pub async fn apply_compound_edit(
     let mut result_bytes = preimages.bytes();
     for id in changed {
         result_bytes = compound_preimages::charge_row(&mut tx, &id, result_bytes).await?;
-        rows.push(block_tree::load_block_row_in_tx(&mut tx, &id, true).await?);
+        rows.push(block_tree::load_block_row_tx(&mut tx, &id, true).await?);
     }
     rows.sort_by(|left, right| {
         (&left.parent_page_id, &left.parent_block_id)
@@ -571,7 +571,7 @@ async fn validate_mutation(
     created: &BTreeSet<String>,
 ) -> Result<Vec<String>, String> {
     require_reference(id, expected, created)?;
-    let row = block_tree::load_block_row_in_tx(tx, id, true).await?;
+    let row = block_tree::load_block_row_tx(tx, id, true).await?;
     if row.page_id != page_id {
         return Err("Notes compound edits cannot mutate another page".to_string());
     }

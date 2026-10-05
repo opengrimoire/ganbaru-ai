@@ -487,7 +487,7 @@ fn validate_distractions_sample(sample: &DistractionsSampleMessage) -> Result<()
             .is_some_and(|name| name.len() > 120)
         || sample.started_at_ms < 0
         || !(1..=86_400).contains(&sample.elapsed_seconds)
-        || !valid_local_date(&sample.local_date)
+        || !is_valid_local_date(&sample.local_date)
         || sample.created_at_ms < 0
     {
         return Err("Distractions sample metadata is invalid".to_string());
@@ -495,7 +495,7 @@ fn validate_distractions_sample(sample: &DistractionsSampleMessage) -> Result<()
     Ok(())
 }
 
-fn valid_local_date(value: &str) -> bool {
+fn is_valid_local_date(value: &str) -> bool {
     chrono::NaiveDate::parse_from_str(value, "%Y-%m-%d").is_ok()
 }
 

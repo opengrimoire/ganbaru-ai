@@ -245,7 +245,7 @@ pub(super) async fn execute_restore(
         reverted_turn_ids,
         provider_history_action: provider_history_action.to_string(),
         recovery_state: "complete".to_string(),
-        thread_revision: u64::try_from(thread_revision).map_err(|_| corrupt_data())?,
+        thread_revision: u64::try_from(thread_revision).map_err(|_| corrupt_data_error())?,
     })
     }
     .await;

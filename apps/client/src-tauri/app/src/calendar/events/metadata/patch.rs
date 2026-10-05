@@ -163,7 +163,7 @@ impl Metadata {
                     };
                     let mut rows = Vec::with_capacity(values.len());
                     for value in values {
-                        let old = self.music_assignments.iter().find(|row| {
+                        let existing = self.music_assignments.iter().find(|row| {
                             row.owner_kind == owner_kind && row.phase == value.phase.as_ref()
                         });
                         let mut row = MusicAssignment {
@@ -176,12 +176,12 @@ impl Metadata {
                             soundscape_behavior: value.soundscape_behavior.as_ref().into(),
                             provenance_kind: value.provenance_kind.as_ref().into(),
                             provenance_id: value.provenance_id.clone(),
-                            updated_at_ms: old.map_or(now_ms, |row| row.updated_at_ms),
-                            version: old.map_or(1, |row| row.version),
+                            updated_at_ms: existing.map_or(now_ms, |row| row.updated_at_ms),
+                            version: existing.map_or(1, |row| row.version),
                         };
-                        if old != Some(&row) {
+                        if existing != Some(&row) {
                             row.updated_at_ms = now_ms;
-                            row.version = old.map_or(Ok(1), |row| {
+                            row.version = existing.map_or(Ok(1), |row| {
                                 row.version
                                     .checked_add(1)
                                     .ok_or("Calendar Music version overflow")
@@ -220,9 +220,9 @@ impl Metadata {
         if let Some(values) = &draft.attendees {
             let mut rows = Vec::with_capacity(values.len());
             for (index, value) in values.iter().enumerate() {
-                let old = self.attendees.iter().find(|row| row.id == value.id);
+                let existing = self.attendees.iter().find(|row| row.id == value.id);
                 rows.push(Attendee {
-                    id: old
+                    id: existing
                         .map(|row| Ok(row.id.clone()))
                         .unwrap_or_else(|| copied_id(&event.id, "attendee", &value.id))?,
                     event_id: event.id.clone(),
@@ -232,8 +232,9 @@ impl Metadata {
                     status: value.status.clone(),
                     rsvp: i64::from(value.rsvp),
                     sort_order: index as i64,
-                    icalendar_component_id: old.and_then(|row| row.icalendar_component_id.clone()),
-                    icalendar_property_index: old.and_then(|row| row.icalendar_property_index),
+                    icalendar_component_id: existing
+                        .and_then(|row| row.icalendar_component_id.clone()),
+                    icalendar_property_index: existing.and_then(|row| row.icalendar_property_index),
                 });
             }
             self.attendees.sort_by_key(|row| row.sort_order);
@@ -245,9 +246,9 @@ impl Metadata {
         if let Some(values) = &draft.alarms {
             let mut rows = Vec::with_capacity(values.len());
             for (index, value) in values.iter().enumerate() {
-                let old = self.alarms.iter().find(|row| row.id == value.id);
+                let existing = self.alarms.iter().find(|row| row.id == value.id);
                 rows.push(Alarm {
-                    id: old
+                    id: existing
                         .map(|row| Ok(row.id.clone()))
                         .unwrap_or_else(|| copied_id(&event.id, "alarm", &value.id))?,
                     event_id: event.id.clone(),
@@ -256,7 +257,8 @@ impl Metadata {
                     trigger_value: value.trigger_value.clone(),
                     description: value.description.clone(),
                     sort_order: index as i64,
-                    icalendar_component_id: old.and_then(|row| row.icalendar_component_id.clone()),
+                    icalendar_component_id: existing
+                        .and_then(|row| row.icalendar_component_id.clone()),
                 });
             }
             self.alarms.sort_by_key(|row| row.sort_order);

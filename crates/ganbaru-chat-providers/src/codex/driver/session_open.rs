@@ -6,12 +6,12 @@ impl CodexProviderDriver {
         &self,
         working_directory: &Path,
     ) -> ChatResult<(CodexRpcConnection, CodexHomeLayout)> {
-        let inject_internal = self
+        let inject_internal_mcp = self
             .configuration
             .internal_mcp
             .as_ref()
             .is_some_and(|server| !server.organizational_authority);
-        self.spawn_connection(working_directory, false, &[], inject_internal)
+        self.spawn_connection(working_directory, false, &[], inject_internal_mcp)
     }
 
     pub(super) fn spawn_connection(

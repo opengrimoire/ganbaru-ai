@@ -191,7 +191,7 @@ fn parse_local_ipv4_route(
         }
         let flags = u16::from_str_radix(fields[3], 16)
             .map_err(|_| "Linux default route flags are invalid".to_string())?;
-        if flags & 0x1 == 0 || !valid_interface(fields[0]) {
+        if flags & 0x1 == 0 || !is_valid_interface(fields[0]) {
             continue;
         }
         let raw_mask = u32::from_str_radix(fields[7], 16)
@@ -219,7 +219,7 @@ fn parse_local_ipv4_route(
         .ok_or_else(|| "no usable Linux private network route is available".to_string())
 }
 
-fn valid_interface(value: &str) -> bool {
+fn is_valid_interface(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= 15
         && value
@@ -238,7 +238,7 @@ fn ipv4_prefix(mask: Ipv4Addr) -> Result<u32, String> {
 
 fn active_firewalls(scope: &LanScope, port: u16) -> Vec<AuthorizedScope> {
     let mut result = Vec::new();
-    if ufw_enabled() {
+    if is_ufw_enabled() {
         result.push(AuthorizedScope {
             firewall: FirewallKind::Ufw,
             interface: scope.interface.clone(),
@@ -248,7 +248,7 @@ fn active_firewalls(scope: &LanScope, port: u16) -> Vec<AuthorizedScope> {
             zone: None,
         });
     }
-    if firewalld_running() {
+    if is_firewalld_running() {
         let zone = firewalld_zone(&scope.interface);
         result.push(AuthorizedScope {
             firewall: FirewallKind::Firewalld,
@@ -262,7 +262,7 @@ fn active_firewalls(scope: &LanScope, port: u16) -> Vec<AuthorizedScope> {
     result
 }
 
-fn ufw_enabled() -> bool {
+fn is_ufw_enabled() -> bool {
     let Ok(contents) = fs::read_to_string("/etc/ufw/ufw.conf") else {
         return false;
     };
@@ -272,7 +272,7 @@ fn ufw_enabled() -> bool {
     })
 }
 
-fn firewalld_running() -> bool {
+fn is_firewalld_running() -> bool {
     command_path(&["/usr/bin/firewall-cmd", "/usr/sbin/firewall-cmd"])
         .and_then(|path| Command::new(path).arg("--state").output().ok())
         .is_some_and(|output| output.status.success() && output.stdout == b"running\n")
@@ -285,15 +285,15 @@ fn firewalld_zone(interface: &str) -> Option<String> {
         .output()
         .ok()?;
     let zone = String::from_utf8(output.stdout).ok()?.trim().to_string();
-    if output.status.success() && valid_zone(&zone) {
+    if output.status.success() && is_valid_zone(&zone) {
         return Some(zone);
     }
     let output = Command::new(path).arg("--get-default-zone").output().ok()?;
     let zone = String::from_utf8(output.stdout).ok()?.trim().to_string();
-    (output.status.success() && valid_zone(&zone)).then_some(zone)
+    (output.status.success() && is_valid_zone(&zone)).then_some(zone)
 }
 
-fn valid_zone(value: &str) -> bool {
+fn is_valid_zone(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= 64
         && value
@@ -460,7 +460,7 @@ fn apply_scope_privileged(scope: &AuthorizedScope, grant: bool) -> Result<(), St
 }
 
 fn validate_authorized_scope(scope: &AuthorizedScope) -> Result<(), String> {
-    if !valid_interface(&scope.interface)
+    if !is_valid_interface(&scope.interface)
         || !(scope.local_address.is_private() || scope.local_address.is_link_local())
         || !matches!(scope.port, COORDINATOR_PORT | DEVELOPMENT_COORDINATOR_PORT)
     {
@@ -491,7 +491,7 @@ fn validate_authorized_scope(scope: &AuthorizedScope) -> Result<(), String> {
     }
     match scope.firewall {
         FirewallKind::Ufw if scope.zone.is_none() => Ok(()),
-        FirewallKind::Firewalld if scope.zone.as_deref().is_some_and(valid_zone) => Ok(()),
+        FirewallKind::Firewalld if scope.zone.as_deref().is_some_and(is_valid_zone) => Ok(()),
         _ => Err("saved Linux firewall scope is inconsistent".to_string()),
     }
 }
@@ -553,7 +553,7 @@ fn apply_firewalld_commands(
     let zone = scope
         .zone
         .as_deref()
-        .filter(|zone| valid_zone(zone))
+        .filter(|zone| is_valid_zone(zone))
         .ok_or_else(|| "the active firewalld zone is unavailable".to_string())?;
     let operation = if grant {
         "--add-rich-rule"

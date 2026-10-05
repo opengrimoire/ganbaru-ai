@@ -18,11 +18,11 @@ pub fn replay_driver_receipt(receipt: CommandReceiptRead) -> ChatResult<DriverOp
             true,
         )),
         CommandReceiptState::Completed => {
-            serde_json::from_value(receipt.result.ok_or_else(corrupt_data)?.value)
+            serde_json::from_value(receipt.result.ok_or_else(corrupt_data_error)?.value)
                 .map_err(json_error)
         }
         CommandReceiptState::Failed => Err(serde_json::from_value(
-            receipt.error.ok_or_else(corrupt_data)?.value,
+            receipt.error.ok_or_else(corrupt_data_error)?.value,
         )
         .map_err(json_error)?),
     }
@@ -85,7 +85,7 @@ fn json_error<T>(_error: T) -> ChatError {
     )
 }
 
-fn corrupt_data() -> ChatError {
+fn corrupt_data_error() -> ChatError {
     ChatError::new(
         ChatErrorCode::Persistence,
         "Stored Chat command receipt is incomplete",

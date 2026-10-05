@@ -96,7 +96,7 @@ pub async fn rebuild_thread_projections(
     }
     let sequence = events.last().map(|event| event.sequence).unwrap_or(0);
     sqlx::query("UPDATE chat_threads SET last_projected_sequence = ? WHERE id = ?")
-        .bind(i64::try_from(sequence).map_err(|_| corrupt_data())?)
+        .bind(i64::try_from(sequence).map_err(|_| corrupt_data_error())?)
         .bind(thread_id.as_str())
         .execute(&mut *transaction)
         .await
@@ -113,7 +113,7 @@ fn persistence_error<T>(_error: T) -> ChatError {
     )
 }
 
-fn corrupt_data() -> ChatError {
+fn corrupt_data_error() -> ChatError {
     ChatError::new(
         ChatErrorCode::Persistence,
         "Stored Chat event sequence is invalid",

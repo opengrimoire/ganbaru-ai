@@ -18,9 +18,9 @@
   import { getTheme } from "$lib/stores/theme.svelte";
   import { resolveAppTokens, resolveCalendarTokens } from "$lib/themes";
   import {
-    projectIconPickerPanelPlacement, projectIconPickerPointPlacement,
+    iconPickerPanelPlacement, iconPickerPointPlacement,
     readProjectIconDefaultColor, readProjectIconAskEveryTime,
-    type ProjectIconPickerRect,
+    type IconPickerRect,
   } from "$lib/projects/icons/picker";
   import { ensureConfigLoaded, getConfigKey, setConfigKey } from "$lib/vault/config";
   import { createNotesDesignCover, createNotesLocalFilePageCover, NOTES_COVER_DESIGNS } from "$lib/notes/pages/cover";
@@ -45,9 +45,9 @@
   const persist = untrack(() => onSelect);
   const pickerId = $props.id();
   const tabs: readonly CoverTab[] = ["designs", "upload"];
-  const PANEL_WIDTH = 360;
-  const PANEL_HEIGHT = 440;
-  const UPLOAD_HEIGHT = 228;
+  const PANEL_WIDTH_PX = 360;
+  const PANEL_HEIGHT_PX = 440;
+  const UPLOAD_HEIGHT_PX = 228;
   const CHOICE_WIDTH_REM = 8.25;
   const CHOICE_HEIGHT_REM = 18.05;
   const DEFAULT_COLOR_KEY = "notes.coverPicker.defaultColor";
@@ -71,14 +71,14 @@
   let designContentElement = $state<HTMLDivElement>();
   let canScrollUp = $state(false);
   let canScrollDown = $state(false);
-  let panelPlacement = $state({ left: 0, top: 0, width: PANEL_WIDTH, height: PANEL_HEIGHT });
+  let panelPlacement = $state({ left: 0, top: 0, width: PANEL_WIDTH_PX, height: PANEL_HEIGHT_PX });
   let query = $state("");
   let uploadUrl = $state("");
   let error = $state<string | null>(null);
   let busy = $state(false);
   let active = true;
-  let interacted = false;
-  let keyboardInteraction = false;
+  let hasInteracted = false;
+  let isKeyboardInteraction = false;
 
   const calendarTokens = $derived(resolveCalendarTokens(theme.current));
   const pickerBg = $derived(calendarTokens["--cal-bg"]);
@@ -111,7 +111,7 @@
   });
 
   /** Resolve the same visual viewport boundary used to constrain floating pickers. */
-  function viewport(): ProjectIconPickerRect {
+  function viewport(): IconPickerRect {
     const view = window.visualViewport;
     const left = view?.offsetLeft ?? 0;
     const top = view?.offsetTop ?? 0;
@@ -123,15 +123,15 @@
   /** Position this panel and the optional per-design color panel like Add icon. */
   function placePanel(): void {
     if (!trigger) return;
-    panelPlacement = projectIconPickerPanelPlacement({
+    panelPlacement = iconPickerPanelPlacement({
       triggerRect: trigger.getBoundingClientRect(), boundaryRect: viewport(),
-      preferredWidth: PANEL_WIDTH, preferredHeight: activeTab === "upload" ? UPLOAD_HEIGHT : PANEL_HEIGHT,
+      preferredWidth: PANEL_WIDTH_PX, preferredHeight: activeTab === "upload" ? UPLOAD_HEIGHT_PX : PANEL_HEIGHT_PX,
       align: "start",
     });
     if (colorChoice) {
       const rem = Number.parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
       const width = CHOICE_WIDTH_REM * rem;
-      const position = projectIconPickerPointPlacement({
+      const position = iconPickerPointPlacement({
         anchorRect: colorChoice.anchor.getBoundingClientRect(), viewportRect: viewport(),
         panelWidth: width, panelHeight: CHOICE_HEIGHT_REM * rem,
       });
@@ -143,20 +143,20 @@
     placePanel();
     const frame = requestAnimationFrame(() => panelElement?.querySelector<HTMLButtonElement>('[role="tab"][aria-selected="true"]')?.focus({ preventScroll: true }));
     void ensureConfigLoaded().then(() => {
-      if (!active || interacted) return;
+      if (!active || hasInteracted) return;
       askEveryTime = readProjectIconAskEveryTime(getConfigKey<unknown>(ASK_COLOR_KEY, false));
       if (initialCover?.type !== "design") color = readProjectIconDefaultColor(getConfigKey<unknown>(DEFAULT_COLOR_KEY, "default"));
     }).catch((cause: unknown) => { if (active) error = String(cause); });
     /** Dismiss outside both panels while allowing the originating trigger to toggle. */
     function outside(event: PointerEvent): void {
-      keyboardInteraction = false;
+      isKeyboardInteraction = false;
       const target = event.target;
       if (!(target instanceof Node) || panelElement?.contains(target) || colorChoiceElement?.contains(target) || trigger?.contains(target)) return;
       close();
     }
     /** Match Add icon's Escape dismissal and keyboard focus restoration. */
     function keydown(event: KeyboardEvent): void {
-      keyboardInteraction = true;
+      isKeyboardInteraction = true;
       if (event.key === "Escape") { event.preventDefault(); close(); }
     }
     document.addEventListener("pointerdown", outside, true);
@@ -180,7 +180,7 @@
   function close(): void {
     active = false;
     onClose();
-    if (keyboardInteraction) trigger?.focus({ preventScroll: true });
+    if (isKeyboardInteraction) trigger?.focus({ preventScroll: true });
   }
 
   /** Translate design labels shared by tiles, filtering, and color choices. */
@@ -201,7 +201,7 @@
   }
 
   /** Persist a completed selection immediately, keeping errors in the picker for retry. */
-  async function selectCover(selected: NotesPageCover | null, closeAfter = true): Promise<void> {
+  async function selectCover(selected: NotesPageCover | null, shouldCloseAfter = true): Promise<void> {
     if (busy || !active) return;
     busy = true;
     error = null;
@@ -210,7 +210,7 @@
       if (!active) return;
       currentCover = selected;
       colorChoice = null;
-      if (closeAfter) close();
+      if (shouldCloseAfter) close();
     } catch (cause) {
       if (active) error = t("notes.pageCoverSaveFailed", cause instanceof Error ? cause.message : String(cause));
     } finally { if (active) busy = false; }
@@ -218,7 +218,7 @@
 
   /** Apply the chosen color to an existing design and remember it for the next choice. */
   function selectColor(value: NotesCoverColor): void {
-    interacted = true;
+    hasInteracted = true;
     color = value;
     setConfigKey(DEFAULT_COLOR_KEY, value === "default" ? undefined : value);
     if (currentCover?.type === "design") void selectCover(createNotesDesignCover(currentCover.design.pattern, value), false);
@@ -227,7 +227,7 @@
   /** Optionally ask for a color beside the chosen tile, matching icon selection. */
   function chooseDesign(pattern: CoverDesign, target: EventTarget | null): void {
     if (busy) return;
-    interacted = true;
+    hasInteracted = true;
     colorOpen = false;
     if (askEveryTime && target instanceof HTMLElement) {
       colorChoice = { pattern, anchor: target };
@@ -354,7 +354,7 @@
   tabindex="-1"
   data-app-floating-surface
   onpointerdown={(event) => {
-    keyboardInteraction = false;
+    isKeyboardInteraction = false;
     if (event.target instanceof Element && !event.target.closest("[data-icon-picker-inline-panel]")) {
       colorOpen = false;
       colorChoice = null;
@@ -396,7 +396,7 @@
         }}><Shuffle size={14} strokeWidth={1.75} /></button>
         <IconPickerColorControl bind:open={colorOpen} {color} label={t("notes.pageCoverPalette")} {askEveryTime} {colorSelectionBorder} {automaticColor} {colorLabel}
           colorSwatch={(slot) => getEventColor(slot, theme.current).bg} onSelect={selectColor} onOpen={() => { colorChoice = null; }} disabled={busy}
-          onAskEveryTimeChange={(value) => { interacted = true; askEveryTime = value; setConfigKey(ASK_COLOR_KEY, value); if (!value) colorChoice = null; }} />
+          onAskEveryTimeChange={(value) => { hasInteracted = true; askEveryTime = value; setConfigKey(ASK_COLOR_KEY, value); if (!value) colorChoice = null; }} />
       </div>
       <div bind:this={designScrollElement} class="cover-design-scroll min-h-0 flex-1 overflow-y-auto"
         class:scroll-top={canScrollUp && !canScrollDown} class:scroll-bottom={canScrollDown && !canScrollUp}

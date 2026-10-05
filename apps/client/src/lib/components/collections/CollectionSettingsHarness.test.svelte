@@ -3,7 +3,7 @@
   import CollectionMenu from "./CollectionMenu.svelte";
   import Select from "$lib/components/ui/Select.svelte";
 
-  let { onclose = () => {}, oncommit = () => {} }: { onclose?: () => void; oncommit?: (value: string) => void } = $props();
+  let { onClose = () => {}, onCommit = () => {} }: { onClose?: () => void; onCommit?: (value: string) => void } = $props();
   let open = $state(false);
   let anchor: HTMLButtonElement | null = $state(null);
   let draft = $state("");
@@ -13,9 +13,9 @@
 
 <button bind:this={anchor} type="button" aria-label="View settings" onclick={() => { open = true; }}>Settings</button>
 {#if open}
-  <CollectionSettings label="View settings" {anchor} onclose={() => { open = false; onclose(); }}>
+  <CollectionSettings label="View settings" {anchor} onClose={() => { open = false; onClose(); }}>
     <fieldset disabled={saving}>
-      <input aria-label="View name" bind:value={draft} onblur={() => oncommit(draft)} />
+      <input aria-label="View name" bind:value={draft} onblur={() => onCommit(draft)} />
       <button type="button" onclick={() => { saving = true; }}>Save</button>
     </fieldset>
     <CollectionMenu label="Layout" summary="Table" fullWidth>

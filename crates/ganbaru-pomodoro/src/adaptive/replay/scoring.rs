@@ -50,7 +50,7 @@ pub fn score_results(
         }
         add_features(&mut score, &outcome.features);
     }
-    finish(&mut score);
+    derive_rates(&mut score);
     Ok(score)
 }
 
@@ -64,18 +64,18 @@ pub fn score_observed(outcomes: &[ObservedOutcome]) -> OutcomeScore {
     for outcome in outcomes {
         add_features(&mut score, &outcome.features);
     }
-    finish(&mut score);
+    derive_rates(&mut score);
     score
 }
 
 /// Group actual exposure in first-observed candidate order.
 pub fn score_by_candidate(
     outcomes: &[ObservedOutcome],
-    candidates: &BTreeMap<String, Option<String>>,
+    candidate_ids: &BTreeMap<String, Option<String>>,
 ) -> Vec<CandidateObservedScore> {
     let mut groups: Vec<(String, Vec<ObservedOutcome>)> = Vec::new();
     for outcome in outcomes {
-        let Some(Some(candidate)) = candidates.get(&outcome.opportunity_id) else {
+        let Some(Some(candidate)) = candidate_ids.get(&outcome.opportunity_id) else {
             continue;
         };
         if candidate.is_empty() {
@@ -131,35 +131,39 @@ fn descending(a: Option<f64>, b: Option<f64>) -> Ordering {
         .total_cmp(&a.unwrap_or(f64::NEG_INFINITY))
 }
 
-fn add_features(score: &mut OutcomeScore, f: &FeatureVector) {
+fn add_features(score: &mut OutcomeScore, features: &FeatureVector) {
     score.scored_outcome_count += 1;
-    score.completed_focus_segments += f.completed_focus_segments;
-    score.interrupted_focus_segments += f.interrupted_focus_segments;
-    score.focus_failure_count += f.focus_failure_count;
-    score.stop_count += f.stop_count;
-    score.clean_focus_seconds += f.clean_focus_seconds;
-    score.planned_focus_seconds += f.planned_focus_seconds;
-    score.blocked_attempt_count += f.blocked_attempt_count;
-    score.break_skipped_count += f.break_skipped_count;
-    score.short_break_overtime_seconds += f.short_break_overtime_seconds;
-    score.long_break_overtime_seconds += f.long_break_overtime_seconds;
+    score.completed_focus_segments += features.completed_focus_segments;
+    score.interrupted_focus_segments += features.interrupted_focus_segments;
+    score.focus_failure_count += features.focus_failure_count;
+    score.stop_count += features.stop_count;
+    score.clean_focus_seconds += features.clean_focus_seconds;
+    score.planned_focus_seconds += features.planned_focus_seconds;
+    score.blocked_attempt_count += features.blocked_attempt_count;
+    score.break_skipped_count += features.break_skipped_count;
+    score.short_break_overtime_seconds += features.short_break_overtime_seconds;
+    score.long_break_overtime_seconds += features.long_break_overtime_seconds;
     let reasons = [
-        (f.focus_failure_count > 0.0, "focus_failure"),
-        (f.interrupted_focus_segments > 0.0, "interrupted_focus"),
-        (f.stop_count > 0.0, "stopped_run"),
-        (f.blocked_attempt_count > 0.0, "blocked_attempts"),
-        (f.break_skipped_count > 0.0, "skipped_break"),
+        (features.focus_failure_count > 0.0, "focus_failure"),
         (
-            f.short_break_overtime_seconds >= SHORT_BREAK_DRIFT_SECONDS,
+            features.interrupted_focus_segments > 0.0,
+            "interrupted_focus",
+        ),
+        (features.stop_count > 0.0, "stopped_run"),
+        (features.blocked_attempt_count > 0.0, "blocked_attempts"),
+        (features.break_skipped_count > 0.0, "skipped_break"),
+        (
+            features.short_break_overtime_seconds >= SHORT_BREAK_DRIFT_SECONDS,
             "short_break_overtime",
         ),
         (
-            f.long_break_overtime_seconds >= LONG_BREAK_DRIFT_SECONDS,
+            features.long_break_overtime_seconds >= LONG_BREAK_DRIFT_SECONDS,
             "long_break_overtime",
         ),
         (
-            f.planned_focus_seconds > 0.0
-                && f.clean_focus_seconds < f.planned_focus_seconds - CLEAN_FOCUS_LOSS_SECONDS,
+            features.planned_focus_seconds > 0.0
+                && features.clean_focus_seconds
+                    < features.planned_focus_seconds - CLEAN_FOCUS_LOSS_SECONDS,
             "clean_focus_loss",
         ),
     ];
@@ -177,7 +181,7 @@ fn add_features(score: &mut OutcomeScore, f: &FeatureVector) {
 fn ratio(numerator: f64, denominator: f64) -> Option<f64> {
     (denominator > 0.0).then(|| numerator / denominator)
 }
-fn finish(score: &mut OutcomeScore) {
+fn derive_rates(score: &mut OutcomeScore) {
     let count = score.scored_outcome_count as f64;
     score.completion_rate = ratio(
         score.completed_focus_segments,

@@ -165,21 +165,21 @@
     return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom };
   }
 
-  function openSubmenu(next: Submenu, element: HTMLElement, focusFirst = false): void {
+  function openSubmenu(next: Submenu, element: HTMLElement, shouldFocusFirst = false): void {
     submenu = next;
     submenuAnchor = rectOf(element);
     submenuPosition = null;
     paletteAnchor = null;
     palettePosition = null;
-    if (focusFirst) {
+    if (shouldFocusFirst) {
       void tick().then(() => submenuElement?.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus());
     }
   }
 
-  function openPalette(element: HTMLElement, focusFirst = false): void {
+  function openPalette(element: HTMLElement, shouldFocusFirst = false): void {
     paletteAnchor = rectOf(element);
     palettePosition = null;
-    if (focusFirst) {
+    if (shouldFocusFirst) {
       void tick().then(() => paletteElement?.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus());
     }
   }
@@ -203,12 +203,12 @@
     paletteAnchor = null;
   }
 
-  function resize(): void {
+  function updateViewport(): void {
     viewport = { width: window.innerWidth, height: window.innerHeight };
   }
 </script>
 
-<svelte:window onresize={resize} />
+<svelte:window onresize={updateViewport} />
 
 <div class="contents" use:dismissOnOutside={{ onDismiss: (reason) => onClose(reason === "escape") }}>
 <div

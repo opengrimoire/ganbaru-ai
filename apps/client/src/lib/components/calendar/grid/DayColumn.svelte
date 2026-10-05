@@ -171,7 +171,7 @@
 
   // Centralized pomodoro timeline
   const pomodoro = getPomodoro();
-  const calZoom = getCalendarZoom();
+  const calendarZoom = getCalendarZoom();
   const railWidth = 6;
 
   // One rail segment per contiguous group of pomodoro events (merge overlapping/adjacent)
@@ -277,11 +277,11 @@
   let lastClientY: number | null = null;
   let scrollProximityRaf = 0;
   // Track when mouse is near a block's resize edge (top or bottom)
-  let hoverResizeBlockId: string | null = $state(null);
+  let hoverResizeEventId: string | null = $state(null);
 
   $effect(() => {
     if (dragPreview || createPreview) {
-      hoverResizeBlockId = null;
+      hoverResizeEventId = null;
     }
   });
 
@@ -308,17 +308,17 @@
     document.addEventListener("visibilitychange", handleVisibilityChange);
 
     // Track scroll for resize detection during scroll
-    const sp = columnEl?.closest(".hide-scrollbar") as HTMLElement | null;
-    if (sp) {
-      sp.addEventListener("scroll", handleParentScroll);
-      sp.addEventListener(CALENDAR_ZOOM_FRAME_EVENT, handleZoomFrame);
+    const scrollParent = columnEl?.closest(".hide-scrollbar") as HTMLElement | null;
+    if (scrollParent) {
+      scrollParent.addEventListener("scroll", handleParentScroll);
+      scrollParent.addEventListener(CALENDAR_ZOOM_FRAME_EVENT, handleZoomFrame);
     }
 
     return () => {
       window.removeEventListener("blur", clearMouseState);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
-      sp?.removeEventListener("scroll", handleParentScroll);
-      sp?.removeEventListener(CALENDAR_ZOOM_FRAME_EVENT, handleZoomFrame);
+      scrollParent?.removeEventListener("scroll", handleParentScroll);
+      scrollParent?.removeEventListener(CALENDAR_ZOOM_FRAME_EVENT, handleZoomFrame);
       if (scrollProximityRaf) cancelAnimationFrame(scrollProximityRaf);
     };
   });
@@ -326,7 +326,7 @@
   function clearHoverTracking() {
     const hasTracking = lastClientX !== null
       || lastClientY !== null
-      || hoverResizeBlockId !== null
+      || hoverResizeEventId !== null
       || scrollProximityRaf !== 0;
 
     if (!hasTracking) return;
@@ -337,7 +337,7 @@
       cancelAnimationFrame(scrollProximityRaf);
       scrollProximityRaf = 0;
     }
-    hoverResizeBlockId = null;
+    hoverResizeEventId = null;
   }
 
   function isTimedColumnSurface(target: EventTarget | null): boolean {
@@ -355,10 +355,10 @@
     const scrollContainer = columnEl?.closest(".hide-scrollbar") as HTMLElement | null;
     const raw = scrollContainer?.style.getPropertyValue("--hour-h") ?? "";
     const rendered = raw ? parseFloat(raw) : Number.NaN;
-    return Number.isFinite(rendered) && rendered > 0 ? rendered : calZoom.hourHeight;
+    return Number.isFinite(rendered) && rendered > 0 ? rendered : calendarZoom.hourHeight;
   }
 
-  type BlockHit =
+  type EventHit =
     | { kind: "edge"; eventId: string; edge: "resize-top" | "resize-bottom" }
     | { kind: "body"; eventId: string };
 
@@ -375,8 +375,8 @@
     return true;
   }
 
-  function findBlockHit(offsetX: number, offsetY: number, colWidth: number): BlockHit | null {
-    const hh = getRenderedHourHeight();
+  function findEventHit(offsetX: number, offsetY: number, colWidth: number): EventHit | null {
+    const hourHeight = getRenderedHourHeight();
     const threshold = getResizeThreshold();
 
     // Blocks are positioned inside a container offset by railWidth + 4
@@ -390,22 +390,22 @@
       if (panelOpen && pos.event.id !== editingId) continue;
 
       // Don't subtract gap for hit detection to avoid dead zones between stacked blocks
-      const blockLeftPx = eventAreaLeft + (pos.left / 100) * eventAreaWidth;
-      const blockRightPx = eventAreaLeft + ((pos.left + pos.width) / 100) * eventAreaWidth;
-      if (offsetX < blockLeftPx || offsetX > blockRightPx) continue;
+      const eventLeftPx = eventAreaLeft + (pos.left / 100) * eventAreaWidth;
+      const eventRightPx = eventAreaLeft + ((pos.left + pos.width) / 100) * eventAreaWidth;
+      if (offsetX < eventLeftPx || offsetX > eventRightPx) continue;
 
-      const blockTopY = (pos.startMinute / 60) * hh;
-      const blockBottomY = ((pos.startMinute + pos.durationMinutes) / 60) * hh;
+      const eventTopY = (pos.startMinute / 60) * hourHeight;
+      const eventBottomY = ((pos.startMinute + pos.durationMinutes) / 60) * hourHeight;
 
       // Strict containment: [top, bottom)
-      if (offsetY >= blockTopY && offsetY < blockBottomY) {
+      if (offsetY >= eventTopY && offsetY < eventBottomY) {
         // Mouse is inside this block. Check if near an edge.
-        if (!pos.isClippedTop && Math.abs(offsetY - blockTopY) < threshold) {
+        if (!pos.isClippedTop && Math.abs(offsetY - eventTopY) < threshold) {
           return canResizeEdge(pos, "resize-top")
             ? { kind: "edge", eventId: pos.event.id, edge: "resize-top" }
             : { kind: "body", eventId: pos.event.id };
         }
-        if (!pos.isClippedBottom && Math.abs(offsetY - blockBottomY) < threshold) {
+        if (!pos.isClippedBottom && Math.abs(offsetY - eventBottomY) < threshold) {
           return canResizeEdge(pos, "resize-bottom")
             ? { kind: "edge", eventId: pos.event.id, edge: "resize-bottom" }
             : { kind: "body", eventId: pos.event.id };
@@ -419,16 +419,16 @@
     return null;
   }
 
-  function findNearbyBlockEdge(offsetX: number, offsetY: number, colWidth: number): { eventId: string; edge: "resize-top" | "resize-bottom" } | null {
-    const hit = findBlockHit(offsetX, offsetY, colWidth);
+  function findNearbyEventEdge(offsetX: number, offsetY: number, colWidth: number): { eventId: string; edge: "resize-top" | "resize-bottom" } | null {
+    const hit = findEventHit(offsetX, offsetY, colWidth);
     return hit?.kind === "edge" ? { eventId: hit.eventId, edge: hit.edge } : null;
   }
 
   function getCreateTimingFromOffset(offsetY: number): CreateStartTiming {
-    const hh = getRenderedHourHeight();
-    const rawMinute = (offsetY / hh) * 60;
+    const hourHeight = getRenderedHourHeight();
+    const rawMinute = (offsetY / hourHeight) * 60;
     const clickMinute = snapSimpleClickStartMinute(rawMinute);
-    const selectionMinute = clampMinute(snapToGrid(rawMinute, calZoom.gridMinutes));
+    const selectionMinute = clampMinute(snapToGrid(rawMinute, calendarZoom.gridMinutes));
 
     return { selectionMinute, clickMinute };
   }
@@ -442,23 +442,23 @@
     const colRect = columnEl.getBoundingClientRect();
     const colOffsetX = clientX - colRect.left;
     const colOffsetY = clientY - colRect.top;
-    const hit = findBlockHit(colOffsetX, colOffsetY, colRect.width);
+    const hit = findEventHit(colOffsetX, colOffsetY, colRect.width);
 
     if (hit?.kind === "edge") {
-      hoverResizeBlockId = (panelOpen && hit.eventId !== editingId) ? null : hit.eventId;
+      hoverResizeEventId = (panelOpen && hit.eventId !== editingId) ? null : hit.eventId;
     } else {
-      hoverResizeBlockId = null;
+      hoverResizeEventId = null;
     }
   }
 
   // Get resize edge for a specific block from click coordinates
-  function getBlockEdgeFromClick(eventId: string, e: PointerEvent): "resize-top" | "resize-bottom" | undefined {
+  function getEventEdgeFromClick(eventId: string, e: PointerEvent): "resize-top" | "resize-bottom" | undefined {
     if (mobileLayout) return undefined;
     if (!columnEl) return undefined;
     const colRect = columnEl.getBoundingClientRect();
     const colOffsetX = e.clientX - colRect.left;
     const colOffsetY = e.clientY - colRect.top;
-    const nearby = findNearbyBlockEdge(colOffsetX, colOffsetY, colRect.width);
+    const nearby = findNearbyEventEdge(colOffsetX, colOffsetY, colRect.width);
     if (nearby && nearby.eventId === eventId) {
       return nearby.edge;
     }
@@ -475,7 +475,7 @@
     const colOffsetY = e.clientY - colRect.top;
 
     // Check proximity to existing block edges for resize
-    const nearby = findNearbyBlockEdge(colOffsetX, colOffsetY, colRect.width);
+    const nearby = findNearbyEventEdge(colOffsetX, colOffsetY, colRect.width);
     if (nearby) {
       onDragStart(nearby.eventId, e, nearby.edge);
       return;
@@ -492,7 +492,7 @@
 
   function handleParentScroll() {
     if (lastClientY === null || !columnEl) return;
-    if (calZoom.isAnimating) return;
+    if (calendarZoom.isAnimating) return;
 
     if (!scrollProximityRaf) {
       scrollProximityRaf = requestAnimationFrame(() => {
@@ -518,7 +518,7 @@
   }
 
   function handleColumnMouseLeave(e: MouseEvent) {
-    if (calZoom.isAnimating) return;
+    if (calendarZoom.isAnimating) return;
     const enteringTimedSurface = isTimedColumnSurface(e.relatedTarget);
     if (!enteringTimedSurface) clearHoverTracking();
   }
@@ -540,7 +540,7 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
   data-day-column
-  class="relative z-2 min-w-0 {hoverResizeBlockId !== null ? 'cursor-ns-resize' : 'cursor-default'}"
+  class="relative z-2 min-w-0 {hoverResizeEventId !== null ? 'cursor-ns-resize' : 'cursor-default'}"
   style="
     height: calc(24 * var(--hour-h) * 1px);
     contain: layout style;
@@ -606,7 +606,7 @@
 
   <div
     bind:this={columnEl}
-    class="absolute top-0 right-0 bottom-0 {draggingEventId ? 'pointer-events-none' : hoverResizeBlockId !== null ? 'cursor-ns-resize' : 'cursor-default'}"
+    class="absolute top-0 right-0 bottom-0 {draggingEventId ? 'pointer-events-none' : hoverResizeEventId !== null ? 'cursor-ns-resize' : 'cursor-default'}"
     style="left: {railWidth + 4}px;"
     onpointerdown={handleColumnAreaPointerDown}
   >
@@ -624,32 +624,32 @@
       isPast={!isPendingCreateEventId(pos.event.id) && (
         isPast || (isToday && currentTimeMinute >= 0 && effectiveMinuteRange(pos.event, dateStr).endMinute <= currentTimeMinute)
       )}
-      inResizeZone={hoverResizeBlockId === pos.event.id}
-      onclick={(rect) => { if (!didDrag) onEventClick(pos.event, rect); }}
-      onprefetch={() => onEventPrefetch?.(pos.event)}
-      onpointerdown={(e) => {
-        if (allowPointerEditing) onDragStart(pos.event.id, e, getBlockEdgeFromClick(pos.event.id, e));
+      inResizeZone={hoverResizeEventId === pos.event.id}
+      onClick={(rect) => { if (!didDrag) onEventClick(pos.event, rect); }}
+      onPrefetch={() => onEventPrefetch?.(pos.event)}
+      onPointerDown={(e) => {
+        if (allowPointerEditing) onDragStart(pos.event.id, e, getEventEdgeFromClick(pos.event.id, e));
       }}
     />
   {/each}
 
   <!-- Drag previews replace the original block at the target position, layout-aware. -->
-  {#each layoutedPreviews as lp (lp.event.id)}
-    {@const previewEvent = lp.event}
+  {#each layoutedPreviews as previewPosition (previewPosition.event.id)}
+    {@const previewEvent = previewPosition.event}
     {@const dragBase = getEventColor(previewEvent.color, theme)}
     {@const dragIconColor = `color-mix(in srgb, ${dragBase.text} 70%, ${dragBase.bg})`}
     {@const dragTimeColor = `color-mix(in srgb, ${dragBase.text} 80%, ${dragBase.bg})`}
     {@const dragLocationColor = `color-mix(in srgb, ${dragBase.text} 60%, ${dragBase.bg})`}
-    {@const dragH = (lp.durationMinutes / 60) * calZoom.hourHeight}
+    {@const dragHeightPx = (previewPosition.durationMinutes / 60) * calendarZoom.hourHeight}
     {@const dragIndicators = getEventIndicatorState(previewEvent)}
     <div
       data-event-id={previewEvent.id}
       class="preview-outline pointer-events-none absolute flex overflow-hidden rounded text-[0.8rem] leading-tight"
       style="
-        top: calc({lp.startMinute} / 60 * var(--hour-h) * 1px);
-        height: calc({lp.durationMinutes} / 60 * var(--hour-h) * 1px);
-        left: {lp.left}%;
-        width: {lp.totalColumns > 1 ? `calc(${lp.width}% - 2px)` : `${lp.width}%`};
+        top: calc({previewPosition.startMinute} / 60 * var(--hour-h) * 1px);
+        height: calc({previewPosition.durationMinutes} / 60 * var(--hour-h) * 1px);
+        left: {previewPosition.left}%;
+        width: {previewPosition.totalColumns > 1 ? `calc(${previewPosition.width}% - 2px)` : `${previewPosition.width}%`};
         color: {dragBase.text};
         --event-bg: {dragBase.bg};
         --outline-mix: {isDark ? 'white' : 'black'};
@@ -680,12 +680,12 @@
         >
           {#if previewEvent.title}{previewEvent.title}{:else}{t("calendar.event.noTitle")}{/if}
         </div>
-        {#if dragH > 32}
-          {@const st = previewEvent.start.split(" ")[1] ?? ""}
-          {@const et = previewEvent.end.split(" ")[1] ?? ""}
-          <div class="truncate" style="color: {dragTimeColor};">{formatTimeRange(st, et, preferences.calendarTimeFormat, "compact")}</div>
+        {#if dragHeightPx > 32}
+          {@const startTime = previewEvent.start.split(" ")[1] ?? ""}
+          {@const endTime = previewEvent.end.split(" ")[1] ?? ""}
+          <div class="truncate" style="color: {dragTimeColor};">{formatTimeRange(startTime, endTime, preferences.calendarTimeFormat, "compact")}</div>
         {/if}
-        {#if dragH > 48 && previewEvent.location}
+        {#if dragHeightPx > 48 && previewEvent.location}
           <div class="truncate text-[0.666667rem]" style="color: {dragLocationColor};">{previewEvent.location}</div>
         {/if}
       </div>
@@ -694,18 +694,18 @@
 
   <!-- Create preview (new block being drawn, layout-aware) -->
   {#if createPreview && layoutedCreatePreview}
-    {@const lp = layoutedCreatePreview}
+    {@const previewPosition = layoutedCreatePreview}
     {@const createBase = getEventColor(undefined, theme)}
     {@const createTimeColor = `color-mix(in srgb, ${createBase.text} 80%, ${createBase.bg})`}
-    {@const createH = (lp.durationMinutes / 60) * calZoom.hourHeight}
+    {@const createHeightPx = (previewPosition.durationMinutes / 60) * calendarZoom.hourHeight}
     <div
       data-create-preview
       class="preview-outline pointer-events-none absolute flex overflow-hidden rounded text-[0.8rem] leading-tight"
       style="
-        top: calc({lp.startMinute} / 60 * var(--hour-h) * 1px);
-        height: calc({lp.durationMinutes} / 60 * var(--hour-h) * 1px);
-        left: {lp.left}%;
-        width: {lp.totalColumns > 1 ? `calc(${lp.width}% - 2px)` : `${lp.width}%`};
+        top: calc({previewPosition.startMinute} / 60 * var(--hour-h) * 1px);
+        height: calc({previewPosition.durationMinutes} / 60 * var(--hour-h) * 1px);
+        left: {previewPosition.left}%;
+        width: {previewPosition.totalColumns > 1 ? `calc(${previewPosition.width}% - 2px)` : `${previewPosition.width}%`};
         color: {createBase.text};
         --event-bg: {createBase.bg};
         --outline-mix: {isDark ? 'white' : 'black'};
@@ -716,10 +716,10 @@
         <div class="truncate font-medium">
           {#if createPreview.event.title}{createPreview.event.title}{:else}{t("calendar.event.noTitle")}{/if}
         </div>
-        {#if createH > 32}
-          {@const st = createPreview.event.start.split(" ")[1] ?? ""}
-          {@const et = createPreview.event.end.split(" ")[1] ?? ""}
-          <div class="truncate" style="color: {createTimeColor};">{formatTimeRange(st, et, preferences.calendarTimeFormat, "compact")}</div>
+        {#if createHeightPx > 32}
+          {@const startTime = createPreview.event.start.split(" ")[1] ?? ""}
+          {@const endTime = createPreview.event.end.split(" ")[1] ?? ""}
+          <div class="truncate" style="color: {createTimeColor};">{formatTimeRange(startTime, endTime, preferences.calendarTimeFormat, "compact")}</div>
         {/if}
       </div>
     </div>

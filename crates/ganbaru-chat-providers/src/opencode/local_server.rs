@@ -152,7 +152,7 @@ where
 {
     let mut reader = reader;
     let mut ready = Some(ready);
-    let mut total = 0_usize;
+    let mut stdout_bytes = 0_usize;
     let mut line = Vec::new();
     let mut chunk = [0_u8; 4096];
     loop {
@@ -176,8 +176,8 @@ where
         if ready.is_none() {
             continue;
         }
-        total = total.saturating_add(read);
-        if total > STDOUT_LIMIT_BYTES {
+        stdout_bytes = stdout_bytes.saturating_add(read);
+        if stdout_bytes > STDOUT_LIMIT_BYTES {
             send_ready(
                 &mut ready,
                 Err(startup_error("OpenCode server output exceeded its bound")),

@@ -26,7 +26,7 @@ fn gsettings_set(schema: &str, key: &str, value: &str) -> Result<(), String> {
             "refusing to write unknown gsettings key {schema} {key}"
         ));
     }
-    if !valid_shortcut_restore_value(value) {
+    if !is_valid_shortcut_restore_value(value) {
         return Err(format!(
             "refusing to write invalid gsettings value for {schema} {key}"
         ));
@@ -113,11 +113,11 @@ fn is_known_keybinding_schema(schema: &str) -> bool {
 #[cfg(target_os = "linux")]
 pub(super) fn is_allowed_gsettings_restore_target(schema: &str, key: &str) -> bool {
     GNOME_SPECIAL_RESTORE_KEYS.contains(&(schema, key))
-        || (is_known_keybinding_schema(schema) && valid_gsettings_key_name(key))
+        || (is_known_keybinding_schema(schema) && is_valid_gsettings_key_name(key))
 }
 
 #[cfg(target_os = "linux")]
-fn valid_gsettings_key_name(key: &str) -> bool {
+fn is_valid_gsettings_key_name(key: &str) -> bool {
     !key.is_empty()
         && key.len() <= 128
         && key
@@ -126,7 +126,7 @@ fn valid_gsettings_key_name(key: &str) -> bool {
 }
 
 #[cfg(target_os = "linux")]
-fn valid_shortcut_restore_value(value: &str) -> bool {
+fn is_valid_shortcut_restore_value(value: &str) -> bool {
     !value.as_bytes().contains(&0) && value.len() <= SHORTCUT_RESTORE_VALUE_MAX_BYTES
 }
 
@@ -148,10 +148,10 @@ pub(super) fn validate_saved_shortcuts(
     saved: &SavedShortcuts,
     known_keys: &HashMap<String, HashSet<String>>,
 ) -> Result<(), String> {
-    if !valid_shortcut_restore_value(&saved.overlay_key) {
+    if !is_valid_shortcut_restore_value(&saved.overlay_key) {
         return Err("invalid GNOME overlay key restore value".to_string());
     }
-    if !valid_shortcut_restore_value(&saved.dock_hotkeys) {
+    if !is_valid_shortcut_restore_value(&saved.dock_hotkeys) {
         return Err("invalid GNOME dock hotkeys restore value".to_string());
     }
     if saved.disabled.len() > SHORTCUT_RESTORE_DISABLED_MAX_ITEMS {
@@ -161,7 +161,7 @@ pub(super) fn validate_saved_shortcuts(
         if !is_known_keybinding_schema(schema) {
             return Err(format!("unknown GNOME shortcut schema {schema}"));
         }
-        if !valid_gsettings_key_name(key) {
+        if !is_valid_gsettings_key_name(key) {
             return Err(format!("invalid GNOME shortcut key name {key}"));
         }
         if !known_keys
@@ -170,7 +170,7 @@ pub(super) fn validate_saved_shortcuts(
         {
             return Err(format!("unknown GNOME shortcut key {schema} {key}"));
         }
-        if !valid_shortcut_restore_value(value) {
+        if !is_valid_shortcut_restore_value(value) {
             return Err(format!(
                 "invalid GNOME shortcut restore value for {schema} {key}"
             ));
@@ -306,10 +306,10 @@ fn persist_shortcut_restore(path: &Path, saved: &SavedShortcuts) -> Result<(), S
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
-    let tmp_path = path.with_extension("json.tmp");
+    let temporary_path = path.with_extension("json.tmp");
     let json = serde_json::to_string(saved).map_err(|e| e.to_string())?;
-    write_owner_only_file(&tmp_path, &json)?;
-    std::fs::rename(&tmp_path, path).map_err(|e| e.to_string())?;
+    write_owner_only_file(&temporary_path, &json)?;
+    std::fs::rename(&temporary_path, path).map_err(|e| e.to_string())?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -331,8 +331,8 @@ fn restore_shortcuts(saved: &SavedShortcuts) {
     ) {
         eprintln!("failed to restore GNOME dock hotkeys: {err}");
     }
-    for (schema, key, val) in &saved.disabled {
-        if let Err(err) = gsettings_set(schema, key, val) {
+    for (schema, key, value) in &saved.disabled {
+        if let Err(err) = gsettings_set(schema, key, value) {
             eprintln!("failed to restore GNOME shortcut {schema} {key}: {err}");
         }
     }

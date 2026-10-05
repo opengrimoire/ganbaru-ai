@@ -97,14 +97,10 @@ fn database_date_edits_preserve_ranges_and_zones_and_reject_invalid_ranges_atomi
                 .is_err()
             );
         }
-        let table = data_sources::layouts::table::get_data_source_table_view(
-            &pool,
-            DATA_SOURCE_A,
-            None,
-            None,
-        )
-        .await
-        .unwrap();
+        let table =
+            data_sources::layouts::table::data_source_table_view(&pool, DATA_SOURCE_A, None, None)
+                .await
+                .unwrap();
         let table = serde_json::to_value(table).unwrap();
         assert_eq!(
             table["rows"][0]["properties"]["When"]["date"],
@@ -197,7 +193,7 @@ fn database_view_window_keyset_pages_ten_thousand_rows_with_bounded_payloads() {
         .unwrap();
         tx.commit().await.unwrap();
 
-        let first = data_sources::layouts::table::get_data_source_table_view_window(
+        let first = data_sources::layouts::table::data_source_table_view_window(
             &pool,
             DATA_SOURCE_A,
             None,
@@ -245,7 +241,7 @@ fn database_view_window_keyset_pages_ten_thousand_rows_with_bounded_payloads() {
         );
 
         let cursor = first_json["next_cursor"].as_str().unwrap().to_string();
-        let second = data_sources::layouts::table::get_data_source_table_view_window(
+        let second = data_sources::layouts::table::data_source_table_view_window(
             &pool,
             DATA_SOURCE_A,
             None,

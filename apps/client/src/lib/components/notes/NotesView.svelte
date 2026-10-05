@@ -280,14 +280,14 @@
     void projects.ensureLoaded().catch((error) => {
       console.error("load projects failed", error);
     });
-    const onHashChange = () => {
+    const handleHashChange = () => {
       void openHashTarget().catch((error) => {
         console.error("open notes block link failed", error);
       });
     };
-    window.addEventListener("hashchange", onHashChange);
+    window.addEventListener("hashchange", handleHashChange);
     return () => {
-      window.removeEventListener("hashchange", onHashChange);
+      window.removeEventListener("hashchange", handleHashChange);
     };
   });
 

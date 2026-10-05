@@ -9,11 +9,11 @@ use std::collections::{HashMap, HashSet};
 
 const MAX_SCHEMA_BYTES: usize = 50 * 1024;
 const MAX_PROPERTIES: usize = 100;
-const MAX_PROPERTY_NAME_LEN: usize = 120;
-const MAX_PROPERTY_DESCRIPTION_LEN: usize = 2000;
+const MAX_PROPERTY_NAME_CHARS: usize = 120;
+const MAX_PROPERTY_DESCRIPTION_CHARS: usize = 2000;
 const MAX_OPTIONS: usize = 100;
-const MAX_OPTION_NAME_LEN: usize = 120;
-const MAX_UNIQUE_ID_PREFIX_LEN: usize = 32;
+const MAX_OPTION_NAME_CHARS: usize = 120;
+const MAX_UNIQUE_ID_PREFIX_CHARS: usize = 32;
 
 const SUPPORTED_PROPERTY_TYPES: &[&str] = &[
     "title",
@@ -110,7 +110,7 @@ pub async fn list_data_sources(pool: &SqlitePool) -> Result<Vec<NoteDataSourceDt
     Ok(result)
 }
 
-pub async fn get_data_source_schema(
+pub async fn data_source_schema(
     pool: &SqlitePool,
     data_source_id: &str,
     database_id: Option<&str>,
@@ -285,14 +285,14 @@ fn canonical_property(key: &str, value: &Value) -> Result<Value, String> {
         .get("name")
         .and_then(Value::as_str)
         .unwrap_or(fallback_name);
-    let name = validate_non_empty_text(raw_name, "property.name", MAX_PROPERTY_NAME_LEN, false)?;
+    let name = validate_non_empty_text(raw_name, "property.name", MAX_PROPERTY_NAME_CHARS, false)?;
     let description = validate_text(
         object
             .get("description")
             .and_then(Value::as_str)
             .unwrap_or_default(),
         "property.description",
-        MAX_PROPERTY_DESCRIPTION_LEN,
+        MAX_PROPERTY_DESCRIPTION_CHARS,
     )?;
     let mut canonical = Map::new();
     canonical.insert("id".to_string(), Value::String(id));
@@ -386,7 +386,7 @@ fn canonical_unique_id_config(value: Option<&Value>) -> Result<Value, String> {
                 Value::String(validate_text(
                     trimmed,
                     "unique_id.prefix",
-                    MAX_UNIQUE_ID_PREFIX_LEN,
+                    MAX_UNIQUE_ID_PREFIX_CHARS,
                 )?)
             }
         }
@@ -421,7 +421,7 @@ fn canonical_options(values: &[Value], status_type: Option<&str>) -> Result<Vec<
                 .and_then(Value::as_str)
                 .unwrap_or_default(),
             "option.name",
-            MAX_OPTION_NAME_LEN,
+            MAX_OPTION_NAME_CHARS,
             true,
         )?;
         if !names.insert(name.to_lowercase()) {
@@ -869,10 +869,10 @@ fn read_string_field<'a>(
 fn validate_non_empty_text(
     value: &str,
     label: &str,
-    max_len: usize,
+    max_chars: usize,
     reject_comma: bool,
 ) -> Result<String, String> {
-    let trimmed = validate_text(value.trim(), label, max_len)?;
+    let trimmed = validate_text(value.trim(), label, max_chars)?;
     if trimmed.is_empty() {
         return Err(format!("{label} must not be empty"));
     }
@@ -882,11 +882,11 @@ fn validate_non_empty_text(
     Ok(trimmed)
 }
 
-fn validate_text(value: &str, label: &str, max_len: usize) -> Result<String, String> {
+fn validate_text(value: &str, label: &str, max_chars: usize) -> Result<String, String> {
     if value.chars().any(char::is_control) {
         return Err(format!("{label} must not contain control characters"));
     }
-    if value.chars().count() > max_len {
+    if value.chars().count() > max_chars {
         return Err(format!("{label} is too long"));
     }
     Ok(value.to_string())

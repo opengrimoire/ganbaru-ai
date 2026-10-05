@@ -1,6 +1,6 @@
 //! Reviewed dependency date shifts over one bounded canonical project graph.
 
-use super::history::{current_timestamp, insert_task_change_event_owned};
+use super::history::{current_timestamp, insert_task_field_change_event};
 use super::models::{ProjectTaskChangeEventRow, ProjectTaskRow, ProjectsMutationRows};
 use super::{dependency_cascade_graph as graph, dependency_cascade_plan as plan};
 use crate::db::connect_sqlite;
@@ -223,7 +223,7 @@ pub(super) async fn apply_dependency_cascade(
             if old == new {
                 continue;
             }
-            insert_task_change_event_owned(
+            insert_task_field_change_event(
                 &mut tx,
                 &item.task_id,
                 "updated",

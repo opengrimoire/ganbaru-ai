@@ -55,8 +55,8 @@ export function memoryDisplayRows(report: MemoryReport | null): MemoryDisplayRow
     Frontend: 0,
     Network: 0,
   };
-  for (const process of report.processes) {
-    byCategory[categorizeMemoryProcessName(process.name)] += process.mb;
+  for (const processMemory of report.processes) {
+    byCategory[categorizeMemoryProcessName(processMemory.name)] += processMemory.mb;
   }
 
   return [

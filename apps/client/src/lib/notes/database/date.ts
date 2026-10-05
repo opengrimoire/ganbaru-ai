@@ -5,7 +5,7 @@ export interface NotesDatabaseDateValue {
 }
 
 /** Identify real ISO calendar dates and optional local or offset time components. */
-export function notesDatabaseDateBoundaryValid(value: string): boolean {
+export function notesDatabaseIsDateBoundaryValid(value: string): boolean {
   const match = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d{1,9})?)?(?:Z|[+-](\d{2}):(\d{2}))?)?$/.exec(value);
   if (!match) return false;
   const [, year, month, day, hour, minute, second, zoneHour, zoneMinute] = match;
@@ -18,7 +18,7 @@ export function notesDatabaseDateBoundaryValid(value: string): boolean {
 }
 
 /** Validate named zones with the same platform timezone data used for display. */
-export function notesDatabaseTimeZoneValid(value: string): boolean {
+export function notesDatabaseIsTimeZoneValid(value: string): boolean {
   if (!value || value.length > 100 || /[\u0000-\u001f\u007f]/.test(value)) return false;
   try {
     new Intl.DateTimeFormat("en", { timeZone: value }).format(0);

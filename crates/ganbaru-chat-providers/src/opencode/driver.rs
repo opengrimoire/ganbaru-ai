@@ -106,7 +106,7 @@ impl OpenCodeSessionInput {
         }
     }
 
-    fn resume(&self) -> ChatResult<Option<String>> {
+    fn resume_session_id(&self) -> ChatResult<Option<String>> {
         match self {
             Self::Fresh(_) => Ok(None),
             Self::Resume(request) => {
@@ -129,7 +129,7 @@ impl OpenCodeSessionInput {
         }
     }
 
-    fn resumed(&self) -> bool {
+    fn is_resume(&self) -> bool {
         matches!(self, Self::Resume(_))
     }
 }
@@ -253,9 +253,9 @@ impl OpenCodeProviderDriver {
                     Ok((commands, lsp, formatters))
                 }
                 .await;
-                let stop = server.stop().await;
+                let stop_result = server.stop().await;
                 let (commands, lsp, formatters) = server_probe?;
-                stop?;
+                stop_result?;
                 Ok(OpenCodeCatalogSnapshot {
                     version: Some(version.to_string()),
                     account_label: None,
@@ -312,10 +312,10 @@ impl OpenCodeProviderDriver {
         }
         let workspace = canonical_workspace(input.workspace())?;
         self.require_external_workspace_confirmation()?;
-        let group = continuation_group(&self.settings, None)?;
+        let continuation_group_id = continuation_group(&self.settings, None)?;
         if input
             .expected_continuation()
-            .is_some_and(|expected| expected != &group)
+            .is_some_and(|expected| expected != &continuation_group_id)
         {
             return Err(ChatError::new(
                 ChatErrorCode::Conflict,
@@ -323,7 +323,7 @@ impl OpenCodeProviderDriver {
                 true,
             ));
         }
-        let resume_id = input.resume()?;
+        let resume_session_id = input.resume_session_id()?;
         let mut owned_server = match self.settings.connection {
             OpenCodeConnectionMode::Local => Some(
                 OwnedOpenCodeServer::start(&self.configuration, &workspace, self.password.as_ref())
@@ -360,7 +360,7 @@ impl OpenCodeProviderDriver {
         let rules = permission_override(input.modes().safety_mode);
         let resolved = match resolve_native_session(
             &client,
-            resume_id.as_deref(),
+            resume_session_id.as_deref(),
             &workspace,
             rules.as_deref(),
         )
@@ -392,7 +392,7 @@ impl OpenCodeProviderDriver {
         let capabilities = capabilities();
         sink.emit(normalizer.external_event(
             &state,
-            if input.resumed() {
+            if input.is_resume() {
                 "session/resumed"
             } else {
                 "session/started"
@@ -446,7 +446,7 @@ impl OpenCodeProviderDriver {
             session_id: local_session_id,
             state: ProviderSessionState::Ready,
             provider_thread_id: Some(provider_thread),
-            continuation_group_id: group,
+            continuation_group_id,
             resume_cursor: Some(cursor),
             effective_modes: input.modes(),
             capabilities,
@@ -516,7 +516,7 @@ impl OpenCodeProviderDriver {
     }
 
     fn require_external_workspace_confirmation(&self) -> ChatResult<()> {
-        if self.settings.external() && !self.settings.external_workspace_access_confirmed {
+        if self.settings.is_external() && !self.settings.external_workspace_access_confirmed {
             return Err(ChatError::validation(
                 "providerConfig.confirmExternalWorkspaceAccess",
                 "Confirm before sending the local workspace path to the external OpenCode server",
@@ -527,7 +527,7 @@ impl OpenCodeProviderDriver {
 }
 
 fn toolchain_detail(lsp: &Value, formatters: &Value) -> String {
-    fn entries(value: &Value) -> usize {
+    fn entry_count(value: &Value) -> usize {
         value
             .as_array()
             .map(Vec::len)
@@ -536,24 +536,24 @@ fn toolchain_detail(lsp: &Value, formatters: &Value) -> String {
     }
     format!(
         "OpenCode language servers: {}; formatters: {}",
-        entries(lsp),
-        entries(formatters)
+        entry_count(lsp),
+        entry_count(formatters)
     )
 }
 
 async fn resolve_native_session(
     client: &OpenCodeHttpClient,
-    resume_id: Option<&str>,
+    resume_session_id: Option<&str>,
     workspace: &Path,
     rules: Option<&[super::permissions::OpenCodePermissionRule]>,
 ) -> ChatResult<Value> {
-    if let Some(resume_id) = resume_id {
-        match client.session(resume_id).await? {
+    if let Some(resume_session_id) = resume_session_id {
+        match client.session(resume_session_id).await? {
             OpenCodeSessionLookup::Found(session) => {
                 let session = if session_directory(&session)
                     .is_some_and(|directory| !same_directory(directory, workspace))
                 {
-                    client.fork_session(resume_id, None).await?
+                    client.fork_session(resume_session_id, None).await?
                 } else {
                     session
                 };

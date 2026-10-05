@@ -635,11 +635,12 @@ fn require_json_extension(path: &Path) -> Result<(), String> {
 }
 
 fn write_json_file(path: &Path, contents: &str) -> Result<(), String> {
-    let tmp_path = temp_json_path(path)?;
-    let result = write_json_file_inner(&tmp_path, contents)
-        .and_then(|()| fs::rename(&tmp_path, path).map_err(|e| format!("save JSON graph: {e}")));
+    let temporary_path = temporary_json_path(path)?;
+    let result = write_json_file_inner(&temporary_path, contents).and_then(|()| {
+        fs::rename(&temporary_path, path).map_err(|e| format!("save JSON graph: {e}"))
+    });
     if result.is_err() {
-        let _ = fs::remove_file(&tmp_path);
+        let _ = fs::remove_file(&temporary_path);
     }
     result
 }
@@ -653,7 +654,7 @@ fn write_json_file_inner(path: &Path, contents: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn temp_json_path(path: &Path) -> Result<PathBuf, String> {
+fn temporary_json_path(path: &Path) -> Result<PathBuf, String> {
     let file_name = path
         .file_name()
         .ok_or_else(|| "JSON graph path has no file name".to_string())?

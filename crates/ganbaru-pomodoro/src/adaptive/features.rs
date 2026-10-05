@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::adaptive::models::*;
-use crate::adaptive::policy::add;
+use crate::adaptive::policy::push_unique;
 
 const FOCUS_EDGE_RATIO: f64 = 0.25;
 const FOCUS_EDGE_SECONDS: f64 = 300.0;
@@ -14,7 +14,7 @@ const BLOCK_BURST_MIN_ATTEMPTS: usize = 3;
 pub fn extract_adaptive_features(input: &FeatureInput) -> FeatureVector {
     let mut totals = FeatureVector::default();
     for flag in &input.data_quality_flags {
-        add(&mut totals.data_quality_flags, flag);
+        push_unique(&mut totals.data_quality_flags, flag);
     }
     let observed_end = input.observation_ended_at.as_deref().map(parse_time_ms);
     let mut focus_windows: Vec<(i64, i64)> = input
@@ -62,8 +62,8 @@ pub fn extract_adaptive_features(input: &FeatureInput) -> FeatureVector {
         &input.run_events,
         &focus_windows,
     );
-    skipped_break_outcomes(&mut totals, &input.segments, &input.run_events);
-    block_features(
+    apply_skipped_break_outcomes(&mut totals, &input.segments, &input.run_events);
+    apply_block_events(
         &mut totals,
         &input.block_events,
         &focus_windows,
@@ -270,7 +270,7 @@ fn apply_event(
         "skip_break" => totals.break_skipped_count += 1.0,
         "focus_failed" => totals.focus_failure_count += 1.0,
         "stop" => totals.stop_count += 1.0,
-        "crash_recovery" => add(&mut totals.data_quality_flags, "crash_recovered"),
+        "crash_recovery" => push_unique(&mut totals.data_quality_flags, "crash_recovered"),
         _ => {}
     }
 }
@@ -344,7 +344,7 @@ fn explicit_event_near(events: &[RunEventInput], event_type: &str, at_ms: i64) -
         })
 }
 
-fn skipped_break_outcomes(
+fn apply_skipped_break_outcomes(
     totals: &mut FeatureVector,
     segments: &[SegmentInput],
     events: &[RunEventInput],
@@ -402,7 +402,7 @@ fn next_focus(segments: &[SegmentInput], at_ms: i64) -> Option<&SegmentInput> {
         .min_by_key(|segment| segment_start_ms(segment))
 }
 
-fn block_features(
+fn apply_block_events(
     totals: &mut FeatureVector,
     events: &[BlockEventInput],
     focus_windows: &[(i64, i64)],
@@ -414,15 +414,15 @@ fn block_features(
         .collect();
     blocked.sort_by_key(|event| parse_time_ms(&event.occurred_at));
     totals.blocked_attempt_count += blocked.len() as f64;
-    totals.repeated_blocked_source_attempt_count += repeated_count(&blocked);
-    totals.focus_repeated_blocked_source_attempt_count += repeated_count(
+    totals.repeated_blocked_source_attempt_count += repeated_source_attempt_count(&blocked);
+    totals.focus_repeated_blocked_source_attempt_count += repeated_source_attempt_count(
         &blocked
             .iter()
             .copied()
             .filter(|event| event.phase.as_deref() == Some("focus"))
             .collect::<Vec<_>>(),
     );
-    totals.break_repeated_blocked_source_attempt_count += repeated_count(
+    totals.break_repeated_blocked_source_attempt_count += repeated_source_attempt_count(
         &blocked
             .iter()
             .copied()
@@ -467,7 +467,7 @@ fn block_features(
     }
 }
 
-fn repeated_count(events: &[&BlockEventInput]) -> f64 {
+fn repeated_source_attempt_count(events: &[&BlockEventInput]) -> f64 {
     let mut counts = BTreeMap::<String, usize>::new();
     for event in events {
         *counts

@@ -3,9 +3,9 @@
 mod tools;
 
 use super::protocol::{
-    AcpAvailableCommand, AcpConfigOption, MAX_PROTOCOL_TEXT_BYTES, bounded_text, object,
-    parse_available_commands_update, parse_config_options_update, protocol_error, safe_shape,
-    valid_identifier,
+    AcpAvailableCommand, AcpConfigOption, MAX_PROTOCOL_TEXT_BYTES, bounded_text,
+    is_valid_identifier, object, parse_available_commands_update, parse_config_options_update,
+    protocol_error, safe_shape,
 };
 use crate::events::*;
 use crate::models::*;
@@ -147,7 +147,7 @@ impl CursorEventNormalizer {
     ) -> ChatResult<CanonicalRuntimeEvent> {
         let object = object(params)?;
         let tool_call_id = text(object, "toolCallId")
-            .filter(|value| valid_identifier(value, 512))
+            .filter(|value| is_valid_identifier(value, 512))
             .ok_or_else(|| protocol_error("Cursor plan tool call ID"))?;
         let markdown = text(object, "plan").ok_or_else(|| protocol_error("Cursor plan text"))?;
         let todos = object
@@ -174,7 +174,7 @@ impl CursorEventNormalizer {
     ) -> ChatResult<CanonicalRuntimeEvent> {
         let object = object(params)?;
         text(object, "toolCallId")
-            .filter(|value| valid_identifier(value, 512))
+            .filter(|value| is_valid_identifier(value, 512))
             .ok_or_else(|| protocol_error("Cursor todo tool call ID"))?;
         if !object.get("merge").is_some_and(Value::is_boolean) {
             return Err(protocol_error("Cursor todo merge flag"));
@@ -426,7 +426,7 @@ impl CursorEventNormalizer {
                 .ok_or_else(|| protocol_error("ACP plan entry content"))?;
             if entry
                 .get("id")
-                .is_some_and(|id| id.as_str().is_none_or(|id| !valid_identifier(id, 256)))
+                .is_some_and(|id| id.as_str().is_none_or(|id| !is_valid_identifier(id, 256)))
             {
                 return Err(protocol_error("ACP plan entry ID"));
             }
@@ -454,7 +454,7 @@ impl CursorEventNormalizer {
     ) -> ChatResult<Vec<CanonicalRuntimeEvent>> {
         let mode = text(update, "currentModeId")
             .or_else(|| text(update, "modeId"))
-            .filter(|value| valid_identifier(value, 256))
+            .filter(|value| is_valid_identifier(value, 256))
             .ok_or_else(|| protocol_error("current mode update"))?;
         state.modes.interaction_mode = if ["plan", "architect"]
             .iter()
@@ -599,7 +599,7 @@ fn validate_todos(todos: &[Value]) -> ChatResult<()> {
             .ok_or_else(|| protocol_error("Cursor todo"))?;
         if todo
             .get("id")
-            .is_some_and(|id| id.as_str().is_none_or(|id| !valid_identifier(id, 256)))
+            .is_some_and(|id| id.as_str().is_none_or(|id| !is_valid_identifier(id, 256)))
             || ["content", "title", "status"].into_iter().any(|key| {
                 todo.get(key).is_some_and(|value| {
                     value

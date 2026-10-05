@@ -110,7 +110,7 @@ where
 pub(crate) struct OverlayEnforcementGuard {
     labels: Vec<String>,
     primary_label: String,
-    cleanup: Vec<Box<dyn EnforcementCleanup>>,
+    cleanups: Vec<Box<dyn EnforcementCleanup>>,
     stopped: bool,
 }
 
@@ -119,7 +119,7 @@ impl OverlayEnforcementGuard {
         Self {
             labels: labels.to_vec(),
             primary_label: primary_label.to_string(),
-            cleanup: Vec::new(),
+            cleanups: Vec::new(),
             stopped: false,
         }
     }
@@ -133,7 +133,7 @@ impl OverlayEnforcementGuard {
     where
         F: FnMut() -> Result<(), String> + Send + 'static,
     {
-        self.cleanup.push(Box::new(cleanup));
+        self.cleanups.push(Box::new(cleanup));
     }
 
     #[cfg(any(target_os = "windows", target_os = "macos"))]
@@ -141,7 +141,7 @@ impl OverlayEnforcementGuard {
     where
         G: EnforcementCleanup + 'static,
     {
-        self.cleanup.push(Box::new(guard));
+        self.cleanups.push(Box::new(guard));
     }
 
     pub(crate) fn stop(&mut self) {
@@ -151,7 +151,7 @@ impl OverlayEnforcementGuard {
         self.stopped = true;
         let _ = self.labels.len();
         let _ = self.primary_label.as_str();
-        while let Some(mut cleanup) = self.cleanup.pop() {
+        while let Some(mut cleanup) = self.cleanups.pop() {
             if let Err(err) = cleanup.stop() {
                 eprintln!("failed to stop Pomodoro overlay enforcement: {err}");
             }
@@ -160,7 +160,7 @@ impl OverlayEnforcementGuard {
 
     #[cfg(test)]
     fn cleanup_len(&self) -> usize {
-        self.cleanup.len()
+        self.cleanups.len()
     }
 }
 
@@ -449,7 +449,7 @@ impl Drop for OverlayReconcileGuard {
 }
 
 #[cfg(any(target_os = "windows", target_os = "macos"))]
-use super::run_main_thread_setup;
+use super::run_on_main_thread_blocking;
 
 #[cfg(target_os = "windows")]
 mod windows {
@@ -464,8 +464,8 @@ mod windows {
     use super::{
         VK_LCONTROL_CODE, VK_LMENU_CODE, VK_LSHIFT_CODE, VK_LWIN_CODE, VK_RCONTROL_CODE,
         VK_RMENU_CODE, VK_RSHIFT_CODE, VK_RWIN_CODE, WindowsOverlayShortcutEvent,
-        run_main_thread_setup, should_block_windows_overlay_shortcut, update_windows_modifier_bits,
-        windows_modifiers_from_bits,
+        run_on_main_thread_blocking, should_block_windows_overlay_shortcut,
+        update_windows_modifier_bits, windows_modifiers_from_bits,
     };
     use tauri::Manager;
     use windows::Win32::Foundation::{
@@ -795,7 +795,7 @@ mod windows {
     ) -> Result<(), String> {
         let labels = labels.to_vec();
         let app_for_setup = app.clone();
-        run_main_thread_setup(app, move || {
+        run_on_main_thread_blocking(app, move || {
             for label in labels {
                 let Some(window) = app_for_setup.get_webview_window(&label) else {
                     continue;
@@ -835,7 +835,8 @@ mod macos {
     use tauri::Manager;
 
     use super::{
-        MacPresentationLeaseState, mac_overlay_presentation_options_bits, run_main_thread_setup,
+        MacPresentationLeaseState, mac_overlay_presentation_options_bits,
+        run_on_main_thread_blocking,
     };
 
     type IOPMAssertionId = u32;
@@ -875,7 +876,7 @@ mod macos {
     impl MacPresentationGuard {
         pub(super) fn start(app: &tauri::AppHandle) -> Result<Self, String> {
             let app_for_setup = app.clone();
-            run_main_thread_setup(app, move || {
+            run_on_main_thread_blocking(app, move || {
                 let mtm = MainThreadMarker::new()
                     .ok_or_else(|| "macOS presentation options need the main thread".to_string())?;
                 let ns_app = NSApplication::sharedApplication(mtm);
@@ -900,7 +901,7 @@ mod macos {
             if !self.active {
                 return Ok(());
             }
-            run_main_thread_setup(&self.app, move || {
+            run_on_main_thread_blocking(&self.app, move || {
                 let mtm = MainThreadMarker::new()
                     .ok_or_else(|| "macOS presentation options need the main thread".to_string())?;
                 let restore_options_bits = PRESENTATION_LEASE_STATE
@@ -998,7 +999,7 @@ mod macos {
     ) -> Result<(), String> {
         let labels = labels.to_vec();
         let app_for_setup = app.clone();
-        run_main_thread_setup(app, move || {
+        run_on_main_thread_blocking(app, move || {
             for label in labels {
                 let Some(window) = app_for_setup.get_webview_window(&label) else {
                     continue;

@@ -191,9 +191,9 @@ describe("cloneTheme", () => {
   });
 
   it("snapshots calendarTokens from the resolved source palette", () => {
-    const customCal = { ...BASE_CALENDAR_TOKENS.dark, "--cal-bg": "#202020" };
+    const customCalendarTokens = { ...BASE_CALENDAR_TOKENS.dark, "--cal-bg": "#202020" };
     const source = makeUserTheme({
-      calendarTokens: customCal,
+      calendarTokens: customCalendarTokens,
     });
     const copy = cloneTheme(source, "fork", "Fork");
     expect(copy.calendarTokens["--cal-bg"]).toBe("#202020");
@@ -232,8 +232,8 @@ describe("cloneTheme", () => {
   });
 
   it("snapshots seedCalendarTokens equal to live calendarTokens at clone time", () => {
-    const customCal = { ...BASE_CALENDAR_TOKENS.dark, "--cal-bg": "#202020" };
-    const source = makeUserTheme({ calendarTokens: customCal });
+    const customCalendarTokens = { ...BASE_CALENDAR_TOKENS.dark, "--cal-bg": "#202020" };
+    const source = makeUserTheme({ calendarTokens: customCalendarTokens });
     const copy = cloneTheme(source, "fork", "Fork");
     expect(copy.seedCalendarTokens).toEqual(copy.calendarTokens);
     expect(copy.seedCalendarTokens).not.toBe(copy.calendarTokens);

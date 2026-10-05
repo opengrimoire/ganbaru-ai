@@ -14,7 +14,7 @@ pub(crate) struct SnapshotIds {
     pub assignment: String,
 }
 
-pub(crate) fn run_start(
+pub(crate) fn run_start_snapshot(
     decision: &AdaptiveDecision,
     ids: SnapshotIds,
     planned_blocks: Vec<PomodoroAdaptivePlannedBlockWrite>,
@@ -25,7 +25,7 @@ pub(crate) fn run_start(
         .map(|assignment| assignment_write(assignment, &ids, &decision.policy_id))
         .into_iter()
         .collect();
-    let envelope = boundary(decision, ids, "run_start");
+    let envelope = decision_envelope(decision, ids, "run_start");
     PomodoroRunAdaptiveSnapshotWrite {
         policy_id: envelope.policy_id,
         policy_version: envelope.policy_version,
@@ -38,7 +38,7 @@ pub(crate) fn run_start(
     }
 }
 
-pub(crate) fn boundary(
+pub(crate) fn decision_envelope(
     decision: &AdaptiveDecision,
     ids: SnapshotIds,
     opportunity: &str,

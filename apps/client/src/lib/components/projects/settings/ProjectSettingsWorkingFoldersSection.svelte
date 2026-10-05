@@ -248,9 +248,9 @@
   <div class="flex flex-col gap-1.5">
     {#each folders as folder (folder.workingFolder.id)}
       {@const busy = saving || operationId !== null || loading}
-      {@const primary = draft.primaryId === folder.workingFolder.id}
-      {@const external = folder.workingFolder.kind === "external"}
-      {@const needsRecreate = !external && folder.bindingStatus !== "available"}
+      {@const isPrimary = draft.primaryId === folder.workingFolder.id}
+      {@const isExternal = folder.workingFolder.kind === "external"}
+      {@const needsRecreate = !isExternal && folder.bindingStatus !== "available"}
       <div
         class="flex min-w-0 items-center justify-between gap-4 px-1 py-1 max-[480px]:flex-col max-[480px]:items-stretch max-[480px]:gap-2"
         role="group"
@@ -291,27 +291,27 @@
               type="button"
               class="working-folder-action"
               data-collection-menu-keep-open
-              aria-pressed={primary}
-              disabled={busy || !draft.primaryReady || primary || Boolean(folder.workingFolder.archivedAt)}
+              aria-pressed={isPrimary}
+              disabled={busy || !draft.primaryReady || isPrimary || Boolean(folder.workingFolder.archivedAt)}
               onclick={() => draft.makePrimary(folder)}
-            ><Star size={14} fill={primary ? "currentColor" : "none"} /><span>{primary ? t("projects.settings.workingFolders.primary") : t("projects.settings.workingFolders.makePrimary")}</span></button>
+            ><Star size={14} fill={isPrimary ? "currentColor" : "none"} /><span>{isPrimary ? t("projects.settings.workingFolders.primary") : t("projects.settings.workingFolders.makePrimary")}</span></button>
             <button
               type="button"
               class="working-folder-action"
-              disabled={busy || (!external && !needsRecreate) || Boolean(folder.workingFolder.archivedAt)}
+              disabled={busy || (!isExternal && !needsRecreate) || Boolean(folder.workingFolder.archivedAt)}
               onclick={() => changeFolderLocation(folder)}
             >
               {#if needsRecreate}<RefreshCw size={14} />{:else}<Link2 size={14} />{/if}
               <span>{needsRecreate ? t("projects.settings.workingFolders.recreate") : folder.bindingStatus === "unbound" || folder.bindingStatus === "missing" ? t("projects.settings.workingFolders.locate") : t("projects.settings.workingFolders.rebind")}</span>
             </button>
-            <button type="button" class="working-folder-action" disabled={busy || !external} onclick={() => rename(folder)}><Pencil size={14} /><span>{t("projects.settings.workingFolders.rename")}</span></button>
+            <button type="button" class="working-folder-action" disabled={busy || !isExternal} onclick={() => rename(folder)}><Pencil size={14} /><span>{t("projects.settings.workingFolders.rename")}</span></button>
             {#if folder.workingFolder.archivedAt}
-              <button type="button" class="working-folder-action" disabled={busy || !external} onclick={() => draft.setArchived(folder, false)}><ArchiveRestore size={14} /><span>{t("projects.settings.workingFolders.restore")}</span></button>
+              <button type="button" class="working-folder-action" disabled={busy || !isExternal} onclick={() => draft.setArchived(folder, false)}><ArchiveRestore size={14} /><span>{t("projects.settings.workingFolders.restore")}</span></button>
             {:else}
-              <button type="button" class="working-folder-action" disabled={busy || !external} onclick={() => draft.setArchived(folder, true)}><Archive size={14} /><span>{t("projects.settings.workingFolders.archive")}</span></button>
+              <button type="button" class="working-folder-action" disabled={busy || !isExternal} onclick={() => draft.setArchived(folder, true)}><Archive size={14} /><span>{t("projects.settings.workingFolders.archive")}</span></button>
             {/if}
             <div class="my-1 h-px bg-border/70" aria-hidden="true"></div>
-            <button type="button" class="working-folder-action working-folder-remove" disabled={busy || !external} onclick={() => remove(folder)}><Trash2 size={14} /><span>{t("projects.settings.workingFolders.remove")}</span></button>
+            <button type="button" class="working-folder-action working-folder-remove" disabled={busy || !isExternal} onclick={() => remove(folder)}><Trash2 size={14} /><span>{t("projects.settings.workingFolders.remove")}</span></button>
           </CollectionMenu>
         </div>
         <Select

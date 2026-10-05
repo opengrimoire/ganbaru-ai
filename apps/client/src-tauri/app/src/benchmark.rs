@@ -14,9 +14,9 @@ pub(crate) mod seed;
 /// the folder users back up. Used by the in-app benchmark harness to
 /// hand state across the Phase A -> restart -> Phase B boundary.
 fn benchmark_state_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
-    let mut p = app.path().app_config_dir().map_err(|e| e.to_string())?;
-    p.push("benchmark-state.json");
-    Ok(p)
+    let mut path = app.path().app_config_dir().map_err(|e| e.to_string())?;
+    path.push("benchmark-state.json");
+    Ok(path)
 }
 
 /// Path to the isolated SQLite file the benchmark harness uses for both
@@ -24,9 +24,9 @@ fn benchmark_state_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
 /// operation. The harness deletes it before each run and after the summary
 /// is closed.
 fn benchmark_db_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
-    let mut p = app.path().app_config_dir().map_err(|e| e.to_string())?;
-    p.push("benchmark.sqlite");
-    Ok(p)
+    let mut path = app.path().app_config_dir().map_err(|e| e.to_string())?;
+    path.push("benchmark.sqlite");
+    Ok(path)
 }
 
 /// Delete the benchmark DB file together with its WAL and SHM sidecars.

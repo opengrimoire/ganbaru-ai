@@ -81,7 +81,7 @@ pub(crate) async fn pick_images(
             let result = selection
                 .unwrap_or_default()
                 .into_iter()
-                .map(file_path_to_path)
+                .map(dialog_path)
                 .collect::<ChatResult<Vec<_>>>();
             let _ = sender.try_send(result);
         });
@@ -268,7 +268,7 @@ fn managed_attachment_path(app: &tauri::AppHandle, relative_path: &str) -> ChatR
         .join(relative))
 }
 
-fn file_path_to_path(value: FilePath) -> ChatResult<PathBuf> {
+fn dialog_path(value: FilePath) -> ChatResult<PathBuf> {
     value
         .into_path()
         .map_err(|_| ChatError::validation("image", "Selected image is not local"))

@@ -131,7 +131,7 @@ function comparePaletteRows(a: PaletteRow, b: PaletteRow): number {
 }
 
 export async function loadAllUserThemes(): Promise<UserThemeRead[]> {
-  const rows = await invoke<UserThemeRead[]>("theme_load_all", {
+  const rows = await invoke<UserThemeRead[]>("themes_load_all", {
     dbUrl: await activeDbUrl(),
   });
   return rows.map((read) => ({
@@ -144,11 +144,11 @@ export async function loadAllUserThemes(): Promise<UserThemeRead[]> {
 }
 
 export async function insertTheme(write: UserThemeWrite): Promise<void> {
-  await invoke<void>("theme_insert", { dbUrl: await activeDbUrl(), write });
+  await invoke<void>("themes_insert", { dbUrl: await activeDbUrl(), write });
 }
 
 export async function deleteTheme(id: string): Promise<void> {
-  await invoke<void>("theme_delete", { dbUrl: await activeDbUrl(), id });
+  await invoke<void>("themes_delete", { dbUrl: await activeDbUrl(), id });
 }
 
 /**
@@ -164,7 +164,7 @@ export async function deleteTheme(id: string): Promise<void> {
  * created_at_ms survives and dismissals are not cascaded.
  */
 export async function replaceThemeContent(write: UserThemeWrite): Promise<void> {
-  await invoke<void>("theme_replace_content", {
+  await invoke<void>("themes_replace_content", {
     dbUrl: await activeDbUrl(),
     write,
   });
@@ -174,7 +174,7 @@ export async function renameTheme(
   id: string,
   displayName: string,
 ): Promise<void> {
-  await invoke<void>("theme_rename", {
+  await invoke<void>("themes_rename", {
     dbUrl: await activeDbUrl(),
     id,
     displayName,
@@ -190,7 +190,7 @@ export async function resetTokenToSeed(
   kind: TokenKind,
   key: string,
 ): Promise<void> {
-  await invoke<void>("theme_reset_token_to_seed", {
+  await invoke<void>("themes_reset_token_to_seed", {
     dbUrl: await activeDbUrl(),
     id,
     kind,
@@ -203,14 +203,14 @@ export async function resetTokenToSeed(
  * Used by the editor footer's "Reset all" button.
  */
 export async function resetThemeToSeed(id: string): Promise<void> {
-  await invoke<void>("theme_reset_to_seed", { dbUrl: await activeDbUrl(), id });
+  await invoke<void>("themes_reset_to_seed", { dbUrl: await activeDbUrl(), id });
 }
 
 export async function recordDismissal(
   id: string,
   engineVersion: number,
 ): Promise<void> {
-  await invoke<void>("theme_record_dismissal", {
+  await invoke<void>("themes_record_dismissal", {
     dbUrl: await activeDbUrl(),
     id,
     engineVersion,
@@ -218,7 +218,7 @@ export async function recordDismissal(
 }
 
 export async function loadDismissals(): Promise<DismissalRow[]> {
-  return invoke<DismissalRow[]>("theme_load_dismissals", {
+  return invoke<DismissalRow[]>("themes_load_dismissals", {
     dbUrl: await activeDbUrl(),
   });
 }

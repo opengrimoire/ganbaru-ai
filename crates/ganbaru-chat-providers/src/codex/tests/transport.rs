@@ -120,8 +120,8 @@ fn transport_honors_cancellation_while_waiting_for_response() {
     crate::test_block_on(async {
         let (client_reader, _server_writer) = tokio::io::duplex(1024);
         let (_server_reader, client_writer) = tokio::io::duplex(1024);
-        let _connection = CodexRpcConnection::from_test_io(client_reader, client_writer);
-        let client = _connection.client();
+        let connection = CodexRpcConnection::from_test_io(client_reader, client_writer);
+        let client = connection.client();
         let cancellation = DriverCancellation::default();
         let request_context = DriverOperationContext {
             operation_id: "cancelled".to_string(),

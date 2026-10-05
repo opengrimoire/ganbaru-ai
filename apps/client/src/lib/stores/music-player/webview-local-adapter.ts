@@ -78,7 +78,7 @@ export function createMusicWebviewLocalAdapter(
   let kickTimeoutId: number | null = null;
   let kickCount = 0;
   let ignoreNextPause = false;
-  let pauseSilenced = false;
+  let isPauseSilenced = false;
 
   function register(element: HTMLMediaElement | null): void {
     if (state.localMediaElement === element) return;
@@ -92,7 +92,7 @@ export function createMusicWebviewLocalAdapter(
   }
 
   function effectiveElementVolume(): number {
-    return pauseSilenced ? 0 : context.effectiveVolume();
+    return isPauseSilenced ? 0 : context.effectiveVolume();
   }
 
   function applyVolume(): void {
@@ -104,14 +104,14 @@ export function createMusicWebviewLocalAdapter(
   }
 
   function silence(element: HTMLMediaElement): void {
-    pauseSilenced = true;
+    isPauseSilenced = true;
     element.muted = true;
     element.volume = 0;
   }
 
   function restoreVolume(element: HTMLMediaElement): void {
     if (element !== state.localMediaElement) return;
-    pauseSilenced = false;
+    isPauseSilenced = false;
     applyVolume();
   }
 
@@ -408,7 +408,7 @@ export function createMusicWebviewLocalAdapter(
       element.removeAttribute("src");
       element.load();
     }
-    pauseSilenced = false;
+    isPauseSilenced = false;
     state.localMediaSrc = null;
     state.localHasVideo = false;
     state.localBackendKind = "none";

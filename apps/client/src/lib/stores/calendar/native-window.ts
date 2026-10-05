@@ -34,7 +34,7 @@ export interface NativeCalendarWindowRequest {
 }
 
 export interface MappedNativeCalendarWindow {
-  rawBlocks: CalendarEvent[];
+  sourceEvents: CalendarEvent[];
   windowEvents: CalendarEvent[];
   totalEventCount: number | null;
   diagnostics: CalendarExpansionDiagnostic[];
@@ -146,8 +146,8 @@ export function parseNativeCalendarWindow(value: unknown): NativeCalendarWindow 
 /** Map canonical instants to render labels, applying only the override selected by native expansion. */
 export function mapNativeCalendarWindow(value: unknown, renderZone: string): MappedNativeCalendarWindow {
   const rows = parseNativeCalendarWindow(value);
-  const rawBlocks = mapWindowRows(rows, renderZone);
-  const templates = new Map(rawBlocks.map((event) => [event.id, event]));
+  const sourceEvents = mapWindowRows(rows, renderZone);
+  const templates = new Map(sourceEvents.map((event) => [event.id, event]));
   const overrides = new Map(rows.overrides.map((override) => [override.id, override]));
   const windowEvents = rows.occurrences.map((occurrence): CalendarEvent => {
     const template = templates.get(occurrence.template_id);
@@ -175,7 +175,7 @@ export function mapNativeCalendarWindow(value: unknown, renderZone: string): Map
     }
     return event;
   });
-  return { rawBlocks, windowEvents, totalEventCount: rows.total_event_count, diagnostics: rows.diagnostics };
+  return { sourceEvents, windowEvents, totalEventCount: rows.total_event_count, diagnostics: rows.diagnostics };
 }
 
 /** Fetch canonical source rows and occurrences without sending a frontend recurrence projection back to Rust. */

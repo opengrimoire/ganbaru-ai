@@ -238,7 +238,7 @@ describe("normalizeDistractionsConfig", () => {
     });
   });
 
-  it("normalizes built-in categories and custom category stacks", () => {
+  it("normalizes built-in categories and custom category customCategories", () => {
     const normalized = normalizeDistractionsConfig({
       blockedCategories: [
         categoryRule("social-media"),
@@ -548,7 +548,7 @@ describe("evaluateDistractionsUrl", () => {
     expect(decision.matchedRule).toBeNull();
   });
 
-  it("blocks enabled custom category stacks in blacklist mode", () => {
+  it("blocks enabled custom category customCategories in blacklist mode", () => {
     const decision = evaluateDistractionsUrl("https://news.ycombinator.com/item?id=1", config({
       mode: "blacklist",
       customCategoryStacks: [

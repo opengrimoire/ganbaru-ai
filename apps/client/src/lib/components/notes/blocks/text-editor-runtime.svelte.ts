@@ -313,10 +313,10 @@ const NOTES_LINK_HOVER_CLOSE_DELAY_MS = 150;
 export class NotesTextEditorController {
   readonly runtime: NotesTextEditorRuntime;
   #rightClickSelection: NotesTextSelection | null = null;
-  #pasteAsPlainText = false;
+  #shouldPasteAsPlainText = false;
 
   slashOpen = $state(false);
-  #resumeSlashAfterComposition = false;
+  #shouldResumeSlashAfterComposition = false;
   slashActiveIndex = $state(0);
   slashActiveCommand = $state<NotesSlashCommand | null>(null);
   slashItemCount = $state(0);
@@ -456,7 +456,7 @@ export class NotesTextEditorController {
   }
 
   closeSlashMenu(): void {
-    this.#resumeSlashAfterComposition = false;
+    this.#shouldResumeSlashAfterComposition = false;
     this.slashOpen = false;
     this.slashActiveIndex = 0;
     this.slashActiveCommand = null;
@@ -479,7 +479,7 @@ export class NotesTextEditorController {
 
   handleCompositionStart = (): void => {
     this.cancelLinkEditor();
-    this.#resumeSlashAfterComposition = this.slashOpen;
+    this.#shouldResumeSlashAfterComposition = this.slashOpen;
     this.runtime.compositionActive = true;
     this.closeCompositionSensitiveMenus();
   };
@@ -627,7 +627,7 @@ export class NotesTextEditorController {
       this.cancelLinkEditor(true);
       return;
     }
-    this.#pasteAsPlainText = (event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === "v";
+    this.#shouldPasteAsPlainText = (event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === "v";
     const undoAction = notesUndoShortcutAction(event);
     if (undoAction) {
       event.preventDefault();
@@ -872,9 +872,9 @@ export class NotesTextEditorController {
     this.#rightClickSelection = null;
     this.syncTextSelection(event.currentTarget);
     if (preservedSelection) this.runtime.restoreTrackedSelection(preservedSelection);
-    const keyboardPosition = event.clientX === 0 && event.clientY === 0;
-    this.contextMenuFocusOnOpen = keyboardPosition;
-    if (keyboardPosition) {
+    const isKeyboardInvoked = event.clientX === 0 && event.clientY === 0;
+    this.contextMenuFocusOnOpen = isKeyboardInvoked;
+    if (isKeyboardInvoked) {
       const selection = event.currentTarget.ownerDocument.getSelection();
       const caretRect = selection?.rangeCount && event.currentTarget.contains(selection.anchorNode)
         ? selection.getRangeAt(0).getBoundingClientRect()
@@ -1200,10 +1200,10 @@ export class NotesTextEditorController {
 
   handleCompositionEnd = (event: CompositionEvent): void => {
     this.runtime.compositionActive = false;
-    const resumeSlash = this.#resumeSlashAfterComposition;
-    this.#resumeSlashAfterComposition = false;
+    const shouldResumeSlash = this.#shouldResumeSlashAfterComposition;
+    this.#shouldResumeSlashAfterComposition = false;
     if (event.currentTarget instanceof HTMLElement && !event.currentTarget.closest("[data-notes-document-selection]")) {
-      this.slashOpen = resumeSlash;
+      this.slashOpen = shouldResumeSlash;
       this.commitRichTextInput(event.currentTarget);
     }
   };
@@ -1211,8 +1211,8 @@ export class NotesTextEditorController {
   handlePaste = async (event: ClipboardEvent): Promise<void> => {
     if (!(event.currentTarget instanceof HTMLElement)) return;
     this.cancelLinkEditor();
-    const plainOnly = this.#pasteAsPlainText;
-    this.#pasteAsPlainText = false;
+    const plainOnly = this.#shouldPasteAsPlainText;
+    this.#shouldPasteAsPlainText = false;
     const clipboardText = event.clipboardData?.getData("text/plain") ?? "";
     const selection = notesTextSelectionFromEditableRoot(event.currentTarget);
     if (!selection) return;
@@ -1277,7 +1277,7 @@ export class NotesTextEditorController {
   };
 
   handleEditorBlur = (): void => {
-    this.#resumeSlashAfterComposition = false;
+    this.#shouldResumeSlashAfterComposition = false;
     this.runtime.compositionActive = false;
     this.slashOpen = false;
     window.setTimeout(() => {
@@ -1315,23 +1315,23 @@ export class NotesTextEditorController {
   }
 
   selectSlashCommand = (command: NotesSlashCommand): void => {
-    const clearTypedSlashText = this.slashInputSession.open;
+    const shouldClearTypedSlashText = this.slashInputSession.open;
     this.closeSlashMenu();
     recordRecentNotesSlashCommandKey(notesSlashCommandKey(command));
     switch (command.kind) {
       case "block":
-        this.source.onConvert(this.block.id, command.blockType, clearTypedSlashText);
+        this.source.onConvert(this.block.id, command.blockType, shouldClearTypedSlashText);
         return;
       case "toggle_heading":
-        this.source.onConvertToToggleHeading(this.block.id, command.headingType, clearTypedSlashText);
+        this.source.onConvertToToggleHeading(this.block.id, command.headingType, shouldClearTypedSlashText);
         return;
       case "action":
-        if (command.action !== "delete" && clearTypedSlashText) this.clearSlashText();
+        if (command.action !== "delete" && shouldClearTypedSlashText) this.clearSlashText();
         this.runSlashAction(command.action);
         return;
       case "color":
         if (!this.blockSupportsColor) return;
-        if (clearTypedSlashText) this.clearSlashText();
+        if (shouldClearTypedSlashText) this.clearSlashText();
         this.source.onColorChange(this.block.id, command.color);
     }
   };

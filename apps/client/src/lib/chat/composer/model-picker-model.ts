@@ -6,7 +6,7 @@ import type {
   ProviderModel,
   RememberedComposerSelection,
 } from "$lib/chat/contracts";
-import { rankedModels } from "./model";
+import { modelOptionRole, rankedModels } from "./model";
 import {
   compareCompanyModels,
   formatModelDisplayName,
@@ -15,7 +15,9 @@ import {
   type ModelCompanyIdentity,
 } from "./model-company";
 
-export type KnownModelOption = Exclude<ModelOptionDefinition, { kind: "unknown" }>;
+export { modelOptionRole };
+
+export type KnownModelOption =Exclude<ModelOptionDefinition, { kind: "unknown" }>;
 
 export interface QuickEffortChoice {
   modelId: string;
@@ -210,18 +212,6 @@ export function isKnownModelOption(
   definition: ModelOptionDefinition,
 ): definition is KnownModelOption {
   return definition.kind !== "unknown";
-}
-
-export function modelOptionRole(
-  definition: KnownModelOption,
-): "effort" | "speed" | "other" {
-  const identity = `${definition.key} ${definition.label}`.toLowerCase();
-  if (identity.includes("effort") || identity.includes("reasoning")) return "effort";
-  if (identity.includes("speed")
-    || identity.includes("fast")
-    || identity.includes("service tier")
-    || identity.includes("service_tier")) return "speed";
-  return "other";
 }
 
 export function modelEffortStopPosition(

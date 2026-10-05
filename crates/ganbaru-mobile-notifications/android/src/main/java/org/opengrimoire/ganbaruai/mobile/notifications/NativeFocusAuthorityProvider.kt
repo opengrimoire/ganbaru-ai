@@ -58,7 +58,7 @@ class NativeFocusAuthorityProvider : ContentProvider() {
     }
 
     /** Called under the Guardian publication lock, after any earlier operation. */
-    internal fun current(context: Context, processNonce: Long, generation: Long, revision: Long): Boolean {
+    internal fun isCurrent(context: Context, processNonce: Long, generation: Long, revision: Long): Boolean {
       val extras = Bundle().apply {
         putLong(FOCUS_SCOPE_PROCESS, processNonce)
         putLong(FOCUS_SCOPE_GENERATION, generation)
@@ -67,7 +67,7 @@ class NativeFocusAuthorityProvider : ContentProvider() {
       return read(context, METHOD_CURRENT, extras)
     }
 
-    internal fun processCurrent(context: Context, processNonce: Long): Boolean =
+    internal fun isProcessCurrent(context: Context, processNonce: Long): Boolean =
       read(context, METHOD_PROCESS, Bundle().apply { putLong(FOCUS_SCOPE_PROCESS, processNonce) })
 
     private fun read(context: Context, method: String, extras: Bundle): Boolean {

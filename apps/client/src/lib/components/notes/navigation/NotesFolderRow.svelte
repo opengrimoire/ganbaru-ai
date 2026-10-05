@@ -100,27 +100,27 @@
   let pendingName = $state<string | null>(null);
   let renameInput = $state<HTMLInputElement | null>(null);
   let handledRenameRequestId = 0;
-  let suppressFolderActivation = false;
+  let shouldSuppressFolderActivation = false;
   let destinationPickerLoadState = $state<LazyComponentLoadState<
     "destination-picker",
     LoadedNotesOptionalComponent
   > | null>(null);
 
   function handleNavigationDragStart(event: DragEvent): void {
-    suppressFolderActivation = true;
+    shouldSuppressFolderActivation = true;
     onNavigationDragStart?.(event);
   }
 
   function handleNavigationDragEnd(event: DragEvent): void {
     onNavigationDragEnd?.(event);
     window.setTimeout(() => {
-      suppressFolderActivation = false;
+      shouldSuppressFolderActivation = false;
     }, 0);
   }
 
   function activateFolder(): void {
-    if (suppressFolderActivation) {
-      suppressFolderActivation = false;
+    if (shouldSuppressFolderActivation) {
+      shouldSuppressFolderActivation = false;
       return;
     }
     onActivate();

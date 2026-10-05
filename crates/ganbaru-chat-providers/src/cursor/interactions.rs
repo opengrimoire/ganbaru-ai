@@ -1,7 +1,7 @@
 //! Cursor ACP permission and structured-question validation.
 
 use super::protocol::{
-    MAX_PROTOCOL_TEXT_BYTES, bounded_text, object, protocol_error, safe_shape, valid_identifier,
+    MAX_PROTOCOL_TEXT_BYTES, bounded_text, is_valid_identifier, object, protocol_error, safe_shape,
 };
 use crate::events::*;
 use crate::models::*;
@@ -67,12 +67,12 @@ pub fn parse_permission(params: &Value, workspace: &Path) -> ChatResult<ParsedPe
         .and_then(Value::as_object)
         .ok_or_else(|| protocol_error("permission tool call"))?;
     let tool_call_id = text(tool, "toolCallId")
-        .filter(|value| valid_identifier(value, 512))
+        .filter(|value| is_valid_identifier(value, 512))
         .ok_or_else(|| protocol_error("permission tool call ID"))?;
     let provider_request_id = ProviderRequestId::new(tool_call_id.to_string())
         .map_err(|_| protocol_error("permission request ID"))?;
     let tool_kind = text(tool, "kind")
-        .filter(|kind| valid_identifier(kind, 128))
+        .filter(|kind| is_valid_identifier(kind, 128))
         .unwrap_or("unknown")
         .to_string();
     let options = parse_permission_options(object.get("options"))?;
@@ -86,7 +86,7 @@ pub fn parse_permission(params: &Value, workspace: &Path) -> ChatResult<ParsedPe
         })
         .collect();
     let title = match tool.get("title") {
-        Some(Value::String(value)) if valid_display_text(value, 512) => value.clone(),
+        Some(Value::String(value)) if is_valid_display_text(value, 512) => value.clone(),
         Some(_) => return Err(protocol_error("permission title")),
         None => "Tool permission".to_string(),
     };
@@ -117,7 +117,7 @@ pub fn parse_permission(params: &Value, workspace: &Path) -> ChatResult<ParsedPe
 pub fn parse_question(params: &Value) -> ChatResult<ParsedQuestion> {
     let object = object(params)?;
     let tool_call_id = text(object, "toolCallId")
-        .filter(|value| valid_identifier(value, 512))
+        .filter(|value| is_valid_identifier(value, 512))
         .ok_or_else(|| protocol_error("Cursor question tool call ID"))?;
     let provider_request_id = ProviderRequestId::new(tool_call_id.to_string())
         .map_err(|_| protocol_error("Cursor question request ID"))?;
@@ -136,14 +136,14 @@ pub fn parse_question(params: &Value) -> ChatResult<ParsedQuestion> {
             .as_object()
             .ok_or_else(|| protocol_error("Cursor question"))?;
         let id = text(raw, "id")
-            .filter(|value| valid_identifier(value, 256))
+            .filter(|value| is_valid_identifier(value, 256))
             .ok_or_else(|| protocol_error("Cursor question ID"))?
             .to_string();
         if !question_ids.insert(id.clone()) {
             return Err(protocol_error("duplicate Cursor question ID"));
         }
         let prompt = text(raw, "prompt")
-            .filter(|value| valid_display_text(value, MAX_PROTOCOL_TEXT_BYTES))
+            .filter(|value| is_valid_display_text(value, MAX_PROTOCOL_TEXT_BYTES))
             .ok_or_else(|| protocol_error("Cursor question prompt"))?;
         let raw_options = raw
             .get("options")
@@ -162,13 +162,13 @@ pub fn parse_question(params: &Value) -> ChatResult<ParsedQuestion> {
                     .as_object()
                     .ok_or_else(|| protocol_error("Cursor question option"))?;
                 let option_id = text(option, "id")
-                    .filter(|value| valid_identifier(value, 256))
+                    .filter(|value| is_valid_identifier(value, 256))
                     .ok_or_else(|| protocol_error("Cursor question option ID"))?;
                 if !seen_option_ids.insert(option_id.to_string()) {
                     return Err(protocol_error("duplicate Cursor question option ID"));
                 }
                 let label = text(option, "label")
-                    .filter(|value| valid_display_text(value, 512))
+                    .filter(|value| is_valid_display_text(value, 512))
                     .ok_or_else(|| protocol_error("Cursor question option label"))?;
                 option_ids.push(option_id.to_string());
                 Ok(UserInputOption {
@@ -221,10 +221,10 @@ pub fn parse_xai_question(params: &Value) -> ChatResult<(ParsedQuestion, Vec<Xai
         object
     };
     let tool_call_id = text(object, "toolCallId")
-        .filter(|value| valid_identifier(value, 512))
+        .filter(|value| is_valid_identifier(value, 512))
         .ok_or_else(|| protocol_error("Grok question tool call ID"))?;
     text(object, "sessionId")
-        .filter(|value| valid_identifier(value, 512))
+        .filter(|value| is_valid_identifier(value, 512))
         .ok_or_else(|| protocol_error("Grok question session ID"))?;
     text(object, "mode")
         .filter(|value| matches!(*value, "default" | "plan"))
@@ -240,19 +240,19 @@ pub fn parse_xai_question(params: &Value) -> ChatResult<(ParsedQuestion, Vec<Xai
     }
     let mut canonical = Vec::new();
     let mut pending = Vec::new();
-    let mut ids = BTreeSet::new();
+    let mut question_ids = BTreeSet::new();
     for raw in raw_questions {
         let raw = raw
             .as_object()
             .ok_or_else(|| protocol_error("Grok question"))?;
         let question = text(raw, "question")
-            .filter(|value| valid_display_text(value, MAX_PROTOCOL_TEXT_BYTES))
+            .filter(|value| is_valid_display_text(value, MAX_PROTOCOL_TEXT_BYTES))
             .ok_or_else(|| protocol_error("Grok question text"))?;
         let id = text(raw, "id")
-            .filter(|value| valid_identifier(value, 256))
+            .filter(|value| is_valid_identifier(value, 256))
             .unwrap_or(question)
             .to_string();
-        if !ids.insert(id.clone()) {
+        if !question_ids.insert(id.clone()) {
             return Err(protocol_error("duplicate Grok question ID"));
         }
         let raw_options = raw
@@ -271,10 +271,10 @@ pub fn parse_xai_question(params: &Value) -> ChatResult<(ParsedQuestion, Vec<Xai
                 .as_object()
                 .ok_or_else(|| protocol_error("Grok question option"))?;
             let label = text(option, "label")
-                .filter(|value| valid_display_text(value, 512))
+                .filter(|value| is_valid_display_text(value, 512))
                 .ok_or_else(|| protocol_error("Grok question option label"))?;
             let option_id = text(option, "id")
-                .filter(|value| valid_identifier(value, 256))
+                .filter(|value| is_valid_identifier(value, 256))
                 .unwrap_or(label)
                 .to_string();
             if !option_ids.insert(option_id.clone()) {
@@ -544,13 +544,13 @@ fn parse_permission_options(value: Option<&Value>) -> ChatResult<Vec<AcpPermissi
             .as_object()
             .ok_or_else(|| protocol_error("permission option"))?;
         let option_id = text(option, "optionId")
-            .filter(|value| valid_identifier(value, 256))
+            .filter(|value| is_valid_identifier(value, 256))
             .ok_or_else(|| protocol_error("permission option ID"))?;
         if !option_ids.insert(option_id.to_string()) {
             return Err(protocol_error("duplicate permission option ID"));
         }
         let name = text(option, "name")
-            .filter(|value| valid_display_text(value, 512))
+            .filter(|value| is_valid_display_text(value, 512))
             .ok_or_else(|| protocol_error("permission option name"))?;
         let kind = text(option, "kind")
             .filter(|kind| {
@@ -635,9 +635,9 @@ fn decision_kind(kind: &str) -> ApprovalDecisionKind {
     }
 }
 
-fn valid_display_text(value: &str, maximum: usize) -> bool {
+fn is_valid_display_text(value: &str, max_bytes: usize) -> bool {
     !value.trim().is_empty()
-        && value.len() <= maximum
+        && value.len() <= max_bytes
         && !value
             .chars()
             .any(|character| character.is_control() && !matches!(character, '\n' | '\r' | '\t'))

@@ -7,7 +7,7 @@ import type {
 } from "$lib/chat/contracts";
 import {
   composerModelSelection,
-  providerAvailable,
+  isProviderAvailable,
   readComposerModelSelection,
   resolveDefaultProviderModel,
 } from "./model";
@@ -36,7 +36,7 @@ export function resolveComposerDefaults(
   if (!workingFolderId) return null;
   const currentProvider = settings.providerInstances.find((provider) => (
     provider.configuration.instanceId === input.providerInstanceId
-    && providerAvailable(provider)
+    && isProviderAvailable(provider)
   ));
   const preferredProviderId = settings.configuration.workingFolderProviderPreferences[
     workingFolderId

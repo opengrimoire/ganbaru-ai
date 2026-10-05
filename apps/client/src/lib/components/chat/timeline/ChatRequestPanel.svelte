@@ -142,7 +142,7 @@
     return formatList(localization.locale, [...labels, ...(text ? [text] : [])]);
   }
 
-  function validAnswer(index: number): boolean {
+  function isAnswerValid(index: number): boolean {
     const current = questions[index];
     if (!current || !current.required) return true;
     return (selected[current.id]?.length ?? 0) > 0 || Boolean(freeForm[current.id]?.trim());
@@ -150,7 +150,7 @@
 
   async function advanceOrSubmit(): Promise<void> {
     if (!question || resolving) return;
-    if (!validAnswer(step)) {
+    if (!isAnswerValid(step)) {
       error = t("chat.composer.requiredAnswer");
       void tick().then(() => panel?.querySelector<HTMLElement>("input, textarea")?.focus());
       return;

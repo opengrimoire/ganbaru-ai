@@ -293,7 +293,7 @@ async fn append_restore_operations_tx(
             .await?;
         collaboration_operations::record_tx(
             tx,
-            collaboration_operations::NotesCollaborationOperation {
+            collaboration_operations::CollaborationOperation {
                 entity_type: "comment_thread",
                 entity_id: &entity_id,
                 operation_type,
@@ -329,7 +329,7 @@ async fn append_restore_operations_tx(
         set_entity_sync_version_tx(tx, "notes_comments", &entity_id, base_version + 1).await?;
         collaboration_operations::record_tx(
             tx,
-            collaboration_operations::NotesCollaborationOperation {
+            collaboration_operations::CollaborationOperation {
                 entity_type: "comment",
                 entity_id: &entity_id,
                 operation_type,
@@ -361,7 +361,7 @@ async fn append_restore_operations_tx(
         set_entity_sync_version_tx(tx, "notes_suggestions", &entity_id, base_version + 1).await?;
         collaboration_operations::record_tx(
             tx,
-            collaboration_operations::NotesCollaborationOperation {
+            collaboration_operations::CollaborationOperation {
                 entity_type: "suggestion",
                 entity_id: &entity_id,
                 operation_type,
@@ -488,19 +488,19 @@ fn copied_graph_scope(
         );
         for row in rows.get("notes_blocks").into_iter().flatten() {
             if value_in(row, "page_id", &scope.page_ids) {
-                extend_id(&mut scope.block_ids, row);
+                insert_row_id(&mut scope.block_ids, row);
             }
         }
         for row in rows.get("notes_databases").into_iter().flatten() {
             if value_in(row, "parent_page_id", &scope.page_ids)
                 || value_in(row, "parent_block_id", &scope.block_ids)
             {
-                extend_id(&mut scope.database_ids, row);
+                insert_row_id(&mut scope.database_ids, row);
             }
         }
         for row in rows.get("notes_data_sources").into_iter().flatten() {
             if value_in(row, "database_id", &scope.database_ids) {
-                extend_id(&mut scope.data_source_ids, row);
+                insert_row_id(&mut scope.data_source_ids, row);
             }
         }
         for row in rows.get("notes_pages").into_iter().flatten() {
@@ -508,7 +508,7 @@ fn copied_graph_scope(
                 || value_in(row, "parent_block_id", &scope.block_ids)
                 || value_in(row, "parent_data_source_id", &scope.data_source_ids)
             {
-                extend_id(&mut scope.page_ids, row);
+                insert_row_id(&mut scope.page_ids, row);
             }
         }
         let after = (
@@ -527,23 +527,23 @@ fn copied_graph_scope(
         .flatten()
     {
         if value_in(row, "data_source_id", &scope.data_source_ids) {
-            extend_id(&mut scope.template_ids, row);
+            insert_row_id(&mut scope.template_ids, row);
         }
     }
     for row in rows.get("notes_comment_threads").into_iter().flatten() {
         if value_in(row, "page_id", &scope.page_ids) {
-            extend_id(&mut scope.thread_ids, row);
+            insert_row_id(&mut scope.thread_ids, row);
         }
     }
     for row in rows.get("notes_comments").into_iter().flatten() {
         if value_in(row, "thread_id", &scope.thread_ids) {
-            extend_id(&mut scope.comment_ids, row);
+            insert_row_id(&mut scope.comment_ids, row);
         }
     }
     scope
 }
 
-fn extend_id(ids: &mut HashSet<String>, row: &Value) {
+fn insert_row_id(ids: &mut HashSet<String>, row: &Value) {
     if let Some(id) = json_optional_string(row, "id") {
         ids.insert(id);
     }

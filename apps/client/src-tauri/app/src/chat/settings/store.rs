@@ -1,6 +1,6 @@
 use super::{
     config_io_error, config_shape_error, device_state_error, mapping::provider_instance_read,
-    provider_not_found,
+    provider_not_found_error,
 };
 use crate::chat::credentials::{CredentialStore, PlatformCredentialStore};
 use crate::chat::device_state::read_active_device_scope;
@@ -70,5 +70,5 @@ pub(crate) fn provider_mut<'a>(
         .providers
         .iter_mut()
         .find(|provider| &provider.instance_id == instance_id)
-        .ok_or_else(provider_not_found)
+        .ok_or_else(provider_not_found_error)
 }

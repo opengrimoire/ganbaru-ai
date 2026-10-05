@@ -20,9 +20,9 @@
     scrollTime = undefined,
     emphasizedTime = undefined,
     inputNavigation = null,
-    onselect,
-    oncancel,
-    ontypedigit,
+    onSelect,
+    onCancel,
+    onTypeDigit,
   }: {
     currentTime: string;
     isEnd?: boolean;
@@ -32,9 +32,9 @@
     scrollTime?: string | undefined;
     emphasizedTime?: string | null | undefined;
     inputNavigation?: TimePickerInputNavigation | null;
-    onselect: (time: string, source?: "keyboard" | "pointer") => void;
-    oncancel?: (source?: "keyboard" | "pointer") => void;
-    ontypedigit?: (digit: string) => void;
+    onSelect: (time: string, source?: "keyboard" | "pointer") => void;
+    onCancel?: (source?: "keyboard" | "pointer") => void;
+    onTypeDigit?: (digit: string) => void;
   } = $props();
 
   const preferences = getPreferences();
@@ -142,21 +142,21 @@
     if (e.key === "Escape") {
       e.preventDefault();
       e.stopPropagation();
-      oncancel?.("keyboard");
+      onCancel?.("keyboard");
       return;
     }
 
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
       e.stopPropagation();
-      onselect(slot, "keyboard");
+      onSelect(slot, "keyboard");
       return;
     }
 
     if (/^\d$/.test(e.key)) {
       e.preventDefault();
       e.stopPropagation();
-      ontypedigit?.(e.key);
+      onTypeDigit?.(e.key);
       return;
     }
 
@@ -175,14 +175,14 @@
   function getDurationLabel(slot: string): string {
     if (!isEnd) return "";
     const [h, m] = slot.split(":").map(Number);
-    let d = h * 60 + m - startMinutes;
-    if (d <= 0) d += 1440;
-    if (d >= 1440) return "";
-    const hrs = d / 60;
+    let durationMinutes = h * 60 + m - startMinutes;
+    if (durationMinutes <= 0) durationMinutes += 1440;
+    if (durationMinutes >= 1440) return "";
+    const hours = durationMinutes / 60;
     return t(
       "calendar.timePicker.durationHours",
-      formatNumber(locale, hrs, { maximumFractionDigits: 1 }),
-      hrs === 1,
+      formatNumber(locale, hours, { maximumFractionDigits: 1 }),
+      hours === 1,
     );
   }
 </script>
@@ -193,8 +193,8 @@
     {@const selected = currentTime === slot}
     {@const emphasized = slot === emphasizedSlot}
     {@const active = activeIndex === index}
-    {@const durLabel = getDurationLabel(slot)}
-    <button onclick={() => onselect(slot, "pointer")}
+    {@const durationLabel = getDurationLabel(slot)}
+    <button onclick={() => onSelect(slot, "pointer")}
       data-time={slot}
       data-slot-index={index}
       tabindex={activeIndex === index ? 0 : -1}
@@ -204,8 +204,8 @@
         {selected ? 'bg-accent' : active ? 'bg-black/5 dark:bg-black/15' : ''}"
       style="font-weight: {active || emphasized ? 600 : selected ? 500 : 400}; color: {active || emphasized || selected ? 'var(--foreground)' : 'var(--muted-foreground)'};">
       <span>{formatTimeLabel(slot, preferences.calendarTimeFormat)}</span>
-      {#if durLabel}
-        <span class="ml-2 text-[0.733333rem]" style="color: var(--muted-foreground); font-weight: 400;">({durLabel})</span>
+      {#if durationLabel}
+        <span class="ml-2 text-[0.733333rem]" style="color: var(--muted-foreground); font-weight: 400;">({durationLabel})</span>
       {/if}
     </button>
   {/each}

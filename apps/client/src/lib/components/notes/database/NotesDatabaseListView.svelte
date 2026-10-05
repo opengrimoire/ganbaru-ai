@@ -419,12 +419,12 @@
 
         <CollectionMenu fullWidth disabled={editingLocked} label={t("notes.databaseTableSorts")} kind="sort" activeCount={sorts.length} summary={formatList(localization.locale, sorts.map((sort) => columns.find((column) => column.id === sort.property_id)?.name ?? ""))}>
 
-          <NotesDatabaseSortControls properties={columns} {sorts} pending={mutating || editingLocked} onchange={saveSorts} />
+          <NotesDatabaseSortControls properties={columns} {sorts} pending={mutating || editingLocked} onChange={saveSorts} />
         </CollectionMenu>
 
         <CollectionMenu fullWidth disabled={editingLocked} label={t("notes.databaseTableFilters")} kind="filter" activeCount={notesDatabaseFilterCount(filters)} summary={notesDatabaseFilterCount(filters) ? formatNumber(localization.locale, notesDatabaseFilterCount(filters)) : ""}>
 
-          <NotesDatabaseFilterControls properties={columns} {filters} pending={mutating || editingLocked} onchange={saveFilters} />
+          <NotesDatabaseFilterControls properties={columns} {filters} pending={mutating || editingLocked} onChange={saveFilters} />
         </CollectionMenu>
       </div>
 
@@ -435,7 +435,7 @@
   <NotesDatabaseQueryBar properties={columns} {filters} {sorts} pending={mutating || editingLocked} onFiltersChange={saveFilters} onSortsChange={saveSorts} />
   {#if error}<p class="text-[0.8rem] text-destructive" role="alert">{error}</p>{/if}
   {#if settingsOpen}
-    <CollectionSettings label={t("notes.databaseViewSettings")} anchor={settingsAnchor} onclose={onCloseSettings}>
+    <CollectionSettings label={t("notes.databaseViewSettings")} anchor={settingsAnchor} onClose={onCloseSettings}>
       {@render settingsHeader?.()}
       {@render viewControls()}
       {#if list}{@render propertyControls()}{/if}

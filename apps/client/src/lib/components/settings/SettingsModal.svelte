@@ -81,7 +81,7 @@
     if (!mobilePresentation && themeEditor.editingId) requestSettingsClose();
   });
 
-  const SECTIONS = $derived(settingsSectionsForShell(mobilePresentation ? "mobile" : "desktop"));
+  const sections = $derived(settingsSectionsForShell(mobilePresentation ? "mobile" : "desktop"));
 
   const initialActiveSection = untrack(() => initialSection ?? "appearance");
   const initialActiveChatSubsection = untrack(() => initialChatSubsection ?? "teammates");
@@ -217,7 +217,7 @@
   }
 
   function activeSectionLabel(): string {
-    const section = SECTIONS.find((candidate) => candidate.id === activeSection);
+    const section = sections.find((candidate) => candidate.id === activeSection);
     return section ? t(section.labelKey) : t("settings.title");
   }
 
@@ -504,7 +504,7 @@
         class="min-h-0 flex-1 overflow-y-auto px-3 py-3"
       >
         <div class="mx-auto flex w-full max-w-xl flex-col gap-1">
-          {#each SECTIONS as section}
+          {#each sections as section}
             {@const Icon = section.icon}
             <button
               type="button"
@@ -557,7 +557,7 @@
     {#if useTopNav}
       <header class="flex shrink-0 items-center gap-2 border-b border-border/70 bg-background/40 px-2 py-2 dark:bg-black/20">
         <nav class="flex min-w-0 flex-1 gap-1 overflow-x-auto rounded-md bg-card/60 p-0.5 dark:bg-background/60">
-          {#each SECTIONS as section}
+          {#each sections as section}
             {@const Icon = section.icon}
             <button
               onclick={() => {
@@ -611,7 +611,7 @@
           </button>
         </div>
         <nav class="flex flex-col">
-          {#each SECTIONS as section}
+          {#each sections as section}
             {@const Icon = section.icon}
             <button
               onclick={() => {

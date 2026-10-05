@@ -131,14 +131,10 @@ fn list_database_view_persists_visible_properties_grouping_filters_and_sorts() {
         .await
         .unwrap();
 
-        let default_list = data_sources::layouts::list::get_data_source_list_view(
-            &pool,
-            DATA_SOURCE_A,
-            None,
-            None,
-        )
-        .await
-        .unwrap();
+        let default_list =
+            data_sources::layouts::list::data_source_list_view(&pool, DATA_SOURCE_A, None, None)
+                .await
+                .unwrap();
         let default_json = serde_json::to_value(default_list).unwrap();
         assert_eq!(default_json["view"]["type"], "list");
         assert_eq!(

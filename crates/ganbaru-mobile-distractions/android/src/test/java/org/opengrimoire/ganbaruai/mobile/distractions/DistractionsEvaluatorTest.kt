@@ -49,7 +49,7 @@ class DistractionsEvaluatorTest {
 
   @Test
   fun blocksSelectedAppDuringEnabledActivePhase() {
-    assertTrue(DistractionsEvaluator.evaluateSchedule(
+    assertTrue(DistractionsEvaluator.isBlockedBySchedule(
       schedule,
       phase(phase = "focus"),
       "com.google.android.youtube",
@@ -59,13 +59,13 @@ class DistractionsEvaluatorTest {
 
   @Test
   fun followsPerPhaseSchedule() {
-    assertFalse(DistractionsEvaluator.evaluateSchedule(
+    assertFalse(DistractionsEvaluator.isBlockedBySchedule(
       schedule,
       phase(phase = "short_break"),
       "com.google.android.youtube",
       NOW,
     ))
-    assertTrue(DistractionsEvaluator.evaluateSchedule(
+    assertTrue(DistractionsEvaluator.isBlockedBySchedule(
       schedule,
       phase(phase = "long_break"),
       "com.google.android.youtube",
@@ -75,13 +75,13 @@ class DistractionsEvaluatorTest {
 
   @Test
   fun failsOpenForPausedOrExpiredProjection() {
-    assertFalse(DistractionsEvaluator.evaluateSchedule(
+    assertFalse(DistractionsEvaluator.isBlockedBySchedule(
       schedule,
       phase(phase = "focus", running = false),
       "com.google.android.youtube",
       NOW,
     ))
-    assertFalse(DistractionsEvaluator.evaluateSchedule(
+    assertFalse(DistractionsEvaluator.isBlockedBySchedule(
       schedule,
       phase(phase = "focus", validUntilEpochMs = NOW),
       "com.google.android.youtube",
@@ -91,13 +91,13 @@ class DistractionsEvaluatorTest {
 
   @Test
   fun ignoresAppsWithoutAnEnabledExactPackageRule() {
-    assertFalse(DistractionsEvaluator.evaluateSchedule(
+    assertFalse(DistractionsEvaluator.isBlockedBySchedule(
       schedule,
       phase(phase = "focus"),
       "com.example.video",
       NOW,
     ))
-    assertFalse(DistractionsEvaluator.evaluateSchedule(
+    assertFalse(DistractionsEvaluator.isBlockedBySchedule(
       schedule.copy(blockedApps = schedule.blockedApps.map { it.copy(enabled = false) }),
       phase(phase = "focus"),
       "com.google.android.youtube",

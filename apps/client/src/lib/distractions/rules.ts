@@ -251,7 +251,7 @@ export interface DistractionsCategoryRule {
   enabled: boolean;
 }
 
-export interface DistractionsCustomCategoryStack {
+export interface DistractionsCustomCategory {
   id: string;
   name: string;
   enabled: boolean;
@@ -309,7 +309,7 @@ export interface DistractionsConfig {
   blockDuringLongBreaks: boolean;
   pauseDuringFocusPause: boolean;
   blockedCategories: DistractionsCategoryRule[];
-  customCategoryStacks: DistractionsCustomCategoryStack[];
+  customCategoryStacks: DistractionsCustomCategory[];
   blockedHosts: DistractionsHostRule[];
   exceptionHosts: DistractionsHostRule[];
   allowedHosts: DistractionsHostRule[];
@@ -614,24 +614,24 @@ function normalizeCategoryRules(value: unknown): DistractionsCategoryRule[] {
   return rules.map((rule) => byId.get(rule.id) ?? rule);
 }
 
-function normalizeCustomCategoryStackId(value: unknown): string | null {
+function normalizeCustomCategoryId(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const id = value.trim();
   if (!/^[a-z0-9][a-z0-9_-]{0,79}$/i.test(id)) return null;
   return id;
 }
 
-export function normalizeDistractionsCustomCategoryStackName(input: string): string | null {
+export function normalizeDistractionsCustomCategoryName(input: string): string | null {
   const name = input.trim().replace(/\s+/g, " ").slice(0, 60);
   return name.length > 0 ? name : null;
 }
 
-function normalizeCustomCategoryStackValue(value: unknown): DistractionsCustomCategoryStack | null {
+function normalizeCustomCategoryValue(value: unknown): DistractionsCustomCategory | null {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
   const record = value as Record<string, unknown>;
-  const id = normalizeCustomCategoryStackId(record.id);
+  const id = normalizeCustomCategoryId(record.id);
   const name = typeof record.name === "string"
-    ? normalizeDistractionsCustomCategoryStackName(record.name)
+    ? normalizeDistractionsCustomCategoryName(record.name)
     : null;
   const hosts = normalizeHostRules(record.hosts);
   if (!id || !name || hosts.length === 0) return null;
@@ -643,17 +643,17 @@ function normalizeCustomCategoryStackValue(value: unknown): DistractionsCustomCa
   };
 }
 
-function normalizeCustomCategoryStacks(value: unknown): DistractionsCustomCategoryStack[] {
+function normalizeCustomCategories(value: unknown): DistractionsCustomCategory[] {
   if (!Array.isArray(value)) return [];
   const seenIds = new Set<string>();
-  const stacks: DistractionsCustomCategoryStack[] = [];
+  const customCategories: DistractionsCustomCategory[] = [];
   for (const item of value) {
-    const stack = normalizeCustomCategoryStackValue(item);
-    if (!stack || seenIds.has(stack.id)) continue;
-    seenIds.add(stack.id);
-    stacks.push(stack);
+    const customCategory = normalizeCustomCategoryValue(item);
+    if (!customCategory || seenIds.has(customCategory.id)) continue;
+    seenIds.add(customCategory.id);
+    customCategories.push(customCategory);
   }
-  return stacks;
+  return customCategories;
 }
 
 function normalizeUsageLimitId(value: unknown): string | null {
@@ -920,7 +920,7 @@ export function normalizeDistractionsConfig(value: unknown): DistractionsConfig 
       ? record.pauseDuringFocusPause
       : DEFAULT_DISTRACTIONS_CONFIG.pauseDuringFocusPause,
     blockedCategories: normalizeCategoryRules(record.blockedCategories),
-    customCategoryStacks: normalizeCustomCategoryStacks(record.customCategoryStacks),
+    customCategoryStacks: normalizeCustomCategories(record.customCategoryStacks),
     blockedHosts: normalizeHostRules(record.blockedHosts),
     exceptionHosts: normalizeHostRules(record.exceptionHosts),
     allowedHosts: normalizeHostRules(record.allowedHosts),
@@ -1015,12 +1015,12 @@ export function evaluateDistractionsUrl(
       return { blocked: true, host, matchedRule: `blocked host: ${blockedHost}` };
     }
   }
-  for (const stack of config.customCategoryStacks) {
-    if (!stack.enabled) continue;
-    for (const stackRule of stack.hosts) {
-      if (!stackRule.enabled) continue;
-      if (distractionsHostMatchesRule(host, stackRule.host)) {
-        return { blocked: true, host, matchedRule: `custom stack: ${stack.name}` };
+  for (const customCategory of config.customCategoryStacks) {
+    if (!customCategory.enabled) continue;
+    for (const hostRule of customCategory.hosts) {
+      if (!hostRule.enabled) continue;
+      if (distractionsHostMatchesRule(host, hostRule.host)) {
+        return { blocked: true, host, matchedRule: `custom stack: ${customCategory.name}` };
       }
     }
   }

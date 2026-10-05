@@ -1,7 +1,7 @@
 use super::*;
 
 #[cfg(target_os = "linux")]
-fn linux_is_wayland_session() -> bool {
+fn is_wayland_session() -> bool {
     std::env::var("XDG_SESSION_TYPE")
         .map(|value| value.eq_ignore_ascii_case("wayland"))
         .unwrap_or(false)
@@ -85,7 +85,7 @@ fn x11_window_status<C: x11rb::connection::Connection>(
     let process_id = x11_property_u32(conn, window, pid_atom, AtomEnum::CARDINAL.into())?;
     let wm_class_names = x11_wm_class(conn, window);
     let process_names = process_id
-        .map(|id| read_linux_process_name(&PathBuf::from("/proc").join(id.to_string())))
+        .map(|id| read_linux_process_names(&PathBuf::from("/proc").join(id.to_string())))
         .unwrap_or_default();
     let app_name = wm_class_names
         .last()
@@ -360,7 +360,7 @@ fn wayland_close_active_window(
 #[cfg(target_os = "linux")]
 pub(in crate::distractions) fn foreground_desktop_app_status()
 -> DistractionsForegroundDesktopAppStatus {
-    if linux_is_wayland_session() {
+    if is_wayland_session() {
         return wayland_foreground_window_status()
             .unwrap_or_else(unavailable_foreground_desktop_app_status);
     }
@@ -378,7 +378,7 @@ pub(in crate::distractions) fn close_current_foreground_desktop_app(
     expected: DistractionsForegroundDesktopAppExpectation,
     authorize: &mut dyn FnMut(&DistractionsForegroundDesktopAppStatus) -> Result<(), String>,
 ) -> Result<(), String> {
-    if linux_is_wayland_session() {
+    if is_wayland_session() {
         return wayland_close_active_window(expected, authorize);
     }
     if std::env::var_os("DISPLAY").is_some() {

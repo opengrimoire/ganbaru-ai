@@ -5,7 +5,7 @@ import {
   activePomodoroSaveWouldStopSession,
   endActiveEventWouldStopProductivity,
   isActiveTimedCalendarEvent,
-  sameConcreteOccurrence,
+  isSameConcreteOccurrence,
 } from "./active-event-end";
 
 const pomodoroConfig: PomodoroConfig = createPresetPomodoroConfig("adaptive", 1);
@@ -90,7 +90,7 @@ describe("active event end helpers", () => {
       recurringParentId: "template-1",
     });
 
-    expect(sameConcreteOccurrence(template, firstSynthetic)).toBe(true);
+    expect(isSameConcreteOccurrence(template, firstSynthetic)).toBe(true);
   });
 
   it("detects active timed calendar events without requiring pomodoro config", () => {

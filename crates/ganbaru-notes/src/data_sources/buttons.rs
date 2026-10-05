@@ -441,11 +441,11 @@ fn read_string_field<'a>(
         .ok_or_else(|| format!("{label} must be a string"))
 }
 
-fn validate_text(value: &str, label: &str, max_len: usize) -> Result<String, String> {
+fn validate_text(value: &str, label: &str, max_chars: usize) -> Result<String, String> {
     if value.chars().any(char::is_control) {
         return Err(format!("{label} must not contain control characters"));
     }
-    if value.chars().count() > max_len {
+    if value.chars().count() > max_chars {
         return Err(format!("{label} is too long"));
     }
     Ok(value.to_string())

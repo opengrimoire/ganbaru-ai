@@ -33,9 +33,9 @@ export function musicReviewSource(
   if (item.sourceKind === "youtube-video" && item.youtubeVideoId) {
     return parseMusicSourceInput(`https://www.youtube.com/watch?v=${item.youtubeVideoId}`).source;
   }
-  const available = detail.locations.find((location) => location.availability === "available");
-  if (!available) return null;
-  const folder = bindings.find((binding) => binding.rootId === available.rootId)?.folderPath;
+  const availableLocation = detail.locations.find((location) => location.availability === "available");
+  if (!availableLocation) return null;
+  const folder = bindings.find((binding) => binding.rootId === availableLocation.rootId)?.folderPath;
   if (!folder) return null;
   const originalSidecar = item.originalArtworkIdentity?.startsWith("sidecar:")
     ? item.originalArtworkIdentity.slice("sidecar:".length)
@@ -43,7 +43,7 @@ export function musicReviewSource(
   const artworkPath = item.artworkOverride
     ?? (originalSidecar ? resolveLocalMusicPath(folder, originalSidecar) : null);
   return localFileSourceFromPath(
-    resolveLocalMusicPath(folder, available.relativePath),
+    resolveLocalMusicPath(folder, availableLocation.relativePath),
     item.titleOverride ?? item.originalTitle,
     artworkPath,
   );

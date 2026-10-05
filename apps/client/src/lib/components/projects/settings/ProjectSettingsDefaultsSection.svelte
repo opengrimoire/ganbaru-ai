@@ -481,7 +481,7 @@
         ariaLabel={t("projects.settings.selectColor")}
         displayLabel
         class="w-44 max-[480px]:w-full"
-        onselect={(color) => {
+        onSelect={(color) => {
           projectColorDraft = color;
         }}
       />

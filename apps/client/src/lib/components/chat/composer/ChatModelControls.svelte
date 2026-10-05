@@ -18,7 +18,7 @@
   import {
     composerModelSelection,
     defaultModelOptions,
-    providerAvailable,
+    isProviderAvailable,
     readComposerModelSelection,
   } from "$lib/chat/composer/model";
   import { formatModelDisplayName, modelCompany } from "$lib/chat/composer/model-company";
@@ -327,7 +327,7 @@
     closeFlyout();
   }
 
-  function modelSectionCollapsed(sectionId: string): boolean {
+  function isModelSectionCollapsed(sectionId: string): boolean {
     return collapsedModelSections.has(sectionId);
   }
 
@@ -925,14 +925,14 @@
                       <label class="model-search"><Search size={16} /><input bind:this={modelSearch} bind:value={modelQuery} placeholder={t("chat.composer.modelSearch")} /></label>
                     </div>
                     <section class="model-company-section favorite-company-section" aria-labelledby="favorite-models-heading">
-                      <button id="favorite-models-heading" type="button" class="model-company-heading" aria-expanded={!modelSectionCollapsed("favorites")} aria-controls="favorite-models-content" onclick={() => toggleModelSection("favorites")}><Star size={14} fill="currentColor" /><span>{t("chat.composer.favorites")}</span><ChevronDown size={13} class={modelSectionCollapsed("favorites") ? "collapsed" : undefined} /></button>
-                      <div id="favorite-models-content" class="model-company-content" class:collapsed={modelSectionCollapsed("favorites")} inert={modelSectionCollapsed("favorites")} aria-hidden={modelSectionCollapsed("favorites")}>
+                      <button id="favorite-models-heading" type="button" class="model-company-heading" aria-expanded={!isModelSectionCollapsed("favorites")} aria-controls="favorite-models-content" onclick={() => toggleModelSection("favorites")}><Star size={14} fill="currentColor" /><span>{t("chat.composer.favorites")}</span><ChevronDown size={13} class={isModelSectionCollapsed("favorites") ? "collapsed" : undefined} /></button>
+                      <div id="favorite-models-content" class="model-company-content" class:collapsed={isModelSectionCollapsed("favorites")} inert={isModelSectionCollapsed("favorites")} aria-hidden={isModelSectionCollapsed("favorites")}>
                         <div class="model-company-content-inner">
                           {#each favoriteModelEntries as favorite (`favorite:${favorite.provider.configuration.instanceId}:${favorite.model.id}`)}
                             {@const metadata = modelMetadata(favorite.model.contextLimit, favorite.model.availability)}
                             {@const company = modelCompany(favorite.provider.configuration.familyId, favorite.model)}
                             <div class="model-row">
-                              <button type="button" class="model-choice" disabled={!providerAvailable(favorite.provider) || favorite.model.availability === "unavailable"} title={favorite.model.availability === "available" ? undefined : metadata.join(" · ")} onclick={() => chooseModel(favorite.provider, favorite.model.id, false)}>
+                              <button type="button" class="model-choice" disabled={!isProviderAvailable(favorite.provider) || favorite.model.availability === "unavailable"} title={favorite.model.availability === "available" ? undefined : metadata.join(" · ")} onclick={() => chooseModel(favorite.provider, favorite.model.id, false)}>
                                 <span class="favorite-model-label"><ChatProviderIcon familyId={company.iconFamilyId} label={company.name} monochrome size={14} /><strong>{formatModelDisplayName(favorite.model.displayName)}</strong></span>
                                 {#if favorite.provider.configuration.instanceId === provider?.configuration.instanceId && selection.modelId === favorite.model.id}<Check size={15} />{/if}
                               </button>
@@ -945,13 +945,13 @@
                     </section>
 
                     {#each modelCompanySections as section (section.company.id)}
-                      {@const sectionCollapsed = modelSectionCollapsed(section.company.id)}
+                      {@const sectionCollapsed = isModelSectionCollapsed(section.company.id)}
                       <section class="model-company-section" data-model-company={section.company.id} aria-labelledby={`model-company-${section.company.id}`}>
                         <button id={`model-company-${section.company.id}`} type="button" class="model-company-heading" aria-expanded={!sectionCollapsed} aria-controls={`model-company-${section.company.id}-content`} onclick={() => toggleModelSection(section.company.id)}><ChatProviderIcon familyId={section.company.iconFamilyId} label={section.company.name} monochrome size={14} /><span>{section.company.name}</span><ChevronDown size={13} class={sectionCollapsed ? "collapsed" : undefined} /></button>
                         <div id={`model-company-${section.company.id}-content`} class="model-company-content" class:collapsed={sectionCollapsed} inert={sectionCollapsed} aria-hidden={sectionCollapsed}>
                           <div class="model-company-content-inner">
                             {#each section.managedProviders as managedProvider (managedProvider.configuration.instanceId)}
-                              <button type="button" disabled={!providerAvailable(managedProvider)} title={probeStatus(managedProvider)} onclick={() => chooseModel(managedProvider, null, true)}>
+                              <button type="button" disabled={!isProviderAvailable(managedProvider)} title={probeStatus(managedProvider)} onclick={() => chooseModel(managedProvider, null, true)}>
                                 <span><strong>{t("chat.composer.providerManagedModel")}</strong></span>
                                 {#if managedProvider.configuration.instanceId === provider?.configuration.instanceId && selection.providerManaged}<Check size={14} />{/if}
                               </button>
@@ -959,7 +959,7 @@
                             {#each section.models as entry (`${entry.provider.configuration.instanceId}:${entry.model.id}`)}
                               {@const metadata = modelMetadata(entry.model.contextLimit, entry.model.availability)}
                               <div class="model-row">
-                                <button type="button" class="model-choice" disabled={!providerAvailable(entry.provider) || entry.model.availability === "unavailable"} title={entry.model.availability === "available" ? undefined : metadata.join(" · ")} onclick={() => chooseModel(entry.provider, entry.model.id, false)}>
+                                <button type="button" class="model-choice" disabled={!isProviderAvailable(entry.provider) || entry.model.availability === "unavailable"} title={entry.model.availability === "available" ? undefined : metadata.join(" · ")} onclick={() => chooseModel(entry.provider, entry.model.id, false)}>
                                   <span><strong>{formatModelDisplayName(entry.model.displayName)}</strong></span>
                                   {#if entry.provider.configuration.instanceId === provider?.configuration.instanceId && selection.modelId === entry.model.id}<Check size={15} />{/if}
                                 </button>

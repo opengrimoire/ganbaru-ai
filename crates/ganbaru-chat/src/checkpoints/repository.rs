@@ -81,7 +81,7 @@ pub(super) async fn insert_checkpoint_and_associate_turn(
     .bind(&captured.git_object_id)
     .bind(changed_files_data)
     .bind(now.as_str())
-    .bind(kind.wire())
+    .bind(kind.as_str())
     .bind(turn_id.map(ChatTurnId::as_str))
     .bind(&captured.index_commit_oid)
     .bind(&captured.index_tree_oid)

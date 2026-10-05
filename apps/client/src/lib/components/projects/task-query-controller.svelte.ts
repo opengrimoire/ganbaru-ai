@@ -221,7 +221,7 @@ export class ProjectTaskQueryController {
   get allEvents(): CalendarEvent[] {
     const projectId = this.projectId;
     if (!projectId) return [];
-    return this.#calendar.rawBlocks
+    return this.#calendar.sourceEvents
       .filter((event) => event.projectId === projectId)
       .sort((first, second) => first.start.localeCompare(second.start));
   }
@@ -430,7 +430,7 @@ export class ProjectTaskQueryController {
   /** Reload changed queries and committed mutations once while keeping selected details retained. */
   loadCurrent(selectedTaskIds: readonly string[], selectedTaskId: string | null): void {
     const request = this.request();
-    if (!request || !this.#projects.projectDataLoaded(request.projectId)) return;
+    if (!request || !this.#projects.isProjectDataLoaded(request.projectId)) return;
     const retained = selectedTaskId ? [...selectedTaskIds, selectedTaskId] : [...selectedTaskIds];
     const queryKey = this.#taskQueryRevisionKey(request);
     const loadKey = JSON.stringify([queryKey, [...new Set(retained)].sort()]);

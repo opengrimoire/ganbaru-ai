@@ -78,7 +78,7 @@ async fn apply_reference(
     action: ReferenceAction,
 ) -> Result<FocusExecutionSnapshot, FocusExecutionError> {
     validate_change(change)?;
-    timestamp(context.now_ms)?;
+    format_timestamp(context.now_ms)?;
     let (revision, mut state) = load_state(tx).await?;
     if revision != expected_revision || state.run_id.as_deref() != Some(&change.run_id) {
         return Err(stale(revision));
@@ -157,7 +157,7 @@ async fn apply_reference(
     let mut session = Session::load(tx, state, context).await?;
     session.changed_segments = changed_segments;
     session
-        .event(
+        .record_event(
             tx,
             "reconfigure",
             context.now_ms,
@@ -173,7 +173,7 @@ async fn apply_reference(
             sqlx::query(
                 "UPDATE pomodoro_runs SET planned_end = ? WHERE id = ? AND ended_at IS NULL",
             )
-            .bind(timestamp(end_ms)?)
+            .bind(format_timestamp(end_ms)?)
             .bind(&change.run_id)
             .execute(&mut **tx)
             .await
@@ -193,7 +193,7 @@ async fn apply_reference(
     }
     session.state.last_transition_at_ms = session.state.last_transition_at_ms.max(context.now_ms);
     save_state(tx, &session.state, next_revision, context.now_ms).await?;
-    snapshot(
+    load_snapshot(
         tx,
         next_revision,
         &session.state,

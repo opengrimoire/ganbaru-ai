@@ -4,7 +4,7 @@ import {
   distractionsLimitEntrySourceKeys,
   normalizeDistractionsAppName,
   normalizeDistractionsConfig,
-  normalizeDistractionsCustomCategoryStackName,
+  normalizeDistractionsCustomCategoryName,
   normalizeDistractionsDesktopAppMatchNames,
   normalizeDistractionsLimitEntryColor,
   normalizeDistractionsLimitEntryName,
@@ -16,7 +16,7 @@ import {
   type DistractionsCategoryId,
   type DistractionsCategoryRule,
   type DistractionsConfig,
-  type DistractionsCustomCategoryStack,
+  type DistractionsCustomCategory,
   type DistractionsDesktopConfig,
   type DistractionsHostRule,
   type DistractionsLimitEntry,
@@ -31,13 +31,13 @@ import { publishMobileDistractionsConfig } from "$lib/scheduling/mobile-distract
 
 const CONFIG_KEY = "distractions";
 
-export type AddDistractionsCustomCategoryStackResult =
+export type AddDistractionsCustomCategoryResult =
   | "added"
   | "invalid-name"
   | "invalid-hosts"
   | "duplicate-name";
 
-export type UpdateDistractionsCustomCategoryStackResult =
+export type UpdateDistractionsCustomCategoryResult =
   | "updated"
   | "missing"
   | "invalid-name"
@@ -143,7 +143,7 @@ interface DistractionsAppRuleInput {
   matchNames?: readonly string[];
 }
 
-function appRuleInput(
+function appRuleFromInput(
   input: string | DistractionsAppRuleInput,
 ): DistractionsAppRule | null {
   const name = normalizeDistractionsAppName(typeof input === "string" ? input : input.name);
@@ -170,7 +170,7 @@ function mergeApps(
   existingApps: readonly DistractionsAppRule[],
   input: string | DistractionsAppRuleInput,
 ): DistractionsAppRule[] | null {
-  const rule = appRuleInput(input);
+  const rule = appRuleFromInput(input);
   if (!rule) return null;
   const key = appRuleKey(rule.name);
   if (existingApps.some((rule) => appRuleKey(rule.name) === key)) return existingApps.slice();
@@ -203,7 +203,7 @@ function setCategoryEnabled(
   return categories.map((rule) => rule.id === id ? { ...rule, enabled } : rule);
 }
 
-function slugifyCustomCategoryStackName(name: string): string {
+function slugifyCustomCategoryName(name: string): string {
   const slug = name
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
@@ -211,32 +211,32 @@ function slugifyCustomCategoryStackName(name: string): string {
   return slug || "custom-stack";
 }
 
-function createCustomCategoryStackId(name: string): string {
+function createCustomCategoryId(name: string): string {
   const suffix = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
     ? crypto.randomUUID().replace(/-/g, "").slice(0, 12)
     : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
-  return `${slugifyCustomCategoryStackName(name).slice(0, 48)}-${suffix}`;
+  return `${slugifyCustomCategoryName(name).slice(0, 48)}-${suffix}`;
 }
 
-function setCustomCategoryStackEnabled(
-  stacks: readonly DistractionsCustomCategoryStack[],
+function setCustomCategoryEnabled(
+  customCategories: readonly DistractionsCustomCategory[],
   id: string,
   enabled: boolean,
-): DistractionsCustomCategoryStack[] {
-  return stacks.map((stack) => stack.id === id ? { ...stack, enabled } : stack);
+): DistractionsCustomCategory[] {
+  return customCategories.map((customCategory) => customCategory.id === id ? { ...customCategory, enabled } : customCategory);
 }
 
-function removeCustomCategoryStack(
-  stacks: readonly DistractionsCustomCategoryStack[],
+function removeCustomCategory(
+  customCategories: readonly DistractionsCustomCategory[],
   id: string,
-): DistractionsCustomCategoryStack[] {
-  return stacks.filter((stack) => stack.id !== id);
+): DistractionsCustomCategory[] {
+  return customCategories.filter((customCategory) => customCategory.id !== id);
 }
 
-function duplicateCustomCategoryStackName(name: string, currentId: string | null): boolean {
+function isDuplicateCustomCategoryName(name: string, currentId: string | null): boolean {
   const normalizedName = name.toLowerCase();
-  return config.customCategoryStacks.some((stack) => (
-    stack.id !== currentId && stack.name.toLowerCase() === normalizedName
+  return config.customCategoryStacks.some((customCategory) => (
+    customCategory.id !== currentId && customCategory.name.toLowerCase() === normalizedName
   ));
 }
 
@@ -386,7 +386,7 @@ export function getDistractions() {
     get blockedCategories(): readonly DistractionsCategoryRule[] {
       return config.blockedCategories;
     },
-    get customCategoryStacks(): readonly DistractionsCustomCategoryStack[] {
+    get customCategories(): readonly DistractionsCustomCategory[] {
       return config.customCategoryStacks;
     },
     get blockedHosts(): readonly DistractionsHostRule[] {
@@ -500,19 +500,19 @@ export function getDistractions() {
     setBlockedCategoryEnabled(id: DistractionsCategoryId, enabled: boolean): void {
       update({ blockedCategories: setCategoryEnabled(config.blockedCategories, id, enabled) });
     },
-    addCustomCategoryStack(
+    addCustomCategory(
       nameInput: string,
       hostsInput: string,
-    ): AddDistractionsCustomCategoryStackResult {
-      const name = normalizeDistractionsCustomCategoryStackName(nameInput);
+    ): AddDistractionsCustomCategoryResult {
+      const name = normalizeDistractionsCustomCategoryName(nameInput);
       if (!name) return "invalid-name";
       const hosts = parseDistractionsHosts(hostsInput).map((host) => ({ host, enabled: true }));
       if (hosts.length === 0) return "invalid-hosts";
-      if (duplicateCustomCategoryStackName(name, null)) return "duplicate-name";
-      const existingIds = new Set(config.customCategoryStacks.map((stack) => stack.id));
-      let id = createCustomCategoryStackId(name);
+      if (isDuplicateCustomCategoryName(name, null)) return "duplicate-name";
+      const existingIds = new Set(config.customCategoryStacks.map((customCategory) => customCategory.id));
+      let id = createCustomCategoryId(name);
       while (existingIds.has(id)) {
-        id = createCustomCategoryStackId(name);
+        id = createCustomCategoryId(name);
       }
       update({
         customCategoryStacks: [
@@ -527,22 +527,22 @@ export function getDistractions() {
       });
       return "added";
     },
-    updateCustomCategoryStack(
+    updateCustomCategory(
       id: string,
       nameInput: string,
       hostsInput: string,
-    ): UpdateDistractionsCustomCategoryStackResult {
-      const name = normalizeDistractionsCustomCategoryStackName(nameInput);
+    ): UpdateDistractionsCustomCategoryResult {
+      const name = normalizeDistractionsCustomCategoryName(nameInput);
       if (!name) return "invalid-name";
       const hosts = parseDistractionsHosts(hostsInput).map((host) => ({ host, enabled: true }));
       if (hosts.length === 0) return "invalid-hosts";
-      if (duplicateCustomCategoryStackName(name, id)) return "duplicate-name";
+      if (isDuplicateCustomCategoryName(name, id)) return "duplicate-name";
       let found = false;
-      const customCategoryStacks = config.customCategoryStacks.map((stack) => {
-        if (stack.id !== id) return stack;
+      const customCategoryStacks = config.customCategoryStacks.map((customCategory) => {
+        if (customCategory.id !== id) return customCategory;
         found = true;
         return {
-          ...stack,
+          ...customCategory,
           name,
           hosts,
         };
@@ -551,12 +551,12 @@ export function getDistractions() {
       update({ customCategoryStacks });
       return "updated";
     },
-    removeCustomCategoryStack(id: string): void {
-      update({ customCategoryStacks: removeCustomCategoryStack(config.customCategoryStacks, id) });
+    removeCustomCategory(id: string): void {
+      update({ customCategoryStacks: removeCustomCategory(config.customCategoryStacks, id) });
     },
-    setCustomCategoryStackEnabled(id: string, enabled: boolean): void {
+    setCustomCategoryEnabled(id: string, enabled: boolean): void {
       update({
-        customCategoryStacks: setCustomCategoryStackEnabled(config.customCategoryStacks, id, enabled),
+        customCategoryStacks: setCustomCategoryEnabled(config.customCategoryStacks, id, enabled),
       });
     },
     addBlockedHostsText(text: string): boolean {

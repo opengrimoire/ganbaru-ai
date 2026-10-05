@@ -352,7 +352,7 @@ pub(super) struct BoundedLine {
 pub(super) async fn read_bounded_line<R>(
     reader: &mut R,
     output: &mut Vec<u8>,
-    maximum_payload_bytes: usize,
+    max_payload_bytes: usize,
 ) -> std::io::Result<Option<BoundedLine>>
 where
     R: AsyncBufRead + Unpin,
@@ -367,12 +367,12 @@ where
                 }
                 return Ok(Some(BoundedLine {
                     byte_length,
-                    oversized: byte_length > maximum_payload_bytes,
+                    oversized: byte_length > max_payload_bytes,
                 }));
             }
             let newline = available.iter().position(|byte| *byte == b'\n');
             let consumed = newline.map_or(available.len(), |index| index + 1);
-            let remaining = maximum_payload_bytes
+            let remaining = max_payload_bytes
                 .saturating_add(1)
                 .saturating_sub(output.len());
             output.extend_from_slice(&available[..consumed.min(remaining)]);
@@ -383,7 +383,7 @@ where
         if found_newline {
             return Ok(Some(BoundedLine {
                 byte_length,
-                oversized: byte_length > maximum_payload_bytes.saturating_add(1),
+                oversized: byte_length > max_payload_bytes.saturating_add(1),
             }));
         }
     }

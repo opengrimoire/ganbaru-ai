@@ -19,14 +19,14 @@ describe("EventColorPicker mobile layout", () => {
   it("uses touch targets and closes its dialog after pointer selection", async () => {
     target = document.createElement("div");
     document.body.append(target);
-    const onselect = vi.fn();
+    const onSelect = vi.fn();
     component = mount(EventColorPicker, {
       target,
       props: {
         color: 2,
         theme: lightTheme,
         mobileLayout: true,
-        onselect,
+        onSelect,
       },
     });
 
@@ -43,7 +43,7 @@ describe("EventColorPicker mobile layout", () => {
 
     swatch?.click();
     await tick();
-    expect(onselect).toHaveBeenCalledWith(3);
+    expect(onSelect).toHaveBeenCalledWith(3);
     expect(document.body.querySelector("[role='dialog']")).toBeNull();
   });
 });

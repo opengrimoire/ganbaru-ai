@@ -6,29 +6,29 @@ import {
   filterProjectLucideIcons,
   projectIconEmojiRecentValues,
   projectIconLucideRecentValues,
-  projectIconPickerAnchoredPanelPlacement,
-  projectIconPickerGroupVirtualWindow,
-  projectIconPickerIsPrimaryLucideCategory,
-  projectIconPickerLucideCategoryIcon,
-  projectIconPickerLucideCategoryOptions,
-  projectIconPickerLucideGroups,
-  projectIconPickerLucideRecentPreviewValue,
-  projectIconPickerMenuPlacement,
-  projectIconPickerPanelPlacement,
-  projectIconPickerPointPlacement,
-  projectIconPickerPrimaryLucideCategoryOptions,
-  projectIconPickerRandomEmojiIcon,
-  projectIconPickerRandomLucideIcon,
-  projectIconPickerVisibleEmojiCategories,
-  projectIconPickerVisibleCustomEmojis,
-  projectIconVirtualWindow,
+  iconPickerAnchoredPanelPlacement,
+  iconPickerGroupVirtualWindow,
+  iconPickerIsPrimaryLucideCategory,
+  iconPickerLucideCategoryIcon,
+  iconPickerLucideCategoryOptions,
+  iconPickerLucideGroups,
+  iconPickerLucideRecentPreviewValue,
+  iconPickerMenuPlacement,
+  iconPickerPanelPlacement,
+  iconPickerPointPlacement,
+  iconPickerPrimaryLucideCategoryOptions,
+  iconPickerRandomEmojiIcon,
+  iconPickerRandomLucideIcon,
+  iconPickerVisibleEmojiCategories,
+  iconPickerVisibleCustomEmojis,
+  iconPickerVirtualWindow,
   prependProjectIconRecentValue,
   projectEmojiSkinToneFromEmoji,
   readProjectIconAskEveryTime,
   readProjectIconDefaultColor,
   readProjectIconRecentValues,
   stripProjectEmojiSkinTone,
-  type ProjectIconPickerRect,
+  type IconPickerRect,
 } from "./picker";
 import {
   PROJECT_EMOJI_CATALOG_VERSION,
@@ -74,7 +74,7 @@ const customEmojis: readonly ProjectCustomEmoji[] = [
   },
 ];
 
-const pickerBoundary: ProjectIconPickerRect = {
+const pickerBoundary: IconPickerRect = {
   top: 40,
   right: 900,
   bottom: 620,
@@ -83,7 +83,7 @@ const pickerBoundary: ProjectIconPickerRect = {
   height: 580,
 };
 
-function pickerTrigger(overrides: Partial<ProjectIconPickerRect> = {}): ProjectIconPickerRect {
+function pickerTrigger(overrides: Partial<IconPickerRect> = {}): IconPickerRect {
   return {
     top: 120,
     right: 640,
@@ -95,7 +95,7 @@ function pickerTrigger(overrides: Partial<ProjectIconPickerRect> = {}): ProjectI
   };
 }
 
-describe("project icon picker helpers", () => {
+describe("icon picker helpers", () => {
   it("filters emoji by category and search terms", () => {
     expect(filterProjectEmojiEntries(emojiEntries, "coffee", "all").map((entry) => entry.emoji)).toEqual(["☕"]);
     expect(filterProjectEmojiEntries(emojiEntries, "", "symbols").map((entry) => entry.emoji)).toEqual(["✅", "🏁"]);
@@ -117,7 +117,7 @@ describe("project icon picker helpers", () => {
   });
 
   it("builds the visible emoji category tabs with the localized symbols label", () => {
-    expect(projectIconPickerVisibleEmojiCategories("Symbols plus flags")).toEqual([
+    expect(iconPickerVisibleEmojiCategories("Symbols plus flags")).toEqual([
       { id: "smileys", label: "Smileys" },
       { id: "people", label: "People" },
       { id: "nature", label: "Nature" },
@@ -136,24 +136,24 @@ describe("project icon picker helpers", () => {
       { slug: "wrench", label: "Wrench", category: "Tools", terms: "wrench tools", iconNode: [] },
       { slug: "folder", label: "Folder", category: "File icons", terms: "folder file", iconNode: [] },
     ];
-    const options = projectIconPickerLucideCategoryOptions([
+    const options = iconPickerLucideCategoryOptions([
       "Travel",
       "Tools",
       "File icons",
     ], categoryIconEntries);
 
-    expect(projectIconPickerLucideCategoryIcon("Travel", categoryIconEntries)?.slug).toBe("luggage");
+    expect(iconPickerLucideCategoryIcon("Travel", categoryIconEntries)?.slug).toBe("luggage");
     expect(options.map((option) => [option.category, option.icon?.slug])).toEqual([
       ["Travel", "luggage"],
       ["Tools", "wrench"],
       ["File icons", "folder"],
     ]);
-    expect(projectIconPickerPrimaryLucideCategoryOptions(options).map((option) => option.category)).toEqual([
+    expect(iconPickerPrimaryLucideCategoryOptions(options).map((option) => option.category)).toEqual([
       "File icons",
       "Tools",
     ]);
-    expect(projectIconPickerIsPrimaryLucideCategory("Tools")).toBe(true);
-    expect(projectIconPickerIsPrimaryLucideCategory("Travel")).toBe(false);
+    expect(iconPickerIsPrimaryLucideCategory("Tools")).toBe(true);
+    expect(iconPickerIsPrimaryLucideCategory("Travel")).toBe(false);
   });
 
   it("reads recent values from unknown config data", () => {
@@ -190,17 +190,17 @@ describe("project icon picker helpers", () => {
   });
 
   it("filters custom emoji by name without changing the empty-query order", () => {
-    expect(projectIconPickerVisibleCustomEmojis(customEmojis, "").map((emoji) => emoji.id)).toEqual([
+    expect(iconPickerVisibleCustomEmojis(customEmojis, "").map((emoji) => emoji.id)).toEqual([
       "launch",
       "focus",
     ]);
-    expect(projectIconPickerVisibleCustomEmojis(customEmojis, "FOCUS").map((emoji) => emoji.id)).toEqual([
+    expect(iconPickerVisibleCustomEmojis(customEmojis, "FOCUS").map((emoji) => emoji.id)).toEqual([
       "focus",
     ]);
   });
 
   it("groups Lucide icons in category order and drops empty categories", () => {
-    expect(projectIconPickerLucideGroups(lucideEntries, [
+    expect(iconPickerLucideGroups(lucideEntries, [
       "Mathematics",
       "Animals",
       "Travel",
@@ -211,19 +211,19 @@ describe("project icon picker helpers", () => {
   });
 
   it("previews recent Lucide icons with the active color policy", () => {
-    expect(projectIconPickerLucideRecentPreviewValue({
+    expect(iconPickerLucideRecentPreviewValue({
       rawValue: "lucide:folder",
       iconColor: 3,
     })).toBe("lucide:folder:3");
-    expect(projectIconPickerLucideRecentPreviewValue({
+    expect(iconPickerLucideRecentPreviewValue({
       rawValue: "lucide:folder:9",
       iconColor: 3,
     })).toBe("lucide:folder:3");
-    expect(projectIconPickerLucideRecentPreviewValue({
+    expect(iconPickerLucideRecentPreviewValue({
       rawValue: "lucide:folder:9",
       iconColor: "default",
     })).toBe("lucide:folder");
-    expect(projectIconPickerLucideRecentPreviewValue({
+    expect(iconPickerLucideRecentPreviewValue({
       rawValue: "emoji:🚀",
       iconColor: 3,
     })).toBe("emoji:🚀");
@@ -249,11 +249,11 @@ describe("project icon picker helpers", () => {
   it("selects random emoji and Lucide values from injected randomness", () => {
     const thumbs = [{ emoji: "👍", name: "thumbs up", category: "people", terms: "👍 thumbs up" }] as const;
 
-    expect(projectIconPickerRandomEmojiIcon(thumbs, "medium", () => 0)).toEqual({
+    expect(iconPickerRandomEmojiIcon(thumbs, "medium", () => 0)).toEqual({
       kind: "emoji",
       emoji: "👍🏽",
     });
-    expect(projectIconPickerRandomLucideIcon(lucideEntries, {
+    expect(iconPickerRandomLucideIcon(lucideEntries, {
       iconColor: 5,
       random: () => 0.9,
     })).toEqual({
@@ -261,7 +261,7 @@ describe("project icon picker helpers", () => {
       slug: "check",
       color: 5,
     });
-    expect(projectIconPickerRandomLucideIcon(lucideEntries, {
+    expect(iconPickerRandomLucideIcon(lucideEntries, {
       iconColor: "default",
       random: () => 0.9,
     })).toEqual({
@@ -269,11 +269,11 @@ describe("project icon picker helpers", () => {
       slug: "check",
       color: "default",
     });
-    expect(projectIconPickerRandomEmojiIcon([], "default", () => 0)).toBeNull();
+    expect(iconPickerRandomEmojiIcon([], "default", () => 0)).toBeNull();
   });
 
   it("computes a bounded virtual grid window", () => {
-    expect(projectIconVirtualWindow(100, 5, 36, 72, 72, 1)).toEqual({
+    expect(iconPickerVirtualWindow(100, 5, 36, 72, 72, 1)).toEqual({
       startIndex: 5,
       endIndex: 30,
       beforeHeight: 36,
@@ -282,7 +282,7 @@ describe("project icon picker helpers", () => {
   });
 
   it("anchors the icon picker panel from the trigger bottom trailing edge", () => {
-    expect(projectIconPickerPanelPlacement({
+    expect(iconPickerPanelPlacement({
       triggerRect: pickerTrigger(),
       boundaryRect: pickerBoundary,
       preferredWidth: 360,
@@ -296,7 +296,7 @@ describe("project icon picker helpers", () => {
   });
 
   it("aligns the panel with the trigger's left edge when requested", () => {
-    expect(projectIconPickerPanelPlacement({
+    expect(iconPickerPanelPlacement({
       triggerRect: pickerTrigger(),
       boundaryRect: pickerBoundary,
       preferredWidth: 360,
@@ -309,7 +309,7 @@ describe("project icon picker helpers", () => {
       height: 440,
     });
 
-    expect(projectIconPickerPanelPlacement({
+    expect(iconPickerPanelPlacement({
       triggerRect: pickerTrigger({ left: 840, right: 960, width: 120 }),
       boundaryRect: pickerBoundary,
       preferredWidth: 360,
@@ -319,7 +319,7 @@ describe("project icon picker helpers", () => {
   });
 
   it("caps the icon picker panel before the lower boundary", () => {
-    const placement = projectIconPickerPanelPlacement({
+    const placement = iconPickerPanelPlacement({
       triggerRect: pickerTrigger({ top: 280, bottom: 312 }),
       boundaryRect: pickerBoundary,
       preferredWidth: 360,
@@ -331,7 +331,7 @@ describe("project icon picker helpers", () => {
   });
 
   it("keeps the icon picker panel inside the viewport width", () => {
-    const placement = projectIconPickerPanelPlacement({
+    const placement = iconPickerPanelPlacement({
       triggerRect: pickerTrigger({ left: 840, right: 960, width: 120 }),
       boundaryRect: pickerBoundary,
       preferredWidth: 360,
@@ -343,7 +343,7 @@ describe("project icon picker helpers", () => {
   });
 
   it("places anchored custom panels above when there is more useful space above", () => {
-    expect(projectIconPickerAnchoredPanelPlacement({
+    expect(iconPickerAnchoredPanelPlacement({
       anchorRect: pickerTrigger({ top: 500, bottom: 532 }),
       viewportRect: pickerBoundary,
       panelWidth: 330,
@@ -356,7 +356,7 @@ describe("project icon picker helpers", () => {
   });
 
   it("places anchored custom panels below when there is enough space below", () => {
-    expect(projectIconPickerAnchoredPanelPlacement({
+    expect(iconPickerAnchoredPanelPlacement({
       anchorRect: pickerTrigger(),
       viewportRect: pickerBoundary,
       panelWidth: 330,
@@ -369,7 +369,7 @@ describe("project icon picker helpers", () => {
   });
 
   it("places category menus on the side with more available space", () => {
-    expect(projectIconPickerMenuPlacement({
+    expect(iconPickerMenuPlacement({
       anchorRect: pickerTrigger({ top: 520, bottom: 552 }),
       viewportRect: pickerBoundary,
       menuWidth: 240,
@@ -382,7 +382,7 @@ describe("project icon picker helpers", () => {
   });
 
   it("centers point panels on their anchor while staying in the viewport", () => {
-    expect(projectIconPickerPointPlacement({
+    expect(iconPickerPointPlacement({
       anchorRect: pickerTrigger({ left: 0, right: 32, width: 32 }),
       viewportRect: pickerBoundary,
       panelWidth: 260,
@@ -400,7 +400,7 @@ describe("project icon picker helpers", () => {
       { category: "C", entries: Array.from({ length: 4 }, (_, index) => `c-${index}`) },
     ];
 
-    const result = projectIconPickerGroupVirtualWindow({
+    const result = iconPickerGroupVirtualWindow({
       groups,
       columnCount: 4,
       viewportHeight: 72,

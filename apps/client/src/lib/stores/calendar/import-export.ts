@@ -29,7 +29,7 @@ export interface CalendarBulkImportStoreResult {
 export async function bulkImportCalendarEvents(
   events: CalendarEvent[],
   targetCalendarId: string,
-  opts: CalendarBulkImportOptions = {},
+  options: CalendarBulkImportOptions = {},
 ): Promise<CalendarBulkImportStoreResult> {
   const now = nowIso();
   const fallbackZone = localTimezone();
@@ -39,9 +39,9 @@ export async function bulkImportCalendarEvents(
     now,
     fallbackZone,
     () => crypto.randomUUID(),
-    opts.preservation ?? null,
-    opts.sourceName ?? "",
-    opts.sourceKind ?? "import-file",
+    options.preservation ?? null,
+    options.sourceName ?? "",
+    options.sourceKind ?? "import-file",
   );
   const result = await invoke<CalendarBulkImportResult>("calendar_bulk_import", {
     dbUrl: dbUrl(),
@@ -57,7 +57,7 @@ export async function bulkImportCalendarEvents(
     },
     applied: result.applied.length > 0,
     added: result.added,
-    refreshWindow: opts.refreshWindow ?? true,
+    refreshWindow: options.refreshWindow ?? true,
   };
 }
 

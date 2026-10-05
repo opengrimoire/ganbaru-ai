@@ -99,22 +99,22 @@ impl OpenCodeSseDecoder {
         if line.starts_with(b":") {
             return Ok(None);
         }
-        let Some(separator) = line.iter().position(|byte| *byte == b':') else {
+        let Some(colon_index) = line.iter().position(|byte| *byte == b':') else {
             return Ok(None);
         };
-        let field = &line[..separator];
-        let mut value = &line[separator + 1..];
+        let field = &line[..colon_index];
+        let mut value = &line[colon_index + 1..];
         if field != b"data" {
             return Ok(None);
         }
         if value.first() == Some(&b' ') {
             value = &value[1..];
         }
-        let separator = usize::from(!self.data_lines.is_empty());
-        if value.len() + separator > MAX_EVENT_DATA_BYTES.saturating_sub(self.data_bytes) {
+        let separator_bytes = usize::from(!self.data_lines.is_empty());
+        if value.len() + separator_bytes > MAX_EVENT_DATA_BYTES.saturating_sub(self.data_bytes) {
             return Err(protocol_error("event data size"));
         }
-        self.data_bytes += value.len() + separator;
+        self.data_bytes += value.len() + separator_bytes;
         self.data_lines.push(value.to_vec());
         Ok(None)
     }

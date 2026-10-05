@@ -117,7 +117,7 @@ pub async fn chat_preview_access_profile_revision(
     let pool = chat_pool(app, db_url).await?;
     let current = read_access_profile(&pool, &request.access_profile_id).await?;
     if current.revision != request.expected_revision {
-        return Err(stale_access_profile());
+        return Err(stale_access_profile_error());
     }
     let is_expansion = profile_revision_is_expansion(
         current.latest_revision.default_channel_capabilities,
@@ -264,7 +264,7 @@ pub async fn chat_publish_access_profile_revision(
     .await
     .map_err(persistence_error)?;
     if locked.rows_affected() != 1 {
-        return Err(stale_access_profile());
+        return Err(stale_access_profile_error());
     }
     insert_access_profile_revision(
         &mut transaction,
@@ -403,7 +403,7 @@ pub async fn chat_archive_access_profile(
     .await
     .map_err(persistence_error)?;
     if updated.rows_affected() != 1 {
-        return Err(stale_access_profile());
+        return Err(stale_access_profile_error());
     }
     read_access_profile(&pool, &request.access_profile_id).await
 }
@@ -580,7 +580,7 @@ fn map_access_profile_write_error(error: sqlx::Error) -> ChatError {
     }
 }
 
-fn stale_access_profile() -> ChatError {
+fn stale_access_profile_error() -> ChatError {
     ChatError::new(
         ChatErrorCode::StaleRevision,
         "The access profile changed before the update",

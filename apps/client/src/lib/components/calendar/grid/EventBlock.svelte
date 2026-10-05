@@ -17,7 +17,7 @@
   import MapPin from "@lucide/svelte/icons/map-pin";
   import Users from "@lucide/svelte/icons/users";
 
-  const calZoom = getCalendarZoom();
+  const calendarZoom = getCalendarZoom();
   const preferences = getPreferences();
   const { t } = getLocalization();
 
@@ -32,9 +32,9 @@
     mobileLayout = false,
     isPast = false,
     inResizeZone = false,
-    onclick,
-    onprefetch,
-    onpointerdown,
+    onClick,
+    onPrefetch,
+    onPointerDown,
   }: {
     positioned: PositionedEvent;
     theme: Theme;
@@ -46,9 +46,9 @@
     mobileLayout?: boolean;
     isPast?: boolean;
     inResizeZone?: boolean;
-    onclick: (rect?: DOMRect) => void;
-    onprefetch?: () => void;
-    onpointerdown?: (e: PointerEvent) => void;
+    onClick: (rect?: DOMRect) => void;
+    onPrefetch?: () => void;
+    onPointerDown?: (e: PointerEvent) => void;
   } = $props();
 
   const isDark = $derived(isThemeCalendarDark(theme));
@@ -65,7 +65,7 @@
   const hasIcons = $derived(indicators.iconCount > 0);
   const isCancelled = $derived(isEventSurfaceCancelled(positioned.event));
   const eventTitle = $derived(positioned.event.title || t("calendar.event.noTitle"));
-  const blockPixelHeight = $derived((positioned.durationMinutes / 60) * calZoom.hourHeight);
+  const eventPixelHeight = $derived((positioned.durationMinutes / 60) * calendarZoom.hourHeight);
 
   const usePastColors = $derived(
     preferences.calendarDimPastEvents && isPast && !editing && !preview && !grabbing,
@@ -83,22 +83,22 @@
   const iconColor = $derived(`color-mix(in srgb, ${activeColors.text} 70%, ${activeColors.bg})`);
 
   function handlePointerDown(e: PointerEvent) {
-    onprefetch?.();
+    onPrefetch?.();
     e.stopPropagation();
-    onpointerdown?.(e);
+    onPointerDown?.(e);
   }
 
-  let blockEl: HTMLDivElement | undefined = $state();
+  let eventEl: HTMLDivElement | undefined = $state();
 
   function handleClick(e: MouseEvent | KeyboardEvent) {
     e.stopPropagation();
-    const eventRect = blockEl?.getBoundingClientRect();
-    const colRect = blockEl?.closest("[data-day-column]")?.getBoundingClientRect();
+    const eventRect = eventEl?.getBoundingClientRect();
+    const colRect = eventEl?.closest("[data-day-column]")?.getBoundingClientRect();
     // Use column boundaries for horizontal positioning so the panel clears the rail
     const rect = eventRect && colRect
       ? new DOMRect(colRect.x, eventRect.y, colRect.width, eventRect.height)
       : eventRect;
-    onclick(rect);
+    onClick(rect);
   }
 
   function handleKeydown(e: KeyboardEvent): void {
@@ -115,14 +115,14 @@
 </script>
 
 <div
-  bind:this={blockEl}
+  bind:this={eventEl}
   role="button"
   tabindex="0"
   aria-label={`${eventTitle} ${timeRange}`}
   data-event-id={positioned.event.id}
   data-clipped-top={positioned.isClippedTop || undefined}
   data-clipped-bottom={positioned.isClippedBottom || undefined}
-  title={blockPixelHeight <= 14 ? `${eventTitle} ${timeRange}` : undefined}
+  title={eventPixelHeight <= 14 ? `${eventTitle} ${timeRange}` : undefined}
   class="event-block-wrapper absolute flex text-[0.8rem] leading-tight select-none {statusPatternClass} {showContour ? 'event-editing' : ''} {animateLayout ? 'event-layout-transition' : ''} {mobileLayout ? 'mobile-event-block' : ''} overflow-hidden {positioned.isClippedTop && positioned.isClippedBottom ? '' : positioned.isClippedTop ? 'rounded-b' : positioned.isClippedBottom ? 'rounded-t' : 'rounded'}"
   style="
     top: calc({positioned.startMinute} / 60 * var(--hour-h) * 1px);
@@ -139,8 +139,8 @@
   "
   onclick={handleClick}
   onkeydown={handleKeydown}
-  onfocus={onprefetch}
-  onpointerenter={onprefetch}
+  onfocus={onPrefetch}
+  onpointerenter={onPrefetch}
   onpointerdown={handlePointerDown}
 >
   <!-- Resize handle: top (hidden on clipped edge) -->

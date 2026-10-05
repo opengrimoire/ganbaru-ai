@@ -122,11 +122,11 @@
 {/if}
 
 {#if showQuickNotes}
-  <QuickNotesPanel onclose={() => { showQuickNotes = false; }} />
+  <QuickNotesPanel onClose={() => { showQuickNotes = false; }} />
 {/if}
 
 {#if musicMounted}
-  <MusicPanel visible={showMusic} onclose={() => { showMusic = false; }} />
+  <MusicPanel visible={showMusic} onClose={() => { showMusic = false; }} />
 {/if}
 
 {#if showThemeQuickSwitcher && ThemeQuickSwitcher}

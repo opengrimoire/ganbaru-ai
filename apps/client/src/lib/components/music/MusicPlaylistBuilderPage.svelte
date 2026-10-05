@@ -176,7 +176,7 @@
   const playlistManagementActive = $derived(
     playlistManagementOpen || (destination.kind === "review" && reviewWorkspaceViewState.managingPlaylists),
   );
-  const hasList = $derived(destination.kind === "playlist");
+  const isPlaylistDestination = $derived(destination.kind === "playlist");
   const reviewItems = $derived(library.currentWindow.items.filter((item) =>
     showIgnoredReviewItems || item.reviewState !== "ignored"));
   const issueCount = $derived(library.issues.length);
@@ -962,7 +962,7 @@
     }
     if (event.key === "/" && !(event.target instanceof HTMLInputElement) && !(event.target instanceof HTMLTextAreaElement)) {
       if (destination.kind === "review") return;
-      if (!hasList) return;
+      if (!isPlaylistDestination) return;
       event.preventDefault();
       if (layout.contextPanelPresentation === "sheet") contextViewState.contextPanelOpen = true;
       void tick().then(() => root?.querySelector<HTMLInputElement>("[data-builder-context-search]")?.focus());
@@ -1185,7 +1185,7 @@
         {/if}
       {:else if playlistManagementOpen && (destination.kind === "playlists" || destination.kind === "playlist")}
         <div class="min-h-0 flex-1 overflow-y-auto p-3" data-music-scrollable="true"><MusicPlaylistManager bind:this={playlistManager} bind:actionsDisabled={playlistManagerActionsDisabled} playlists={library.playlistSummaries} onEdit={(playlistId) => { void openPlaylistManagementSurface(playlistId, "edit"); }} onDelete={(playlistId) => { void openPlaylistManagementSurface(playlistId, "delete"); }} onReorder={reorderPlaylistSummaries} onDone={() => playlistManagementOpen = false} showHeader={false} /></div>
-      {:else if hasList}
+      {:else if isPlaylistDestination}
         {#if destination.kind === "playlist" && playlist.detail && playlist.playbackIssue === "no-eligible-items"}
               <div class="mx-3 mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-warning/30 bg-warning/8 px-3 py-2 text-[0.68rem] text-warning" role="status">
                 <span class="min-w-0 flex-1">{t("music.builder.noEligiblePlaylistItems")}</span>

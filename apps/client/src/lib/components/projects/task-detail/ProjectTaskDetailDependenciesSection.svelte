@@ -1,11 +1,11 @@
 <script lang="ts">
+  import type { MaybePromise } from "$lib/utils";
   import Select from "$lib/components/ui/Select.svelte";
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import type { ProjectTask, ProjectTaskDependency } from "$lib/projects/types";
   import ProjectSettingsSectionHeading from "$lib/components/projects/settings/ProjectSettingsSectionHeading.svelte";
 
-  type ActionResult = void | Promise<void>;
 
   let {
     task,
@@ -25,8 +25,8 @@
     dependencySearch: string;
     taskById: (taskId: string) => ProjectTask | undefined;
     onDependencySearchChange: (value: string) => void;
-    onAddBlockingDependency: (blockingTask: ProjectTask, blockedTask: ProjectTask) => ActionResult;
-    onRemoveDependency: (dependencyId: string) => ActionResult;
+    onAddBlockingDependency: (blockingTask: ProjectTask, blockedTask: ProjectTask) => MaybePromise;
+    onRemoveDependency: (dependencyId: string) => MaybePromise;
   } = $props();
 
   const { t } = getLocalization();

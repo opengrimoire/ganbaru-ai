@@ -216,7 +216,7 @@ pub(super) async fn insert_run_tx(
         },
     )
     .await?;
-    log_new_pause_events(tx, &run.id, initial_segment).await
+    insert_segment_pause_events(tx, &run.id, initial_segment).await
 }
 
 pub(super) async fn insert_segment_tx(

@@ -209,25 +209,25 @@
     if (!mobileLayout && viewport.container) viewport.syncCounterScroll();
   });
 
-  function handleProjectListHorizontalKeydown(event: KeyboardEvent): void {
+  function handleHorizontalKeydown(event: KeyboardEvent): void {
     if (event.key === "Escape" && quickAdd.hasActiveDraft()) {
       event.preventDefault();
       event.stopPropagation();
       quickAdd.cancelActiveDrafts();
-      projectListBlurTarget(event.target);
+      blurTarget(event.target);
       return;
     }
     viewport.handleHorizontalKeydown(event);
   }
 
-  function projectListEventTargetElement(target: EventTarget | null): Element | null {
+  function eventTargetElement(target: EventTarget | null): Element | null {
     if (target instanceof Element) return target;
     if (target instanceof Node) return target.parentElement;
     return null;
   }
 
-  function projectListBlurTarget(target: EventTarget | null): void {
-    const targetElement = projectListEventTargetElement(target);
+  function blurTarget(target: EventTarget | null): void {
+    const targetElement = eventTargetElement(target);
     if (targetElement instanceof HTMLElement) {
       targetElement.blur();
       return;
@@ -240,7 +240,7 @@
   function handleProjectWindowPointerDown(event: PointerEvent): void {
     const target = event.target;
     if (!(target instanceof Node)) return;
-    const targetElement = projectListEventTargetElement(target);
+    const targetElement = eventTargetElement(target);
     if (targetElement) {
       quickAdd.cancelForOutsideTarget(targetElement);
       interaction.handleOutsidePointerTarget(targetElement);
@@ -478,7 +478,7 @@
     const count = scheduledLinksForTask(taskId).length;
     const starts = projects.eventLinksForTask(taskId)
       .filter((link) => link.linkKind === "scheduled")
-      .map((link) => calendar.rawBlocks.find((event) => event.id === link.eventId)?.start)
+      .map((link) => calendar.sourceEvents.find((event) => event.id === link.eventId)?.start)
       .filter((start): start is string => Boolean(start))
       .sort((a, b) => a.localeCompare(b));
     const now = new Date();
@@ -488,7 +488,7 @@
     return count > 0 ? t("projects.schedule.scheduledCount", count) : null;
   }
 
-  function handleProjectListScroll(event: Event): void {
+  function handleScroll(event: Event): void {
     if (!mobileLayout) viewport.syncCounterScroll();
     const target = event.currentTarget as HTMLElement;
     if (target.scrollHeight - target.scrollTop - target.clientHeight < 600) onNeedMore();
@@ -496,7 +496,7 @@
 </script>
 
 <svelte:window
-  onkeydown={handleProjectListHorizontalKeydown}
+  onkeydown={handleHorizontalKeydown}
   onpointerdown={handleProjectWindowPointerDown}
   onpointermove={viewport.handleResizePointerMove}
   onpointerup={(event) => viewport.finishResize(event, true)}
@@ -508,7 +508,7 @@
   bind:clientWidth={listViewportWidth}
   class="project-list-scroll h-full min-h-0 overflow-auto overscroll-contain"
   data-mobile-layout={mobileLayout}
-  onscroll={handleProjectListScroll}
+  onscroll={handleScroll}
 >
   <div class="flex min-h-full flex-col gap-5 p-3">
     {#if viewport.resizeError}

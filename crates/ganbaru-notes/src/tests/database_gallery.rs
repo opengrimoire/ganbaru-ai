@@ -126,7 +126,7 @@ fn gallery_database_view_persists_card_preview_filters_and_sorts() {
         .await
         .unwrap();
 
-        let default_gallery = data_sources::layouts::gallery::get_data_source_gallery_view(
+        let default_gallery = data_sources::layouts::gallery::data_source_gallery_view(
             &pool,
             DATA_SOURCE_A,
             None,

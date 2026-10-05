@@ -1016,7 +1016,7 @@ mod tests {
 
     #[tokio::test]
     async fn idle_usage_drain_does_not_create_a_spool_before_any_samples_exist() {
-        let path = temp_spool("idle-without-samples");
+        let path = temporary_spool("idle-without-samples");
         let canonical = SqlitePoolOptions::new()
             .max_connections(1)
             .connect("sqlite::memory:")
@@ -1035,7 +1035,7 @@ mod tests {
         canonical.close().await;
     }
 
-    fn temp_spool(name: &str) -> PathBuf {
+    fn temporary_spool(name: &str) -> PathBuf {
         let unique = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .expect("clock")
@@ -1078,7 +1078,7 @@ mod tests {
 
     #[tokio::test]
     async fn accepted_transport_snapshot_preserves_every_batch_and_rejects_oversized_cache() {
-        let path = temp_spool("accepted-complete");
+        let path = temporary_spool("accepted-complete");
         let pool = open_spool(&path).await.unwrap();
         let mut tx = pool.begin().await.unwrap();
         for index in 0..250 {
@@ -1124,7 +1124,7 @@ mod tests {
 
     #[tokio::test]
     async fn exported_identities_survive_compaction_and_lost_acknowledgements() {
-        let path = temp_spool("export-compaction");
+        let path = temporary_spool("export-compaction");
         enqueue_at(&path, "vault", "phone", &sample("sent", 10))
             .await
             .unwrap();
@@ -1183,7 +1183,7 @@ mod tests {
 
     #[tokio::test]
     async fn native_batch_retry_after_acknowledgement_does_not_reinsert_usage() {
-        let path = temp_spool("native-receipt");
+        let path = temporary_spool("native-receipt");
         let rows = [native_sample("one", 12), native_sample("two", 18)];
         enqueue_native_samples_at(&path, "vault", "phone", &rows)
             .await
@@ -1225,7 +1225,7 @@ mod tests {
 
     #[tokio::test]
     async fn failed_native_batch_rolls_back_all_rows_and_receipt_before_retry() {
-        let path = temp_spool("native-rollback");
+        let path = temporary_spool("native-rollback");
         let pool = open_spool(&path).await.unwrap();
         sqlx::raw_sql(
             "CREATE TRIGGER reject_native_batch BEFORE INSERT ON pending_usage_samples
@@ -1267,7 +1267,7 @@ mod tests {
 
     #[tokio::test]
     async fn accounting_reads_all_transport_batches_and_deduplicates_accepted_pending_identity() {
-        let path = temp_spool("accounting");
+        let path = temporary_spool("accounting");
         let pool = open_spool(&path).await.unwrap();
         let mut tx = pool.begin().await.unwrap();
         for index in 0..250 {
@@ -1325,7 +1325,7 @@ mod tests {
 
     #[tokio::test]
     async fn writable_accounting_drains_all_local_transport_batches_before_publication() {
-        let path = temp_spool("writable-batches");
+        let path = temporary_spool("writable-batches");
         let spool = open_spool(&path).await.unwrap();
         let mut tx = spool.begin().await.unwrap();
         for index in 0..250 {
@@ -1384,7 +1384,7 @@ mod tests {
 
     #[tokio::test]
     async fn failed_owner_snapshot_rolls_back_acknowledgement_and_retry_preserves_totals() {
-        let path = temp_spool("atomic-accounting");
+        let path = temporary_spool("atomic-accounting");
         replace_accepted_at(&path, "vault", &[sample("combined-old", 30)])
             .await
             .unwrap();
@@ -1450,7 +1450,7 @@ mod tests {
 
     #[tokio::test]
     async fn pending_samples_survive_restart_and_only_acknowledged_ids_are_removed() {
-        let path = temp_spool("pending");
+        let path = temporary_spool("pending");
         enqueue_at(&path, "vault", "phone", &sample("one", 12))
             .await
             .expect("enqueue first");
@@ -1477,7 +1477,7 @@ mod tests {
 
     #[tokio::test]
     async fn guardian_snapshot_and_external_acknowledgements_survive_lost_response_and_restart() {
-        let path = temp_spool("guardian-ack-retry");
+        let path = temporary_spool("guardian-ack-retry");
         replace_accepted_at(&path, "vault", &[sample("old", 30)])
             .await
             .unwrap();
@@ -1588,7 +1588,7 @@ mod tests {
 
     #[tokio::test]
     async fn guardian_acknowledgement_capacity_rolls_back_the_new_snapshot() {
-        let path = temp_spool("guardian-ack-capacity");
+        let path = temporary_spool("guardian-ack-capacity");
         let ids: Vec<String> = (0..MAX_GUARDIAN_ACKNOWLEDGEMENTS)
             .map(|index| format!("event-{index}"))
             .collect();
@@ -1635,7 +1635,7 @@ mod tests {
 
     #[tokio::test]
     async fn accepted_combined_samples_replace_atomically_without_duplication() {
-        let path = temp_spool("accepted");
+        let path = temporary_spool("accepted");
         replace_accepted_at(&path, "vault", &[sample("combined-one", 30)])
             .await
             .expect("store first snapshot");
@@ -1708,7 +1708,7 @@ mod tests {
 
     #[tokio::test]
     async fn spool_compaction_preserves_the_exact_unacknowledged_total() {
-        let path = temp_spool("compaction");
+        let path = temporary_spool("compaction");
         enqueue_at(&path, "vault", "phone", &sample("one", 12))
             .await
             .expect("enqueue first");

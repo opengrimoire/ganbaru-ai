@@ -58,7 +58,7 @@ struct SaveUtf8DownloadRequest<'a> {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct SaveUtf8DownloadResponse {
+struct SaveDownloadResponse {
     display_name: String,
 }
 
@@ -210,7 +210,7 @@ impl<R: Runtime> MobileDocuments<R> {
         document_kind: &str,
     ) -> Result<String, String> {
         self.0
-            .run_mobile_plugin::<SaveUtf8DownloadResponse>(
+            .run_mobile_plugin::<SaveDownloadResponse>(
                 "saveUtf8Download",
                 SaveUtf8DownloadRequest {
                     file_name,
@@ -239,7 +239,7 @@ impl<R: Runtime> MobileDocuments<R> {
         document_kind: &str,
     ) -> Result<String, String> {
         self.0
-            .run_mobile_plugin::<SaveUtf8DownloadResponse>(
+            .run_mobile_plugin::<SaveDownloadResponse>(
                 "saveFileDownload",
                 SaveFileDownloadRequest {
                     source_path,

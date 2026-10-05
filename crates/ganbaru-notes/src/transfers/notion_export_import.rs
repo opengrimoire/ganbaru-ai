@@ -266,7 +266,7 @@ struct AssetRewrite {
 }
 
 impl AssetRewrite {
-    fn fake_url(&mut self, asset: NotesFileAssetDto) -> String {
+    fn placeholder_url(&mut self, asset: NotesFileAssetDto) -> String {
         self.counter += 1;
         let extension = asset
             .relative_path
@@ -752,7 +752,7 @@ async fn rewrite_media_reference(
         ));
     }
     if copied.action == "copied_asset" {
-        copied.asset.map(|asset| assets.fake_url(asset))
+        copied.asset.map(|asset| assets.placeholder_url(asset))
     } else {
         None
     }

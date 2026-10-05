@@ -492,7 +492,7 @@
   </div>
 {:else if panel && panel !== "settings"}
   {#key panel}
-    <CollectionSettings label={panelTitle(panel)} anchor={panelTriggerElement(panel)} onclose={onClose}>
+    <CollectionSettings label={panelTitle(panel)} anchor={panelTriggerElement(panel)} onClose={onClose}>
       {#if panel === "group"}
         {#each PROJECT_TASK_GROUP_MODES as mode}
           {@render optionRow(taskGroupModeLabel(mode), taskGroupBy === mode, () => { taskGroupBy = mode; })}

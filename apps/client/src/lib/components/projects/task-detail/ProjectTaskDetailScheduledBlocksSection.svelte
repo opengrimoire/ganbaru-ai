@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { MaybePromise } from "$lib/utils";
   import Select from "$lib/components/ui/Select.svelte";
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import { formatDateTime, formatList } from "$lib/i18n/formatters";
@@ -7,7 +8,6 @@
   import ProjectTaskDetailDateField from "./ProjectTaskDetailDateField.svelte";
   import ProjectSettingsSectionHeading from "$lib/components/projects/settings/ProjectSettingsSectionHeading.svelte";
 
-  type ActionResult = void | Promise<void>;
 
   let {
     task,
@@ -49,8 +49,8 @@
     onClearEndDate: () => void;
     onSelectDate: (date: string) => void;
     onCancelDatePicker: () => void;
-    onLinkEvent: (task: ProjectTask, event: ProjectLinkableEvent) => ActionResult;
-    onUnlinkEvent: (task: ProjectTask, event: ProjectLinkableEvent) => ActionResult;
+    onLinkEvent: (task: ProjectTask, event: ProjectLinkableEvent) => MaybePromise;
+    onUnlinkEvent: (task: ProjectTask, event: ProjectLinkableEvent) => MaybePromise;
   } = $props();
 
   const localization = getLocalization();

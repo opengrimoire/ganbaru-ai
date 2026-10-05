@@ -249,13 +249,13 @@ describe("createProjectStoreActions", () => {
       .mockReturnValueOnce(first.promise)
       .mockReturnValueOnce(second.promise);
     const context = setup();
-    const oldRequest = context.actions.updateTask(task, { title: "Old response" });
-    const newRequest = context.actions.updateTask(task, { title: "New response" });
+    const staleRequest = context.actions.updateTask(task, { title: "Old response" });
+    const latestRequest = context.actions.updateTask(task, { title: "New response" });
 
     second.resolve(taskMutation({ ...task, title: "New response", updatedAt: "new" }));
-    await newRequest;
+    await latestRequest;
     first.resolve(taskMutation({ ...task, title: "Old response", updatedAt: "old" }));
-    await oldRequest;
+    await staleRequest;
 
     expect(context.readSnapshot().tasks[0]).toMatchObject({ title: "New response", updatedAt: "new" });
   });

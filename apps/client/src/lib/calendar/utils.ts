@@ -403,7 +403,7 @@ export {
   getTimezoneOffset,
   getTimezoneOffsetMinutes,
   getTimezoneRegion,
-  GUTTER_WIDTH_PER_TZ,
+  GUTTER_WIDTH_PER_TIMEZONE,
   listAllTimezones,
   searchTimezones,
 } from "./timezone-utils";
@@ -799,11 +799,11 @@ const resolvedPaletteCache = new WeakMap<Theme, ColorEntry[]>();
 function resolvePalette(theme: Theme): ColorEntry[] {
   const cached = resolvedPaletteCache.get(theme);
   if (cached) return cached;
-  const darkCal = isThemeCalendarDark(theme);
+  const calendarIsDark = isThemeCalendarDark(theme);
   const out: ColorEntry[] = [];
   for (let i = 0; i < theme.eventPalette.length; i++) {
     const bg = theme.eventPalette[i];
-    out.push({ bg, text: pickContrastText(bg, darkCal) });
+    out.push({ bg, text: pickContrastText(bg, calendarIsDark) });
   }
   resolvedPaletteCache.set(theme, out);
   return out;

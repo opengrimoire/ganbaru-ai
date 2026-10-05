@@ -63,8 +63,8 @@ fn adaptive_context(now: i64, resolver: Arc<TestLocalTime>) -> FocusExecutionCon
         event_date: commitment.event_date.clone(),
         event_id: Some(commitment.occurrence_id.clone()),
         original_event_id: commitment.event_id.clone(),
-        planned_start: persistence::timestamp(START).unwrap(),
-        planned_end: persistence::timestamp(commitment.end_ms).unwrap(),
+        planned_start: persistence::format_timestamp(START).unwrap(),
+        planned_end: persistence::format_timestamp(commitment.end_ms).unwrap(),
         source_kind: "scheduler_snapshot".to_owned(),
     }];
     value
@@ -99,9 +99,9 @@ async fn seed_completed_focus_history_before(pool: &SqlitePool, before: i64) {
             id: format!("history-run-{index}"),
             event_id: "focus-event".to_owned(),
             event_date: date.clone(),
-            planned_start: persistence::timestamp(start).unwrap(),
-            planned_end: persistence::timestamp(end).unwrap(),
-            started_at: persistence::timestamp(start).unwrap(),
+            planned_start: persistence::format_timestamp(start).unwrap(),
+            planned_end: persistence::format_timestamp(end).unwrap(),
+            started_at: persistence::format_timestamp(start).unwrap(),
             rhythm: CountRhythm::BASELINE.into_rhythm(),
             rhythm_source: "custom".to_owned(),
             preset_key: None,
@@ -120,9 +120,9 @@ async fn seed_completed_focus_history_before(pool: &SqlitePool, before: i64) {
             run_id: run.id.clone(),
             rhythm_position: 1,
             phase: "focus".to_owned(),
-            planned_start: persistence::timestamp(start).unwrap(),
-            planned_end: persistence::timestamp(end).unwrap(),
-            actual_start: Some(persistence::timestamp(start).unwrap()),
+            planned_start: persistence::format_timestamp(start).unwrap(),
+            planned_end: persistence::format_timestamp(end).unwrap(),
+            actual_start: Some(persistence::format_timestamp(start).unwrap()),
             actual_end: None,
             pauses: Vec::new(),
             status: "active".to_owned(),
@@ -135,7 +135,7 @@ async fn seed_completed_focus_history_before(pool: &SqlitePool, before: i64) {
             &mut tx,
             &PomodoroRunClosure {
                 run_id: run.id,
-                ended_at: persistence::timestamp(end).unwrap(),
+                ended_at: persistence::format_timestamp(end).unwrap(),
                 end_reason: "completed".to_owned(),
                 segment_status: "completed".to_owned(),
                 segment_end_reason: "completed".to_owned(),
@@ -152,7 +152,7 @@ async fn seed_accepted_replay_candidates(pool: &SqlitePool, resolver: &TestLocal
     use crate::adaptive::{
         decision::{AdaptiveDecisionInput, POLICY_ID, decision_local_instants},
         replay::{decide_candidate, default_candidates},
-        snapshots::{SnapshotIds, run_start},
+        snapshots::{SnapshotIds, run_start_snapshot},
     };
     use crate::{
         PomodoroRunClosure, PomodoroRunWrite, PomodoroSegmentWrite,
@@ -163,8 +163,8 @@ async fn seed_accepted_replay_candidates(pool: &SqlitePool, resolver: &TestLocal
     let mut tx = pool.begin_with("BEGIN IMMEDIATE").await.unwrap();
     for index in (1..=4).rev() {
         let start = START - index * DAY;
-        let at = persistence::timestamp(start).unwrap();
-        let end = persistence::timestamp(start + 240 * MINUTE).unwrap();
+        let at = persistence::format_timestamp(start).unwrap();
+        let end = persistence::format_timestamp(start + 240 * MINUTE).unwrap();
         let history = load_adaptive_history_tx(&mut tx, &at, POLICY_ID, 80)
             .await
             .unwrap();
@@ -183,7 +183,7 @@ async fn seed_accepted_replay_candidates(pool: &SqlitePool, resolver: &TestLocal
         let decision = decide_candidate(&input, &default_candidates()[0], &facts).unwrap();
         let run_id = format!("replay-run-{index}");
         let segment_id = format!("replay-segment-{index}");
-        let snapshot = run_start(
+        let snapshot = run_start_snapshot(
             &decision,
             SnapshotIds {
                 run: run_id.clone(),
@@ -198,7 +198,7 @@ async fn seed_accepted_replay_candidates(pool: &SqlitePool, resolver: &TestLocal
             .unwrap()
             .format("%Y-%m-%d")
             .to_string();
-        let ended = persistence::timestamp(
+        let ended = persistence::format_timestamp(
             start + decision.selected_rhythm.focus_duration_minutes * MINUTE,
         )
         .unwrap();
@@ -323,12 +323,13 @@ fn adaptive_execution_rejects_fractional_replay_evidence_and_can_retry_after_rep
                 .fetch_one(&pool)
                 .await
                 .unwrap();
-        let receipts: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM pomodoro_execution_receipts")
-            .fetch_one(&pool)
-            .await
-            .unwrap();
+        let receipt_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM pomodoro_execution_receipts")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
         assert_eq!(open, 0);
-        assert_eq!(receipts, 0);
+        assert_eq!(receipt_count, 0);
         sqlx::query("UPDATE pomodoro_adaptive_decision_values SET previous_numeric_value = 40 WHERE decision_id = 'replay-decision-1' AND value_key = 'focus_duration_minutes'").execute(&pool).await.unwrap();
         let result = execute(&pool, &adaptive_start_command(), &configured)
             .await
@@ -340,20 +341,20 @@ fn adaptive_execution_rejects_fractional_replay_evidence_and_can_retry_after_rep
 #[test]
 fn oversized_adaptive_aggregate_rolls_back_execution_revision_and_receipt_before_retry() {
     use crate::adaptive::decision::POLICY_ID;
-    use crate::execution::persistence::timestamp;
+    use crate::execution::persistence::format_timestamp;
 
     block_on(async {
         let pool = pool().await;
         let resolver = Arc::new(TestLocalTime::default());
         seed_accepted_replay_candidates(&pool, &resolver).await;
         sqlx::query("INSERT INTO pomodoro_adaptive_experiments (id, policy_id, parameter_key, assignment_unit, status, started_at) VALUES ('budget-experiment', ?, 'focus_duration_minutes', 'run', 'active', ?)")
-            .bind(POLICY_ID).bind(timestamp(START - MINUTE).unwrap()).execute(&pool).await.unwrap();
+            .bind(POLICY_ID).bind(format_timestamp(START - MINUTE).unwrap()).execute(&pool).await.unwrap();
         sqlx::query("INSERT INTO pomodoro_adaptive_experiment_variants (experiment_id, variant_key, numeric_value, is_control) VALUES ('budget-experiment', 'control', 40, 1)")
             .execute(&pool).await.unwrap();
         sqlx::query("INSERT INTO pomodoro_adaptive_assignments (id, experiment_id, variant_key, context_snapshot_id, assignment_seed, assigned_at) SELECT 'budget-assignment', 'budget-experiment', 'control', id, 'seed', ? FROM pomodoro_adaptive_context_snapshots ORDER BY id LIMIT 1")
-            .bind(timestamp(START - MINUTE).unwrap()).execute(&pool).await.unwrap();
+            .bind(format_timestamp(START - MINUTE).unwrap()).execute(&pool).await.unwrap();
         sqlx::query("WITH RECURSIVE items(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM items WHERE n < 100001) INSERT INTO pomodoro_adaptive_outcomes (id, assignment_id, outcome_window, outcome_key, numeric_value, measured_at) SELECT 'budget-outcome-' || n, 'budget-assignment', 'run', 'clean_focus_seconds', 1, ? FROM items")
-            .bind(timestamp(START - MINUTE).unwrap()).execute(&pool).await.unwrap();
+            .bind(format_timestamp(START - MINUTE).unwrap()).execute(&pool).await.unwrap();
         let configured = adaptive_context(START, resolver);
         let request = adaptive_start_command();
         let error = execute(&pool, &request, &configured).await.unwrap_err();
@@ -371,11 +372,12 @@ fn oversized_adaptive_aggregate_rolls_back_execution_revision_and_receipt_before
             .fetch_one(&pool)
             .await
             .unwrap();
-        let receipts: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM pomodoro_execution_receipts")
-            .fetch_one(&pool)
-            .await
-            .unwrap();
-        assert_eq!((open, revision, receipts), (0, 0, 0));
+        let receipt_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM pomodoro_execution_receipts")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!((open, revision, receipt_count), (0, 0, 0));
         sqlx::query(
             "DELETE FROM pomodoro_adaptive_outcomes WHERE assignment_id = 'budget-assignment'",
         )
@@ -485,7 +487,7 @@ fn adaptive_reconfiguration_enters_break_when_accepted_focus_is_shorter_than_inh
             None,
         );
         let key = crate::adaptive::experiments::selection::experiment_context_key(&bucket);
-        let at = persistence::timestamp(configured.now_ms).unwrap();
+        let at = persistence::format_timestamp(configured.now_ms).unwrap();
         sqlx::query("INSERT INTO pomodoro_adaptive_policies (id, status, policy_version, model_version, exploration_budget_per_week, created_at, updated_at) VALUES (?, 'active', 1, 1, 2, ?, ?)")
             .bind(crate::adaptive::decision::POLICY_ID).bind(&at).bind(&at).execute(&pool).await.unwrap();
         sqlx::query("INSERT INTO pomodoro_adaptive_context_states (policy_id, context_key, readiness, strain, recovery_debt, avoidance_pressure, momentum, confidence, updated_at) VALUES (?, ?, 0.1, 1.0, 1.0, 0.1, 0.1, 1.0, ?)")
@@ -609,13 +611,13 @@ fn adaptive_exploration_assignment_and_exposure_commit_once_with_native_executio
         .await
         .unwrap();
         assert_eq!(stopped.mode, FocusMode::Stopped);
-        let observations: i64 = sqlx::query_scalar(
+        let observation_count: i64 = sqlx::query_scalar(
             "SELECT COUNT(*) FROM pomodoro_adaptive_outcomes WHERE outcome_window = 'run' AND outcome_key = 'run_stopped' AND boolean_value = 1 AND assignment_id IS NOT NULL",
         )
         .fetch_one(&pool)
         .await
         .unwrap();
-        assert_eq!(observations, 1);
+        assert_eq!(observation_count, 1);
     });
 }
 

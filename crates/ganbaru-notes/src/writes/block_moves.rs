@@ -1,5 +1,5 @@
 use super::block_comments::update_block_comment_thread_pages;
-use super::block_tree::{load_block_row_in_tx, load_blocks_by_ids, normalize_selection_root_ids};
+use super::block_tree::{load_block_row_tx, load_blocks_by_ids, normalize_selection_root_ids};
 use super::parents::{
     ParentTarget, parent_target_from_block_row, refresh_parent_has_children, resolve_block_parent,
     touch_page, validate_block_for_parent,
@@ -40,7 +40,7 @@ pub(super) async fn move_block_tx(
 ) -> Result<(), String> {
     require_uuid(block_id, "block_id")?;
     validate_parent(&request.parent)?;
-    let current = load_block_row_in_tx(tx, block_id, false).await?;
+    let current = load_block_row_tx(tx, block_id, false).await?;
     let old_parent = ParentTarget {
         parent_type: if current.parent_type == "page_id" {
             "page_id"
@@ -164,7 +164,7 @@ pub async fn move_blocks(
     let mut root_rows = Vec::with_capacity(root_ids.len());
     let mut old_parents = Vec::with_capacity(root_ids.len());
     for block_id in &root_ids {
-        let row = load_block_row_in_tx(&mut tx, block_id, include_trashed).await?;
+        let row = load_block_row_tx(&mut tx, block_id, include_trashed).await?;
         if row.in_trash != 0 {
             super::database_lifecycle::set_block_trash(&mut tx, block_id, false).await?;
         }

@@ -27,8 +27,8 @@
 
   const PREVIEW_OPEN_DELAY_MS = 300;
   const PREVIEW_CLOSE_DELAY_MS = 120;
-  const PREVIEW_WIDTH = 300;
-  const POINTER_DRAG_DISTANCE = 5;
+  const PREVIEW_WIDTH_PX = 300;
+  const POINTER_DRAG_DISTANCE_PX = 5;
   const THUMBNAIL_ROWS = [0, 1, 2] as const;
   const THUMBNAIL_COLUMNS = [0, 1, 2] as const;
 
@@ -45,16 +45,16 @@
   const referenceType = $derived(reference.mention.type);
   const referenceId = $derived(reference.mention.type === "page" ? reference.mention.page.id : reference.mention.database.id);
   const referenceKey = $derived(`${referenceType}:${referenceId}`);
-  const validReference = $derived(isNotesUuid(referenceId));
+  const isValidReference = $derived(isNotesUuid(referenceId));
   let anchor = $state<HTMLAnchorElement | null>(null);
   let card = $state<HTMLDivElement | null>(null);
   let previewOpen = $state(false);
   let previewStatus = $state<"idle" | "loading" | "ready" | "failed">("idle");
   let breadcrumbs = $state<readonly NotesPageBreadcrumbItem[]>([]);
   let database = $state<NotesDatabaseReference | null>(null);
-  let navigationError = $state(false);
+  let hasNavigationError = $state(false);
   let navigating = $state(false);
-  let placement = $state<NotesFloatingPanelPlacement>({ left: 0, top: 0, width: PREVIEW_WIDTH, maxHeight: 0 });
+  let placement = $state<NotesFloatingPanelPlacement>({ left: 0, top: 0, width: PREVIEW_WIDTH_PX, maxHeight: 0 });
   let openTimer: ReturnType<typeof setTimeout> | null = null;
   let closeTimer: ReturnType<typeof setTimeout> | null = null;
   let databaseRequest: Promise<NotesDatabaseReference> | null = null;
@@ -64,11 +64,11 @@
 
   const providedTarget = $derived(reference.href
     ? notesLinkTarget(reference.href, typeof window === "undefined" ? undefined : window.location.href) : null);
-  const destination = $derived(!validReference ? null : referenceType === "page"
+  const destination = $derived(!isValidReference ? null : referenceType === "page"
     ? `#notes?page=${referenceId}`
     : database ? `#notes?page=${database.page_id}&block=${database.block_id}`
       : providedTarget?.blockId === referenceId ? `#notes?page=${providedTarget.pageId}&block=${referenceId}` : null);
-  const href = $derived(destination ?? (validReference ? `#notes?block=${referenceId}` : undefined));
+  const href = $derived(destination ?? (isValidReference ? `#notes?block=${referenceId}` : undefined));
   const typeLabel = $derived(referenceType === "database" ? t("notes.blockType.childDatabase") : t("notes.blockType.childPage"));
   const previewTitle = $derived((referenceType === "database" ? database?.title
     : breadcrumbs.find((item) => item.current)?.title)?.trim() || reference.plain_text.trim() || t("notes.untitled"));
@@ -93,7 +93,7 @@
     database = null;
     breadcrumbs = [];
     previewStatus = "idle";
-    navigationError = false;
+    hasNavigationError = false;
     navigating = false;
     pointerStart = null;
     return () => { revision += 1; closePreview(); };
@@ -146,7 +146,7 @@
   }
 
   function schedulePreview(event: PointerEvent): void {
-    if (!validReference || event.pointerType === "touch" || event.buttons) return;
+    if (!isValidReference || event.pointerType === "touch" || event.buttons) return;
     keepPreviewOpen();
     if (previewOpen || openTimer !== null) return;
     openTimer = setTimeout(() => {
@@ -167,10 +167,10 @@
 
   /** Resolve missing ownership on demand and use the normal Notes navigation path. */
   async function navigate(): Promise<void> {
-    if (!validReference || navigating) return;
+    if (!isValidReference || navigating) return;
     const requestRevision = revision;
     navigating = true;
-    navigationError = false;
+    hasNavigationError = false;
     closePreview();
     try {
       let url = destination;
@@ -182,7 +182,7 @@
       await openNotesTextLink(url);
     } catch (error: unknown) {
       if (disposed || requestRevision !== revision) return;
-      navigationError = true;
+      hasNavigationError = true;
       previewOpen = true;
       console.warn("Notes reference navigation failed", { referenceId, error });
     } finally {
@@ -194,7 +194,7 @@
     event.preventDefault();
     event.stopPropagation();
     const moved = pointerStart !== null
-      && Math.hypot(event.clientX - pointerStart.x, event.clientY - pointerStart.y) >= POINTER_DRAG_DISTANCE;
+      && Math.hypot(event.clientX - pointerStart.x, event.clientY - pointerStart.y) >= POINTER_DRAG_DISTANCE_PX;
     pointerStart = null;
     const selection = anchor?.ownerDocument.getSelection();
     if (moved || (selection && !selection.isCollapsed && !event.ctrlKey && !event.metaKey)) return;
@@ -254,7 +254,7 @@
       top: Math.min(viewportHeight, Math.max(0, rect.top - offsetTop)),
       bottom: Math.min(viewportHeight, Math.max(0, rect.bottom - offsetTop)),
     }, { width: viewportWidth, height: viewportHeight }, {
-      width: PREVIEW_WIDTH, height: notesFloatingPanelContentHeight(card), align: "start",
+      width: PREVIEW_WIDTH_PX, height: notesFloatingPanelContentHeight(card), align: "start",
     });
     placement = { ...position, left: position.left + offsetLeft, top: position.top + offsetTop };
   }
@@ -284,7 +284,7 @@
     if (!previewOpen) return;
     void previewStatus;
     void previewTitle;
-    void navigationError;
+    void hasNavigationError;
     void tick().then(reposition);
   });
 </script><a
@@ -295,7 +295,7 @@
   class={`notes-local-reference ${attributes.class ?? ""}`}
   data-notes-reference-id={referenceId}
   data-notes-reference-type={referenceType}
-  aria-disabled={!validReference ? "true" : undefined}
+  aria-disabled={!isValidReference ? "true" : undefined}
   aria-busy={navigating ? "true" : undefined}
   aria-describedby={previewOpen ? previewId : undefined}
   onpointerenter={schedulePreview}
@@ -333,7 +333,7 @@
         {#if containingPath}<div class="mt-1 wrap-anywhere text-[0.85em] leading-snug text-muted-foreground">{containingPath}</div>{/if}
       </div>
     </div>
-    {#if navigationError}
+    {#if hasNavigationError}
       <div class="px-3.5 pb-3.5 text-[0.9em] text-muted-foreground" role="status">{t("notes.linkOpenFailed")}</div>
     {:else if previewStatus === "failed"}
       <div class="px-3.5 pb-3.5 text-[0.9em] text-muted-foreground" role="status">{t("notes.databaseGalleryPreviewUnavailable")}</div>

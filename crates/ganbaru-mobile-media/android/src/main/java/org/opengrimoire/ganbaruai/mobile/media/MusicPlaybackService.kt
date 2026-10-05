@@ -118,7 +118,7 @@ class MusicPlaybackService : MediaSessionService() {
                 if (destroyed || capturedGeneration != generation || capturedLoadEpoch != loadEpoch) return@post
                 if (expireResolution()) return@post
                 resolutionDeadlineMs = null
-                if (!NativeMusicAuthority.current(deliveryId)) {
+                if (!NativeMusicAuthority.isDeliveryCurrent(deliveryId)) {
                   loading = false
                   desiredAutoplay = false
                   sessionId?.let { NativeMusicSession.reportUnavailable(it, generation, NativeMusicInterruption.SourceAuthorityChanged) }
@@ -141,7 +141,7 @@ class MusicPlaybackService : MediaSessionService() {
                   if (expireResolution()) return@post
                   resolutionDeadlineMs = null
                   loading = false
-                  if (!NativeMusicAuthority.current(deliveryId)) {
+                  if (!NativeMusicAuthority.isDeliveryCurrent(deliveryId)) {
                     desiredAutoplay = false
                     sessionId?.let { NativeMusicSession.reportUnavailable(it, generation, NativeMusicInterruption.SourceAuthorityChanged) }
                   } else { sourceError = error.message ?: "Android media access failed"; reportObservation() }

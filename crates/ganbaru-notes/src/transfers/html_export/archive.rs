@@ -21,11 +21,12 @@ fn write_zip_archive(
     path: &Path,
     archive: &mut HtmlArchive,
 ) -> Result<(), String> {
-    let tmp_path = temp_zip_path(path)?;
-    let result = write_zip_archive_inner(asset_root, &tmp_path, archive)
-        .and_then(|()| fs::rename(&tmp_path, path).map_err(|e| format!("save HTML archive: {e}")));
+    let temporary_path = temporary_zip_path(path)?;
+    let result = write_zip_archive_inner(asset_root, &temporary_path, archive).and_then(|()| {
+        fs::rename(&temporary_path, path).map_err(|e| format!("save HTML archive: {e}"))
+    });
     if result.is_err() {
-        let _ = fs::remove_file(&tmp_path);
+        let _ = fs::remove_file(&temporary_path);
     }
     result
 }
@@ -126,7 +127,7 @@ fn require_zip_extension(path: &Path) -> Result<(), String> {
     }
 }
 
-fn temp_zip_path(path: &Path) -> Result<PathBuf, String> {
+fn temporary_zip_path(path: &Path) -> Result<PathBuf, String> {
     let file_name = path
         .file_name()
         .ok_or_else(|| "HTML archive path has no file name".to_string())?

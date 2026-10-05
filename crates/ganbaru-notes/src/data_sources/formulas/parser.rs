@@ -104,7 +104,7 @@ fn collect_dependencies(
 struct FormulaParser {
     chars: Vec<char>,
     pos: usize,
-    nodes: usize,
+    node_count: usize,
 }
 
 impl FormulaParser {
@@ -112,7 +112,7 @@ impl FormulaParser {
         Self {
             chars: expression.chars().collect(),
             pos: 0,
-            nodes: 0,
+            node_count: 0,
         }
     }
 
@@ -360,8 +360,8 @@ impl FormulaParser {
     }
 
     fn expr(&mut self, expr: FormulaExpr) -> Result<FormulaExpr, String> {
-        self.nodes += 1;
-        if self.nodes > MAX_AST_NODES {
+        self.node_count += 1;
+        if self.node_count > MAX_AST_NODES {
             return Err("formula expression is too complex".to_string());
         }
         Ok(expr)

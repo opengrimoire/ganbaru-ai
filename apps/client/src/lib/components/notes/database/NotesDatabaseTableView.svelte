@@ -15,7 +15,7 @@
   import NotesDatabasePropertyValue from "./NotesDatabasePropertyValue.svelte";
   import NotesDatabaseRowParentControls from "./NotesDatabaseRowParentControls.svelte";
   import { NOTES_DATABASE_MAX_COLLAPSED_ROWS, NOTES_DATABASE_ROW_MAX_DEPTH, notesDatabaseCollapsedRows, notesDatabaseHierarchyRows } from "$lib/notes/database/row-hierarchy";
-  import { NOTES_DATABASE_QUERY_MAX_SORTS, notesDatabaseFilterCount, notesDatabaseFilterConditions, notesDatabaseNewFilter, notesDatabaseRowMatchesFilters, notesDatabaseSortedColumn } from "$lib/notes/database/query-controls";
+  import { NOTES_DATABASE_QUERY_MAX_SORTS, notesDatabaseFilterCount, notesDatabaseFilterConditions, notesDatabaseNewFilter, notesDatabaseRowMatchesFilters, notesDatabaseSortsWithColumn } from "$lib/notes/database/query-controls";
   import Select from "$lib/components/ui/Select.svelte";
   import { onDestroy, tick, untrack, type Snippet } from "svelte";
   import { databaseResource, notesDatabaseSession, rememberDatabaseScroll } from "$lib/notes/database/session.svelte";
@@ -200,12 +200,12 @@
   let loadMoreSentinel: HTMLDivElement | null = $state(null);
   let tableRequestId = 0;
   let mutating = $state(false);
-  let editingCell = $state(false);
+  let isEditingCell = $state(false);
 
-  let viewOpen = true;
-  const rowCreation = createNotesDatabaseRowCreation(() => viewOpen ? loadTable(false) : Promise.resolve(null));
+  let isViewOpen = true;
+  const rowCreation = createNotesDatabaseRowCreation(() => isViewOpen ? loadTable(false) : Promise.resolve(null));
   onDestroy(() => {
-    viewOpen = false;
+    isViewOpen = false;
     rowCreation.flush();
   });
 
@@ -215,28 +215,28 @@
   });
   let error = $state<string | null>(null);
   let addRowKey = $state<string | null>(null);
-  let resizing = $state<{ id: string; pointerId: number; startX: number; startWidth: number; width: number } | null>(null);
+  let columnResize = $state<{ id: string; pointerId: number; startX: number; startWidth: number; width: number } | null>(null);
   let pendingColumnWidth = $state<{ id: string; width: number } | null>(null);
 
   function startColumnResize(event: PointerEvent, column: NotesDatabaseTableColumn): void {
     if (event.button !== 0 || mutating || editingLocked) return;
     event.preventDefault();
     event.stopPropagation();
-    resizing = { id: column.id, pointerId: event.pointerId, startX: event.clientX, startWidth: column.width, width: column.width };
+    columnResize = { id: column.id, pointerId: event.pointerId, startX: event.clientX, startWidth: column.width, width: column.width };
     (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
   }
 
   function moveColumnResize(event: PointerEvent): void {
-    if (!resizing || event.pointerId !== resizing.pointerId) return;
-    const column = columns.find((item) => item.id === resizing?.id);
+    if (!columnResize || event.pointerId !== columnResize.pointerId) return;
+    const column = columns.find((item) => item.id === columnResize?.id);
     if (!column) return;
-    resizing.width = notesDatabaseTableColumnWidth(column, event.clientX - resizing.startX);
+    columnResize.width = notesDatabaseTableColumnWidth(column, event.clientX - columnResize.startX);
   }
 
   function finishColumnResize(event: PointerEvent, commit: boolean): void {
-    if (!resizing || event.pointerId !== resizing.pointerId) return;
-    const gesture = resizing;
-    resizing = null;
+    if (!columnResize || event.pointerId !== columnResize.pointerId) return;
+    const gesture = columnResize;
+    columnResize = null;
     if (commit && gesture.width !== gesture.startWidth) updateColumnWidth(gesture.id, gesture.width - gesture.startWidth);
   }
 
@@ -267,7 +267,7 @@
     temporarilyExpandedGroupIds = [];
     temporarilyExpandedRowIds = [];
   });
-  let csvPanelOpen = $state<"database-csv-import" | "database-csv-export" | null>(null);
+  let openCsvPanelKind = $state<"database-csv-import" | "database-csv-export" | null>(null);
   let csvPanelLoadState = $state<LazyComponentLoadState<
     "database-csv-import" | "database-csv-export",
     LoadedNotesEditorPanel
@@ -278,7 +278,7 @@
     retry = false,
   ): void {
     if (kind === "database-csv-import" && editingLocked) return;
-    csvPanelOpen = kind;
+    openCsvPanelKind = kind;
     if (!retry && csvPanelLoadState?.key === kind) return;
     const loadingState = beginLazyComponentLoad(csvPanelLoadState, kind);
     csvPanelLoadState = loadingState;
@@ -316,7 +316,7 @@
   })) : []);
   const visibleColumns = $derived(notesDatabaseTableVisibleColumns(columns));
   const renderedColumns = $derived(visibleColumns.map((column) => ({ ...column,
-    width: resizing?.id === column.id ? resizing.width : pendingColumnWidth?.id === column.id ? pendingColumnWidth.width : column.width,
+    width: columnResize?.id === column.id ? columnResize.width : pendingColumnWidth?.id === column.id ? pendingColumnWidth.width : column.width,
   })));
   function frozenOffset(columnId: string): number | null {
     return notesTableFrozenOffset(renderedColumns, tableConfiguration?.presentation?.frozen_property_id, columnId, tableViewportWidth);
@@ -426,7 +426,7 @@
 
   $effect(() => {
     const revision = notesDatabaseSession.revision;
-    if (mutating || editingCell || rowCreation.isSaving(dataSourceId)) return;
+    if (mutating || isEditingCell || rowCreation.isSaving(dataSourceId)) return;
     const signature = `${dataSourceId}:${databaseId ?? ""}:${viewId ?? ""}:${reloadKey}:${revision}`;
     if (signature === lastLoadSignature) return;
     const force = reloadKey !== lastReloadKey;
@@ -850,8 +850,8 @@
     const values = groupId === null ? table?.calculations?.overall
       : table?.calculations?.groups && Object.hasOwn(table.calculations.groups, groupId) ? table.calculations.groups[groupId] : undefined;
     const storedValue = values && Object.hasOwn(values, column.id) ? values[column.id] : undefined;
-    const emptyGroup = groupId !== null && (!table?.group_counts || !Object.hasOwn(table.group_counts, groupId) || table.group_counts[groupId] === 0);
-    const value = storedValue === undefined && emptyGroup && calculation && ["count_all", "count_values", "empty", "unique", "sum"].includes(calculation) ? 0 : storedValue;
+    const isEmptyGroup = groupId !== null && (!table?.group_counts || !Object.hasOwn(table.group_counts, groupId) || table.group_counts[groupId] === 0);
+    const value = storedValue === undefined && isEmptyGroup && calculation && ["count_all", "count_values", "empty", "unique", "sum"].includes(calculation) ? 0 : storedValue;
     return typeof value === "number" ? formatNumber(localization.locale, value, calculation === "percent_checked" ? { style: "percent", maximumFractionDigits: 1 } : { maximumFractionDigits: 3 }) : t("notes.databaseTableEmptyCell");
   }
 
@@ -903,7 +903,7 @@
   /** Change the chosen property sort while retaining its existing priority. */
   function sortColumn(columnId: string, direction: NotesDatabaseTableSort["direction"]): void {
     if (mutating || (sorts.length >= NOTES_DATABASE_QUERY_MAX_SORTS && !sorts.some((sort) => sort.property_id === columnId))) return;
-    saveSorts(notesDatabaseSortedColumn(sorts, columnId, direction));
+    saveSorts(notesDatabaseSortsWithColumn(sorts, columnId, direction));
   }
 
   function updateColumnWidth(columnId: string, delta: number): void {
@@ -1007,7 +1007,7 @@
   {/if}
 {/snippet}
 
-<svelte:window onpointermove={moveColumnResize} onpointerup={(event) => finishColumnResize(event, true)} onpointercancel={(event) => finishColumnResize(event, false)} onkeydown={(event) => { if (event.key === "Escape") resizing = null; }} />
+<svelte:window onpointermove={moveColumnResize} onpointerup={(event) => finishColumnResize(event, true)} onpointercancel={(event) => finishColumnResize(event, false)} onkeydown={(event) => { if (event.key === "Escape") columnResize = null; }} />
 
 <section class="space-y-3 pt-2" aria-label={t("notes.databaseTableTitle")}>
 
@@ -1027,7 +1027,7 @@
   {#if table}
     <div class="grid gap-2 @container">
       {#if settingsOpen}
-        <CollectionSettings label={t("notes.databaseViewSettings")} anchor={settingsAnchor} onclose={onCloseSettings}>
+        <CollectionSettings label={t("notes.databaseViewSettings")} anchor={settingsAnchor} onClose={onCloseSettings}>
               {@render settingsHeader?.()}
               {#if editingLocked}
                 <p class="px-2 py-2 text-muted-foreground">{t("notes.databaseEditingLockDescription")}</p>
@@ -1084,12 +1084,12 @@
             return column ? [column.name] : [];
           }))} fullWidth>
 
-          <NotesDatabaseSortControls properties={columns} {sorts} pending={mutating} onchange={saveSorts} />
+          <NotesDatabaseSortControls properties={columns} {sorts} pending={mutating} onChange={saveSorts} />
         </CollectionMenu>
 
         <CollectionMenu label={t("notes.databaseTableFilters")} kind="filter" activeCount={notesDatabaseFilterCount(filters)} summary={notesDatabaseFilterCount(filters) > 0 ? formatNumber(localization.locale, notesDatabaseFilterCount(filters)) : ""} fullWidth>
 
-          <NotesDatabaseFilterControls properties={columns} {filters} pending={mutating} onchange={saveFilters} />
+          <NotesDatabaseFilterControls properties={columns} {filters} pending={mutating} onChange={saveFilters} />
         </CollectionMenu>
         <CollectionMenu label={t("notes.databaseTablePresentation.conditionalColor")} summary={formatNumber(localization.locale, tableConfiguration?.presentation?.color_rules?.length ?? 0)} fullWidth>
           <div class="grid gap-3">
@@ -1104,7 +1104,7 @@
                 <Select inline appearance="quiet" class="w-full" ariaLabel={t("notes.databaseTablePresentation.color")} value={rule.color} disabled={mutating}
                   options={NOTES_TEXT_COLORS.filter((color) => color !== "default").map((color) => ({ value: color, label: t(`notes.blockColor.${color}`) }))}
                   onChange={(value) => updateColorRule(rule.id, { color: value as NotesDatabaseTableColorRule["color"] })} />
-                <NotesDatabaseFilterControls properties={columns} filters={rule.filters} pending={mutating} onchange={(next) => { if (next.length) updateColorRule(rule.id, { filters: next }); }} />
+                <NotesDatabaseFilterControls properties={columns} filters={rule.filters} pending={mutating} onChange={(next) => { if (next.length) updateColorRule(rule.id, { filters: next }); }} />
               </div>
             {/each}
             <button type="button" class="flex min-h-8 items-center gap-2 rounded px-2 text-left hover:bg-accent" disabled={mutating || (tableConfiguration?.presentation?.color_rules?.length ?? 0) >= 16} onclick={addColorRule}><Plus class="size-3.5" />{t("notes.databaseTablePresentation.addColorRule")}</button>
@@ -1217,7 +1217,7 @@
         </CollectionSettings>
       {/if}
 
-      {#if !editingLocked && csvPanelOpen === "database-csv-import" && csvPanelLoadState?.status === "ready" && csvPanelLoadState.component.kind === "database-csv-import"}
+      {#if !editingLocked && openCsvPanelKind === "database-csv-import" && csvPanelLoadState?.status === "ready" && csvPanelLoadState.component.kind === "database-csv-import"}
         {@const NotesDatabaseCsvImportPanel = csvPanelLoadState.component.component}
         <NotesDatabaseCsvImportPanel
           {dataSourceId}
@@ -1226,7 +1226,7 @@
             await loadTable();
           }}
         />
-      {:else if fileExportAvailable && csvPanelOpen === "database-csv-export" && csvPanelLoadState?.status === "ready" && csvPanelLoadState.component.kind === "database-csv-export"}
+      {:else if fileExportAvailable && openCsvPanelKind === "database-csv-export" && csvPanelLoadState?.status === "ready" && csvPanelLoadState.component.kind === "database-csv-export"}
         {@const NotesDatabaseCsvExportPanel = csvPanelLoadState.component.component}
         <NotesDatabaseCsvExportPanel
           {dataSourceId}
@@ -1234,7 +1234,7 @@
           {viewId}
           disabled={mutating || loading}
         />
-      {:else if csvPanelOpen && csvPanelLoadState?.status === "failed"}
+      {:else if openCsvPanelKind && csvPanelLoadState?.status === "failed"}
         <button class="min-h-8 rounded-md border border-border px-2 text-[0.8rem] hover:bg-accent" type="button" onclick={retryCsvPanel}>{t("common.retry")}</button>
       {/if}
 
@@ -1297,7 +1297,7 @@
                       <CollectionMenu label={t("notes.databasePropertyFilter")} kind="filter" fullWidth
                         activeCount={notesDatabaseFilterCount(filters, column.id)}>
 
-                        <NotesDatabaseFilterControls properties={columns} {filters} propertyId={column.id} pending={mutating} onchange={saveFilters} />
+                        <NotesDatabaseFilterControls properties={columns} {filters} propertyId={column.id} pending={mutating} onChange={saveFilters} />
         </CollectionMenu>
                       {/if}
                       <button type="button" class="flex min-h-8 items-center gap-2 rounded-sm px-2 text-left hover:bg-accent" disabled={sortUnavailable} onclick={() => sortColumn(column.id, "ascending")}>
@@ -1472,11 +1472,11 @@
                     {:else if column.type === "date"}
                       <NotesDatabaseDateCell {row} {column} {rowIndex} {columnIndex}
                         mutating={mutating || rowCreation.blocked(row.id)} onSave={(value) => saveCell(row, column, value)}
-                        onNavigate={handleCellKeydown} onEditingChange={(editing) => { editingCell = editing; }} />
+                        onNavigate={handleCellKeydown} onEditingChange={(editing) => { isEditingCell = editing; }} />
                     {:else if column.type === "number"}
                       <NotesDatabaseNumberCell {row} {column} {rowIndex} {columnIndex}
                         mutating={mutating || rowCreation.blocked(row.id)} onSave={(value) => saveCell(row, column, value)}
-                        onNavigate={handleCellKeydown} onEditingChange={(editing) => { editingCell = editing; }} />
+                        onNavigate={handleCellKeydown} onEditingChange={(editing) => { isEditingCell = editing; }} />
                     {:else if column.type === "button"}
                       <button
                         data-table-cell="true"
@@ -1504,9 +1504,9 @@
                         class="min-h-8 w-full min-w-0 resize-none rounded-sm border border-transparent bg-transparent px-1 py-1.5 text-foreground outline-none hover:bg-accent/20 focus:bg-accent/20"
                         style="field-sizing: content;" value={String(editValue)} aria-label={column.name}
                         disabled={mutating || (column.type !== "title" && rowCreation.blocked(row.id))}
-                        onfocus={() => { editingCell = true; }}
+                        onfocus={() => { isEditingCell = true; }}
                         oninput={(event) => { if (column.type === "title") rowCreation.draft(row.id, column.id, event.currentTarget.value); }}
-                        onblur={(event) => { editingCell = false; void saveCell(row, column, event.currentTarget.value); }}
+                        onblur={(event) => { isEditingCell = false; void saveCell(row, column, event.currentTarget.value); }}
                         onkeydown={(event) => handleCellKeydown(event, rowIndex, columnIndex)}></textarea>
                     {:else if notesDatabaseTableColumnCanEdit(column)}
                       <input
@@ -1518,10 +1518,10 @@
                         inputmode="text"
                         aria-label={column.name}
                         disabled={mutating || (column.type !== "title" && rowCreation.blocked(row.id))}
-                        onfocus={() => { editingCell = true; }}
+                        onfocus={() => { isEditingCell = true; }}
                         oninput={(event) => { if (column.type === "title") rowCreation.draft(row.id, column.id, event.currentTarget.value); }}
                         onblur={(event) => {
-                          editingCell = false;
+                          isEditingCell = false;
                           void saveCell(row, column, event.currentTarget.value);
                         }}
                         onkeydown={(event) => handleCellKeydown(event, rowIndex, columnIndex)}
@@ -1559,7 +1559,7 @@
           {#key addRowKey}
             <CollectionRow template={gridTemplate}>
               <div class="col-span-2"></div>
-              <div data-database-new-row style={`grid-column: 3 / -1;`}><CollectionQuickAdd label={t("notes.databaseNewPage")} disabled={mutating || loading} oncreate={() => { void createRow(); }} /></div>
+              <div data-database-new-row style={`grid-column: 3 / -1;`}><CollectionQuickAdd label={t("notes.databaseNewPage")} disabled={mutating || loading} onCreate={() => { void createRow(); }} /></div>
             </CollectionRow>
           {/key}
         </div>

@@ -85,7 +85,7 @@ pub struct MobileDistractionsSyncResult {
     full_batch: bool,
 }
 
-fn valid_package_name(value: &str) -> bool {
+fn is_valid_package_name(value: &str) -> bool {
     if value.len() < 3 || value.len() > 255 {
         return false;
     }
@@ -119,7 +119,7 @@ fn normalize_event(mut event: PendingEvent) -> Result<PendingEvent, String> {
         return Err("mobile Distractions event kind is invalid".to_string());
     }
     event.package_name = event.package_name.trim().to_ascii_lowercase();
-    if !valid_package_name(&event.package_name) {
+    if !is_valid_package_name(&event.package_name) {
         return Err("mobile Distractions package name is invalid".to_string());
     }
     event.display_name = event
@@ -133,7 +133,7 @@ fn normalize_event(mut event: PendingEvent) -> Result<PendingEvent, String> {
     if event.display_name.is_empty() {
         return Err("mobile Distractions display name is required".to_string());
     }
-    if !crate::distractions::limits::validate_local_date(&event.local_date) {
+    if !crate::distractions::limits::is_valid_local_date(&event.local_date) {
         return Err("mobile Distractions local date is invalid".to_string());
     }
     if event.started_at_ms < 0 || event.occurred_at_ms < 0 {
@@ -592,11 +592,11 @@ mod tests {
 
     #[test]
     fn package_validation_requires_bounded_java_segments() {
-        assert!(valid_package_name("com.example.video"));
-        assert!(valid_package_name("app_1.social.feed2"));
-        assert!(!valid_package_name("android"));
-        assert!(!valid_package_name("1com.example"));
-        assert!(!valid_package_name("com.example-app"));
+        assert!(is_valid_package_name("com.example.video"));
+        assert!(is_valid_package_name("app_1.social.feed2"));
+        assert!(!is_valid_package_name("android"));
+        assert!(!is_valid_package_name("1com.example"));
+        assert!(!is_valid_package_name("com.example-app"));
     }
 
     #[tokio::test]

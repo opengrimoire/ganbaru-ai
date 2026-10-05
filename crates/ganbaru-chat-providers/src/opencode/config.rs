@@ -126,7 +126,7 @@ impl OpenCodeProviderSettings {
         }
     }
 
-    pub fn external(&self) -> bool {
+    pub fn is_external(&self) -> bool {
         matches!(self.connection, OpenCodeConnectionMode::External { .. })
     }
 }
@@ -164,9 +164,9 @@ pub fn continuation_group(
 
 fn normalize_server_origin(value: &str) -> ChatResult<(String, bool)> {
     if value.len() > MAX_SERVER_URL_BYTES || value.contains(['\0', '\n', '\r']) {
-        return Err(invalid_server_url());
+        return Err(invalid_server_url_error());
     }
-    let parsed = Url::parse(value).map_err(|_| invalid_server_url())?;
+    let parsed = Url::parse(value).map_err(|_| invalid_server_url_error())?;
     if !matches!(parsed.scheme(), "http" | "https")
         || !parsed.username().is_empty()
         || parsed.password().is_some()
@@ -175,12 +175,12 @@ fn normalize_server_origin(value: &str) -> ChatResult<(String, bool)> {
         || parsed.host_str().is_none()
         || !matches!(parsed.path(), "" | "/")
     {
-        return Err(invalid_server_url());
+        return Err(invalid_server_url_error());
     }
     let loopback = is_loopback_host(&parsed);
     let port = parsed
         .port_or_known_default()
-        .ok_or_else(invalid_server_url)?;
+        .ok_or_else(invalid_server_url_error)?;
     let host = normalized_host(&parsed)?;
     let default_port = matches!((parsed.scheme(), port), ("http", 80) | ("https", 443));
     let origin = if default_port {
@@ -192,7 +192,7 @@ fn normalize_server_origin(value: &str) -> ChatResult<(String, bool)> {
 }
 
 fn normalized_host(url: &Url) -> ChatResult<String> {
-    let host = url.host_str().ok_or_else(invalid_server_url)?;
+    let host = url.host_str().ok_or_else(invalid_server_url_error)?;
     match host.parse::<IpAddr>() {
         Ok(IpAddr::V6(address)) => Ok(format!("[{address}]")),
         Ok(IpAddr::V4(address)) => Ok(address.to_string()),
@@ -210,7 +210,7 @@ fn is_loopback_host(url: &Url) -> bool {
     }
 }
 
-fn invalid_server_url() -> ChatError {
+fn invalid_server_url_error() -> ChatError {
     ChatError::validation(
         "providerConfig.serverUrl",
         "OpenCode server URL must be an HTTP or HTTPS origin without credentials",

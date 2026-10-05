@@ -1,6 +1,6 @@
 use super::common::{
-    has_thread_eligible_mention, map_teammate_write_error, normalized_fts_query,
-    valid_teammate_effort, validate_message_request, validate_teammate_role,
+    has_thread_eligible_mention, is_valid_teammate_effort, map_teammate_write_error,
+    normalized_fts_query, validate_message_request, validate_teammate_role,
 };
 use super::scheduling::{claim_scheduled_message_for_immediate_send, validate_scheduled_for};
 use super::workflow::{has_authority_bearing_references, require_continuation_scope_is_unchanged};
@@ -13,9 +13,9 @@ fn teammate_effort_accepts_every_catalog_reasoning_level() {
     for effort in [
         "none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra",
     ] {
-        assert!(valid_teammate_effort(effort), "rejected {effort}");
+        assert!(is_valid_teammate_effort(effort), "rejected {effort}");
     }
-    assert!(!valid_teammate_effort("automatic"));
+    assert!(!is_valid_teammate_effort("automatic"));
 }
 
 async fn migrated_pool() -> SqlitePool {

@@ -36,7 +36,7 @@ pub(super) fn validate_policy(
         ));
     }
     if let Some(effort) = policy.effort.as_deref() {
-        if !valid_teammate_effort(effort) {
+        if !is_valid_teammate_effort(effort) {
             return Err(ChatError::validation(
                 "effort",
                 "Teammate effort is invalid",
@@ -53,7 +53,7 @@ pub(super) fn validate_policy(
 }
 
 #[cfg(desktop)]
-pub(super) fn valid_teammate_effort(effort: &str) -> bool {
+pub(super) fn is_valid_teammate_effort(effort: &str) -> bool {
     matches!(
         effort,
         "none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max" | "ultra"

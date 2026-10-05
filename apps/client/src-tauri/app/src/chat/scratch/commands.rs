@@ -51,7 +51,7 @@ async fn read_scratch_identity(
     .fetch_optional(pool)
     .await
     .map_err(persistence_error)?
-    .ok_or_else(scratch_not_found)?;
+    .ok_or_else(scratch_not_found_error)?;
     Ok(ScratchIdentity {
         scope_id: parse_id(row.try_get("scope_id").map_err(persistence_error)?)?,
         scope_revision: u64_value(row.try_get("scope_revision").map_err(persistence_error)?)?,
@@ -84,7 +84,7 @@ async fn require_scratch_inspection_authority(
             | ChatScratchScopeLifecycleState::Archived
             | ChatScratchScopeLifecycleState::CleanupFailed
     ) {
-        return Err(scratch_not_found());
+        return Err(scratch_not_found_error());
     }
     match identity.generation_lifecycle {
         ChatScratchGenerationLifecycleState::Active => {
@@ -117,7 +117,7 @@ async fn require_scratch_inspection_authority(
             "Restricted scratch requires explicit owner inspection",
             false,
         )),
-        _ => Err(scratch_not_found()),
+        _ => Err(scratch_not_found_error()),
     }
 }
 
@@ -224,7 +224,7 @@ fn parse_scope_lifecycle(value: &str) -> ChatResult<ChatScratchScopeLifecycleSta
         "cleanup_pending" => Ok(ChatScratchScopeLifecycleState::CleanupPending),
         "cleanup_failed" => Ok(ChatScratchScopeLifecycleState::CleanupFailed),
         "removed" => Ok(ChatScratchScopeLifecycleState::Removed),
-        _ => Err(corrupt_scratch()),
+        _ => Err(corrupt_scratch_error()),
     }
 }
 
@@ -235,7 +235,7 @@ fn parse_generation_lifecycle(value: &str) -> ChatResult<ChatScratchGenerationLi
         "cleanup_pending" => Ok(ChatScratchGenerationLifecycleState::CleanupPending),
         "cleanup_failed" => Ok(ChatScratchGenerationLifecycleState::CleanupFailed),
         "removed" => Ok(ChatScratchGenerationLifecycleState::Removed),
-        _ => Err(corrupt_scratch()),
+        _ => Err(corrupt_scratch_error()),
     }
 }
 
@@ -246,7 +246,7 @@ where
     T::try_from(value).map_err(identifier_error)
 }
 
-fn scratch_not_found() -> ChatError {
+fn scratch_not_found_error() -> ChatError {
     ChatError::new(
         ChatErrorCode::NotFound,
         "Private scratch generation was not found",
@@ -254,7 +254,7 @@ fn scratch_not_found() -> ChatError {
     )
 }
 
-fn corrupt_scratch() -> ChatError {
+fn corrupt_scratch_error() -> ChatError {
     ChatError::new(
         ChatErrorCode::Persistence,
         "Stored private scratch state is invalid",

@@ -66,7 +66,7 @@ async fn pool() -> SqlitePool {
         .unwrap();
     ganbaru_db::run_migrations(&pool).await.unwrap();
     sqlx::query("INSERT INTO calendar_events (id, title, start_time, end_time) VALUES ('focus-event', 'Focus', ?, ?)")
-        .bind(persistence::timestamp(START).unwrap()).bind(persistence::timestamp(START + 20 * MINUTE).unwrap())
+        .bind(persistence::format_timestamp(START).unwrap()).bind(persistence::format_timestamp(START + 20 * MINUTE).unwrap())
         .execute(&pool).await.unwrap();
     pool
 }
@@ -382,16 +382,17 @@ fn execution_failure_rolls_back_outgoing_phase_events_revision_and_receipt() {
             .unwrap();
         assert_eq!(current.revision, initial.revision);
         assert_eq!(current.segment.unwrap().status, "active");
-        let events: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM pomodoro_run_events")
+        let event_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM pomodoro_run_events")
             .fetch_one(&pool)
             .await
             .unwrap();
-        assert_eq!(events, 2);
-        let receipts: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM pomodoro_execution_receipts")
-            .fetch_one(&pool)
-            .await
-            .unwrap();
-        assert_eq!(receipts, 1);
+        assert_eq!(event_count, 2);
+        let receipt_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM pomodoro_execution_receipts")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(receipt_count, 1);
     });
 }
 
@@ -486,17 +487,17 @@ fn execution_break_completion_waits_for_acceptance_and_exact_event_end_wins() {
         )
         .await;
         assert_eq!(expired.mode, FocusMode::Expired);
-        let active: i64 =
+        let active_count: i64 =
             sqlx::query_scalar("SELECT COUNT(*) FROM pomodoro_segments WHERE status = 'active'")
                 .fetch_one(&pool)
                 .await
                 .unwrap();
-        assert_eq!(active, 0);
-        let phases: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM pomodoro_segments")
+        assert_eq!(active_count, 0);
+        let phase_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM pomodoro_segments")
             .fetch_one(&pool)
             .await
             .unwrap();
-        assert_eq!(phases, 3);
+        assert_eq!(phase_count, 3);
     });
 }
 
@@ -812,11 +813,11 @@ fn execution_android_background_and_recovery_never_create_future_phases() {
         assert_eq!(recovered.mode, FocusMode::ReturnWait);
         let repeated = observe(&pool, FocusObservation::Deadline, &background).await;
         assert_eq!(repeated.revision, recovered.revision);
-        let phases: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM pomodoro_segments")
+        let phase_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM pomodoro_segments")
             .fetch_one(&pool)
             .await
             .unwrap();
-        assert_eq!(phases, 1);
+        assert_eq!(phase_count, 1);
         let mut foreground = context(START + 4 * MINUTE);
         foreground.platform = FocusPlatform::Android;
         let opened = observe(
@@ -855,12 +856,12 @@ fn execution_reconfiguration_atomically_carries_subminute_progress() {
         assert_eq!(run.inherited_focus_ms, 30_125);
         assert_eq!(run.inherited_phase_ms, 30_125);
         assert_eq!(result.remaining_ms, 3 * MINUTE - 30_125);
-        let active: i64 =
+        let active_count: i64 =
             sqlx::query_scalar("SELECT COUNT(*) FROM pomodoro_runs WHERE ended_at IS NULL")
                 .fetch_one(&pool)
                 .await
                 .unwrap();
-        assert_eq!(active, 1);
+        assert_eq!(active_count, 1);
         assert_eq!(result.changed_segments.len(), 2);
     });
 }

@@ -285,9 +285,9 @@ internal object ProtectedPackages {
   fun resolve(context: Context): Set<String> {
     val manager = context.packageManager
     val packages = mutableSetOf(context.packageName, "android")
-    resolve(manager, Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME))?.let(packages::add)
-    resolve(manager, Intent(Settings.ACTION_SETTINGS))?.let(packages::add)
-    resolve(manager, Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))?.let(packages::add)
+    defaultActivityPackage(manager, Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME))?.let(packages::add)
+    defaultActivityPackage(manager, Intent(Settings.ACTION_SETTINGS))?.let(packages::add)
+    defaultActivityPackage(manager, Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))?.let(packages::add)
     val telecom = context.getSystemService(Context.TELECOM_SERVICE) as? TelecomManager
     telecom?.defaultDialerPackage?.let(packages::add)
     return packages
@@ -303,7 +303,7 @@ internal object ProtectedPackages {
     return info.uid < Process.FIRST_APPLICATION_UID
   }
 
-  private fun resolve(manager: PackageManager, intent: Intent): String? =
+  private fun defaultActivityPackage(manager: PackageManager, intent: Intent): String? =
     manager.resolveActivity(intent, PackageManager.MATCH_DEFAULT_ONLY)?.activityInfo?.packageName
 }
 
@@ -340,7 +340,7 @@ internal class DistractionsEngine(private val context: Context) {
   private var observationScope: DistractionsRecoveryScope? = null
   private var observedThroughEpochMs: Long = 0L
   private var lastBlockedPackage: String? = null
-  private var lastBlockedAt: Long = 0L
+  private var lastBlockedAtEpochMs: Long = 0L
 
   fun onAccessibilityPackage(packageName: String, nowEpochMs: Long): Boolean {
     val rules = prepareObservation(nowEpochMs) ?: return false
@@ -368,9 +368,9 @@ internal class DistractionsEngine(private val context: Context) {
     decision: BlockDecision,
     nowEpochMs: Long,
   ): Boolean {
-    if (lastBlockedPackage == packageName && nowEpochMs - lastBlockedAt < 1_500L) return true
+    if (lastBlockedPackage == packageName && nowEpochMs - lastBlockedAtEpochMs < 1_500L) return true
     lastBlockedPackage = packageName
-    lastBlockedAt = nowEpochMs
+    lastBlockedAtEpochMs = nowEpochMs
     val displayName = appLabel(packageName)
     val phase = DistractionsRuntimeStore.phase(context)
     journal.recordBlock(
@@ -397,12 +397,12 @@ internal class DistractionsEngine(private val context: Context) {
       return null
     }
     val scope = DistractionsRecovery.scope(rules)
-    val lastObserved = (journal.metadata("lastObservedEpochMs") ?: nowEpochMs)
+    val lastObservedEpochMs = (journal.metadata("lastObservedEpochMs") ?: nowEpochMs)
       .coerceIn(0L, nowEpochMs)
     val mustRebuild = observationState == null
       || observationScope != scope
       || observedThroughEpochMs > nowEpochMs
-      || lastObserved < observedThroughEpochMs
+      || lastObservedEpochMs < observedThroughEpochMs
     val queryStart = if (mustRebuild) {
       DistractionsRecovery.queryStart(nowEpochMs)
     } else {
@@ -415,7 +415,7 @@ internal class DistractionsEngine(private val context: Context) {
         events = queryUsageEvents(queryStart, nowEpochMs),
         observedPackages = scope.observedPackages,
         usagePackages = scope.usagePackages,
-        intervalStartEpochMs = lastObserved,
+        intervalStartEpochMs = lastObservedEpochMs,
         intervalEndEpochMs = nowEpochMs,
       )
     } else {
@@ -429,8 +429,8 @@ internal class DistractionsEngine(private val context: Context) {
       JournalUsageInterval(
         packageName = interval.packageName,
         displayName = appLabel(interval.packageName),
-        startedAt = interval.startedAtEpochMs,
-        endedAt = interval.endedAtEpochMs,
+        startedAtEpochMs = interval.startedAtEpochMs,
+        endedAtEpochMs = interval.endedAtEpochMs,
       )
     }
     journal.recordUsageBatch(rules.vaultId, usageIntervals, nowEpochMs)
@@ -494,7 +494,7 @@ internal class DistractionsEngine(private val context: Context) {
     packageName: String,
     nowEpochMs: Long,
   ): BlockDecision {
-    if (DistractionsEvaluator.evaluateSchedule(
+    if (DistractionsEvaluator.isBlockedBySchedule(
         rules.mobile,
         DistractionsRuntimeStore.phase(context),
         packageName,

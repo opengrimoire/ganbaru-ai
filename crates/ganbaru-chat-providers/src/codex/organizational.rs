@@ -13,6 +13,7 @@ pub(super) const ORGANIZATIONAL_PERMISSION_PROFILE: &str = "ganbaru_organization
 pub(super) const INTERNAL_MCP_TOKEN_ENVIRONMENT: &str = "GANBARU_CHAT_MCP_TOKEN";
 
 const MAX_MCP_SERVER_NAMES: usize = 3_200;
+const MAX_PERMISSION_PROFILES: usize = 3_200;
 const MAX_MCP_SERVER_NAME_BYTES: usize = 1_000;
 const ORGANIZATIONAL_PROFILE_TOML: &str =
     r#"{filesystem={":minimal"="read",":workspace_roots"={"."="write"}},network={enabled=false}}"#;
@@ -181,7 +182,7 @@ pub(super) fn verify_permission_profile_list(
     response: &PermissionProfileListResponse,
 ) -> ChatResult<()> {
     if response.next_cursor.is_some()
-        || response.data.len() > MAX_MCP_SERVER_NAMES
+        || response.data.len() > MAX_PERMISSION_PROFILES
         || !response
             .data
             .iter()

@@ -124,7 +124,7 @@
   let templateSourceId = $state(untrack(() => dataSourceId));
   let templateError = $state<string | null>(null);
   let pendingDeleteView = $state<NotesDatabaseView | null>(null);
-  let lastDatabaseId = $state<string | null>(null);
+  let lastViewsLoadSignature = $state<string | null>(null);
   let metadataRequest = 0;
   let dataSources = $state<NotesDataSource[]>([]);
   let sourcesLoading = $state(false);
@@ -140,7 +140,7 @@
 
   const supportedViews = $derived(views.filter((view) => NOTES_DATABASE_VIEW_KINDS.includes(view.type as NotesDatabaseViewKind)));
   const selectedView = $derived(supportedViews.find((view) => view.id === selectedViewId) ?? supportedViews[0] ?? null);
-  const activeView = $derived((selectedView?.type ?? "table") as NotesDatabaseViewKind);
+  const activeViewKind = $derived((selectedView?.type ?? "table") as NotesDatabaseViewKind);
   const activeViewId = $derived(selectedView?.id ?? null);
   const activeSourceId = $derived(selectedView?.data_source_id ?? dataSourceId);
   const activeSource = $derived(dataSources.find((source) => source.id === activeSourceId));
@@ -148,7 +148,7 @@
   const attachedSources = $derived(dataSources.filter((source) => attachedSourceIds.has(source.id)));
   const otherSources = $derived(dataSources.filter((source) => !attachedSourceIds.has(source.id)));
   const layoutInstance = $derived.by(() => {
-    const identity = JSON.stringify([activeSourceId, databaseId, activeViewId, activeView]);
+    const identity = JSON.stringify([activeSourceId, databaseId, activeViewId, activeViewKind]);
     const reportSaving = (saving: boolean): void => {
       if (layoutInstance.reportSaving !== reportSaving) return;
       layoutSavingState = { reporter: reportSaving, saving };
@@ -172,8 +172,8 @@
     const revision = notesDatabaseSession.revision;
     if (!databaseId || busy) return;
     const signature = `${dataSourceId}:${databaseId}:${revision}`;
-    if (signature === lastDatabaseId) return;
-    lastDatabaseId = signature;
+    if (signature === lastViewsLoadSignature) return;
+    lastViewsLoadSignature = signature;
     void reloadViews(selectedViewId ?? initialViewId, false);
   });
 
@@ -201,7 +201,7 @@
   }
 
   $effect(() => {
-    activeView;
+    activeViewKind;
     requestActiveView();
   });
 
@@ -302,8 +302,8 @@
 
   function requestActiveView(retry = false): void {
     if (!selectedView) return;
-    if (!retry && viewLoadState?.key === activeView) return;
-    const kind = activeView;
+    if (!retry && viewLoadState?.key === activeViewKind) return;
+    const kind = activeViewKind;
     const component = readNotesDatabaseView(kind);
     if (component) {
       viewLoadState = { key: kind, status: "ready", requestId: (viewLoadState?.requestId ?? 0) + 1, component };
@@ -421,7 +421,7 @@
   }
 
   async function createNewRow(): Promise<void> {
-    if (activeView === "table") {
+    if (activeViewKind === "table") {
       newRowRequestState = { reporter: layoutInstance.reportSaving, count: newRowRequest + 1 };
       return;
     }
@@ -491,7 +491,7 @@
         {#each attachedSources as source (source.id)}
           <button type="button" class="flex min-h-8 min-w-0 items-center gap-2 rounded-sm px-2 text-left hover:bg-accent" disabled={selectionDisabled}
             aria-pressed={source.id === activeSourceId} onclick={() => {
-              const view = supportedViews.find((candidate) => candidate.data_source_id === source.id && candidate.type === activeView)
+              const view = supportedViews.find((candidate) => candidate.data_source_id === source.id && candidate.type === activeViewKind)
                 ?? supportedViews.find((candidate) => candidate.data_source_id === source.id);
               if (view) selectViewFromToolbar(view.id);
             }}><Database class="size-3.5 shrink-0 text-muted-foreground" /><span class="min-w-0 flex-1 truncate">{source.title || t("notes.databaseSourcesUnnamed")}</span>
@@ -617,27 +617,27 @@
 
 {#key layoutInstance.identity}
 {@const reportLayoutSaving = untrack(() => layoutInstance.reportSaving)}
-{#if selectedView && viewLoadState?.status === "ready" && viewLoadState.key === activeView && viewLoadState.component.kind === "table"}
+{#if selectedView && viewLoadState?.status === "ready" && viewLoadState.key === activeViewKind && viewLoadState.component.kind === "table"}
   {@const NotesDatabaseTableView = viewLoadState.component.component}
   <NotesDatabaseTableView {onReady} onSavingChange={reportLayoutSaving} dataSourceId={activeSourceId} {databaseId} viewId={activeViewId} {onSelectPage} {editingLocked} onAddProperty={(type, name) => onAddProperty(type, name, editingScope())} onPropertyAction={onPropertyAction ? (request) => onPropertyAction?.(request, editingScope()) ?? Promise.resolve() : undefined} {newRowRequest} settingsOpen={viewSettingsOpen} {settingsAnchor} {settingsHeader} onCloseSettings={() => { viewSettingsOpen = false; }} onEditProperties={editProperties} reloadKey={reloadKeys.table} />
-{:else if selectedView && viewLoadState?.status === "ready" && viewLoadState.key === activeView && viewLoadState.component.kind === "board"}
+{:else if selectedView && viewLoadState?.status === "ready" && viewLoadState.key === activeViewKind && viewLoadState.component.kind === "board"}
   {@const NotesDatabaseBoardView = viewLoadState.component.component}
   <NotesDatabaseBoardView {onReady} onSavingChange={reportLayoutSaving} settingsOpen={viewSettingsOpen} {settingsAnchor} {settingsHeader} onCloseSettings={() => { viewSettingsOpen = false; }} onEditProperties={editProperties} dataSourceId={activeSourceId} {databaseId} {editingLocked} viewId={activeViewId} {onSelectPage} reloadKey={reloadKeys.board} />
-{:else if selectedView && viewLoadState?.status === "ready" && viewLoadState.key === activeView && viewLoadState.component.kind === "gallery"}
+{:else if selectedView && viewLoadState?.status === "ready" && viewLoadState.key === activeViewKind && viewLoadState.component.kind === "gallery"}
   {@const NotesDatabaseGalleryView = viewLoadState.component.component}
   <NotesDatabaseGalleryView {onReady} onSavingChange={reportLayoutSaving} settingsOpen={viewSettingsOpen} {settingsAnchor} {settingsHeader} onCloseSettings={() => { viewSettingsOpen = false; }} onEditProperties={editProperties} dataSourceId={activeSourceId} {databaseId} {editingLocked} viewId={activeViewId} {onSelectPage} reloadKey={reloadKeys.gallery} />
-{:else if selectedView && viewLoadState?.status === "ready" && viewLoadState.key === activeView && viewLoadState.component.kind === "list"}
+{:else if selectedView && viewLoadState?.status === "ready" && viewLoadState.key === activeViewKind && viewLoadState.component.kind === "list"}
   {@const NotesDatabaseListView = viewLoadState.component.component}
   <NotesDatabaseListView {onReady} onSavingChange={reportLayoutSaving} settingsOpen={viewSettingsOpen} {settingsAnchor} {settingsHeader} onCloseSettings={() => { viewSettingsOpen = false; }} onEditProperties={editProperties} dataSourceId={activeSourceId} {databaseId} {editingLocked} viewId={activeViewId} {onSelectPage} reloadKey={reloadKeys.list} />
-{:else if selectedView && viewLoadState?.status === "ready" && viewLoadState.key === activeView && viewLoadState.component.kind === "calendar"}
+{:else if selectedView && viewLoadState?.status === "ready" && viewLoadState.key === activeViewKind && viewLoadState.component.kind === "calendar"}
   {@const NotesDatabaseCalendarView = viewLoadState.component.component}
   <NotesDatabaseCalendarView {onReady} onSavingChange={reportLayoutSaving} settingsOpen={viewSettingsOpen} {settingsAnchor} {settingsHeader} onCloseSettings={() => { viewSettingsOpen = false; }} onEditProperties={editProperties} dataSourceId={activeSourceId} {databaseId} {editingLocked} viewId={activeViewId} {onSelectPage} reloadKey={reloadKeys.calendar} />
-{:else if selectedView && viewLoadState?.status === "ready" && viewLoadState.key === activeView && viewLoadState.component.kind === "timeline"}
+{:else if selectedView && viewLoadState?.status === "ready" && viewLoadState.key === activeViewKind && viewLoadState.component.kind === "timeline"}
   {@const NotesDatabaseTimelineView = viewLoadState.component.component}
   <NotesDatabaseTimelineView settingsOpen={viewSettingsOpen} {settingsAnchor} {settingsHeader} onCloseSettings={() => { viewSettingsOpen = false; }} onEditProperties={editProperties} {onReady} onSavingChange={reportLayoutSaving} dataSourceId={activeSourceId} {databaseId} {editingLocked} viewId={activeViewId} {onSelectPage} reloadKey={reloadKeys.timeline} />
-{:else if viewLoadState?.status === "failed" && viewLoadState.key === activeView}
-  <div class="my-3 rounded-md border border-destructive/40 p-3 text-[0.8rem] text-destructive" role="alert"><p>{t("common.viewLoadFailed", viewLabel(activeView))}</p><button class="mt-2 min-h-8 rounded-md border border-border px-2 text-foreground hover:bg-accent" type="button" onclick={() => requestActiveView(true)}>{t("common.retry")}</button></div>
+{:else if viewLoadState?.status === "failed" && viewLoadState.key === activeViewKind}
+  <div class="my-3 rounded-md border border-destructive/40 p-3 text-[0.8rem] text-destructive" role="alert"><p>{t("common.viewLoadFailed", viewLabel(activeViewKind))}</p><button class="mt-2 min-h-8 rounded-md border border-border px-2 text-foreground hover:bg-accent" type="button" onclick={() => requestActiveView(true)}>{t("common.retry")}</button></div>
 {:else}
-  <NotesLoadingSkeleton kind={activeView} />
+  <NotesLoadingSkeleton kind={activeViewKind} />
 {/if}
 {/key}

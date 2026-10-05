@@ -23,7 +23,7 @@ function currentTimeZone(): string {
   return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
 }
 
-function kindEnabled(
+function isKindEnabled(
   kind: NotesMentionNotificationKind,
   preferences: NotesMentionNotificationPreferenceSnapshot,
 ): boolean {
@@ -81,7 +81,7 @@ export function notesMentionNotificationIsDue(
   options: NotesMentionNotificationDueOptions,
 ): boolean {
   if (notification.status !== "pending") return false;
-  if (!kindEnabled(notification.kind, preferences)) return false;
+  if (!isKindEnabled(notification.kind, preferences)) return false;
   const dueAtMs = notesMentionNotificationDueAtMs(notification, options);
   return dueAtMs !== null && dueAtMs <= options.nowMs;
 }

@@ -1035,15 +1035,15 @@ describe("Notes editing with delayed persistence", () => {
   });
 
   it("renders Enter in place immediately and retains subsequent typing after the append response", async () => {
-    const e = editor();
-    await e.actions.splitTextBlockAtSelection(firstId, 5, 5);
-    const newId = e.projection.childIdsByParentId[pageId][1];
-    expect(e.projection.flatBlockOutlines.map((item) => item.outline.id)).toEqual([firstId, newId, lastId]);
-    await e.actions.updateBlockText(newId, "Second edited");
-    e.release();
-    await e.persistence.flushPendingBlockSaves();
-    expect(blockPlainText(e.projection.blocksById[newId])).toBe("Second edited");
-    expect(blockPlainText(e.stored.get(newId)!)).toBe("Second edited");
+    const h = editor();
+    await h.actions.splitTextBlockAtSelection(firstId, 5, 5);
+    const newId = h.projection.childIdsByParentId[pageId][1];
+    expect(h.projection.flatBlockOutlines.map((item) => item.outline.id)).toEqual([firstId, newId, lastId]);
+    await h.actions.updateBlockText(newId, "Second edited");
+    h.release();
+    await h.persistence.flushPendingBlockSaves();
+    expect(blockPlainText(h.projection.blocksById[newId])).toBe("Second edited");
+    expect(blockPlainText(h.stored.get(newId)!)).toBe("Second edited");
   });
 
   it("opens a collapsed toggle and writes the split title suffix as an editable child", async () => {
@@ -1342,50 +1342,50 @@ describe("Notes editing with delayed persistence", () => {
   });
 
   it("merges, splits, and undoes before storage responds without resurrecting stale text", async () => {
-    const e = editor();
-    await e.actions.splitTextBlockAtSelection(firstId, 5, 5);
-    const newId = e.projection.childIdsByParentId[pageId][1];
-    await e.actions.updateBlockText(newId, "Second edited");
-    await e.actions.mergeBlockWithPrevious(newId);
-    expect(e.projection.childIdsByParentId[pageId]).toEqual([firstId, lastId]);
-    expect(blockPlainText(e.projection.blocksById[firstId])).toBe("FirstSecond edited");
-    expect(e.focus).toHaveBeenLastCalledWith(firstId, { start: 5, end: 5 });
-    await e.undo.undo();
-    expect(e.projection.childIdsByParentId[pageId]).toEqual([firstId, newId, lastId]);
-    await e.actions.updateBlockText(newId, "After undo");
-    e.release();
-    await e.persistence.flushPendingBlockSaves();
-    expect(blockPlainText(e.stored.get(firstId)!)).toBe("First");
-    expect(blockPlainText(e.stored.get(newId)!)).toBe("After undo");
-    expect(e.stored.get(newId)?.in_trash).toBe(false);
-    expect(blockPlainText(e.projection.blocksById[newId])).toBe("After undo");
+    const h = editor();
+    await h.actions.splitTextBlockAtSelection(firstId, 5, 5);
+    const newId = h.projection.childIdsByParentId[pageId][1];
+    await h.actions.updateBlockText(newId, "Second edited");
+    await h.actions.mergeBlockWithPrevious(newId);
+    expect(h.projection.childIdsByParentId[pageId]).toEqual([firstId, lastId]);
+    expect(blockPlainText(h.projection.blocksById[firstId])).toBe("FirstSecond edited");
+    expect(h.focus).toHaveBeenLastCalledWith(firstId, { start: 5, end: 5 });
+    await h.undo.undo();
+    expect(h.projection.childIdsByParentId[pageId]).toEqual([firstId, newId, lastId]);
+    await h.actions.updateBlockText(newId, "After undo");
+    h.release();
+    await h.persistence.flushPendingBlockSaves();
+    expect(blockPlainText(h.stored.get(firstId)!)).toBe("First");
+    expect(blockPlainText(h.stored.get(newId)!)).toBe("After undo");
+    expect(h.stored.get(newId)?.in_trash).toBe(false);
+    expect(blockPlainText(h.projection.blocksById[newId])).toBe("After undo");
   });
 
   it("preserves middle block order across grouped Enter undo and redo", async () => {
-    const e = editor();
-    await e.actions.splitTextBlockAtSelection(firstId, 5, 5);
-    const second = e.projection.childIdsByParentId[pageId][1];
-    await e.actions.splitTextBlockAtSelection(second, 3, 3);
-    const expected = [...e.projection.childIdsByParentId[pageId]];
-    await e.undo.undo();
-    expect(e.projection.childIdsByParentId[pageId]).toEqual([firstId, lastId]);
-    await e.undo.redo();
-    expect(e.projection.childIdsByParentId[pageId]).toEqual(expected);
-    expect(e.projection.flatBlockOutlines.map((item) => item.outline.id)).toEqual(expected);
-    e.release();
-    await e.persistence.flushPendingBlockSaves();
-    expect(e.error).not.toHaveBeenCalled();
+    const h = editor();
+    await h.actions.splitTextBlockAtSelection(firstId, 5, 5);
+    const second = h.projection.childIdsByParentId[pageId][1];
+    await h.actions.splitTextBlockAtSelection(second, 3, 3);
+    const expected = [...h.projection.childIdsByParentId[pageId]];
+    await h.undo.undo();
+    expect(h.projection.childIdsByParentId[pageId]).toEqual([firstId, lastId]);
+    await h.undo.redo();
+    expect(h.projection.childIdsByParentId[pageId]).toEqual(expected);
+    expect(h.projection.flatBlockOutlines.map((item) => item.outline.id)).toEqual(expected);
+    h.release();
+    await h.persistence.flushPendingBlockSaves();
+    expect(h.error).not.toHaveBeenCalled();
   });
 
   it("keeps unloaded siblings in the outline when inserting within a loaded window", () => {
-    const e = editor();
+    const h = editor();
     const unloaded = fromWrite(createBlockWrite(crypto.randomUUID(), "paragraph", "Unloaded"));
-    e.projection.replaceOutlines([e.projection.blocksById[firstId], unloaded, e.projection.blocksById[lastId]]
+    h.projection.replaceOutlines([h.projection.blocksById[firstId], unloaded, h.projection.blocksById[lastId]]
       .map((block, index) => notesBlockOutlineFromBlock(block, pageId, index)), pageId);
     const inserted = fromWrite(createBlockWrite(crypto.randomUUID(), "paragraph", "New"));
-    e.projection.insertBlockAfter(inserted, firstId);
-    expect(e.projection.flatBlockOutlines.map((item) => item.outline.id)).toEqual([firstId, inserted.id, unloaded.id, lastId]);
-    e.release();
+    h.projection.insertBlockAfter(inserted, firstId);
+    expect(h.projection.flatBlockOutlines.map((item) => item.outline.id)).toEqual([firstId, inserted.id, unloaded.id, lastId]);
+    h.release();
   });
 
 });

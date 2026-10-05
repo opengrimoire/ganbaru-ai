@@ -117,9 +117,9 @@ export type FocusIdleThresholdMinutes =
   (typeof FOCUS_IDLE_THRESHOLD_MINUTES_OPTIONS)[number];
 export const DEFAULT_FOCUS_IDLE_THRESHOLD_MINUTES: FocusIdleThresholdMinutes = 3;
 export const DEFAULT_FOCUS_IDLE_PAUSE_ON_EVENT_CREATE = true;
-export const FOCUS_BREAK_SOUND_INTERVAL_SECONDS = Object.freeze([0, 10, 15, 30, 60] as const);
+export const FOCUS_BREAK_SOUND_INTERVAL_SECONDS_OPTIONS = Object.freeze([0, 10, 15, 30, 60] as const);
 export type FocusBreakSoundIntervalSeconds =
-  (typeof FOCUS_BREAK_SOUND_INTERVAL_SECONDS)[number];
+  (typeof FOCUS_BREAK_SOUND_INTERVAL_SECONDS_OPTIONS)[number];
 export const DEFAULT_FOCUS_BREAK_FINISHED_REPEAT_SECONDS: FocusBreakSoundIntervalSeconds = 10;
 export const DEFAULT_FOCUS_BREAK_END_WARNING_SECONDS: FocusBreakSoundIntervalSeconds = 10;
 export const FOCUS_BREAK_END_ESC_PRESS_OPTIONS = Object.freeze([1, 3, 10, 20, 50] as const);
@@ -132,11 +132,11 @@ export type FocusBreakExtensionLimit =
   | (typeof FOCUS_BREAK_EXTENSION_LIMIT_OPTIONS)[number]
   | null;
 export const DEFAULT_FOCUS_BREAK_EXTENSION_LIMIT: FocusBreakExtensionLimit = 3;
-export const FOCUS_PAUSE_NOTIFICATION_INTERVAL_MINUTES = Object.freeze(
+export const FOCUS_PAUSE_NOTIFICATION_INTERVAL_MINUTES_OPTIONS = Object.freeze(
   [0, 3, 5, 10, 15] as const,
 );
 export type FocusPauseNotificationIntervalMinutes =
-  (typeof FOCUS_PAUSE_NOTIFICATION_INTERVAL_MINUTES)[number];
+  (typeof FOCUS_PAUSE_NOTIFICATION_INTERVAL_MINUTES_OPTIONS)[number];
 export const DEFAULT_FOCUS_PAUSE_NOTIFICATION_INTERVAL_MINUTES:
   FocusPauseNotificationIntervalMinutes = 3;
 
@@ -267,7 +267,7 @@ export function isFocusBreakSoundIntervalSeconds(
   value: unknown,
 ): value is FocusBreakSoundIntervalSeconds {
   return typeof value === "number"
-    && FOCUS_BREAK_SOUND_INTERVAL_SECONDS.includes(
+    && FOCUS_BREAK_SOUND_INTERVAL_SECONDS_OPTIONS.includes(
       value as FocusBreakSoundIntervalSeconds,
     );
 }
@@ -317,7 +317,7 @@ export function isFocusPauseNotificationIntervalMinutes(
   value: unknown,
 ): value is FocusPauseNotificationIntervalMinutes {
   return typeof value === "number"
-    && FOCUS_PAUSE_NOTIFICATION_INTERVAL_MINUTES.includes(
+    && FOCUS_PAUSE_NOTIFICATION_INTERVAL_MINUTES_OPTIONS.includes(
       value as FocusPauseNotificationIntervalMinutes,
     );
 }

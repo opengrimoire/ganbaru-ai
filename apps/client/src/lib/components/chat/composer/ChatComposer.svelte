@@ -74,8 +74,8 @@
   let editorRoot: HTMLDivElement | undefined = $state();
   let editorController: ChatComposerEditor | undefined;
   let editorFocused = false;
-  let boldActive = $state(false);
-  let italicActive = $state(false);
+  let isBoldActive = $state(false);
+  let isItalicActive = $state(false);
   let fileInput: HTMLInputElement | undefined = $state();
   let attachmentMenu: HTMLDetailsElement | undefined = $state();
   let menuEntries = $state<(ProjectWorkingFolderPathRead | ChatPromptCatalogEntry)[]>([]);
@@ -243,8 +243,8 @@
   function handleEditorSelectionChange(selection: ChatComposerSelection, activeMarks: ChatComposerMark[]): void {
     restoreSelectionStart = selection.start;
     restoreSelectionEnd = selection.end;
-    boldActive = activeMarks.includes("bold");
-    italicActive = activeMarks.includes("italic");
+    isBoldActive = activeMarks.includes("bold");
+    isItalicActive = activeMarks.includes("italic");
   }
 
   function handleInput(): void {
@@ -916,8 +916,8 @@
             <span>{visibleComposerMode.label}</span>
           </button>
         {/if}
-        <button type="button" class="format-action" class:active={boldActive} aria-label={t("chat.composer.bold")} aria-pressed={boldActive} title={`${t("chat.composer.bold")} (Ctrl+B)`} disabled={composerDisabled} onpointerdown={(event) => event.preventDefault()} onclick={() => editorController?.toggleMark("bold")}><Bold size={14} /></button>
-        <button type="button" class="format-action" class:active={italicActive} aria-label={t("chat.composer.italic")} aria-pressed={italicActive} title={`${t("chat.composer.italic")} (Ctrl+I)`} disabled={composerDisabled} onpointerdown={(event) => event.preventDefault()} onclick={() => editorController?.toggleMark("italic")}><Italic size={14} /></button>
+        <button type="button" class="format-action" class:active={isBoldActive} aria-label={t("chat.composer.bold")} aria-pressed={isBoldActive} title={`${t("chat.composer.bold")} (Ctrl+B)`} disabled={composerDisabled} onpointerdown={(event) => event.preventDefault()} onclick={() => editorController?.toggleMark("bold")}><Bold size={14} /></button>
+        <button type="button" class="format-action" class:active={isItalicActive} aria-label={t("chat.composer.italic")} aria-pressed={isItalicActive} title={`${t("chat.composer.italic")} (Ctrl+I)`} disabled={composerDisabled} onpointerdown={(event) => event.preventDefault()} onclick={() => editorController?.toggleMark("italic")}><Italic size={14} /></button>
       </div>
       <div class="toolbar-right">
         <div class="execution-controls"><ChatWorkingFolderControl /><ChatModelControls /></div>

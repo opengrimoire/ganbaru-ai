@@ -85,7 +85,7 @@ pub(crate) async fn next_view_sort_order_tx(
     .map_err(|e| format!("prepare notes database view order: {e}"))
 }
 
-pub(crate) async fn generated_uuid_tx(
+pub(crate) async fn generate_uuid_tx(
     tx: &mut Transaction<'_, Sqlite>,
     error_context: &str,
     validation_field: &str,

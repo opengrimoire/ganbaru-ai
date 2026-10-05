@@ -22,16 +22,16 @@ import {
 } from "$lib/stores/preference-options";
 import { projectHasLockedSystemIdentity } from "$lib/projects/system-defaults";
 
-export type ProjectSettingsProjectDraftError =
+export type ProjectDraftError =
   | "name_required"
   | "group_required"
   | "invalid_duration";
 
-export type ProjectSettingsProjectDraftResult<T> =
+export type ProjectDraftResult<T> =
   | { ok: true; value: T }
-  | { ok: false; error: ProjectSettingsProjectDraftError };
+  | { ok: false; error: ProjectDraftError };
 
-export interface ProjectSettingsProjectDraft {
+export interface ProjectDraft {
   groupId: string;
   name: string;
   icon: string;
@@ -53,14 +53,14 @@ export interface ProjectSettingsProjectDraft {
   breakPlaylistId: string;
 }
 
-export interface ProjectSettingsProjectUpdateInput {
+export interface ProjectDraftUpdateInput {
   project: Project;
-  draft: ProjectSettingsProjectDraft;
+  draft: ProjectDraft;
   visibleGroupIds: ReadonlySet<string>;
   nextSortOrderForGroup: (groupId: string, excludeProjectId: string) => number;
 }
 
-export function emptyProjectSettingsProjectDraft(): ProjectSettingsProjectDraft {
+export function emptyProjectDraft(): ProjectDraft {
   return {
     groupId: "",
     name: "",
@@ -84,7 +84,7 @@ export function emptyProjectSettingsProjectDraft(): ProjectSettingsProjectDraft 
   };
 }
 
-export function projectSettingsProjectDraftFromProject(project: Project): ProjectSettingsProjectDraft {
+export function projectDraftFromProject(project: Project): ProjectDraft {
   const customPomodoro = projectCustomPomodoroFromDefaults(project);
   return {
     groupId: project.groupId,
@@ -109,9 +109,9 @@ export function projectSettingsProjectDraftFromProject(project: Project): Projec
   };
 }
 
-export function projectSettingsProjectDraftDirty(
+export function projectDraftDirty(
   project: Project,
-  draft: ProjectSettingsProjectDraft,
+  draft: ProjectDraft,
 ): boolean {
   const identityDirty = !projectHasLockedSystemIdentity(project)
     && (draft.name !== project.name || draft.groupId !== project.groupId);
@@ -128,9 +128,9 @@ export function projectSettingsProjectDraftDirty(
     || draft.breakPlaylistId !== (project.breakPlaylistId ?? "");
 }
 
-export function projectSettingsProjectUpdateFromDraft(
-  input: ProjectSettingsProjectUpdateInput,
-): ProjectSettingsProjectDraftResult<ProjectUpdate> {
+export function projectUpdateFromDraft(
+  input: ProjectDraftUpdateInput,
+): ProjectDraftResult<ProjectUpdate> {
   const identityLocked = projectHasLockedSystemIdentity(input.project);
   const name = identityLocked ? input.project.name : input.draft.name.trim();
   const groupId = identityLocked ? input.project.groupId : input.draft.groupId;
@@ -183,7 +183,7 @@ export function projectSettingsProjectUpdateFromDraft(
 
 function projectSettingsProjectPomodoroDraftDirty(
   project: Project,
-  draft: ProjectSettingsProjectDraft,
+  draft: ProjectDraft,
 ): boolean {
   if (draft.defaultPomodoroMode !== project.defaultPomodoroMode) return true;
   if (draft.defaultPomodoroMode === "preset") {
@@ -201,14 +201,14 @@ function projectSettingsProjectPomodoroDraftDirty(
 
 function projectSettingsProjectIdleDraftDirty(
   project: Project,
-  draft: ProjectSettingsProjectDraft,
+  draft: ProjectDraft,
 ): boolean {
   return draft.defaultIdleSettingsSource !== project.defaultIdleSettingsSource
     || draft.defaultIdlePauseEnabled !== project.defaultIdlePauseEnabled
     || draft.defaultIdleThresholdMinutes !== project.defaultIdleThresholdMinutes;
 }
 
-function projectSettingsProjectPomodoroCustomDraft(draft: ProjectSettingsProjectDraft) {
+function projectSettingsProjectPomodoroCustomDraft(draft: ProjectDraft) {
   return {
     focusDurationMinutes: draft.defaultPomodoroFocusMinutes,
     shortBreakMinutes: draft.defaultPomodoroShortBreakMinutes,
@@ -218,8 +218,8 @@ function projectSettingsProjectPomodoroCustomDraft(draft: ProjectSettingsProject
 }
 
 function projectSettingsProjectDurationFromDraft(
-  draft: ProjectSettingsProjectDraft,
-): ProjectSettingsProjectDraftResult<number | null> {
+  draft: ProjectDraft,
+): ProjectDraftResult<number | null> {
   if (draft.defaultEventTimeMode === "all_day") return { ok: true, value: null };
   if (!draft.defaultEventDurationMinutes.trim()) return { ok: true, value: null };
   const parsed = Number(draft.defaultEventDurationMinutes.trim());

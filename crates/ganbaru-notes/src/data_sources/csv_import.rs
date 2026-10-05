@@ -237,7 +237,7 @@ async fn write_valid_rows_tx(
 ) -> Result<Vec<String>, String> {
     let mut imported_page_ids = Vec::new();
     let mut reserved_ids = HashSet::new();
-    for row in rows.iter().filter(|row| row.valid()) {
+    for row in rows.iter().filter(|row| row.is_valid()) {
         let Some(properties) = row.properties.as_ref() else {
             continue;
         };
@@ -925,7 +925,7 @@ struct PreparedCsvRow {
 }
 
 impl PreparedCsvRow {
-    fn valid(&self) -> bool {
+    fn is_valid(&self) -> bool {
         self.properties.is_some() && self.diagnostics.iter().all(|item| item.severity != "error")
     }
 }
@@ -945,7 +945,7 @@ impl CsvImportPlan {
         dry_run: bool,
         imported_page_ids: Vec<String>,
     ) -> NoteDataSourceCsvImportDto {
-        let valid_row_count = self.rows.iter().filter(|row| row.valid()).count() as i64;
+        let valid_row_count = self.rows.iter().filter(|row| row.is_valid()).count() as i64;
         let invalid_row_count = self.rows.len() as i64 - valid_row_count;
         NoteDataSourceCsvImportDto {
             object: "notes_data_source_csv_import",
@@ -983,7 +983,7 @@ impl CsvImportPlan {
                 .rows
                 .into_iter()
                 .map(|row| {
-                    let valid = row.valid();
+                    let valid = row.is_valid();
                     let error_count = row
                         .diagnostics
                         .iter()

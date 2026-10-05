@@ -47,8 +47,8 @@ pub(crate) async fn run_checkpoint_cleanup(
         .map_err(persistence_error)?;
         let result = match (working_folder_id, repository_identity, expected_object_id) {
             (Some(working_folder_id), Some(repository_identity), Some(expected_object_id)) => {
-                let working_folder_id =
-                    ProjectWorkingFolderId::new(working_folder_id).map_err(|_| corrupt_data())?;
+                let working_folder_id = ProjectWorkingFolderId::new(working_folder_id)
+                    .map_err(|_| corrupt_data_error())?;
                 let authorized = super::super::workspace::commands::authorize_working_folder(
                     app,
                     pool,
@@ -71,7 +71,7 @@ pub(crate) async fn run_checkpoint_cleanup(
                     .map_err(|_| checkpoint_command_error())?
                 }
             }
-            _ => Err(corrupt_data()),
+            _ => Err(corrupt_data_error()),
         };
         match result {
             Ok(()) => {
@@ -119,7 +119,7 @@ fn persistence_error<T>(_error: T) -> ChatError {
     )
 }
 
-fn corrupt_data() -> ChatError {
+fn corrupt_data_error() -> ChatError {
     ChatError::new(
         ChatErrorCode::Persistence,
         "Stored Chat checkpoint cleanup data is invalid",

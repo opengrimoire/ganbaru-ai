@@ -1,4 +1,4 @@
-use super::history::{bool_to_string, insert_task_change_event_owned};
+use super::history::{bool_to_string, insert_task_field_change_event};
 use super::models::{
     ProjectCustomFieldCreate, ProjectCustomFieldOptionCreate, ProjectCustomFieldOptionRow,
     ProjectCustomFieldOptionUpdate, ProjectCustomFieldOptionValueRow, ProjectCustomFieldRow,
@@ -422,7 +422,7 @@ pub(in crate::projects) async fn update_custom_field_value_with_history(
 
     let new_value = custom_field_value_label(tx, &value.task_id, &field).await?;
     if old_value != new_value {
-        insert_task_change_event_owned(
+        insert_task_field_change_event(
             tx,
             value.task_id.trim(),
             "updated",
@@ -463,7 +463,7 @@ pub(in crate::projects) async fn delete_custom_field_with_history(
         .map_err(|e| format!("delete project custom field: {e}"))?;
     for (task_id, old_value) in old_values {
         if old_value.is_some() {
-            insert_task_change_event_owned(
+            insert_task_field_change_event(
                 tx,
                 &task_id,
                 "updated",
@@ -506,7 +506,7 @@ pub(in crate::projects) async fn delete_custom_field_option_with_history(
     for (task_id, old_value) in old_values {
         let new_value = custom_field_value_label(tx, &task_id, &field).await?;
         if old_value != new_value {
-            insert_task_change_event_owned(
+            insert_task_field_change_event(
                 tx,
                 &task_id,
                 "updated",

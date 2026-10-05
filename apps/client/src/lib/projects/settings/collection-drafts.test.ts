@@ -1,14 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
-  projectSettingsPriorityDraftDirty,
-  projectSettingsPrioritySaveDrafts,
-  projectSettingsStatusDraftDirty,
-  projectSettingsStatusSaveDrafts,
-  projectSettingsTagNameExists,
-  projectSettingsTagSaveDrafts,
-  type ProjectSettingsPriorityDraftState,
-  type ProjectSettingsStatusDraftState,
-  type ProjectSettingsTagDraftState,
+  priorityDraftDirty,
+  prioritySaveDrafts,
+  statusDraftDirty,
+  statusSaveDrafts,
+  tagNameTaken,
+  tagSaveDrafts,
+  type PriorityDraftState,
+  type StatusDraftState,
+  type TagDraftState,
 } from "./collection-drafts";
 import type {
   ProjectPriorityConfig,
@@ -58,8 +58,8 @@ function tag(overrides: Partial<ProjectTag> = {}): ProjectTag {
 }
 
 function statusState(
-  overrides: Partial<ProjectSettingsStatusDraftState> = {},
-): ProjectSettingsStatusDraftState {
+  overrides: Partial<StatusDraftState> = {},
+): StatusDraftState {
   return {
     nameDrafts: {},
     categoryDrafts: {},
@@ -70,8 +70,8 @@ function statusState(
 }
 
 function priorityState(
-  overrides: Partial<ProjectSettingsPriorityDraftState> = {},
-): ProjectSettingsPriorityDraftState {
+  overrides: Partial<PriorityDraftState> = {},
+): PriorityDraftState {
   return {
     nameDrafts: {},
     colorDrafts: {},
@@ -81,8 +81,8 @@ function priorityState(
 }
 
 function tagState(
-  overrides: Partial<ProjectSettingsTagDraftState> = {},
-): ProjectSettingsTagDraftState {
+  overrides: Partial<TagDraftState> = {},
+): TagDraftState {
   return {
     nameDrafts: {},
     colorDrafts: {},
@@ -91,10 +91,10 @@ function tagState(
   };
 }
 
-describe("projectSettingsStatusSaveDrafts", () => {
+describe("statusSaveDrafts", () => {
   it("returns changed status drafts with trimmed names", () => {
     const active = status();
-    const result = projectSettingsStatusSaveDrafts([
+    const result = statusSaveDrafts([
       active,
       status({ id: "status-2", name: "Done", category: "done", color: 9 }),
     ], statusState({
@@ -110,7 +110,7 @@ describe("projectSettingsStatusSaveDrafts", () => {
   });
 
   it("rejects a dirty status with a blank name", () => {
-    expect(projectSettingsStatusSaveDrafts([
+    expect(statusSaveDrafts([
       status(),
     ], statusState({ nameDrafts: { "status-1": " " } }))).toEqual({
       ok: false,
@@ -119,18 +119,18 @@ describe("projectSettingsStatusSaveDrafts", () => {
   });
 
   it("detects changed status fields", () => {
-    expect(projectSettingsStatusDraftDirty(status(), statusState())).toBe(false);
-    expect(projectSettingsStatusDraftDirty(
+    expect(statusDraftDirty(status(), statusState())).toBe(false);
+    expect(statusDraftDirty(
       status(),
       statusState({ categoryDrafts: { "status-1": "done" } }),
     )).toBe(true);
   });
 });
 
-describe("projectSettingsPrioritySaveDrafts", () => {
+describe("prioritySaveDrafts", () => {
   it("returns changed priority drafts with trimmed names", () => {
     const normal = priority();
-    const result = projectSettingsPrioritySaveDrafts([
+    const result = prioritySaveDrafts([
       normal,
       priority({ id: "priority-2", name: "Urgent", color: 14 }),
     ], priorityState({
@@ -145,7 +145,7 @@ describe("projectSettingsPrioritySaveDrafts", () => {
   });
 
   it("rejects a dirty priority with a blank name", () => {
-    expect(projectSettingsPrioritySaveDrafts([
+    expect(prioritySaveDrafts([
       priority(),
     ], priorityState({ nameDrafts: { "priority-1": "" } }))).toEqual({
       ok: false,
@@ -154,18 +154,18 @@ describe("projectSettingsPrioritySaveDrafts", () => {
   });
 
   it("detects changed priority fields", () => {
-    expect(projectSettingsPriorityDraftDirty(priority(), priorityState())).toBe(false);
-    expect(projectSettingsPriorityDraftDirty(
+    expect(priorityDraftDirty(priority(), priorityState())).toBe(false);
+    expect(priorityDraftDirty(
       priority(),
       priorityState({ colorDrafts: { "priority-1": 12 } }),
     )).toBe(true);
   });
 });
 
-describe("projectSettingsTagSaveDrafts", () => {
+describe("tagSaveDrafts", () => {
   it("returns changed tag drafts and trims names", () => {
     const research = tag();
-    const result = projectSettingsTagSaveDrafts([
+    const result = tagSaveDrafts([
       research,
       tag({ id: "tag-2", name: "Writing", color: 11 }),
     ], tagState({
@@ -180,13 +180,13 @@ describe("projectSettingsTagSaveDrafts", () => {
   });
 
   it("rejects blank and duplicate tag draft names", () => {
-    expect(projectSettingsTagSaveDrafts([
+    expect(tagSaveDrafts([
       tag(),
     ], tagState({ nameDrafts: { "tag-1": " " } }))).toEqual({
       ok: false,
       error: "name_required",
     });
-    expect(projectSettingsTagSaveDrafts([
+    expect(tagSaveDrafts([
       tag(),
       tag({ id: "tag-2", name: "Writing" }),
     ], tagState({ nameDrafts: { "tag-2": " research " } }))).toEqual({
@@ -196,20 +196,20 @@ describe("projectSettingsTagSaveDrafts", () => {
   });
 });
 
-describe("projectSettingsTagNameExists", () => {
+describe("tagNameTaken", () => {
   it("matches existing tag names case-insensitively", () => {
-    expect(projectSettingsTagNameExists({
+    expect(tagNameTaken({
       tags: [tag()],
       name: " research ",
     })).toBe(true);
   });
 
   it("ignores blank names and the optional ignored tag", () => {
-    expect(projectSettingsTagNameExists({
+    expect(tagNameTaken({
       tags: [tag()],
       name: " ",
     })).toBe(false);
-    expect(projectSettingsTagNameExists({
+    expect(tagNameTaken({
       tags: [tag()],
       name: "Research",
       ignoredTagId: "tag-1",

@@ -15,11 +15,9 @@ export interface VaultInfo {
   displayName: string;
 }
 
-export type DataFolderInfo = VaultInfo;
-
 let cachedActiveVaultInfo: VaultInfo | null | undefined;
 
-export interface DataFolderDefaultLocation {
+export interface VaultDefaultLocation {
   path: string;
   parentPath: string;
   folderName: string;
@@ -63,7 +61,7 @@ export interface VaultOwnershipStatus {
   transferPhase: VaultTransferPhase;
 }
 
-export type DataFolderErrorAction =
+export type VaultErrorAction =
   | "startup"
   | "default"
   | "change"
@@ -116,7 +114,7 @@ function parseVaultInfo(value: unknown): VaultInfo {
   return { path, configPath, databasePath, vaultId, displayName };
 }
 
-function parseDataFolderDefaultLocation(value: unknown): DataFolderDefaultLocation {
+function parseVaultDefaultLocation(value: unknown): VaultDefaultLocation {
   if (!isRecord(value)) throw new Error("default folder response is not an object");
   const path = readString(value.path);
   const parentPath = readString(value.parentPath);
@@ -227,7 +225,7 @@ function containsAny(value: string, needles: readonly string[]): boolean {
 }
 
 function fallbackForAction(
-  action: DataFolderErrorAction,
+  action: VaultErrorAction,
   t: Translate,
 ): string {
   switch (action) {
@@ -248,9 +246,9 @@ function fallbackForAction(
   }
 }
 
-export function formatDataFolderError(
+export function formatVaultError(
   error: unknown,
-  action: DataFolderErrorAction = "general",
+  action: VaultErrorAction = "general",
   t: Translate = translate,
 ): string {
   const raw = errorMessage(error, t);
@@ -336,12 +334,12 @@ export async function getVaultOwnershipStatus(): Promise<VaultOwnershipStatus> {
   return parseVaultOwnershipStatus(await invoke<unknown>("vault_ownership_status"));
 }
 
-export async function getDefaultDataFolderLocation(): Promise<DataFolderDefaultLocation> {
-  return parseDataFolderDefaultLocation(await invoke<unknown>("vault_default_location"));
+export async function getDefaultVaultLocation(): Promise<VaultDefaultLocation> {
+  return parseVaultDefaultLocation(await invoke<unknown>("vault_default_location"));
 }
 
-export async function useDefaultDataFolder(): Promise<DataFolderInfo> {
-  return activateVaultInfo(parseVaultInfo(await invoke<unknown>("vault_use_default_folder")));
+export async function useDefaultVault(): Promise<VaultInfo> {
+  return activateVaultInfo(parseVaultInfo(await invoke<unknown>("vault_use_default")));
 }
 
 export async function pickCreateVault(): Promise<VaultInfo | null> {
@@ -352,14 +350,6 @@ export async function pickCreateVault(): Promise<VaultInfo | null> {
 export async function pickOpenVault(): Promise<VaultInfo | null> {
   const info = parseOptionalVaultInfo(await invoke<unknown>("vault_pick_open"));
   return info ? activateVaultInfo(info) : null;
-}
-
-export async function pickDataFolderLocation(): Promise<DataFolderInfo | null> {
-  return pickCreateVault();
-}
-
-export async function importDataFolder(): Promise<DataFolderInfo | null> {
-  return pickOpenVault();
 }
 
 export async function revealActiveVault(): Promise<void> {

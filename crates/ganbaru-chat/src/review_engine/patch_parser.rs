@@ -2,7 +2,7 @@
 
 use super::super::models::ChatResult;
 use super::contracts::{ReviewHunkRead, ReviewPatchState};
-use super::corrupt_data;
+use super::corrupt_data_error;
 use super::patch_store::{ParsedHunk, ParsedPatch};
 use sha2::{Digest, Sha256};
 
@@ -19,7 +19,7 @@ pub fn parse_patch(patch: &str, file_id: &str) -> ChatResult<ParsedPatch> {
     for (index, start) in starts.iter().copied().enumerate() {
         let end = starts.get(index + 1).copied().unwrap_or(patch.len());
         let text = patch[start..end].to_string();
-        let header = text.lines().next().ok_or_else(corrupt_data)?;
+        let header = text.lines().next().ok_or_else(corrupt_data_error)?;
         let (old_start, old_count, new_start, new_count) = parse_hunk_header(header)?;
         hunks.push(ParsedHunk {
             read: ReviewHunkRead {
@@ -43,8 +43,8 @@ pub fn parse_hunk_header(header: &str) -> ChatResult<(u64, u64, u64, u64)> {
     let body = header
         .strip_prefix("@@ -")
         .and_then(|value| value.split_once(" @@").map(|(range, _)| range))
-        .ok_or_else(corrupt_data)?;
-    let (old, new) = body.split_once(" +").ok_or_else(corrupt_data)?;
+        .ok_or_else(corrupt_data_error)?;
+    let (old, new) = body.split_once(" +").ok_or_else(corrupt_data_error)?;
     let old = parse_hunk_range(old)?;
     let new = parse_hunk_range(new)?;
     Ok((old.0, old.1, new.0, new.1))
@@ -55,8 +55,8 @@ fn parse_hunk_range(value: &str) -> ChatResult<(u64, u64)> {
         .split_once(',')
         .map_or((value, "1"), |(start, lines)| (start, lines));
     Ok((
-        start.parse().map_err(|_| corrupt_data())?,
-        lines.parse().map_err(|_| corrupt_data())?,
+        start.parse().map_err(|_| corrupt_data_error())?,
+        lines.parse().map_err(|_| corrupt_data_error())?,
     ))
 }
 

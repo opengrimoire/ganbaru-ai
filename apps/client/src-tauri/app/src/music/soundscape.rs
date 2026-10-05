@@ -619,7 +619,7 @@ pub(crate) fn apply_automatic(
 }
 
 #[tauri::command]
-pub(crate) fn soundscape_start(
+pub(crate) fn music_soundscape_start(
     app: tauri::AppHandle,
     state: State<'_, SoundscapeEngineState>,
     request: SoundscapeStartRequest,
@@ -632,14 +632,14 @@ pub(crate) fn soundscape_start(
 }
 
 #[tauri::command]
-pub(crate) fn soundscape_pause(
+pub(crate) fn music_soundscape_pause(
     state: State<'_, SoundscapeEngineState>,
 ) -> Result<SoundscapeSnapshot, SoundscapeError> {
     state.controller.dispatch(EngineCommand::Pause)
 }
 
 #[tauri::command]
-pub(crate) fn soundscape_resume(
+pub(crate) fn music_soundscape_resume(
     app: tauri::AppHandle,
     state: State<'_, SoundscapeEngineState>,
 ) -> Result<SoundscapeSnapshot, SoundscapeError> {
@@ -651,14 +651,14 @@ pub(crate) fn soundscape_resume(
 }
 
 #[tauri::command]
-pub(crate) fn soundscape_stop(
+pub(crate) fn music_soundscape_stop(
     state: State<'_, SoundscapeEngineState>,
 ) -> Result<SoundscapeSnapshot, SoundscapeError> {
     state.controller.dispatch(EngineCommand::Stop)
 }
 
 #[tauri::command]
-pub(crate) fn soundscape_set_volume(
+pub(crate) fn music_soundscape_set_volume(
     state: State<'_, SoundscapeEngineState>,
     volume: f64,
 ) -> Result<SoundscapeSnapshot, SoundscapeError> {
@@ -666,7 +666,7 @@ pub(crate) fn soundscape_set_volume(
 }
 
 #[tauri::command]
-pub(crate) fn soundscape_set_levels(
+pub(crate) fn music_soundscape_set_levels(
     state: State<'_, SoundscapeEngineState>,
     levels: Vec<f64>,
 ) -> Result<SoundscapeSnapshot, SoundscapeError> {
@@ -674,7 +674,7 @@ pub(crate) fn soundscape_set_levels(
 }
 
 #[tauri::command]
-pub(crate) fn soundscape_recover(
+pub(crate) fn music_soundscape_recover(
     app: tauri::AppHandle,
     state: State<'_, SoundscapeEngineState>,
 ) -> Result<SoundscapeSnapshot, SoundscapeError> {
@@ -686,7 +686,7 @@ pub(crate) fn soundscape_recover(
 }
 
 #[tauri::command]
-pub(crate) fn soundscape_snapshot(
+pub(crate) fn music_soundscape_snapshot(
     state: State<'_, SoundscapeEngineState>,
 ) -> Result<SoundscapeSnapshot, SoundscapeError> {
     state.controller.dispatch(EngineCommand::Snapshot)

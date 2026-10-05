@@ -87,7 +87,7 @@ type PendingRequest =
   | { mode: "single"; scenarioIds: string[] }
   | { mode: "suite"; scenarioIds: string[]; suiteLabel: string };
 
-export interface RunningInfo {
+export interface BenchmarkRunProgress {
   phase: "A" | "B";
   scenarioId: string;
   scenarioLabel: string;
@@ -111,7 +111,7 @@ class BenchmarkRunnerStore {
     this.#benchmarkStatus.setStatus(status);
   }
 
-  running = $state<RunningInfo | undefined>(undefined);
+  running = $state<BenchmarkRunProgress | undefined>(undefined);
   result = $state<BenchmarkResult | null>(null);
   results = $state<BenchmarkResult[]>([]);
   errorMessage = $state<string | undefined>(undefined);
@@ -210,7 +210,7 @@ class BenchmarkRunnerStore {
           : undefined,
       });
     } catch (e) {
-      this.#failWith(`Setup failed: ${this.#errMsg(e)}`);
+      this.#failWith(`Setup failed: ${this.#describeError(e)}`);
       return;
     }
 
@@ -296,7 +296,7 @@ class BenchmarkRunnerStore {
     try {
       scenario = await loadScenarioById(state.scenarioId);
     } catch (e) {
-      this.#failWith(`Loading scenario failed: ${this.#errMsg(e)}`);
+      this.#failWith(`Loading scenario failed: ${this.#describeError(e)}`);
       return true;
     }
     if (!scenario) {
@@ -349,7 +349,7 @@ class BenchmarkRunnerStore {
     try {
       await persistBenchmarkState({ ...state, stage: "phase-a-running" });
     } catch (e) {
-      this.#failWith(`Persisting state failed: ${this.#errMsg(e)}`);
+      this.#failWith(`Persisting state failed: ${this.#describeError(e)}`);
       return;
     }
 
@@ -370,7 +370,7 @@ class BenchmarkRunnerStore {
         });
       } catch (e) {
         if (this.#isAbort(e)) return;
-        this.#failWith(`Baseline dataset failed: ${this.#errMsg(e)}`);
+        this.#failWith(`Baseline dataset failed: ${this.#describeError(e)}`);
         return;
       }
       if (this.#abort?.signal.aborted) return;
@@ -395,7 +395,7 @@ class BenchmarkRunnerStore {
               startupRuns,
             });
           } catch (e) {
-            this.#failWith(`Persisting state failed: ${this.#errMsg(e)}`);
+            this.#failWith(`Persisting state failed: ${this.#describeError(e)}`);
             return;
           }
           restartForScenario(scenario);
@@ -412,7 +412,7 @@ class BenchmarkRunnerStore {
     try {
       seedHandle = await scenario.seed(dataset, { anchorDate: state.anchorDate });
     } catch (e) {
-      this.#failWith(`Seeding failed: ${this.#errMsg(e)}`);
+      this.#failWith(`Seeding failed: ${this.#describeError(e)}`);
       return;
     }
     if (this.#abort?.signal.aborted) return;
@@ -438,7 +438,7 @@ class BenchmarkRunnerStore {
         startupRuns,
       });
     } catch (e) {
-      this.#failWith(`Persisting state failed: ${this.#errMsg(e)}`);
+      this.#failWith(`Persisting state failed: ${this.#describeError(e)}`);
       return;
     }
 
@@ -469,7 +469,7 @@ class BenchmarkRunnerStore {
     try {
       await persistBenchmarkState({ ...state, stage: "phase-b-running" });
     } catch (e) {
-      this.#failWith(`Persisting state failed: ${this.#errMsg(e)}`);
+      this.#failWith(`Persisting state failed: ${this.#describeError(e)}`);
       return;
     }
 
@@ -487,7 +487,7 @@ class BenchmarkRunnerStore {
       });
     } catch (e) {
       if (this.#isAbort(e)) return;
-      this.#failWith(`Dense dataset failed: ${this.#errMsg(e)}`);
+      this.#failWith(`Dense dataset failed: ${this.#describeError(e)}`);
       return;
     }
     if (this.#abort?.signal.aborted) return;
@@ -524,7 +524,7 @@ class BenchmarkRunnerStore {
             startupRuns,
           });
         } catch (e) {
-          this.#failWith(`Persisting state failed: ${this.#errMsg(e)}`);
+          this.#failWith(`Persisting state failed: ${this.#describeError(e)}`);
           return;
         }
         restartForScenario(scenario);
@@ -550,7 +550,7 @@ class BenchmarkRunnerStore {
       try {
         nextSeedHandle = await scenario.seed(nextDataset, { anchorDate: state.anchorDate });
       } catch (e) {
-        this.#failWith(`Seeding failed: ${this.#errMsg(e)}`);
+        this.#failWith(`Seeding failed: ${this.#describeError(e)}`);
         return;
       }
       if (this.#abort?.signal.aborted) return;
@@ -578,7 +578,7 @@ class BenchmarkRunnerStore {
             : startupRuns,
         });
       } catch (e) {
-        this.#failWith(`Persisting state failed: ${this.#errMsg(e)}`);
+        this.#failWith(`Persisting state failed: ${this.#describeError(e)}`);
         return;
       }
       restartForScenario(scenario);
@@ -679,7 +679,7 @@ class BenchmarkRunnerStore {
         suite: nextSuite,
       });
     } catch (e) {
-      this.#failWith(`Preparing next benchmark failed: ${this.#errMsg(e)}`);
+      this.#failWith(`Preparing next benchmark failed: ${this.#describeError(e)}`);
       return;
     }
     restartForScenario(nextScenario);
@@ -770,14 +770,14 @@ class BenchmarkRunnerStore {
     return e instanceof DOMException && e.name === "AbortError";
   }
 
-  #errMsg(e: unknown): string {
+  #describeError(e: unknown): string {
     return e instanceof Error ? e.message : String(e);
   }
 
   async #detectPlatform(): Promise<string> {
     try {
-      const r = await invoke<{ platform: string }>("get_memory_report");
-      return r.platform;
+      const report = await invoke<{ platform: string }>("memory_report");
+      return report.platform;
     } catch {
       return "unknown";
     }

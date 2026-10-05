@@ -116,7 +116,7 @@ pub(crate) type AssignmentRow = (
     i64,
 );
 
-pub(crate) async fn assignments(
+pub(crate) async fn load_assignments(
     pool: &SqlitePool,
     owner_kind: MusicAssignmentOwnerKind,
     owner_id: &str,
@@ -157,7 +157,7 @@ pub(crate) async fn replace_assignments(
     transaction.commit().await.map_err(|error| {
         MusicLibraryError::database("commit music context assignment update", error)
     })?;
-    assignments(pool, request.owner_kind, &request.owner_id).await
+    load_assignments(pool, request.owner_kind, &request.owner_id).await
 }
 
 pub(crate) async fn replace_assignments_in_transaction(

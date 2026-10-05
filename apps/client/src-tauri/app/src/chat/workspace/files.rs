@@ -10,7 +10,7 @@ use sqlx::SqlitePool;
 pub use ganbaru_chat::workspace::files::*;
 
 #[tauri::command]
-pub async fn project_list_working_folder_directory(
+pub async fn projects_list_working_folder_directory(
     app: tauri::AppHandle,
     db_url: String,
     working_folder_id: ProjectWorkingFolderId,
@@ -31,7 +31,7 @@ pub async fn project_list_working_folder_directory(
 }
 
 #[tauri::command]
-pub async fn project_preview_working_folder_file(
+pub async fn projects_preview_working_folder_file(
     app: tauri::AppHandle,
     db_url: String,
     working_folder_id: ProjectWorkingFolderId,
@@ -51,7 +51,7 @@ pub async fn project_preview_working_folder_file(
 }
 
 #[tauri::command]
-pub async fn project_save_working_folder_file(
+pub async fn projects_save_working_folder_file(
     app: tauri::AppHandle,
     observers: tauri::State<'_, super::observer::ChatWorkspaceObserverRegistry>,
     mutations: tauri::State<'_, super::mutation::ChatWorkspaceMutationRegistry>,
@@ -90,7 +90,7 @@ pub async fn project_save_working_folder_file(
 }
 
 #[tauri::command]
-pub async fn project_save_working_folder_file_copy(
+pub async fn projects_save_working_folder_file_copy(
     app: tauri::AppHandle,
     observers: tauri::State<'_, super::observer::ChatWorkspaceObserverRegistry>,
     mutations: tauri::State<'_, super::mutation::ChatWorkspaceMutationRegistry>,
@@ -129,7 +129,7 @@ pub async fn project_save_working_folder_file_copy(
 }
 
 #[tauri::command]
-pub async fn project_recreate_working_folder_file(
+pub async fn projects_recreate_working_folder_file(
     app: tauri::AppHandle,
     observers: tauri::State<'_, super::observer::ChatWorkspaceObserverRegistry>,
     mutations: tauri::State<'_, super::mutation::ChatWorkspaceMutationRegistry>,
@@ -168,7 +168,7 @@ pub async fn project_recreate_working_folder_file(
 }
 
 #[tauri::command]
-pub async fn project_open_working_folder_file(
+pub async fn projects_open_working_folder_file(
     app: tauri::AppHandle,
     db_url: String,
     working_folder_id: ProjectWorkingFolderId,

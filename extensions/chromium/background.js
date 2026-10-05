@@ -329,8 +329,8 @@ async function decideAndRedirect(tabId, url) {
   const host = hostFromUrl(url);
   if (!host) return;
   const redirectKey = `${tabId}:${url}`;
-  const lastRedirect = recentRedirects.get(redirectKey);
-  if (typeof lastRedirect === "number" && Date.now() - lastRedirect < 3000) return;
+  const lastRedirectAtMs = recentRedirects.get(redirectKey);
+  if (typeof lastRedirectAtMs === "number" && Date.now() - lastRedirectAtMs < 3000) return;
 
   const decision = await sendNativeMessage({ type: "decide_url", url, host });
   await updateStatus({

@@ -139,7 +139,7 @@ impl ThemeScoped for PaletteRowRead {
 }
 
 #[tauri::command]
-pub async fn theme_load_all<R: Runtime>(
+pub async fn themes_load_all<R: Runtime>(
     app: AppHandle<R>,
     db_url: String,
 ) -> Result<Vec<UserThemeRead>, String> {
@@ -216,7 +216,7 @@ pub async fn theme_load_all<R: Runtime>(
 }
 
 #[tauri::command]
-pub async fn theme_insert<R: Runtime>(
+pub async fn themes_insert<R: Runtime>(
     app: AppHandle<R>,
     db_url: String,
     write: UserThemeWrite,
@@ -301,7 +301,7 @@ pub async fn theme_insert<R: Runtime>(
 }
 
 #[tauri::command]
-pub async fn theme_replace_content<R: Runtime>(
+pub async fn themes_replace_content<R: Runtime>(
     app: AppHandle<R>,
     db_url: String,
     write: UserThemeWrite,
@@ -381,7 +381,7 @@ pub async fn theme_replace_content<R: Runtime>(
 }
 
 #[tauri::command]
-pub async fn theme_delete<R: Runtime>(
+pub async fn themes_delete<R: Runtime>(
     app: AppHandle<R>,
     db_url: String,
     id: String,
@@ -397,7 +397,7 @@ pub async fn theme_delete<R: Runtime>(
 }
 
 #[tauri::command]
-pub async fn theme_record_dismissal<R: Runtime>(
+pub async fn themes_record_dismissal<R: Runtime>(
     app: AppHandle<R>,
     db_url: String,
     id: String,
@@ -424,7 +424,7 @@ pub async fn theme_record_dismissal<R: Runtime>(
 }
 
 #[tauri::command]
-pub async fn theme_load_dismissals<R: Runtime>(
+pub async fn themes_load_dismissals<R: Runtime>(
     app: AppHandle<R>,
     db_url: String,
 ) -> Result<Vec<DismissalRow>, String> {
@@ -454,7 +454,7 @@ pub async fn theme_load_dismissals<R: Runtime>(
 }
 
 #[tauri::command]
-pub async fn theme_rename<R: Runtime>(
+pub async fn themes_rename<R: Runtime>(
     app: AppHandle<R>,
     db_url: String,
     id: String,
@@ -475,7 +475,7 @@ pub async fn theme_rename<R: Runtime>(
 }
 
 #[tauri::command]
-pub async fn theme_reset_token_to_seed<R: Runtime>(
+pub async fn themes_reset_token_to_seed<R: Runtime>(
     app: AppHandle<R>,
     db_url: String,
     id: String,
@@ -512,7 +512,7 @@ pub async fn theme_reset_token_to_seed<R: Runtime>(
 }
 
 #[tauri::command]
-pub async fn theme_reset_to_seed<R: Runtime>(
+pub async fn themes_reset_to_seed<R: Runtime>(
     app: AppHandle<R>,
     db_url: String,
     id: String,

@@ -1,8 +1,8 @@
 <script lang="ts">
+  import type { MaybePromise } from "$lib/utils";
   import CollectionRow from "$lib/components/collections/CollectionRow.svelte";
   import CollectionQuickAdd from "$lib/components/collections/CollectionQuickAdd.svelte";
 
-  type MaybePromise = Promise<void> | void;
   type TaskAddMode = "section" | "group";
 
   let {
@@ -42,7 +42,7 @@
   <div style="grid-column: 3 / -1;">
     <CollectionQuickAdd {label} {draft} {active} disabled={pending} {onDraftChange} {onActiveChange}
       inputAttributes={{ "data-section-task-input": mode === "section" ? rowId : undefined, "data-group-task-input": mode === "group" ? rowId : undefined }}
-      onsubmit={async () => { await onSubmit(); return !error; }} />
+      onSubmit={async () => { await onSubmit(); return !error; }} />
   </div>
   {#if error}<p class="col-span-full px-2 py-1 text-[0.8rem] text-destructive" role="alert">{error}</p>{/if}
 </CollectionRow>

@@ -14,8 +14,8 @@ use events::log_block_event;
 use linked_usage::{UsageSample, record_usage_sample};
 use rules::{decide_url_with_limits, feed_fingerprint, host_from_url, rules_fingerprint};
 use snapshot::{
-    StateSnapshot, config_dir_candidates, load_snapshot, runtime_status, should_enforce,
-    valid_local_date,
+    StateSnapshot, config_dir_candidates, is_valid_local_date, load_snapshot, runtime_status,
+    should_enforce,
 };
 
 fn block_on<F: std::future::Future>(future: F) -> F::Output {
@@ -121,7 +121,7 @@ fn run() -> Result<NativeResponse, String> {
                 snapshot.limit_state.as_ref(),
                 regular_rules_active,
             );
-            response.blocked = decision.blocked();
+            response.blocked = decision.is_blocked();
             response.matched_rule_name = decision.matched_rule_name();
             if response.blocked && request.log_event.unwrap_or(true) {
                 log_block_event(&snapshot, &host, &decision);
@@ -162,14 +162,14 @@ fn write_text_file_atomically(path: &Path, contents: &str) -> Result<(), String>
         .file_name()
         .ok_or_else(|| "connection status path has no file name".to_string())?
         .to_string_lossy();
-    let tmp_path = parent.join(format!("{file_name}.tmp"));
+    let temporary_path = parent.join(format!("{file_name}.tmp"));
     {
-        let mut file = std::fs::File::create(&tmp_path).map_err(|e| e.to_string())?;
+        let mut file = std::fs::File::create(&temporary_path).map_err(|e| e.to_string())?;
         file.write_all(contents.as_bytes())
             .map_err(|e| e.to_string())?;
         file.sync_all().map_err(|e| e.to_string())?;
     }
-    std::fs::rename(&tmp_path, path).map_err(|e| e.to_string())
+    std::fs::rename(&temporary_path, path).map_err(|e| e.to_string())
 }
 
 fn extension_connection_dir(config_dir: Option<&Path>) -> Option<PathBuf> {
@@ -182,14 +182,14 @@ fn record_extension_connection(
     config_dir: Option<&Path>,
     message_type: &str,
 ) -> Result<(), String> {
-    let dir = extension_connection_dir(config_dir)
+    let status_dir = extension_connection_dir(config_dir)
         .ok_or_else(|| "app config directory is unavailable".to_string())?;
     let payload = serde_json::json!({
         "lastSeenAt": now_utc().to_rfc3339_opts(SecondsFormat::Millis, true),
         "lastMessageType": message_type,
     });
     let json = serde_json::to_string_pretty(&payload).map_err(|e| e.to_string())?;
-    write_text_file_atomically(&dir.join(EXTENSION_CONNECTION_FILE), &json)
+    write_text_file_atomically(&status_dir.join(EXTENSION_CONNECTION_FILE), &json)
 }
 
 fn read_native_message() -> Result<NativeRequest, String> {
@@ -297,7 +297,7 @@ fn normalize_usage_sample(request: &NativeRequest) -> Result<UsageSample, String
         .local_date
         .clone()
         .ok_or_else(|| "usage localDate is required".to_string())?;
-    if !valid_local_date(&local_date) {
+    if !is_valid_local_date(&local_date) {
         return Err("usage localDate must use yyyy-mm-dd".to_string());
     }
     let display_name = request.display_name.as_ref().and_then(|value| {

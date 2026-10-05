@@ -162,7 +162,7 @@ impl ThreadRuntimeOwner {
 
     pub fn try_command(&self, command: ThreadRuntimeCommand) -> ChatResult<()> {
         if !self.snapshot()?.accepting_commands {
-            return Err(runtime_unavailable());
+            return Err(runtime_unavailable_error());
         }
         self.try_send(command)
     }
@@ -393,7 +393,7 @@ impl ThreadRuntimeOwner {
                     "Chat thread command queue is full",
                     true,
                 ),
-                mpsc::error::TrySendError::Closed(_) => runtime_unavailable(),
+                mpsc::error::TrySendError::Closed(_) => runtime_unavailable_error(),
             })
     }
 
@@ -547,7 +547,7 @@ impl ChatRuntimeRegistry {
         if owner.command_sender.send(command).await.is_err() {
             owner.abort_worker()?;
             mutations.finish_thread(thread_id);
-            return Err(runtime_unavailable());
+            return Err(runtime_unavailable_error());
         }
         match tokio::time::timeout(timeout, receive_response(receiver)).await {
             Ok(Ok(())) => Ok(()),
@@ -559,7 +559,7 @@ impl ChatRuntimeRegistry {
             Err(_) => {
                 owner.abort_worker()?;
                 mutations.finish_thread(thread_id);
-                Err(runtime_timeout())
+                Err(runtime_timeout_error())
             }
         }
     }
@@ -599,7 +599,7 @@ impl ChatRuntimeRegistry {
                         response,
                     })
                     .await
-                    .map_err(|_| runtime_unavailable())?;
+                    .map_err(|_| runtime_unavailable_error())?;
                 receivers.push(receiver);
             }
             for receiver in receivers {
@@ -615,7 +615,7 @@ impl ChatRuntimeRegistry {
             }
             Err(_) => {
                 abort_workers_and_release(&owners, mutations)?;
-                Err(runtime_timeout())
+                Err(runtime_timeout_error())
             }
         }
     }
@@ -643,7 +643,7 @@ impl ChatRuntimeRegistry {
                         response,
                     })
                     .await
-                    .map_err(|_| runtime_unavailable())?;
+                    .map_err(|_| runtime_unavailable_error())?;
                 receivers.push(receiver);
             }
             for receiver in receivers {
@@ -659,7 +659,7 @@ impl ChatRuntimeRegistry {
             }
             Err(_) => {
                 abort_workers_and_release(&owners, mutations)?;
-                Err(runtime_timeout())
+                Err(runtime_timeout_error())
             }
         }
     }

@@ -876,7 +876,7 @@ impl Owner {
                     && self.state.generation == generation
                     && self
                         .state
-                        .entry()
+                        .current_entry()
                         .is_some_and(|entry| entry.backend == SessionBackend::NativeAudio)
                 {
                     let mut next = self.state.clone();
@@ -894,7 +894,7 @@ impl Owner {
                 if browser.is_some()
                     && self
                         .state
-                        .entry()
+                        .current_entry()
                         .is_none_or(|entry| entry.backend != SessionBackend::Browser)
                 {
                     return Ok(self.state.projection(false, now_ms()));
@@ -1058,7 +1058,7 @@ impl Owner {
                 )))
             && self
                 .state
-                .entry()
+                .current_entry()
                 .is_some_and(|entry| entry.backend == SessionBackend::NativeAudio)
             && backend::restart_for_play(&self.app)
                 .await
@@ -1073,7 +1073,7 @@ impl Owner {
                 && matches!(intent, SessionIntent::Play | SessionIntent::Toggle)
                 && self
                     .state
-                    .entry()
+                    .current_entry()
                     .is_some_and(|entry| entry.backend == SessionBackend::NativeAudio))
         {
             next.reconnect_backend()
@@ -1129,7 +1129,10 @@ impl Owner {
                         .iter()
                         .filter_map(|entry| entry.item_id.clone())
                         .collect(),
-                    selected_item_id: self.state.entry().and_then(|entry| entry.item_id.clone()),
+                    selected_item_id: self
+                        .state
+                        .current_entry()
+                        .and_then(|entry| entry.item_id.clone()),
                     name: self.state.queue_name.clone(),
                 };
                 queue::load_queue(
@@ -1233,7 +1236,7 @@ impl Owner {
                 self.state.error = Some(error.to_string());
                 if self
                     .state
-                    .entry()
+                    .current_entry()
                     .is_some_and(|entry| entry.backend == SessionBackend::Browser)
                 {
                     self.state.browser_host = false;
@@ -1262,7 +1265,7 @@ impl Owner {
                 {
                     if source_failure {
                         self.backend_error_pending =
-                            self.state.entry().map(|entry| SessionObservation {
+                            self.state.current_entry().map(|entry| SessionObservation {
                                 session_id: self.state.session_id.clone(),
                                 generation: self.state.generation,
                                 sequence: self.state.last_sequence.saturating_add(1),
@@ -1341,7 +1344,7 @@ impl Owner {
         self.drain_native_delivery().await?;
         let browser = self
             .state
-            .entry()
+            .current_entry()
             .is_some_and(|entry| entry.backend == SessionBackend::Browser);
         #[cfg(not(target_os = "ios"))]
         let authority = if browser && matches!(effect, SessionEffect::Load { .. }) {
@@ -1388,7 +1391,7 @@ impl Owner {
             }
             backend::apply(
                 &self.app,
-                self.state.entry().map(|entry| entry.backend),
+                self.state.current_entry().map(|entry| entry.backend),
                 effect,
                 #[cfg(not(target_os = "ios"))]
                 authority,
@@ -1540,7 +1543,7 @@ impl Owner {
         #[cfg(target_os = "android")]
         if self
             .state
-            .entry()
+            .current_entry()
             .is_some_and(|entry| entry.backend == SessionBackend::NativeAudio)
             && matches!(
                 self.state.status,
@@ -1571,7 +1574,7 @@ impl Owner {
         }
         if self
             .state
-            .entry()
+            .current_entry()
             .is_some_and(|entry| entry.backend == SessionBackend::NativeAudio)
             && matches!(
                 self.state.status,

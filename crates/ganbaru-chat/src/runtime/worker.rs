@@ -59,7 +59,7 @@ impl RuntimeWorker {
                 response,
             } => {
                 if self.session_state() != ProviderSessionState::Ready {
-                    let _ = response.send(Err(runtime_invalid_state(
+                    let _ = response.send(Err(runtime_invalid_state_error(
                         "Chat provider session must be ready before context compaction",
                     )));
                     return false;
@@ -75,7 +75,7 @@ impl RuntimeWorker {
                         run_driver_operation(&context, driver.compact_context(request, &context))
                             .await
                     }
-                    None => Err(runtime_unavailable()),
+                    None => Err(runtime_unavailable_error()),
                 };
                 if result.is_err() {
                     self.update(|state| {
@@ -98,7 +98,7 @@ impl RuntimeWorker {
                         | ProviderSessionState::Stopping
                         | ProviderSessionState::Failed
                 ) {
-                    let _ = response.send(Err(runtime_invalid_state(
+                    let _ = response.send(Err(runtime_invalid_state_error(
                         "Chat provider session is unavailable for MCP status",
                     )));
                     return false;
@@ -108,7 +108,7 @@ impl RuntimeWorker {
                         run_driver_operation(&context, driver.read_mcp_status(request, &context))
                             .await
                     }
-                    None => Err(runtime_unavailable()),
+                    None => Err(runtime_unavailable_error()),
                 };
                 let _ = response.send(result);
             }
@@ -125,7 +125,7 @@ impl RuntimeWorker {
                         ProviderSessionState::Stopped | ProviderSessionState::Failed
                     )
                 {
-                    let _ = response.send(Err(runtime_invalid_state(
+                    let _ = response.send(Err(runtime_invalid_state_error(
                         "Chat provider session is already running",
                     )));
                     return false;
@@ -185,7 +185,7 @@ impl RuntimeWorker {
                         ProviderSessionState::Stopped | ProviderSessionState::Failed
                     )
                 {
-                    let _ = response.send(Err(runtime_invalid_state(
+                    let _ = response.send(Err(runtime_invalid_state_error(
                         "Chat provider session is already running",
                     )));
                     return false;
@@ -239,7 +239,7 @@ impl RuntimeWorker {
                 response,
             } => {
                 if self.session_state() != ProviderSessionState::Ready {
-                    let _ = response.send(Err(runtime_invalid_state(
+                    let _ = response.send(Err(runtime_invalid_state_error(
                         "Chat provider session is not ready for a new turn",
                     )));
                     return false;
@@ -254,7 +254,7 @@ impl RuntimeWorker {
                     Some(driver) => {
                         run_driver_operation(&context, driver.send_turn(request, &context)).await
                     }
-                    None => Err(runtime_unavailable()),
+                    None => Err(runtime_unavailable_error()),
                 };
                 if result.is_err() {
                     let _ = self.flush_events(&context).await;
@@ -270,7 +270,7 @@ impl RuntimeWorker {
                 response,
             } => {
                 if self.session_state() != ProviderSessionState::Active {
-                    let _ = response.send(Err(runtime_invalid_state(
+                    let _ = response.send(Err(runtime_invalid_state_error(
                         "Chat provider session has no steerable turn",
                     )));
                     return false;
@@ -279,7 +279,7 @@ impl RuntimeWorker {
                     Some(driver) => {
                         run_driver_operation(&context, driver.steer_turn(request, &context)).await
                     }
-                    None => Err(runtime_unavailable()),
+                    None => Err(runtime_unavailable_error()),
                 };
                 let _ = response.send(result);
             }
@@ -289,7 +289,7 @@ impl RuntimeWorker {
                 response,
             } => {
                 if self.session_state() != ProviderSessionState::WaitingForApproval {
-                    let _ = response.send(Err(runtime_invalid_state(
+                    let _ = response.send(Err(runtime_invalid_state_error(
                         "Chat provider session has no pending approval",
                     )));
                     return false;
@@ -299,7 +299,7 @@ impl RuntimeWorker {
                         run_driver_operation(&context, driver.resolve_approval(request, &context))
                             .await
                     }
-                    None => Err(runtime_unavailable()),
+                    None => Err(runtime_unavailable_error()),
                 };
                 if result.is_ok() {
                     self.update(|state| {
@@ -321,7 +321,7 @@ impl RuntimeWorker {
                 response,
             } => {
                 if self.session_state() != ProviderSessionState::WaitingForUserInput {
-                    let _ = response.send(Err(runtime_invalid_state(
+                    let _ = response.send(Err(runtime_invalid_state_error(
                         "Chat provider session has no pending user input request",
                     )));
                     return false;
@@ -331,7 +331,7 @@ impl RuntimeWorker {
                         run_driver_operation(&context, driver.resolve_user_input(request, &context))
                             .await
                     }
-                    None => Err(runtime_unavailable()),
+                    None => Err(runtime_unavailable_error()),
                 };
                 if result.is_ok() {
                     self.update(|state| {
@@ -352,7 +352,7 @@ impl RuntimeWorker {
                         | ProviderSessionState::WaitingForApproval
                         | ProviderSessionState::WaitingForUserInput
                 ) {
-                    let _ = response.send(Err(runtime_invalid_state(
+                    let _ = response.send(Err(runtime_invalid_state_error(
                         "Chat provider session has no interruptible turn",
                     )));
                     return false;
@@ -364,7 +364,7 @@ impl RuntimeWorker {
                         run_driver_operation(&context, driver.interrupt_turn(request, &context))
                             .await
                     }
-                    None => Err(runtime_unavailable()),
+                    None => Err(runtime_unavailable_error()),
                 };
                 if result.is_err() {
                     self.update(|state| state.session_state = previous_state);
@@ -377,7 +377,7 @@ impl RuntimeWorker {
                 response,
             } => {
                 if self.session_state() != ProviderSessionState::Ready {
-                    let _ = response.send(Err(runtime_invalid_state(
+                    let _ = response.send(Err(runtime_invalid_state_error(
                         "Chat provider session must be ready before rollback",
                     )));
                     return false;
@@ -386,7 +386,7 @@ impl RuntimeWorker {
                     Some(driver) => {
                         run_driver_operation(&context, driver.rollback(request, &context)).await
                     }
-                    None => Err(runtime_unavailable()),
+                    None => Err(runtime_unavailable_error()),
                 };
                 let _ = response.send(result);
             }

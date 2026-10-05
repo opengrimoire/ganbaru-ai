@@ -17,13 +17,13 @@ let presentationActive = false;
 let visualTimer: ReturnType<typeof setInterval> | null = null;
 let connectionError = $state<string | null>(null);
 
-function failure(error: unknown): void {
+function recordFailure(error: unknown): void {
   connectionError = error instanceof Error ? error.message
     : typeof error === "object" && error !== null && "message" in error && typeof error.message === "string"
       ? error.message : "Native Focus connection failed";
   console.error("Native Focus request failed:", error);
 }
-function accept(next: FocusProjection): void {
+function acceptProjection(next: FocusProjection): void {
   const previous = projection;
   projection = next;
   receivedAt = performance.now();
@@ -40,7 +40,7 @@ function accept(next: FocusProjection): void {
   if (previous?.vaultGeneration !== next.vaultGeneration || previous?.snapshot?.revision !== snapshot?.revision) segmentVersion += 1;
   syncVisualClock();
 }
-const client = new NativeFocusClient(accept, failure);
+const client = new NativeFocusClient(acceptProjection, recordFailure);
 /** Tick only while counters can change, so idle sessions do not invalidate dependents several times per second. */
 function syncVisualClock(): void {
   const needed = presentationActive && focusNeedsVisualClock(projection?.snapshot);
@@ -57,13 +57,13 @@ function beginPresentation(): void {
   presentationActive = true;
   visualNow = performance.now();
   syncVisualClock();
-  void client.initialize().catch(failure);
+  void client.initialize().catch(recordFailure);
 }
 function command(intent: FocusIntent): Promise<void> { return client.command(intent); }
-function dispatch(intent: FocusIntent): void { void command(intent).catch(failure); }
+function dispatch(intent: FocusIntent): void { void command(intent).catch(recordFailure); }
 function currentConfig(): PomodoroConfig { return projection?.snapshot?.run?.configuration ?? DEFAULT_POMODORO_CONFIG; }
-function running(): boolean { return projection?.snapshot?.mode === "running"; }
-function active(): boolean {
+function isRunning(): boolean { return projection?.snapshot?.mode === "running"; }
+function isActive(): boolean {
   const snapshot = projection?.snapshot;
   return Boolean(snapshot?.run && snapshot.run.endedAtMs === null && snapshot.mode !== "stopped" && snapshot.mode !== "expired");
 }
@@ -94,24 +94,24 @@ export function getPomodoro() {
     get totalRhythmPositions() { return rhythmPositionCount(currentConfig()); },
     get currentCycle() { return projection?.snapshot?.segment?.rhythmPosition ?? 1; },
     get totalCycles() { return rhythmPositionCount(currentConfig()); },
-    get isRunning() { return running(); },
-    get isActive() { return active(); },
+    get isRunning() { return isRunning(); },
+    get isActive() { return isActive(); },
     get completedPomodoros() { return projection?.snapshot?.completedFocusCount ?? 0; },
     get totalSecondsForPhase() { return (projection?.snapshot?.segment?.chosenDurationMs ?? 0) / 1000; },
     get canAddFocusTime() {
       const snapshot = projection?.snapshot;
-      return active() && snapshot?.segment?.phase === "focus" && !snapshot.focusExtensionUsed
+      return isActive() && snapshot?.segment?.phase === "focus" && !snapshot.focusExtensionUsed
         && (snapshot.mode === "running" || snapshot.mode === "manual_pause");
     },
     get canPauseResume() {
       const snapshot = projection?.snapshot;
-      return active() && snapshot?.segment?.phase === "focus" && (snapshot.mode === "running" || snapshot.mode === "manual_pause");
+      return isActive() && snapshot?.segment?.phase === "focus" && (snapshot.mode === "running" || snapshot.mode === "manual_pause");
     },
     get pausedPulseFrame() { return projection?.snapshot?.mode === "manual_pause" ? Math.floor(visualNow / VISUAL_INTERVAL_MS) % PAUSE_PULSE.length : null; },
     get pausedPulseAmount() { return projection?.snapshot?.mode === "manual_pause" ? PAUSE_PULSE[Math.floor(visualNow / VISUAL_INTERVAL_MS) % PAUSE_PULSE.length] : 0; },
     get formattedTime() { const seconds = remainingSeconds(); return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`; },
-    get activeBlockId() { return active() ? projection?.snapshot?.run?.occurrenceId ?? null : null; },
-    get activeRunId() { return active() ? projection?.snapshot?.run?.id ?? null : null; },
+    get activeBlockId() { return isActive() ? projection?.snapshot?.run?.occurrenceId ?? null : null; },
+    get activeRunId() { return isActive() ? projection?.snapshot?.run?.id ?? null : null; },
     get dismissedBlockId() { return projection?.snapshot?.dismissedOccurrenceId ?? null; },
     get autoStartSuppressed() { return projection?.snapshot?.automaticAdmissionSuppressed ?? false; },
     async setAutomaticAdmissionSuppressed(suppressed: boolean) {

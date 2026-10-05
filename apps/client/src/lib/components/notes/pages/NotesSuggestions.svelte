@@ -52,7 +52,7 @@
     }
   }
 
-  function suggestionTargetMissing(suggestion: NotesSuggestion): boolean {
+  function isSuggestionTargetMissing(suggestion: NotesSuggestion): boolean {
     const block = notes.blockById(suggestion.block_id);
     return !block || !notesResolveSuggestionAnchor(suggestion, blockPlainText(block));
   }
@@ -206,7 +206,7 @@
                   <div class="mt-0.5 text-[0.733333rem] text-muted-foreground">
                     {suggestionTime(suggestion)}
                   </div>
-                  {#if suggestionTargetMissing(suggestion)}
+                  {#if isSuggestionTargetMissing(suggestion)}
                     <div class="mt-1 text-[0.733333rem] text-muted-foreground">
                       {t("notes.suggestionTargetMissing")}
                     </div>

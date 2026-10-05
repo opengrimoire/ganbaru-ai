@@ -29,10 +29,10 @@ describe.each(["all-day", "timed"] as const)("%s event accessibility", (kind) =>
   it("opens from Enter and Space without starting a drag or bubbling activation", async () => {
     target = document.createElement("div");
     document.body.append(target);
-    const onclick = vi.fn();
-    const onpointerdown = vi.fn();
-    const onprefetch = vi.fn();
-    const common = { theme: darkTheme, onclick, onpointerdown, onprefetch };
+    const onClick = vi.fn();
+    const onPointerDown = vi.fn();
+    const onPrefetch = vi.fn();
+    const common = { theme: darkTheme, onClick, onPointerDown, onPrefetch };
     component = kind === "all-day"
       ? mount(AllDayEventChip, { target, props: { ...common, event } })
       : mount(EventBlock, { target, props: { ...common, positioned } });
@@ -44,7 +44,7 @@ describe.each(["all-day", "timed"] as const)("%s event accessibility", (kind) =>
     const bounds = new DOMRect(10, 20, 100, 40);
     vi.spyOn(control!, "getBoundingClientRect").mockReturnValue(bounds);
     control!.focus();
-    expect(onprefetch).toHaveBeenCalledOnce();
+    expect(onPrefetch).toHaveBeenCalledOnce();
     const parentKeydown = vi.fn();
     const removeParentKeydown = on(target, "keydown", parentKeydown);
     for (const key of ["Enter", " "]) {
@@ -52,18 +52,18 @@ describe.each(["all-day", "timed"] as const)("%s event accessibility", (kind) =>
       control!.dispatchEvent(keydown);
       expect(keydown.defaultPrevented).toBe(true);
     }
-    expect(onclick).toHaveBeenCalledTimes(2);
-    expect(onclick.mock.calls[0][0]).toEqual(bounds);
-    expect(onpointerdown).not.toHaveBeenCalled();
+    expect(onClick).toHaveBeenCalledTimes(2);
+    expect(onClick.mock.calls[0][0]).toEqual(bounds);
+    expect(onPointerDown).not.toHaveBeenCalled();
     expect(parentKeydown).not.toHaveBeenCalled();
     removeParentKeydown();
     control!.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", repeat: true, bubbles: true }));
     control!.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
-    expect(onclick).toHaveBeenCalledTimes(2);
+    expect(onClick).toHaveBeenCalledTimes(2);
     control!.click();
-    expect(onclick).toHaveBeenCalledTimes(3);
+    expect(onClick).toHaveBeenCalledTimes(3);
     const dragTarget = target.querySelector(".resize-handle-top") ?? control!;
     dragTarget.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true }));
-    expect(onpointerdown).toHaveBeenCalledOnce();
+    expect(onPointerDown).toHaveBeenCalledOnce();
   });
 });

@@ -8,11 +8,11 @@
   import CollectionPanel from "./CollectionPanel.svelte";
   import { setCollectionSettingsNavigation, type CollectionSettingsPage } from "./collection-settings-context";
 
-  let { label, anchor = null, preferredWidth = 320, onclose, children }: {
+  let { label, anchor = null, preferredWidth = 320, onClose, children }: {
     label: string;
     anchor?: HTMLElement | null;
     preferredWidth?: number;
-    onclose: () => void;
+    onClose: () => void;
     children: Snippet;
   } = $props();
 
@@ -57,7 +57,7 @@
 
   /** Close explicitly and return focus to the settings control. */
   function close(): void {
-    onclose();
+    onClose();
     if (anchor?.isConnected) anchor.focus({ preventScroll: true });
   }
 
@@ -101,7 +101,7 @@
         restoreFocus = false;
         const focused = document.activeElement;
         if (focused instanceof HTMLElement && node.contains(focused)) focused.blur();
-        onclose();
+        onClose();
       }
     };
     const focusin = (event: FocusEvent) => {

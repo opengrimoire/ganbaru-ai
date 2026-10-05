@@ -18,16 +18,16 @@
     reorderable = false,
     theme,
     tags,
-    onopen,
-    onpin,
-    oncolor,
-    ontag,
-    onarchive,
-    onunarchive,
-    ontrash,
-    onrestore,
-    ondelete,
-    onreorder,
+    onOpen,
+    onPin,
+    onColor,
+    onTag,
+    onArchive,
+    onUnarchive,
+    onTrash,
+    onRestore,
+    onDelete,
+    onReorder,
     mobileLayout = false,
   }: {
     notes: readonly QuickNote[];
@@ -36,16 +36,16 @@
     reorderable?: boolean;
     theme: Theme;
     tags: readonly QuickNoteTag[];
-    onopen: (note: QuickNote) => void;
-    onpin: (note: QuickNote, pinned: boolean) => void;
-    oncolor: (note: QuickNote, color: QuickNote["color"]) => void;
-    ontag: (note: QuickNote, tagId: string | null) => void;
-    onarchive: (note: QuickNote) => void;
-    onunarchive: (note: QuickNote) => void;
-    ontrash: (note: QuickNote) => void;
-    onrestore: (note: QuickNote) => void;
-    ondelete: (note: QuickNote) => void;
-    onreorder: (orderedIds: readonly string[], movedId: string, position: number) => void;
+    onOpen: (note: QuickNote) => void;
+    onPin: (note: QuickNote, pinned: boolean) => void;
+    onColor: (note: QuickNote, color: QuickNote["color"]) => void;
+    onTag: (note: QuickNote, tagId: string | null) => void;
+    onArchive: (note: QuickNote) => void;
+    onUnarchive: (note: QuickNote) => void;
+    onTrash: (note: QuickNote) => void;
+    onRestore: (note: QuickNote) => void;
+    onDelete: (note: QuickNote) => void;
+    onReorder: (orderedIds: readonly string[], movedId: string, position: number) => void;
     mobileLayout?: boolean;
   } = $props();
 
@@ -289,7 +289,7 @@
       suppressLayoutTransition(active.noteId);
     } else {
       const position = visualOrder.indexOf(active.noteId);
-      if (position !== active.originalIndex) onreorder(visualOrder, active.noteId, position);
+      if (position !== active.originalIndex) onReorder(visualOrder, active.noteId, position);
       void settleDrop(active);
     }
     setTimeout(() => { if (suppressClickFor === active.noteId) suppressClickFor = null; }, 0);
@@ -372,7 +372,7 @@
     if (next.every((id, index) => id === visualOrder[index])) return;
     visualOrder = next;
     applyLayout();
-    onreorder(visualOrder, noteId, visualOrder.indexOf(noteId));
+    onReorder(visualOrder, noteId, visualOrder.indexOf(noteId));
   }
 
   function wrapperStyle(noteId: string, position: MasonryPosition | undefined): string {
@@ -442,16 +442,16 @@
         {theme}
         {tags}
         {mobileLayout}
-        onopen={() => onopen(note)}
-        onmove={(direction) => keyboardMove(note.id, direction)}
-        onpin={(pinned) => onpin(note, pinned)}
-        oncolor={(color) => oncolor(note, color)}
-        ontag={(tagId) => ontag(note, tagId)}
-        onarchive={() => onarchive(note)}
-        onunarchive={() => onunarchive(note)}
-        ontrash={() => ontrash(note)}
-        onrestore={() => onrestore(note)}
-        ondelete={() => ondelete(note)}
+        onOpen={() => onOpen(note)}
+        onMove={(direction) => keyboardMove(note.id, direction)}
+        onPin={(pinned) => onPin(note, pinned)}
+        onColor={(color) => onColor(note, color)}
+        onTag={(tagId) => onTag(note, tagId)}
+        onArchive={() => onArchive(note)}
+        onUnarchive={() => onUnarchive(note)}
+        onTrash={() => onTrash(note)}
+        onRestore={() => onRestore(note)}
+        onDelete={() => onDelete(note)}
       />
     </div>
   {/each}

@@ -17,6 +17,7 @@ const MAX_PENDING_REQUESTS: usize = 128;
 const MAX_INBOUND_MESSAGES: usize = 256;
 const MAX_OUTBOUND_MESSAGES: usize = 256;
 const MAX_METHOD_BYTES: usize = 256;
+const MAX_RPC_ID_BYTES: usize = 256;
 const MAX_ERROR_BYTES: usize = 2_048;
 const CANCELLATION_POLL: Duration = Duration::from_millis(25);
 
@@ -261,7 +262,7 @@ impl AcpRpcClient {
         self.send_value(json!({
             "jsonrpc": "2.0",
             "id": id,
-            "error": { "code": code, "message": bounded(message, MAX_ERROR_BYTES) },
+            "error": { "code": code, "message": bounded_text(message, MAX_ERROR_BYTES) },
         }))
         .await
     }
@@ -532,7 +533,7 @@ fn parse_remote_error(value: &Value) -> Result<AcpRpcFailure, String> {
         .ok_or_else(|| "response error message must be a string".to_string())?;
     Ok(AcpRpcFailure::Remote {
         code,
-        message: bounded(message, MAX_ERROR_BYTES),
+        message: bounded_text(message, MAX_ERROR_BYTES),
     })
 }
 
@@ -578,7 +579,7 @@ fn validate_rpc_id(id: &Value) -> Result<(), AcpRpcFailure> {
         Value::Number(_) => Ok(()),
         Value::String(value)
             if !value.is_empty()
-                && value.len() <= MAX_METHOD_BYTES
+                && value.len() <= MAX_RPC_ID_BYTES
                 && !value.chars().any(char::is_control) =>
         {
             Ok(())
@@ -649,11 +650,11 @@ fn trim_line_ending(mut line: Vec<u8>) -> Vec<u8> {
     line
 }
 
-fn bounded(value: &str, maximum: usize) -> String {
-    if value.len() <= maximum {
+fn bounded_text(value: &str, max_bytes: usize) -> String {
+    if value.len() <= max_bytes {
         return value.to_string();
     }
-    let mut end = maximum;
+    let mut end = max_bytes;
     while end > 0 && !value.is_char_boundary(end) {
         end -= 1;
     }

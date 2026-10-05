@@ -4,7 +4,7 @@
   import {
     formatDatePart,
     formatDayName,
-    GUTTER_WIDTH_PER_TZ,
+    GUTTER_WIDTH_PER_TIMEZONE,
     visibleMinuteRangeForScroll,
   } from "$lib/calendar/utils";
   import { createTimelineWheelScroll } from "$lib/calendar/timeline-scroll";
@@ -32,7 +32,7 @@
     allDayEventsByDay,
     theme,
     timezones = [] as string[],
-    tzAbbrMode = "acronym" as TimezoneAbbrMode,
+    timezoneAbbreviationMode = "acronym" as TimezoneAbbrMode,
     onEventClick,
     onEventPrefetch,
     onEventUpdate,
@@ -45,7 +45,7 @@
     onAddTimezone,
     onRemoveTimezone,
     onReorderTimezone,
-    onTzAbbrModeChange,
+    onTimezoneAbbreviationModeChange,
     onWheelNavigate,
     onDayHeaderClick,
     allowPointerEditing = true,
@@ -59,7 +59,7 @@
     allDayEventsByDay: Map<string, CalendarEvent[]>;
     theme: Theme;
     timezones?: string[];
-    tzAbbrMode?: TimezoneAbbrMode;
+    timezoneAbbreviationMode?: TimezoneAbbrMode;
     onEventClick: (event: CalendarEvent, rect?: DOMRect) => void;
     onEventPrefetch?: (event: CalendarEvent) => void;
     onEventUpdate: (event: CalendarEvent) => void;
@@ -72,7 +72,7 @@
     onAddTimezone?: (tz: string) => void;
     onRemoveTimezone?: (index: number) => void;
     onReorderTimezone?: (from: number, to: number) => void;
-    onTzAbbrModeChange?: (mode: TimezoneAbbrMode) => void;
+    onTimezoneAbbreviationModeChange?: (mode: TimezoneAbbrMode) => void;
     onWheelNavigate?: (direction: "back" | "forward") => void;
     onDayHeaderClick?: () => void;
     allowPointerEditing?: boolean;
@@ -91,7 +91,7 @@
   let stickyHeaderHeight = $state(0);
   let visibleStartMinute = $state(0);
   let visibleEndMinute = $state(1440);
-  const calZoom = getCalendarZoom();
+  const calendarZoom = getCalendarZoom();
   const timelineWheelScroll = createTimelineWheelScroll(() => scrollContainer);
   const localization = getLocalization();
   const { t } = localization;
@@ -100,7 +100,7 @@
   function renderedHourHeight(): number {
     const raw = scrollContainer?.style.getPropertyValue("--hour-h") ?? "";
     const parsed = raw ? Number.parseFloat(raw) : Number.NaN;
-    return Number.isFinite(parsed) && parsed > 0 ? parsed : calZoom.hourHeight;
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : calendarZoom.hourHeight;
   }
 
   function updateVisibleMinuteRange() {
@@ -169,9 +169,9 @@
   let allDayOverlayHeight = $state(0);
   $effect(() => { if (allDayEvents.length === 0) allDayOverlayHeight = 0; });
   const gutterTopHeight = $derived(stickyHeaderHeight);
-  const tzCount = $derived(Math.max(1, timezones.length));
+  const timezoneCount = $derived(Math.max(1, timezones.length));
   const gridCols = $derived(
-    `repeat(${tzCount}, ${GUTTER_WIDTH_PER_TZ}px) 1fr`,
+    `repeat(${timezoneCount}, ${GUTTER_WIDTH_PER_TIMEZONE}px) 1fr`,
   );
 
   let headerCell: HTMLElement | undefined = $state();
@@ -204,7 +204,7 @@
   let lastScrollAt = 0;
 
   function updateCurrentTime() {
-    if (calZoom.isAnimating) return;
+    if (calendarZoom.isAnimating) return;
     if (performance.now() - lastScrollAt < SCROLL_SETTLE_MS) return;
     const now = new Date();
     currentTimeMinute = now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60;
@@ -224,18 +224,18 @@
 
     if (scrollContainer) {
       // Set --hour-h before any scroll/layout so the initial paint is correct
-      scrollContainer.style.setProperty("--hour-h", String(calZoom.hourHeight));
+      scrollContainer.style.setProperty("--hour-h", String(calendarZoom.hourHeight));
 
       // Register scroll container so buttons/keyboard can animate
-      calZoom.registerScrollContainer(scrollContainer, 0);
+      calendarZoom.registerScrollContainer(scrollContainer, 0);
 
-      const hh = calZoom.hourHeight;
+      const hourHeight = calendarZoom.hourHeight;
       if (initialScrollMinute >= 0) {
-        scrollContainer.scrollTop = scrollTopForMinute(initialScrollMinute, hh);
+        scrollContainer.scrollTop = scrollTopForMinute(initialScrollMinute, hourHeight);
       } else {
         const now = new Date();
         const targetHour = Math.max(0, now.getHours() - 2);
-        scrollContainer.scrollTop = scrollTopForMinute(targetHour * 60, hh);
+        scrollContainer.scrollTop = scrollTopForMinute(targetHour * 60, hourHeight);
       }
 
       scrollContainer.addEventListener("scroll", handleScroll);
@@ -263,13 +263,13 @@
 
       if (resetZoom) {
         e.preventDefault();
-        calZoom.reset();
+        calendarZoom.reset();
       } else if (zoomIn) {
         e.preventDefault();
-        calZoom.zoomStep(1);
+        calendarZoom.zoomStep(1);
       } else if (e.key === "-" || e.key === "_") {
         e.preventDefault();
-        calZoom.zoomStep(-1);
+        calendarZoom.zoomStep(-1);
       }
     }
     window.addEventListener("keydown", handleKeyDown);
@@ -288,26 +288,26 @@
   // center time stable. Skipped during animations because the store
   // manages --hour-h imperatively until commit.
   $effect(() => {
-    const newH = calZoom.hourHeight;
-    if (!scrollContainer || calZoom.isAnimating) return;
+    const nextHourHeight = calendarZoom.hourHeight;
+    if (!scrollContainer || calendarZoom.isAnimating) return;
 
-    const oldHStr = scrollContainer.style.getPropertyValue("--hour-h");
-    const oldH = oldHStr ? parseFloat(oldHStr) : newH;
+    const previousHourHeightValue = scrollContainer.style.getPropertyValue("--hour-h");
+    const previousHourHeight = previousHourHeightValue ? parseFloat(previousHourHeightValue) : nextHourHeight;
 
-    if (oldH !== newH && oldH > 0) {
+    if (previousHourHeight !== nextHourHeight && previousHourHeight > 0) {
       // Compute center time at old zoom level
-      const viewportH = scrollContainer.clientHeight;
-      const centerOffset = viewportH / 2;
-      const centerMinute = scrollMinuteFromTop(scrollContainer.scrollTop + centerOffset, oldH);
+      const viewportHeight = scrollContainer.clientHeight;
+      const centerOffset = viewportHeight / 2;
+      const centerMinute = scrollMinuteFromTop(scrollContainer.scrollTop + centerOffset, previousHourHeight);
 
       // Apply new zoom
-      scrollContainer.style.setProperty("--hour-h", String(newH));
+      scrollContainer.style.setProperty("--hour-h", String(nextHourHeight));
 
       // Adjust scrollTop to keep the same center time visible
-      const newScrollTop = scrollTopForMinute(centerMinute, newH) - centerOffset;
-      scrollContainer.scrollTop = Math.max(0, newScrollTop);
+      const nextScrollTop = scrollTopForMinute(centerMinute, nextHourHeight) - centerOffset;
+      scrollContainer.scrollTop = Math.max(0, nextScrollTop);
     } else {
-      scrollContainer.style.setProperty("--hour-h", String(newH));
+      scrollContainer.style.setProperty("--hour-h", String(nextHourHeight));
     }
     updateVisibleMinuteRange();
   });
@@ -329,8 +329,8 @@
   function handleScroll() {
     lastScrollAt = performance.now();
     updateVisibleMinuteRange();
-    if (!scrollContainer || !onScrollChange || calZoom.isAnimating) return;
-    const minute = scrollMinuteFromTop(scrollContainer.scrollTop, calZoom.hourHeight);
+    if (!scrollContainer || !onScrollChange || calendarZoom.isAnimating) return;
+    const minute = scrollMinuteFromTop(scrollContainer.scrollTop, calendarZoom.hourHeight);
     onScrollChange(Math.round(minute));
   }
 
@@ -351,7 +351,7 @@
 
   const drag = createTimedEventDragController({
     events: () => events,
-    hourHeight: () => calZoom.hourHeight,
+    hourHeight: () => calendarZoom.hourHeight,
     getColumnDate: () => dateStr,
     getScrollContainer: () => scrollContainer ?? null,
     onEventUpdate: (e) => onEventUpdate(e),
@@ -397,12 +397,12 @@
     >
       <TimezoneSelector
         {timezones}
-        {tzCount}
-        abbrMode={tzAbbrMode}
+        {timezoneCount}
+        abbrMode={timezoneAbbreviationMode}
         onAdd={(tz) => onAddTimezone?.(tz)}
         onRemove={(i) => onRemoveTimezone?.(i)}
         onReorder={(from, to) => onReorderTimezone?.(from, to)}
-        onAbbrModeChange={(m) => onTzAbbrModeChange?.(m)}
+        onAbbrModeChange={(m) => onTimezoneAbbreviationModeChange?.(m)}
       />
       <!-- svelte-ignore a11y_click_events_have_key_events -->
       <div
@@ -452,7 +452,7 @@
         background-color: var(--cal-header-bg);
       "
     >
-      <div style="grid-column: span {tzCount};"></div>
+      <div style="grid-column: span {timezoneCount};"></div>
       <div
         data-calendar-edit-close-zone
         class="flex min-w-0 flex-col px-1"
@@ -465,8 +465,8 @@
             editing={editingId === evt.id}
             preview={previewedIds?.has(evt.id) ?? false}
             isPast={past}
-            onclick={(rect) => onEventClick(evt, rect)}
-            onprefetch={() => onEventPrefetch?.(evt)}
+            onClick={(rect) => onEventClick(evt, rect)}
+            onPrefetch={() => onEventPrefetch?.(evt)}
           />
         {/each}
         {#if allDayCollapsible && !allDayExpanded}
@@ -488,7 +488,7 @@
     data-calendar-scroll-container
     onwheel={scrollTimelineByWheel}
     class="hide-scrollbar absolute inset-x-0 bottom-0 overflow-y-auto overflow-x-hidden"
-    style="top: {gutterTopHeight}px; --hour-h: {calZoom.hourHeight}; background-color: var(--cal-bg);"
+    style="top: {gutterTopHeight}px; --hour-h: {calendarZoom.hourHeight}; background-color: var(--cal-bg);"
   >
     <div class="relative" style="height: calc({allDayOverlayHeight}px + 24 * var(--hour-h) * 1px);">
     <div
@@ -499,9 +499,9 @@
       <div
         data-zoom-body
         class="grid"
-        style="grid-column: 1 / -1; grid-template-columns: subgrid; {calZoom.isAnimating ? 'pointer-events: none;' : ''}"
+        style="grid-column: 1 / -1; grid-template-columns: subgrid; {calendarZoom.isAnimating ? 'pointer-events: none;' : ''}"
       >
-      <TimeGutter {timezones} {anchorDate} {tzCount} />
+      <TimeGutter {timezones} {anchorDate} {timezoneCount} />
       <div
         data-day-column-shell
         data-calendar-edit-close-zone

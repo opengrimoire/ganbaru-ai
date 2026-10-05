@@ -13,7 +13,7 @@ let latestOriginalUrl = "";
 let latestBlocked = true;
 let refreshTimeoutId = null;
 let releaseTimeoutId = null;
-let restoringOriginalUrl = false;
+let isRestoringOriginalUrl = false;
 
 titleEl.textContent = "This site is blocked";
 copyEl.textContent = "Stay strong and keep moving forward.";
@@ -57,15 +57,15 @@ function renderBlockedState(state) {
   const host = typeof state?.host === "string" ? state.host : "";
   const remaining = typeof state?.remainingSeconds === "number" ? state.remainingSeconds : 0;
   const matchedRuleName = typeof state?.matchedRuleName === "string" ? state.matchedRuleName : "";
-  const blockedByLimit = matchedRuleName.startsWith("daily limit:");
+  const blockedByDailyLimit = matchedRuleName.startsWith("daily limit:");
   const blockedByWeeklyLimit = matchedRuleName.startsWith("weekly limit:");
-  const blockedByUsageLimit = blockedByLimit || blockedByWeeklyLimit;
+  const blockedByUsageLimit = blockedByDailyLimit || blockedByWeeklyLimit;
   latestOriginalUrl = typeof state?.originalUrl === "string" ? state.originalUrl : latestOriginalUrl;
   latestBlocked = state?.blocked !== false;
 
   if (latestBlocked) {
     cancelReleaseConfirmation();
-    titleEl.textContent = blockedByLimit
+    titleEl.textContent = blockedByDailyLimit
       ? `${host ? displayHost(host) : "This site"} reached today's limit`
       : blockedByWeeklyLimit
       ? `${host ? displayHost(host) : "This site"} reached this week's limit`
@@ -120,7 +120,7 @@ function cancelReleaseConfirmation() {
 }
 
 function scheduleReleaseConfirmation(unblockedStableMs = 0) {
-  if (releaseTimeoutId !== null || restoringOriginalUrl) return;
+  if (releaseTimeoutId !== null || isRestoringOriginalUrl) return;
   const delayMs = Math.max(0, RELEASE_CONFIRMATION_MS - unblockedStableMs);
   releaseTimeoutId = setTimeout(async () => {
     releaseTimeoutId = null;
@@ -143,8 +143,8 @@ function clearBlockedPageState() {
 }
 
 function restoreOriginalUrl() {
-  if (restoringOriginalUrl || !latestOriginalUrl) return;
-  restoringOriginalUrl = true;
+  if (isRestoringOriginalUrl || !latestOriginalUrl) return;
+  isRestoringOriginalUrl = true;
   cancelReleaseConfirmation();
   clearBlockedPageState();
   chrome.tabs.getCurrent((tab) => {

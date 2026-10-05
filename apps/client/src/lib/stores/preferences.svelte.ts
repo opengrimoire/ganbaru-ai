@@ -62,7 +62,7 @@ const PROFILE_FULL_NAME_CONFIG_KEY = "profile.fullName";
 const PROFILE_IMAGE_PATH_CONFIG_KEY = "profile.imagePath";
 const FONT_FAMILY_CONFIG_KEY = "preferences.fontFamilyId";
 const FONT_SCALE_CONFIG_KEY = "preferences.fontScale";
-const EVENT_TZ_DISPLAY_KEY = "preferences.eventTimezoneDisplay";
+const EVENT_TIMEZONE_DISPLAY_CONFIG_KEY = "preferences.eventTimezoneDisplay";
 const CALENDAR_TIME_FORMAT_CONFIG_KEY = "preferences.calendarTimeFormat";
 const CALENDAR_VIEW_MODE_CONFIG_KEY = "preferences.calendarViewMode";
 const CALENDAR_DIM_PAST_EVENTS_CONFIG_KEY = "preferences.calendarDimPastEvents";
@@ -93,7 +93,7 @@ const NOTES_NOTIFICATION_INCLUDE_CONTENT_CONFIG_KEY =
 const TITLE_BAR_VISIBILITY_CONFIG_KEY = "preferences.titleBarVisibility";
 
 export type EventTimezoneDisplay = "device" | "homeZone";
-const DEFAULT_EVENT_TZ_DISPLAY: EventTimezoneDisplay = "device";
+const DEFAULT_EVENT_TIMEZONE_DISPLAY: EventTimezoneDisplay = "device";
 
 function loadSavedFontFamilyId(): FontFamilyId {
   const saved = getConfigKey<string | undefined>(FONT_FAMILY_CONFIG_KEY, undefined);
@@ -107,10 +107,10 @@ function loadSavedFontScale(): number {
   return clampFontScale(saved);
 }
 
-function loadSavedEventTzDisplay(): EventTimezoneDisplay {
-  const saved = getConfigKey<string | undefined>(EVENT_TZ_DISPLAY_KEY, undefined);
+function loadSavedEventTimezoneDisplay(): EventTimezoneDisplay {
+  const saved = getConfigKey<string | undefined>(EVENT_TIMEZONE_DISPLAY_CONFIG_KEY, undefined);
   if (saved === "device" || saved === "homeZone") return saved;
-  return DEFAULT_EVENT_TZ_DISPLAY;
+  return DEFAULT_EVENT_TIMEZONE_DISPLAY;
 }
 
 function loadSavedProfileDisplayName(): string {
@@ -225,7 +225,7 @@ function loadSavedTitleBarVisibility(): TitleBarVisibility {
 
 let fontFamilyId = $state<FontFamilyId>(loadSavedFontFamilyId());
 let fontScale = $state<number>(loadSavedFontScale());
-let eventTimezoneDisplay = $state<EventTimezoneDisplay>(loadSavedEventTzDisplay());
+let eventTimezoneDisplay = $state<EventTimezoneDisplay>(loadSavedEventTimezoneDisplay());
 let profileDisplayName = $state<string>(loadSavedProfileDisplayName());
 let profileFullName = $state<string>(loadSavedProfileFullName());
 let profileImagePath = $state<string | null>(loadSavedProfileImagePath());
@@ -313,7 +313,7 @@ function setFontScale(value: number): void {
 
 function setEventTimezoneDisplay(value: EventTimezoneDisplay): void {
   eventTimezoneDisplay = value;
-  setConfigKey(EVENT_TZ_DISPLAY_KEY, value);
+  setConfigKey(EVENT_TIMEZONE_DISPLAY_CONFIG_KEY, value);
 }
 
 function setProfileDisplayName(value: string): boolean {
@@ -591,7 +591,7 @@ export function getPreferences() {
       setFontScale(DEFAULT_FONT_SCALE);
     },
     resetEventTimezoneDisplay() {
-      setEventTimezoneDisplay(DEFAULT_EVENT_TZ_DISPLAY);
+      setEventTimezoneDisplay(DEFAULT_EVENT_TIMEZONE_DISPLAY);
     },
     resetCalendarTimeFormat() {
       setCalendarTimeFormat(DEFAULT_CALENDAR_TIME_FORMAT);

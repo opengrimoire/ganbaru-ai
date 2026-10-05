@@ -134,14 +134,10 @@ fn database_rollups_compute_from_relations_and_invalidate_cache() {
         .await
         .unwrap();
 
-        let table = data_sources::layouts::table::get_data_source_table_view(
-            &pool,
-            DATA_SOURCE_A,
-            None,
-            None,
-        )
-        .await
-        .unwrap();
+        let table =
+            data_sources::layouts::table::data_source_table_view(&pool, DATA_SOURCE_A, None, None)
+                .await
+                .unwrap();
         let table_json = serde_json::to_value(table).unwrap();
         assert_eq!(
             table_json["rows"][0]["properties"]["Project budget"]["rollup"]["number"].as_f64(),
@@ -180,14 +176,10 @@ fn database_rollups_compute_from_relations_and_invalidate_cache() {
                 .unwrap();
         assert_eq!(cache_count, 0);
 
-        let table = data_sources::layouts::table::get_data_source_table_view(
-            &pool,
-            DATA_SOURCE_A,
-            None,
-            None,
-        )
-        .await
-        .unwrap();
+        let table =
+            data_sources::layouts::table::data_source_table_view(&pool, DATA_SOURCE_A, None, None)
+                .await
+                .unwrap();
         let table_json = serde_json::to_value(table).unwrap();
         assert_eq!(
             table_json["rows"][0]["properties"]["Project budget"]["rollup"]["number"].as_f64(),
@@ -376,14 +368,10 @@ fn database_formulas_compute_without_persisting_stale_values() {
         .await
         .unwrap();
 
-        let table = data_sources::layouts::table::get_data_source_table_view(
-            &pool,
-            DATA_SOURCE_A,
-            None,
-            None,
-        )
-        .await
-        .unwrap();
+        let table =
+            data_sources::layouts::table::data_source_table_view(&pool, DATA_SOURCE_A, None, None)
+                .await
+                .unwrap();
         let table_json = serde_json::to_value(table).unwrap();
         let properties = &table_json["rows"][0]["properties"];
         assert_eq!(properties["Score"]["formula"]["type"], "number");

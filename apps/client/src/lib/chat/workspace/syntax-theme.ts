@@ -5,7 +5,7 @@ import {
   relativeLuminance,
   shiftPerceptualL,
 } from "$lib/color/math";
-import { resolveAppTokens, resolveCalCanvas, type Theme } from "$lib/themes";
+import { resolveAppTokens, resolveCalendarCanvas, type Theme } from "$lib/themes";
 
 const SYNTAX_TEXT_CONTRAST_TARGET = 4.5;
 
@@ -29,7 +29,7 @@ export interface ChatSyntaxPalette {
 /** Derives readable syntax roles from the active app and calendar surfaces. */
 export function deriveChatSyntaxPalette(theme: Theme): ChatSyntaxPalette {
   const tokens = resolveAppTokens(theme);
-  const background = resolveCalCanvas(theme);
+  const background = resolveCalendarCanvas(theme);
   const foreground = readableAccent(background, tokens["--foreground"], tokens["--foreground"]);
   const accepted = readableAccent(background, tokens["--status-accepted"], foreground);
   const tentative = readableAccent(background, tokens["--status-tentative"], foreground);

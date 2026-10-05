@@ -41,8 +41,8 @@ pub async fn load_workspace_shell(
         .collect::<String>();
     let seed_page_ids = normalize_ids(request.seed_page_ids, MAX_SEED_IDS);
     let expanded_page_ids = normalize_ids(request.expanded_page_ids, MAX_EXPANDED_IDS);
-    let load_page_window = request.page_cursor.as_deref() != Some("end");
-    let load_folder_window = request.folder_cursor.as_deref() != Some("end");
+    let should_load_page_window = request.page_cursor.as_deref() != Some("end");
+    let should_load_folder_window = request.folder_cursor.as_deref() != Some("end");
     let page_cursor = decode_cursor::<PageCursor>(request.page_cursor.as_deref(), "page")?;
     let folder_cursor = decode_cursor::<FolderCursor>(request.folder_cursor.as_deref(), "folder")?;
     let mut transaction = pool
@@ -54,10 +54,10 @@ pub async fn load_workspace_shell(
     let total_folder_count = count_folders(&mut transaction, project_id.as_deref()).await?;
     let mut rows_by_id = HashMap::<String, NotePageSummaryDto>::new();
 
-    let initial_pages = if !load_page_window {
+    let initial_pages = if !should_load_page_window {
         Vec::new()
     } else if request.destination_candidates {
-        fetch_destination_window(
+        load_destination_window(
             &mut transaction,
             project_id.as_deref(),
             &page_query,
@@ -66,7 +66,7 @@ pub async fn load_workspace_shell(
         )
         .await?
     } else {
-        fetch_root_window(
+        load_root_window(
             &mut transaction,
             project_id.as_deref(),
             page_cursor.as_ref(),
@@ -86,15 +86,15 @@ pub async fn load_workspace_shell(
     }
     add_unique(
         &mut rows_by_id,
-        fetch_pages_by_ids(&mut transaction, project_id.as_deref(), &recovery_ids).await?,
+        load_pages_by_ids(&mut transaction, project_id.as_deref(), &recovery_ids).await?,
     );
     add_unique(
         &mut rows_by_id,
-        fetch_ancestors(&mut transaction, project_id.as_deref(), &recovery_ids).await?,
+        load_ancestors(&mut transaction, project_id.as_deref(), &recovery_ids).await?,
     );
     add_unique(
         &mut rows_by_id,
-        fetch_children(&mut transaction, project_id.as_deref(), &expanded_page_ids).await?,
+        load_children(&mut transaction, project_id.as_deref(), &expanded_page_ids).await?,
     );
 
     let mut pages = rows_by_id.into_values().collect::<Vec<_>>();
@@ -108,13 +108,13 @@ pub async fn load_workspace_shell(
     pages.truncate(MAX_SHELL_PAGES);
     let loaded_ids = pages.iter().map(|page| page.id.clone()).collect::<Vec<_>>();
     let page_ids_with_children =
-        fetch_parent_ids_with_children(&mut transaction, &loaded_ids).await?;
+        load_parent_ids_with_children(&mut transaction, &loaded_ids).await?;
     let (missing_parent_page_ids, trashed_parent_page_ids) =
-        fetch_unavailable_parent_ids(&mut transaction, &pages, &loaded_ids).await?;
+        load_unavailable_parent_ids(&mut transaction, &pages, &loaded_ids).await?;
     let resolved_selected_page_id =
         selected_page_id.filter(|selected| pages.iter().any(|page| page.id == *selected));
-    let folder_rows = if load_folder_window {
-        fetch_folder_window(
+    let folder_rows = if should_load_folder_window {
+        load_folder_window(
             &mut transaction,
             project_id.as_deref(),
             folder_cursor.as_ref(),
@@ -128,17 +128,17 @@ pub async fn load_workspace_shell(
     let folder_window_cursor = folder_cursor_from_rows(&folder_rows);
     let folders = folder_rows.into_iter().map(NoteFolderDto::new).collect();
     let navigation_pages = if request.include_navigation_index {
-        fetch_navigation_pages(&mut transaction).await?
+        load_navigation_pages(&mut transaction).await?
     } else {
         Vec::new()
     };
     let navigation_page_ids_with_children = if request.include_navigation_index {
-        fetch_navigation_parent_ids_with_children(&mut transaction).await?
+        load_navigation_parent_ids_with_children(&mut transaction).await?
     } else {
         Vec::new()
     };
     let navigation_folders = if request.include_navigation_index {
-        fetch_navigation_folders(&mut transaction)
+        load_navigation_folders(&mut transaction)
             .await?
             .into_iter()
             .map(NoteFolderDto::new)
@@ -149,7 +149,7 @@ pub async fn load_workspace_shell(
     let navigation_databases = if request.include_navigation_index && navigation_pages.is_empty() {
         Vec::new()
     } else {
-        fetch_navigation_databases(
+        load_navigation_databases(
             &mut transaction,
             (!request.include_navigation_index).then_some(loaded_ids.as_slice()),
         )
@@ -189,7 +189,7 @@ pub async fn load_workspace_shell(
 }
 
 /// Read database shell metadata for the navigation index or one bounded page window.
-async fn fetch_navigation_databases(
+async fn load_navigation_databases(
     transaction: &mut sqlx::Transaction<'_, Sqlite>,
     page_ids: Option<&[String]>,
 ) -> Result<Vec<NoteNavigationDatabaseDto>, String> {
@@ -224,7 +224,7 @@ async fn fetch_navigation_databases(
         .map_err(|error| format!("list Notes navigation databases: {error}"))
 }
 
-async fn fetch_navigation_pages(
+async fn load_navigation_pages(
     transaction: &mut sqlx::Transaction<'_, Sqlite>,
 ) -> Result<Vec<NotePageSummaryDto>, String> {
     sqlx::query_as::<_, NotePageSummaryDto>(&format!(
@@ -240,7 +240,7 @@ async fn fetch_navigation_pages(
     .map_err(|error| format!("list Notes navigation pages: {error}"))
 }
 
-async fn fetch_navigation_folders(
+async fn load_navigation_folders(
     transaction: &mut sqlx::Transaction<'_, Sqlite>,
 ) -> Result<Vec<NoteFolderRow>, String> {
     sqlx::query_as::<_, NoteFolderRow>(
@@ -253,7 +253,7 @@ async fn fetch_navigation_folders(
     .map_err(|error| format!("list Notes navigation folders: {error}"))
 }
 
-async fn fetch_navigation_parent_ids_with_children(
+async fn load_navigation_parent_ids_with_children(
     transaction: &mut sqlx::Transaction<'_, Sqlite>,
 ) -> Result<Vec<String>, String> {
     sqlx::query_scalar(
@@ -391,7 +391,7 @@ async fn count_folders(
         .map_err(|error| format!("count notes workspace folders: {error}"))
 }
 
-async fn fetch_root_window(
+async fn load_root_window(
     transaction: &mut sqlx::Transaction<'_, Sqlite>,
     project_id: Option<&str>,
     cursor: Option<&PageCursor>,
@@ -413,7 +413,7 @@ async fn fetch_root_window(
         .map_err(|error| format!("list notes workspace roots: {error}"))
 }
 
-async fn fetch_destination_window(
+async fn load_destination_window(
     transaction: &mut sqlx::Transaction<'_, Sqlite>,
     project_id: Option<&str>,
     search: &str,
@@ -442,7 +442,7 @@ async fn fetch_destination_window(
         .map_err(|error| format!("list notes destination candidates: {error}"))
 }
 
-async fn fetch_pages_by_ids(
+async fn load_pages_by_ids(
     transaction: &mut sqlx::Transaction<'_, Sqlite>,
     project_id: Option<&str>,
     ids: &[String],
@@ -467,7 +467,7 @@ async fn fetch_pages_by_ids(
         .map_err(|error| format!("list notes workspace recovery pages: {error}"))
 }
 
-async fn fetch_ancestors(
+async fn load_ancestors(
     transaction: &mut sqlx::Transaction<'_, Sqlite>,
     project_id: Option<&str>,
     ids: &[String],
@@ -493,7 +493,7 @@ async fn fetch_ancestors(
         .map_err(|error| format!("list notes workspace ancestors: {error}"))
 }
 
-async fn fetch_children(
+async fn load_children(
     transaction: &mut sqlx::Transaction<'_, Sqlite>,
     project_id: Option<&str>,
     ids: &[String],
@@ -519,7 +519,7 @@ async fn fetch_children(
         .map_err(|error| format!("list notes workspace expanded children: {error}"))
 }
 
-async fn fetch_parent_ids_with_children(
+async fn load_parent_ids_with_children(
     transaction: &mut sqlx::Transaction<'_, Sqlite>,
     ids: &[String],
 ) -> Result<Vec<String>, String> {
@@ -541,7 +541,7 @@ async fn fetch_parent_ids_with_children(
         .map_err(|error| format!("list notes workspace child markers: {error}"))
 }
 
-async fn fetch_unavailable_parent_ids(
+async fn load_unavailable_parent_ids(
     transaction: &mut sqlx::Transaction<'_, Sqlite>,
     pages: &[NotePageSummaryDto],
     loaded_ids: &[String],
@@ -588,7 +588,7 @@ async fn fetch_unavailable_parent_ids(
     Ok((missing, trashed))
 }
 
-async fn fetch_folder_window(
+async fn load_folder_window(
     transaction: &mut sqlx::Transaction<'_, Sqlite>,
     project_id: Option<&str>,
     cursor: Option<&FolderCursor>,

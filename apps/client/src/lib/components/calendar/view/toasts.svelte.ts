@@ -19,8 +19,8 @@ const SAVE_ERROR_TOAST_TIMEOUT_MS = 8_000;
 export function createCalendarViewToastController() {
   let deleteUndoToast: DeleteUndoToast | null = $state(null);
   let deleteUndoTimer: ReturnType<typeof setTimeout> | undefined;
-  let saveSuccessToast: SaveToast | null = $state(null);
-  let saveSuccessTimer: ReturnType<typeof setTimeout> | undefined;
+  let saveToast: SaveToast | null = $state(null);
+  let saveToastTimer: ReturnType<typeof setTimeout> | undefined;
 
   function clearDeleteUndoTimer(): void {
     if (deleteUndoTimer) {
@@ -64,60 +64,60 @@ export function createCalendarViewToastController() {
     }, restore ? Math.max(0, Math.min(DELETE_UNDO_TIMEOUT_MS, lifetimeMs)) : SAVE_SUCCESS_TOAST_TIMEOUT_MS);
   }
 
-  function clearSaveSuccessTimer(): void {
-    if (saveSuccessTimer) {
-      clearTimeout(saveSuccessTimer);
-      saveSuccessTimer = undefined;
+  function clearSaveToastTimer(): void {
+    if (saveToastTimer) {
+      clearTimeout(saveToastTimer);
+      saveToastTimer = undefined;
     }
   }
 
-  function dismissSaveSuccessToast(): void {
-    clearSaveSuccessTimer();
-    saveSuccessToast = null;
+  function dismissSaveToast(): void {
+    clearSaveToastTimer();
+    saveToast = null;
   }
 
   function showSavePendingToast(message: string): string {
-    clearSaveSuccessTimer();
+    clearSaveToastTimer();
     const id = crypto.randomUUID();
-    saveSuccessToast = { id, pending: true, message, variant: "success" };
+    saveToast = { id, pending: true, message, variant: "success" };
     return id;
   }
 
   function dismissSaveToastIfCurrent(id: string): void {
-    if (saveSuccessToast?.id === id) dismissSaveSuccessToast();
+    if (saveToast?.id === id) dismissSaveToast();
   }
 
   function showSaveSuccessToast(id: string, message: string): void {
-    clearSaveSuccessTimer();
-    if (saveSuccessToast?.id !== id) return;
-    saveSuccessToast = { id, pending: false, message, variant: "success" };
-    saveSuccessTimer = setTimeout(() => {
-      if (saveSuccessToast?.id === id) saveSuccessToast = null;
-      saveSuccessTimer = undefined;
+    clearSaveToastTimer();
+    if (saveToast?.id !== id) return;
+    saveToast = { id, pending: false, message, variant: "success" };
+    saveToastTimer = setTimeout(() => {
+      if (saveToast?.id === id) saveToast = null;
+      saveToastTimer = undefined;
     }, SAVE_SUCCESS_TOAST_TIMEOUT_MS);
   }
 
   function showSaveErrorToast(id: string, message: string): void {
-    clearSaveSuccessTimer();
-    if (saveSuccessToast?.id !== id) return;
-    saveSuccessToast = { id, pending: false, message, variant: "error" };
-    saveSuccessTimer = setTimeout(() => {
-      if (saveSuccessToast?.id === id) saveSuccessToast = null;
-      saveSuccessTimer = undefined;
+    clearSaveToastTimer();
+    if (saveToast?.id !== id) return;
+    saveToast = { id, pending: false, message, variant: "error" };
+    saveToastTimer = setTimeout(() => {
+      if (saveToast?.id === id) saveToast = null;
+      saveToastTimer = undefined;
     }, SAVE_ERROR_TOAST_TIMEOUT_MS);
   }
 
   function destroy(): void {
     clearDeleteUndoTimer();
-    clearSaveSuccessTimer();
+    clearSaveToastTimer();
   }
 
   return {
     get deleteUndoToast() {
       return deleteUndoToast;
     },
-    get saveSuccessToast() {
-      return saveSuccessToast;
+    get saveToast() {
+      return saveToast;
     },
     dismissDeleteUndoToast,
     showDeletePendingToast,

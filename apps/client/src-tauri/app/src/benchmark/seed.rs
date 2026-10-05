@@ -190,7 +190,7 @@ async fn insert_segment(
     tx: &mut Transaction<'_, Sqlite>,
     segment: &BenchmarkPomodoroSegmentSeed,
 ) -> Result<(), String> {
-    let config = sqlx::query(
+    let config_row = sqlx::query(
         "SELECT rhythm_kind, rhythm_source, preset_key, idle_timeout_minutes
          FROM calendar_event_pomodoro_configs
          WHERE event_id = ?",
@@ -199,16 +199,16 @@ async fn insert_segment(
     .fetch_one(&mut **tx)
     .await
     .map_err(|e| format!("load benchmark pomodoro config for run: {e}"))?;
-    let rhythm_kind: String = config
+    let rhythm_kind: String = config_row
         .try_get("rhythm_kind")
         .map_err(|e| format!("read rhythm_kind: {e}"))?;
-    let rhythm_source: String = config
+    let rhythm_source: String = config_row
         .try_get("rhythm_source")
         .map_err(|e| format!("read rhythm_source: {e}"))?;
-    let preset_key: Option<String> = config
+    let preset_key: Option<String> = config_row
         .try_get("preset_key")
         .map_err(|e| format!("read preset_key: {e}"))?;
-    let idle_timeout_minutes: Option<i64> = config
+    let idle_timeout_minutes: Option<i64> = config_row
         .try_get("idle_timeout_minutes")
         .map_err(|e| format!("read idle_timeout_minutes: {e}"))?;
 

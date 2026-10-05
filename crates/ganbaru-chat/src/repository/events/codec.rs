@@ -8,21 +8,21 @@ pub(super) fn row_to_event(row: sqlx::sqlite::SqliteRow) -> ChatResult<Canonical
     let runtime = CanonicalRuntimeEvent {
         schema_version,
         event_id: crate::models::ChatEventId::new(string_column(&row, "id")?)
-            .map_err(|_| corrupt_data())?,
+            .map_err(|_| corrupt_data_error())?,
         provider_family_id: crate::models::ProviderFamilyId::new(string_column(
             &row,
             "provider_family_id",
         )?)
-        .map_err(|_| corrupt_data())?,
+        .map_err(|_| corrupt_data_error())?,
         provider_instance_id: crate::models::ProviderInstanceId::new(string_column(
             &row,
             "provider_instance_id",
         )?)
-        .map_err(|_| corrupt_data())?,
+        .map_err(|_| corrupt_data_error())?,
         thread_id: ChatThreadId::new(string_column(&row, "thread_id")?)
-            .map_err(|_| corrupt_data())?,
+            .map_err(|_| corrupt_data_error())?,
         created_at: UtcTimestamp::new(string_column(&row, "created_at")?)
-            .map_err(|_| corrupt_data())?,
+            .map_err(|_| corrupt_data_error())?,
         turn_id: optional_identifier(&row, "turn_id", crate::models::ChatTurnId::new)?,
         provider_turn_id: optional_identifier(
             &row,
@@ -59,7 +59,7 @@ pub(super) fn row_to_event(row: sqlx::sqlite::SqliteRow) -> ChatResult<Canonical
     Ok(CanonicalStoredEvent {
         sequence: u64_column(&row, "sequence")?,
         ingested_at: UtcTimestamp::new(string_column(&row, "ingested_at")?)
-            .map_err(|_| corrupt_data())?,
+            .map_err(|_| corrupt_data_error())?,
         runtime,
     })
 }
@@ -78,7 +78,7 @@ pub(super) fn event_type(event: &CanonicalEvent) -> ChatResult<String> {
         .get("type")
         .and_then(Value::as_str)
         .map(ToOwned::to_owned)
-        .ok_or_else(corrupt_data)
+        .ok_or_else(corrupt_data_error)
 }
 
 pub(super) fn wire_literal<T: Serialize>(value: &T) -> ChatResult<String> {
@@ -86,7 +86,7 @@ pub(super) fn wire_literal<T: Serialize>(value: &T) -> ChatResult<String> {
         .map_err(serialization_error)?
         .as_str()
         .map(ToOwned::to_owned)
-        .ok_or_else(corrupt_data)
+        .ok_or_else(corrupt_data_error)
 }
 
 pub(super) fn versioned_parts(
@@ -112,10 +112,10 @@ pub(super) fn read_versioned(
     match (version, data) {
         (None, None) => Ok(None),
         (Some(version), Some(data)) => Ok(Some(VersionedJson {
-            schema_version: u32::try_from(version).map_err(|_| corrupt_data())?,
+            schema_version: u32::try_from(version).map_err(|_| corrupt_data_error())?,
             value: serde_json::from_str(&data).map_err(serialization_error)?,
         })),
-        _ => Err(corrupt_data()),
+        _ => Err(corrupt_data_error()),
     }
 }
 
@@ -128,7 +128,7 @@ pub(super) fn optional_identifier<T>(
         .map_err(persistence_error)?
         .map(create)
         .transpose()
-        .map_err(|_| corrupt_data())
+        .map_err(|_| corrupt_data_error())
 }
 
 pub(super) fn string_column(row: &sqlx::sqlite::SqliteRow, column: &str) -> ChatResult<String> {
@@ -137,12 +137,12 @@ pub(super) fn string_column(row: &sqlx::sqlite::SqliteRow, column: &str) -> Chat
 
 pub(super) fn u32_column(row: &sqlx::sqlite::SqliteRow, column: &str) -> ChatResult<u32> {
     let value: i64 = row.try_get(column).map_err(persistence_error)?;
-    u32::try_from(value).map_err(|_| corrupt_data())
+    u32::try_from(value).map_err(|_| corrupt_data_error())
 }
 
 pub(super) fn u64_column(row: &sqlx::sqlite::SqliteRow, column: &str) -> ChatResult<u64> {
     let value: i64 = row.try_get(column).map_err(persistence_error)?;
-    u64::try_from(value).map_err(|_| corrupt_data())
+    u64::try_from(value).map_err(|_| corrupt_data_error())
 }
 
 pub(super) fn i64_value(value: u64) -> ChatResult<i64> {
@@ -170,7 +170,7 @@ pub(super) fn serialization_error<T>(_error: T) -> ChatError {
     )
 }
 
-pub(super) fn corrupt_data() -> ChatError {
+pub(super) fn corrupt_data_error() -> ChatError {
     ChatError::new(
         ChatErrorCode::Persistence,
         "Stored Chat data is invalid",

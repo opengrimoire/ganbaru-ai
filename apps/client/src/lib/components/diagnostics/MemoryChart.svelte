@@ -6,7 +6,7 @@
     samples,
     width = 256,
     height = 64,
-    onhover,
+    onHover,
   }: {
     samples: MemorySample[];
     width?: number;
@@ -16,7 +16,7 @@
      * per-process panel above the chart can mirror the hovered values
      * instead of duplicating them in a tooltip.
      */
-    onhover?: (sample: MemorySample | null) => void;
+    onHover?: (sample: MemorySample | null) => void;
   } = $props();
 
   const PAD_X = 2;
@@ -108,17 +108,17 @@
   }
 
   $effect(() => {
-    onhover?.(hoverSample);
+    onHover?.(hoverSample);
   });
 
   // Time chip on the x-axis. Width is sized for the longest label
   // `formatElapsed` will produce in a one-hour buffer (`Xm Ys` or `1h Ym`).
-  const CHIP_W = 56;
-  const CHIP_H = 12;
+  const CHIP_WIDTH = 56;
+  const CHIP_HEIGHT = 12;
   const chipLeft = $derived.by(() => {
     if (!hoverSample) return 0;
-    const target = xOf(hoverSample.t) - CHIP_W / 2;
-    return Math.max(0, Math.min(width - CHIP_W, target));
+    const target = xOf(hoverSample.t) - CHIP_WIDTH / 2;
+    return Math.max(0, Math.min(width - CHIP_WIDTH, target));
   });
 </script>
 
@@ -187,14 +187,14 @@
         -->
         <rect
           x={chipLeft}
-          y={height - CHIP_H - 1}
-          width={CHIP_W}
-          height={CHIP_H}
+          y={height - CHIP_HEIGHT - 1}
+          width={CHIP_WIDTH}
+          height={CHIP_HEIGHT}
           rx="2"
           class="fill-foreground"
         />
         <text
-          x={chipLeft + CHIP_W / 2}
+          x={chipLeft + CHIP_WIDTH / 2}
           y={height - 3}
           text-anchor="middle"
           class="fill-background"

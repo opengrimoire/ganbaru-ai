@@ -53,9 +53,9 @@ pub struct ChatDiagnosticsRead {
     pub projection_healthy: bool,
     pub inconsistent_projection_count: u64,
     pub credential_store_available: bool,
-    pub provider_probe_healthy: u64,
-    pub provider_probe_unhealthy: u64,
-    pub provider_probe_unknown: u64,
+    pub healthy_provider_probes: u64,
+    pub unhealthy_provider_probes: u64,
+    pub unknown_provider_probes: u64,
     pub live_provider_processes: u64,
     pub active_turns: u64,
     pub live_terminals: u64,
@@ -162,7 +162,7 @@ pub async fn chat_stop_all_processes(
         .await?;
     let terminals_stopped = terminals.stop_all()?;
     internal_mcp.stop_all().await;
-    app.state::<super::preview::ChatPreviewManager>()
+    app.state::<super::preview::ChatBrowserManager>()
         .close_all(&app);
     Ok(ChatStopAllResult {
         provider_processes_stopped,
@@ -305,14 +305,14 @@ async fn read_diagnostics(
          FROM chat_cleanup_jobs",
     ).fetch_one(pool).await.map_err(persistence_error)?;
     let (live_provider_processes, active_turns) = runtimes.process_counts()?;
-    let mut provider_probe_healthy = 0u64;
-    let mut provider_probe_unhealthy = 0u64;
-    let mut provider_probe_unknown = 0u64;
+    let mut healthy_provider_probes = 0u64;
+    let mut unhealthy_provider_probes = 0u64;
+    let mut unknown_provider_probes = 0u64;
     for provider in scope.provider_instances.values() {
         match provider.last_probe.as_ref().map(|probe| probe.state) {
-            Some(ProbeState::Healthy) => provider_probe_healthy += 1,
-            Some(_) => provider_probe_unhealthy += 1,
-            None => provider_probe_unknown += 1,
+            Some(ProbeState::Healthy) => healthy_provider_probes += 1,
+            Some(_) => unhealthy_provider_probes += 1,
+            None => unknown_provider_probes += 1,
         }
     }
     Ok(ChatDiagnosticsRead {
@@ -339,9 +339,9 @@ async fn read_diagnostics(
             PlatformCredentialStore::default().availability(),
             super::credentials::CredentialStoreAvailability::Available
         ),
-        provider_probe_healthy,
-        provider_probe_unhealthy,
-        provider_probe_unknown,
+        healthy_provider_probes,
+        unhealthy_provider_probes,
+        unknown_provider_probes,
         live_provider_processes: u64::try_from(live_provider_processes).unwrap_or(u64::MAX),
         active_turns: u64::try_from(active_turns).unwrap_or(u64::MAX),
         live_terminals: u64::try_from(terminals.live_count()?).unwrap_or(u64::MAX),

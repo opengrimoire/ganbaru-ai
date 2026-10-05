@@ -11,7 +11,7 @@ pub(super) const OWNER_KEY: &str = "__ganbaru_trash_owner";
 const MAX_TRASH_OBJECTS: usize = super::database_copy::MAX_COPY_OBJECTS;
 
 #[derive(Clone, Hash, PartialEq, Eq)]
-enum Object {
+enum TrashObject {
     Page(String),
     Block(String),
     Database(String),
@@ -33,7 +33,7 @@ pub(super) async fn set_block_trash(
     id: &str,
     in_trash: bool,
 ) -> Result<(), String> {
-    set_graph_trash(tx, Object::Block(id.to_string()), in_trash).await
+    set_graph_trash(tx, TrashObject::Block(id.to_string()), in_trash).await
 }
 
 /// Move a page, nested notes, and owned database row graphs together.
@@ -42,7 +42,7 @@ pub(super) async fn set_page_trash(
     id: &str,
     in_trash: bool,
 ) -> Result<(), String> {
-    set_graph_trash(tx, Object::Page(id.to_string()), in_trash).await
+    set_graph_trash(tx, TrashObject::Page(id.to_string()), in_trash).await
 }
 
 /// Reassign only owned note pages when a database or note block moves between projects.
@@ -51,7 +51,7 @@ pub(super) async fn adopt_block_project(
     id: &str,
     project_id: Option<&str>,
 ) -> Result<(), String> {
-    let graph = collect_graph(tx, Object::Block(id.to_string()), None).await?;
+    let graph = collect_graph(tx, TrashObject::Block(id.to_string()), None).await?;
     for page in graph.pages {
         let properties = match project_id {
             Some(_) => "json_set(properties, '$.__ganbaru_project_id', ?)",
@@ -74,7 +74,7 @@ pub(super) async fn adopt_block_project(
 
 async fn set_graph_trash(
     tx: &mut Transaction<'_, Sqlite>,
-    root: Object,
+    root: TrashObject,
     in_trash: bool,
 ) -> Result<(), String> {
     let (table, column, id) = root_location(&root);
@@ -175,12 +175,12 @@ async fn set_graph_trash(
     Ok(())
 }
 
-fn root_location(root: &Object) -> (&'static str, &'static str, &str) {
+fn root_location(root: &TrashObject) -> (&'static str, &'static str, &str) {
     match root {
-        Object::Page(id) => ("notes_pages", "properties", id),
-        Object::Block(id) => ("notes_blocks", "payload", id),
-        Object::Database(id) => ("notes_databases", "description", id),
-        Object::Source(id) => ("notes_data_sources", "properties", id),
+        TrashObject::Page(id) => ("notes_pages", "properties", id),
+        TrashObject::Block(id) => ("notes_blocks", "payload", id),
+        TrashObject::Database(id) => ("notes_databases", "description", id),
+        TrashObject::Source(id) => ("notes_data_sources", "properties", id),
     }
 }
 
@@ -202,7 +202,7 @@ async fn write_metadata(
 
 async fn collect_graph(
     tx: &mut Transaction<'_, Sqlite>,
-    root: Object,
+    root: TrashObject,
     token: Option<&str>,
 ) -> Result<TrashJournal, String> {
     let mut queue = VecDeque::from([root]);
@@ -217,10 +217,10 @@ async fn collect_graph(
         }
         let (table, _, id) = root_location(&object);
         let (state_query, owner) = match (&object, token) {
-            (Object::Page(_), Some(_)) => ("in_trash = 1 AND json_extract(properties, '$.__ganbaru_trash_owner') = ?".to_string(), true),
-            (Object::Block(_), Some(_)) => ("in_trash = 1 AND json_extract(payload, '$.__ganbaru_trash_owner') = ?".to_string(), true),
-            (Object::Database(_), Some(_)) => ("in_trash = 1 AND EXISTS(SELECT 1 FROM notes_blocks WHERE id = notes_databases.id AND json_extract(payload, '$.__ganbaru_trash_owner') = ?)".to_string(), true),
-            (Object::Source(_), Some(_)) => ("in_trash = 1 AND EXISTS(SELECT 1 FROM notes_blocks WHERE id = notes_data_sources.database_id AND json_extract(payload, '$.__ganbaru_trash_owner') = ?)".to_string(), true),
+            (TrashObject::Page(_), Some(_)) => ("in_trash = 1 AND json_extract(properties, '$.__ganbaru_trash_owner') = ?".to_string(), true),
+            (TrashObject::Block(_), Some(_)) => ("in_trash = 1 AND json_extract(payload, '$.__ganbaru_trash_owner') = ?".to_string(), true),
+            (TrashObject::Database(_), Some(_)) => ("in_trash = 1 AND EXISTS(SELECT 1 FROM notes_blocks WHERE id = notes_databases.id AND json_extract(payload, '$.__ganbaru_trash_owner') = ?)".to_string(), true),
+            (TrashObject::Source(_), Some(_)) => ("in_trash = 1 AND EXISTS(SELECT 1 FROM notes_blocks WHERE id = notes_data_sources.database_id AND json_extract(payload, '$.__ganbaru_trash_owner') = ?)".to_string(), true),
             _ => ("in_trash = 0".to_string(), false),
         };
         let statement =
@@ -237,7 +237,7 @@ async fn collect_graph(
             continue;
         }
         match object {
-            Object::Page(id) => {
+            TrashObject::Page(id) => {
                 journal.pages.push(id.clone());
                 let blocks = bounded_ids(
                     tx,
@@ -246,7 +246,7 @@ async fn collect_graph(
                     token,
                 )
                 .await?;
-                queue.extend(blocks.into_iter().map(Object::Block));
+                queue.extend(blocks.into_iter().map(TrashObject::Block));
                 let children = bounded_ids(
                     tx,
                     "SELECT id FROM notes_pages WHERE parent_page_id = ? AND in_trash = 0 LIMIT ?",
@@ -254,26 +254,26 @@ async fn collect_graph(
                     token,
                 )
                 .await?;
-                queue.extend(children.into_iter().map(Object::Page));
+                queue.extend(children.into_iter().map(TrashObject::Page));
             }
-            Object::Block(id) => {
+            TrashObject::Block(id) => {
                 journal.blocks.push(id.clone());
                 let children = bounded_ids(tx, "SELECT id FROM notes_blocks WHERE parent_block_id = ? AND in_trash = 0 LIMIT ?", &id, token).await?;
-                queue.extend(children.into_iter().map(Object::Block));
+                queue.extend(children.into_iter().map(TrashObject::Block));
                 let pages = bounded_ids(tx, "SELECT id FROM notes_pages WHERE (parent_block_id = ? OR id = ?) AND in_trash = 0 LIMIT ?", &id, token).await?;
-                queue.extend(pages.into_iter().map(Object::Page));
-                queue.push_back(Object::Database(id));
+                queue.extend(pages.into_iter().map(TrashObject::Page));
+                queue.push_back(TrashObject::Database(id));
             }
-            Object::Database(id) => {
+            TrashObject::Database(id) => {
                 journal.databases.push(id.clone());
                 // A linked shell owns no shared source. Its views never widen this traversal.
                 let sources = bounded_ids(tx, "SELECT id FROM notes_data_sources WHERE database_id = ? AND in_trash = 0 LIMIT ?", &id, token).await?;
-                queue.extend(sources.into_iter().map(Object::Source));
+                queue.extend(sources.into_iter().map(TrashObject::Source));
             }
-            Object::Source(id) => {
+            TrashObject::Source(id) => {
                 journal.sources.push(id.clone());
                 let rows = bounded_ids(tx, "SELECT id FROM notes_pages WHERE parent_data_source_id = ? AND in_trash = 0 LIMIT ?", &id, token).await?;
-                queue.extend(rows.into_iter().map(Object::Page));
+                queue.extend(rows.into_iter().map(TrashObject::Page));
             }
         }
     }

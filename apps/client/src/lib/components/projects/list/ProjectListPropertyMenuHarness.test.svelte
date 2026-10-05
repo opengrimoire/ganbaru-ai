@@ -16,7 +16,7 @@
       customFieldsForProject: () => [field],
       prioritiesForProject: () => [],
     } as unknown as Input["projects"],
-    calendar: {rawBlocks: []} as unknown as Input["calendar"],
+    calendar: {sourceEvents: []} as unknown as Input["calendar"],
     translate: getLocalization().t,
   });
   setProjectListTableContext({query, cellClass: () => "", cellStyle: () => "", rowStyle: () => ""});

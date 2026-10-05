@@ -36,7 +36,7 @@
   const localization = getLocalization();
   const { t } = localization;
   let error = $state<string | null>(null);
-  const selected = $derived(new Set(selectedTaskIds));
+  const selectedTaskIdSet = $derived(new Set(selectedTaskIds));
 
   function tasksForStatus(status: ProjectStatus): ProjectTask[] {
     const rows = tasks.filter((task) => task.statusId === status.id && !task.parentTaskId);
@@ -68,7 +68,7 @@
 
 {#if error}<p class="px-3 py-2 text-[0.8rem] text-destructive" role="alert">{error}</p>{/if}
 <CollectionBoard groups={statuses} items={tasksForStatus} label={(status) => status.name} count={total} fill
-  reorder={taskSortMode === "manual"} {canMove} onmove={move}
+  reorder={taskSortMode === "manual"} {canMove} onMove={move}
   emptyLabel={t("projects.kanban.emptyColumn")} dragLabel={(task) => t("projects.actions.dragTask", task.title)}
   virtualize>
   {#snippet header(status)}
@@ -76,12 +76,12 @@
     <span class="text-[0.8rem] tabular-nums text-muted-foreground">{formatNumber(localization.locale, total(status))}</span>
   {/snippet}
   {#snippet card(task, status, dragHandle)}
-    {@const blocked = projects.dependenciesBlockingTask(task.id).length}
-    {@const blocking = projects.dependenciesBlockedByTask(task.id).length}
-    <CollectionCard title={task.title} onopen={() => onOpenTask(task)} selected={selected.has(task.id)} muted={Boolean(task.archivedAt)}>
+    {@const blockedByCount = projects.dependenciesBlockingTask(task.id).length}
+    {@const blockingCount = projects.dependenciesBlockedByTask(task.id).length}
+    <CollectionCard title={task.title} onOpen={() => onOpenTask(task)} selected={selectedTaskIdSet.has(task.id)} muted={Boolean(task.archivedAt)}>
       {#snippet leading()}
         {@render dragHandle()}
-        <button type="button" class="mt-1 flex shrink-0 items-center justify-center rounded border border-border hover:bg-accent {mobileLayout ? 'size-11' : 'size-6'}" class:bg-primary={selected.has(task.id)} class:text-primary-foreground={selected.has(task.id)} aria-label={selected.has(task.id) ? t("projects.actions.unselectTask", task.title) : t("projects.actions.selectTask", task.title)} onclick={() => onToggleTaskSelection(task)}>{#if selected.has(task.id)}<Check class="size-3.5" />{/if}</button>
+        <button type="button" class="mt-1 flex shrink-0 items-center justify-center rounded border border-border hover:bg-accent {mobileLayout ? 'size-11' : 'size-6'}" class:bg-primary={selectedTaskIdSet.has(task.id)} class:text-primary-foreground={selectedTaskIdSet.has(task.id)} aria-label={selectedTaskIdSet.has(task.id) ? t("projects.actions.unselectTask", task.title) : t("projects.actions.selectTask", task.title)} onclick={() => onToggleTaskSelection(task)}>{#if selectedTaskIdSet.has(task.id)}<Check class="size-3.5" />{/if}</button>
       {/snippet}
       {#snippet actions()}
         <CollectionMenu kind="actions" iconOnly showHeader={false} label={t("projects.actions.openTaskDetails", task.title)}>
@@ -99,12 +99,12 @@
         </CollectionMenu>
       {/snippet}
       <div class="flex flex-wrap items-center gap-1.5 text-muted-foreground"><PriorityFlagIcon color={projectPriorityDisplayColor(task.priority, priorities)} theme={theme.current} size={13} /><span>{projectPriorityDisplayLabel(task.priority, priorities, t)}</span>{#if task.dueDate}<span class="ml-auto">{formatDateTime(localization.locale, new Date(`${task.dueDate}T00:00:00Z`), { month: "short", day: "numeric", timeZone: "UTC" })}</span>{/if}</div>
-      {#if blocked || blocking}<div class="mt-2 flex flex-wrap gap-1 text-[0.733333rem]">{#if blocked}<span class="rounded bg-destructive/10 px-1.5 py-0.5 text-destructive">{t("projects.list.blockedBy", blocked)}</span>{/if}{#if blocking}<span class="rounded bg-muted px-1.5 py-0.5 text-muted-foreground">{t("projects.list.blocks", blocking)}</span>{/if}</div>{/if}
+      {#if blockedByCount || blockingCount}<div class="mt-2 flex flex-wrap gap-1 text-[0.733333rem]">{#if blockedByCount}<span class="rounded bg-destructive/10 px-1.5 py-0.5 text-destructive">{t("projects.list.blockedBy", blockedByCount)}</span>{/if}{#if blockingCount}<span class="rounded bg-muted px-1.5 py-0.5 text-muted-foreground">{t("projects.list.blocks", blockingCount)}</span>{/if}</div>{/if}
       {#if task.archivedAt}<span class="mt-1 block text-[0.733333rem] text-muted-foreground">{t("projects.taskLifecycle.archived")}</span>{/if}
     </CollectionCard>
   {/snippet}
   {#snippet footer(status)}
-    <CollectionQuickAdd label={t("projects.list.addTaskInSection", status.name)} onsubmit={async (title) => Boolean(await projects.addTask(status.projectId, title, undefined, status.id))} />
+    <CollectionQuickAdd label={t("projects.list.addTaskInSection", status.name)} onSubmit={async (title) => Boolean(await projects.addTask(status.projectId, title, undefined, status.id))} />
     {#if tasksForStatus(status).length < total(status)}<button type="button" class="min-h-9 w-full rounded-md px-2 text-[0.8rem] text-muted-foreground hover:bg-accent" onclick={onNeedMore}>{t("common.loadMore")}</button>{/if}
   {/snippet}
 </CollectionBoard>

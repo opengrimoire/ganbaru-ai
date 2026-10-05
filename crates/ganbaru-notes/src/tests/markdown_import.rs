@@ -97,7 +97,7 @@ let value = 1;
         );
 
         let table_id = blocks[9]["id"].as_str().unwrap();
-        let rows = reads::get_block_children(&pool, table_id, None, Some(10))
+        let rows = reads::block_children(&pool, table_id, None, Some(10))
             .await
             .unwrap();
         let rows_json = serde_json::to_value(rows).unwrap();

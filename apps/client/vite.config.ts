@@ -19,8 +19,8 @@ const appVersion = readAppVersion();
 const buildRef = `${appVersion}+${readGitCommit()}${isGitDirty() ? "-dirty" : ""}`;
 const githubRepository = process.env.GANBARU_AI_RELEASE_REPOSITORY ?? "opengrimoire/ganbaru-ai";
 const buildPlatform = resolveTauriBuildPlatform(process.env.TAURI_ENV_PLATFORM);
-const mobileBuild = buildPlatform === "android" || buildPlatform === "ios";
-const androidBuild = buildPlatform === "android";
+const isMobileBuild = buildPlatform === "android" || buildPlatform === "ios";
+const isAndroidBuild = buildPlatform === "android";
 
 function hostDesktopBuildPlatform(): DesktopBuildPlatform {
   if (process.platform === "win32") return "windows";
@@ -173,7 +173,7 @@ async function warmTauriDevEntry(server: ViteDevServer): Promise<void> {
   const clientEnvironment = server.environments.client;
   const entry = await clientEnvironment.transformRequest("/src/main.ts");
   if (!entry) throw new Error("Vite did not transform the Tauri development entry");
-  const warmupUrls = mobileBuild
+  const warmupUrls = isMobileBuild
     ? [
         "/src/main-mobile.ts",
         "/src/MobileApp.svelte",
@@ -285,182 +285,182 @@ export default defineConfig({
     alias: {
       "$lib/api/profile-image-picker": path.resolve(
         configDir,
-        mobileBuild
+        isMobileBuild
           ? "src/lib/api/profile-image-picker.mobile.ts"
           : "src/lib/api/profile-image-picker.ts",
       ),
       "$lib/components/settings/SettingsSectionRenderer.svelte": path.resolve(
         configDir,
-        mobileBuild
+        isMobileBuild
           ? "src/lib/components/settings/SettingsSectionRenderer.mobile.svelte"
           : "src/lib/components/settings/SettingsSectionRenderer.svelte",
       ),
       "$lib/components/settings/detail-registry": path.resolve(
         configDir,
-        mobileBuild
+        isMobileBuild
           ? "src/lib/components/settings/detail-registry.mobile.ts"
           : "src/lib/components/settings/detail-registry.ts",
       ),
       "$lib/components/settings/distractions/DistractionsAppSelector.svelte": path.resolve(
         configDir,
-        mobileBuild
+        isMobileBuild
           ? "src/lib/components/settings/distractions/DistractionsAppSelector.mobile.svelte"
           : "src/lib/components/settings/distractions/DistractionsAppSelector.svelte",
       ),
       "$lib/components/settings/distractions/DistractionsBrowserConnectionStatus.svelte": path.resolve(
         configDir,
-        mobileBuild
+        isMobileBuild
           ? "src/lib/components/settings/distractions/DistractionsBrowserConnectionStatus.mobile.svelte"
           : "src/lib/components/settings/distractions/DistractionsBrowserConnectionStatus.svelte",
       ),
       "$lib/components/themes/editor/mobile-editor-loader": path.resolve(
         configDir,
-        mobileBuild
+        isMobileBuild
           ? "src/lib/components/themes/editor/mobile-editor-loader.mobile.ts"
           : "src/lib/components/themes/editor/mobile-editor-loader.ts",
       ),
       "$lib/chat/workspace/local-execution-ui": path.resolve(
         configDir,
-        mobileBuild
+        isMobileBuild
           ? "src/lib/chat/workspace/local-execution-ui.mobile.ts"
           : "src/lib/chat/workspace/local-execution-ui.ts",
       ),
       "$lib/chat/review/diff-loader": path.resolve(
         configDir,
-        mobileBuild
+        isMobileBuild
           ? "src/lib/chat/review/diff-loader.mobile.ts"
           : "src/lib/chat/review/diff-loader.ts",
       ),
       "$lib/api/db": path.resolve(
         configDir,
-        mobileBuild
+        isMobileBuild
           ? "src/lib/api/db.mobile.ts"
           : "src/lib/api/db.ts",
       ),
       "$lib/music/platform-library": path.resolve(
         configDir,
-        mobileBuild
+        isMobileBuild
           ? "src/lib/music/platform-library.mobile.ts"
           : "src/lib/music/platform-library.ts",
       ),
       "$lib/music/platform-paths": path.resolve(
         configDir,
-        mobileBuild
+        isMobileBuild
           ? "src/lib/music/platform-paths.mobile.ts"
           : "src/lib/music/platform-paths.ts",
       ),
       "$lib/music/session/platform-controls": path.resolve(
         configDir,
-        mobileBuild
+        isMobileBuild
           ? "src/lib/music/session/platform-controls.mobile.ts"
           : "src/lib/music/session/platform-controls.ts",
       ),
       "$lib/windows/sync-transport": path.resolve(
         configDir,
-        mobileBuild
+        isMobileBuild
           ? "src/lib/windows/sync-transport.mobile.ts"
           : "src/lib/windows/sync-transport.ts",
       ),
       "$lib/stores/zoom.svelte": path.resolve(
         configDir,
-        mobileBuild
+        isMobileBuild
           ? "src/lib/stores/zoom.mobile.svelte.ts"
           : "src/lib/stores/zoom.svelte.ts",
       ),
       "$lib/stores/mobile-back-stack.svelte": path.resolve(
         configDir,
-        androidBuild
+        isAndroidBuild
           ? "src/lib/stores/mobile-back-stack.svelte.ts"
           : "src/lib/stores/mobile-back-stack.desktop.ts",
       ),
       "$lib/components/projects/component-registry": path.resolve(
         configDir,
-        mobileBuild
+        isMobileBuild
           ? "src/lib/components/projects/component-registry.mobile.ts"
           : "src/lib/components/projects/component-registry.ts",
       ),
       "$lib/components/notes/working-markdown/platform": path.resolve(
         configDir,
-        mobileBuild
+        isMobileBuild
           ? "src/lib/components/notes/working-markdown/platform.mobile.ts"
           : "src/lib/components/notes/working-markdown/platform.ts",
       ),
       "$lib/components/notes/editor-platform-importers": path.resolve(
         configDir,
-        mobileBuild
+        isMobileBuild
           ? "src/lib/components/notes/editor-platform-importers.mobile.ts"
           : "src/lib/components/notes/editor-platform-importers.ts",
       ),
       "$lib/components/notes/project-platform-importers": path.resolve(
         configDir,
-        mobileBuild
+        isMobileBuild
           ? "src/lib/components/notes/project-platform-importers.mobile.ts"
           : "src/lib/components/notes/project-platform-importers.ts",
       ),
       "$lib/components/music/MusicSoundtrackAssignmentEditor.svelte": path.resolve(
         configDir,
-        mobileBuild
+        isMobileBuild
           ? "src/lib/components/music/MusicSoundtrackAssignmentEditor.mobile.svelte"
           : "src/lib/components/music/MusicSoundtrackAssignmentEditor.svelte",
       ),
       "$lib/components/music/soundscape/MusicSoundscapeControl.svelte": path.resolve(
         configDir,
-        mobileBuild
+        isMobileBuild
           ? "src/lib/components/music/soundscape/MusicSoundscapeControl.mobile.svelte"
           : "src/lib/components/music/soundscape/MusicSoundscapeControl.svelte",
       ),
       "$lib/components/music/soundscape/MusicSoundscapeBuilder.svelte": path.resolve(
         configDir,
-        mobileBuild
+        isMobileBuild
           ? "src/lib/components/music/soundscape/MusicSoundscapeBuilder.mobile.svelte"
           : "src/lib/components/music/soundscape/MusicSoundscapeBuilder.svelte",
       ),
       "$lib/stores/soundscape.svelte": path.resolve(
         configDir,
-        mobileBuild
+        isMobileBuild
           ? "src/lib/stores/soundscape.mobile.svelte.ts"
           : "src/lib/stores/soundscape.svelte.ts",
       ),
       "$lib/stores/music-player/external-controls": path.resolve(
         configDir,
-        mobileBuild
+        isMobileBuild
           ? "src/lib/stores/music-player/external-controls.mobile.ts"
           : "src/lib/stores/music-player/external-controls.ts",
       ),
       "$lib/components/music/builder/MusicItemRepairDialog.svelte": path.resolve(
         configDir,
-        mobileBuild
+        isMobileBuild
           ? "src/lib/components/music/builder/MusicItemRepairDialog.mobile.svelte"
           : "src/lib/components/music/builder/MusicItemRepairDialog.svelte",
       ),
       "$lib/components/music/builder/MusicRelinkWizard.svelte": path.resolve(
         configDir,
-        mobileBuild
+        isMobileBuild
           ? "src/lib/components/music/builder/MusicRelinkWizard.mobile.svelte"
           : "src/lib/components/music/builder/MusicRelinkWizard.svelte",
       ),
       "$lib/components/projects/settings/ProjectSettingsWorkingFoldersSection.svelte": path.resolve(
         configDir,
-        mobileBuild
+        isMobileBuild
           ? "src/lib/components/projects/settings/ProjectSettingsWorkingFoldersSection.mobile.svelte"
           : "src/lib/components/projects/settings/ProjectSettingsWorkingFoldersSection.svelte",
       ),
       "$lib/components/notes/working-markdown/NotesWorkingMarkdownEditor.svelte": path.resolve(
         configDir,
-        mobileBuild
+        isMobileBuild
           ? "src/lib/components/notes/working-markdown/NotesWorkingMarkdownEditor.mobile.svelte"
           : "src/lib/components/notes/working-markdown/NotesWorkingMarkdownEditor.svelte",
       ),
       "$lib/components/notes/NotesProjectSettingsPanel.svelte": path.resolve(
         configDir,
-        mobileBuild
+        isMobileBuild
           ? "src/lib/components/notes/NotesProjectSettingsPanel.mobile.svelte"
           : "src/lib/components/notes/NotesProjectSettingsPanel.svelte",
       ),
       $lib: path.resolve("./src/lib"),
       "virtual:ganbaru-ai-platform-entry": path.resolve(
         configDir,
-        mobileBuild
+        isMobileBuild
           ? "src/main-mobile.ts"
           : "src/main-desktop.ts",
       ),
@@ -468,8 +468,8 @@ export default defineConfig({
   },
   clearScreen: false,
   build: {
-    target: androidBuild ? ANDROID_WEBVIEW_BUILD_TARGET : undefined,
-    cssTarget: androidBuild ? ANDROID_WEBVIEW_BUILD_TARGET : undefined,
+    target: isAndroidBuild ? ANDROID_WEBVIEW_BUILD_TARGET : undefined,
+    cssTarget: isAndroidBuild ? ANDROID_WEBVIEW_BUILD_TARGET : undefined,
     rolldownOptions: {
       preserveEntrySignatures: "allow-extension",
       output: {

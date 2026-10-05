@@ -163,8 +163,8 @@
   let executionTarget = $state<ChatExecutionTarget | null>(initialDraft.executionTarget);
   let selectionStart = $state(initialDraft.selectionStart);
   let selectionEnd = $state(initialDraft.selectionEnd);
-  let boldActive = $state(false);
-  let italicActive = $state(false);
+  let isBoldActive = $state(false);
+  let isItalicActive = $state(false);
   let composing = $state(false);
   let pickerOpen = $state(false);
   let pickerTrigger = $state<ChatReferenceTrigger | null>(null);
@@ -355,8 +355,8 @@
   function handleEditorSelectionChange(selection: ChatComposerSelection, marks: ChatComposerMark[]): void {
     selectionStart = selection.start;
     selectionEnd = selection.end;
-    boldActive = marks.includes("bold");
-    italicActive = marks.includes("italic");
+    isBoldActive = marks.includes("bold");
+    isItalicActive = marks.includes("italic");
     persist();
     void updateReferencePicker(editorController?.plainText() ?? "", selection.start);
   }
@@ -1268,7 +1268,7 @@
         {#if scheduledMessagesOpen}
           {#if ScheduleMenu}
             {@const LoadedScheduledMessagesMenu = ScheduleMenu}
-            <LoadedScheduledMessagesMenu mode="manage" align="right" {scheduledMessages} onmessageschange={updateScheduledMessages} onclose={() => { scheduledMessagesOpen = false; }} />
+            <LoadedScheduledMessagesMenu mode="manage" align="right" {scheduledMessages} onMessagesChange={updateScheduledMessages} onClose={() => { scheduledMessagesOpen = false; }} />
           {:else}<div class="composer-menu schedule-loading align-right" role="status">{t("chat.status.working")}</div>{/if}
         {/if}
       </div>
@@ -1366,8 +1366,8 @@
           <button type="button" class="tool-button" aria-label={t("chat.organization.addContext")} aria-expanded={addMenuOpen} onclick={() => { addMenuOpen = !addMenuOpen; scheduleMenuOpen = false; scheduledMessagesOpen = false; }}><Plus size={16} /></button>
           {#if addMenuOpen}<div class="composer-menu add-menu">{#if localExecutionAvailable}<button type="button" onclick={() => void pickImages()}><Image size={14} />{t("chat.composer.attachImages")}</button>{/if}<button type="button" onclick={() => { addMenuOpen = false; insertReferenceTrigger("@"); }}><AtSign size={14} />{t("chat.organization.peopleAndResources")}</button><button type="button" onclick={() => { addMenuOpen = false; insertReferenceTrigger("#"); }}><Hash size={14} />{t("chat.organization.channels")}</button></div>{/if}
         </div>
-        <button type="button" class="tool-button" class:active={boldActive} aria-label={t("chat.organization.bold")} aria-pressed={boldActive} onclick={() => editorController?.toggleMark("bold")}><Bold size={15} /></button>
-        <button type="button" class="tool-button" class:active={italicActive} aria-label={t("chat.organization.italic")} aria-pressed={italicActive} onclick={() => editorController?.toggleMark("italic")}><Italic size={15} /></button>
+        <button type="button" class="tool-button" class:active={isBoldActive} aria-label={t("chat.organization.bold")} aria-pressed={isBoldActive} onclick={() => editorController?.toggleMark("bold")}><Bold size={15} /></button>
+        <button type="button" class="tool-button" class:active={isItalicActive} aria-label={t("chat.organization.italic")} aria-pressed={isItalicActive} onclick={() => editorController?.toggleMark("italic")}><Italic size={15} /></button>
         <button type="button" class="tool-button" aria-label={t("chat.organization.peopleAndResources")} onpointerdown={(event) => event.preventDefault()} onclick={() => insertReferenceTrigger("@")}><AtSign size={15} /></button>
         <button type="button" class="tool-button" aria-label={t("chat.organization.channels")} onpointerdown={(event) => event.preventDefault()} onclick={() => insertReferenceTrigger("#")}><Hash size={15} /></button>
         <div bind:this={scheduleMenuAnchor} class="menu-anchor">
@@ -1375,7 +1375,7 @@
           {#if scheduleMenuOpen}
             {#if ScheduleMenu}
               {@const LoadedScheduleMenu = ScheduleMenu}
-              <LoadedScheduleMenu mode="choose" selectedScheduledFor={scheduledFor} disabled={sending} onselect={selectSchedule} onclear={clearSchedule} onclose={() => { scheduleMenuOpen = false; }} />
+              <LoadedScheduleMenu mode="choose" selectedScheduledFor={scheduledFor} disabled={sending} onSelect={selectSchedule} onClear={clearSchedule} onClose={() => { scheduleMenuOpen = false; }} />
             {:else}<div class="composer-menu schedule-loading" role="status">{t("chat.status.working")}</div>{/if}
           {/if}
         </div>

@@ -8,7 +8,7 @@
 
   let { controller, anchor }: { controller: NotesDatabasePasteController; anchor: HTMLElement | null } = $props();
   const { t } = getLocalization();
-  const PANEL_WIDTH = 256;
+  const PANEL_WIDTH_PX = 256;
   const TEXT_SCALE = 0.8;
   const current = $derived(controller.prompt);
 
@@ -21,7 +21,7 @@
       const fontSize = paragraph ? Number.parseFloat(getComputedStyle(paragraph).fontSize) : Number.NaN;
       node.style.cssText = anchoredPanelStyle({
         triggerRect: anchor.getBoundingClientRect(), viewportWidth: window.innerWidth, viewportHeight: window.innerHeight,
-        preferredWidth: PANEL_WIDTH, preferredMaxHeight: notesFloatingPanelContentHeight(node),
+        preferredWidth: PANEL_WIDTH_PX, preferredMaxHeight: notesFloatingPanelContentHeight(node),
       });
       if (Number.isFinite(fontSize)) node.style.fontSize = `${fontSize * TEXT_SCALE}px`;
     };

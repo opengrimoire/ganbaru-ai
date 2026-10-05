@@ -64,8 +64,8 @@ pub async fn claim_command_receipt(
                 .fetch_optional(&mut *transaction)
                 .await
                 .map_err(persistence_error)?;
-        let current_revision = current_revision.ok_or_else(not_found)?;
-        if u64::try_from(current_revision).map_err(|_| corrupt_data())? != expected_revision {
+        let current_revision = current_revision.ok_or_else(not_found_error)?;
+        if u64::try_from(current_revision).map_err(|_| corrupt_data_error())? != expected_revision {
             return Err(ChatError::new(
                 ChatErrorCode::StaleRevision,
                 "Chat thread revision is stale",
@@ -90,7 +90,7 @@ pub async fn claim_command_receipt(
     .map_err(persistence_error)?;
     let receipt = read_receipt_from_executor(&mut *transaction, client_command_id)
         .await?
-        .ok_or_else(corrupt_data)?;
+        .ok_or_else(corrupt_data_error)?;
     transaction.commit().await.map_err(persistence_error)?;
     Ok(CommandReceiptClaim::Claimed(receipt))
 }
@@ -137,11 +137,11 @@ pub async fn complete_command_receipt(
     .map_err(persistence_error)?;
     if updated.rows_affected() != 1 {
         let existing = read_command_receipt(pool, client_command_id).await?;
-        return existing.ok_or_else(not_found);
+        return existing.ok_or_else(not_found_error);
     }
     read_command_receipt(pool, client_command_id)
         .await?
-        .ok_or_else(corrupt_data)
+        .ok_or_else(corrupt_data_error)
 }
 
 pub async fn read_command_receipt(
@@ -175,27 +175,27 @@ fn row_to_receipt(row: sqlx::sqlite::SqliteRow) -> ChatResult<CommandReceiptRead
     let state: String = row.try_get("state").map_err(persistence_error)?;
     Ok(CommandReceiptRead {
         client_command_id: ChatCommandId::new(string_column(&row, "client_command_id")?)
-            .map_err(|_| corrupt_data())?,
+            .map_err(|_| corrupt_data_error())?,
         thread_id: ChatThreadId::new(string_column(&row, "thread_id")?)
-            .map_err(|_| corrupt_data())?,
+            .map_err(|_| corrupt_data_error())?,
         command_kind: string_column(&row, "command_kind")?,
         submitted_revision: row
             .try_get::<Option<i64>, _>("submitted_revision")
             .map_err(persistence_error)?
-            .map(|value| u64::try_from(value).map_err(|_| corrupt_data()))
+            .map(|value| u64::try_from(value).map_err(|_| corrupt_data_error()))
             .transpose()?,
         state: match state.as_str() {
             "accepted" => CommandReceiptState::Accepted,
             "completed" => CommandReceiptState::Completed,
             "failed" => CommandReceiptState::Failed,
-            _ => return Err(corrupt_data()),
+            _ => return Err(corrupt_data_error()),
         },
         result: read_versioned(&row, "result_schema_version", "result_data")?,
         error: read_versioned(&row, "error_schema_version", "error_data")?,
         created_at: UtcTimestamp::new(string_column(&row, "created_at")?)
-            .map_err(|_| corrupt_data())?,
+            .map_err(|_| corrupt_data_error())?,
         updated_at: UtcTimestamp::new(string_column(&row, "updated_at")?)
-            .map_err(|_| corrupt_data())?,
+            .map_err(|_| corrupt_data_error())?,
     })
 }
 
@@ -241,10 +241,10 @@ fn read_versioned(
     ) {
         (None, None) => Ok(None),
         (Some(version), Some(data)) => Ok(Some(VersionedJson {
-            schema_version: u32::try_from(version).map_err(|_| corrupt_data())?,
+            schema_version: u32::try_from(version).map_err(|_| corrupt_data_error())?,
             value: serde_json::from_str(&data).map_err(serialization_error)?,
         })),
-        _ => Err(corrupt_data()),
+        _ => Err(corrupt_data_error()),
     }
 }
 
@@ -261,7 +261,7 @@ fn i64_value(value: u64) -> ChatResult<i64> {
     })
 }
 
-fn not_found() -> ChatError {
+fn not_found_error() -> ChatError {
     ChatError::new(
         ChatErrorCode::NotFound,
         "Chat command receipt was not found",
@@ -285,7 +285,7 @@ fn serialization_error<T>(_error: T) -> ChatError {
     )
 }
 
-fn corrupt_data() -> ChatError {
+fn corrupt_data_error() -> ChatError {
     ChatError::new(
         ChatErrorCode::Persistence,
         "Stored Chat command receipt is invalid",

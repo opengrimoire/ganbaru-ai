@@ -1,8 +1,8 @@
 use crate::data_sources;
 use crate::data_sources::views::{
-    ViewProperty as BoardProperty, canonical_filter, canonical_sorts, generated_uuid_tx,
+    ViewProperty, canonical_filter, canonical_sorts, generate_uuid_tx,
     load_active_data_source_and_database_tx, normalized_row_for_schema, parse_json, stored_filters,
-    stored_sorts, view_schema as board_schema,
+    stored_sorts, view_schema,
 };
 use crate::models::{
     NoteDataSourceListConfigurationUpdate, NoteDataSourceListViewDto, NoteDataSourceListViewUpdate,
@@ -17,13 +17,13 @@ const MAX_LIST_CONFIGURATION_BYTES: usize = 50 * 1024;
 const LIST_ROW_OPEN_MODES: &[&str] = &["full_page", "side_panel"];
 
 #[cfg(test)]
-pub async fn get_data_source_list_view(
+pub async fn data_source_list_view(
     pool: &SqlitePool,
     data_source_id: &str,
     database_id: Option<&str>,
     view_id: Option<&str>,
 ) -> Result<NoteDataSourceListViewDto, String> {
-    get_data_source_list_view_window(
+    data_source_list_view_window(
         pool,
         data_source_id,
         database_id,
@@ -33,7 +33,7 @@ pub async fn get_data_source_list_view(
     .await
 }
 
-pub async fn get_data_source_list_view_window(
+pub async fn data_source_list_view_window(
     pool: &SqlitePool,
     data_source_id: &str,
     database_id: Option<&str>,
@@ -69,7 +69,7 @@ pub async fn update_data_source_list_view(
         .await?;
     let (data_source, _database) =
         load_active_data_source_and_database_tx(&mut tx, data_source_id, "board").await?;
-    let schema = board_schema(&parse_json(
+    let schema = view_schema(&parse_json(
         &data_source.properties,
         "data source properties",
     )?)?;
@@ -123,12 +123,12 @@ async fn load_list_view_tx(
     let (data_source, database) =
         load_active_data_source_and_database_tx(tx, data_source_id, "board").await?;
     let schema_properties = parse_json(&data_source.properties, "data source properties")?;
-    let schema = board_schema(&schema_properties)?;
+    let schema = view_schema(&schema_properties)?;
     let view = ensure_list_view_row_tx(tx, &data_source, database_id, view_id, &schema).await?;
     validate_list_configuration(view.configuration.as_deref(), &schema)?;
     let filters = stored_filters(view.filter.as_deref(), "database board filter", "board")?;
     let sorts = stored_sorts(&view.sorts, "database board sorts", "board")?;
-    let window_schema = data_sources::window::table_properties_from_board(&schema);
+    let window_schema = data_sources::window::table_properties_from_view(&schema);
     let configuration = parse_json(
         view.configuration.as_deref().unwrap_or("{}"),
         "list view configuration",
@@ -174,14 +174,14 @@ async fn ensure_list_view_row_tx(
     data_source: &NoteDataSourceRow,
     database_id: Option<&str>,
     view_id: Option<&str>,
-    schema: &[BoardProperty],
+    schema: &[ViewProperty],
 ) -> Result<NoteDatabaseViewRow, String> {
     if let Some(view) = load_list_view_row_tx(tx, &data_source.id, database_id, view_id).await? {
         return Ok(view);
     }
     let database_id = data_sources::views::scoped_database_id(data_source, database_id);
     crate::databases::editing_lock::ensure_unlocked_tx(tx, database_id).await?;
-    let id = generated_uuid_tx(tx, "generate list view id", "generated_list_view_id").await?;
+    let id = generate_uuid_tx(tx, "generate list view id", "generated_list_view_id").await?;
     let sort_order = data_sources::views::next_view_sort_order_tx(tx, database_id).await?;
     sqlx::query(
         "INSERT INTO notes_database_views (
@@ -220,7 +220,7 @@ async fn load_list_view_row_tx(
         .await
 }
 
-fn default_list_configuration(schema: &[BoardProperty]) -> Value {
+fn default_list_configuration(schema: &[ViewProperty]) -> Value {
     json!({
         "type": "list",
         "list": {
@@ -235,7 +235,7 @@ fn default_list_configuration(schema: &[BoardProperty]) -> Value {
 
 fn canonical_list_configuration(
     update: &NoteDataSourceListConfigurationUpdate,
-    schema: &[BoardProperty],
+    schema: &[ViewProperty],
 ) -> Result<Value, String> {
     let group_property_id =
         canonical_group_property_id(update.group_property_id.as_deref(), schema)?;
@@ -266,7 +266,7 @@ fn canonical_list_configuration(
 
 fn validate_list_configuration(
     configuration: Option<&str>,
-    schema: &[BoardProperty],
+    schema: &[ViewProperty],
 ) -> Result<(), String> {
     let value = configuration
         .map(|configuration| parse_json(configuration, "list view configuration"))
@@ -292,7 +292,7 @@ fn validate_list_configuration(
 
 fn canonical_group_property_id(
     raw_property_id: Option<&str>,
-    schema: &[BoardProperty],
+    schema: &[ViewProperty],
 ) -> Result<Option<String>, String> {
     let Some(property_id) = raw_property_id.map(str::trim).filter(|id| !id.is_empty()) else {
         return Ok(None);
@@ -308,7 +308,7 @@ fn canonical_group_property_id(
 }
 
 fn visible_list_property_ids(
-    schema: &[BoardProperty],
+    schema: &[ViewProperty],
     group_property_id: Option<&str>,
 ) -> Vec<String> {
     schema
@@ -322,7 +322,7 @@ fn visible_list_property_ids(
 
 fn canonical_visible_property_ids(
     property_ids: &[String],
-    schema: &[BoardProperty],
+    schema: &[ViewProperty],
     group_property_id: Option<&str>,
 ) -> Vec<String> {
     let known: HashSet<&str> = schema.iter().map(|property| property.id.as_str()).collect();

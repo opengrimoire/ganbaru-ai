@@ -48,7 +48,7 @@
   } from "$lib/notes/blocks/color";
   import type { NotesBlockInsertRequest } from "$lib/notes/blocks/insertion";
   import { notesBlockMarker } from "$lib/notes/blocks/editor-ui";
-  import { notesCalloutOwnTextHidden } from "$lib/notes/block-types/callout-layout";
+  import { notesCalloutIsOwnTextHidden } from "$lib/notes/block-types/callout-layout";
   import {
     planNotesKeyboardAction,
     type NotesKeyboardAction,
@@ -363,7 +363,7 @@
   const blockUnreadCommentCount = $derived(unreadNotesCommentThreadCount(blockCommentThreads));
   const commentAnchors = $derived(notesCommentAnchorsForBlock(notes.commentThreads, block.id, text));
   const suggestionAnchors = $derived(notesSuggestionAnchorsForBlock(notes.suggestions, block.id, text));
-  const calloutContainerOnly = $derived(notesCalloutOwnTextHidden(
+  const calloutContainerOnly = $derived(notesCalloutIsOwnTextHidden(
     block,
     notes.childIdsByParentId[block.id]?.length ?? 0,
   ));
@@ -412,7 +412,7 @@
       .then((module) => { CalloutIconPicker = module.default; })
       .catch((error: unknown) => console.error("load Notes callout icon picker failed", error));
   }
-  const toggleOpen = $derived(block.type !== "toggle" || block.toggle.ganbaru_open !== false);
+  const isToggleOpen = $derived(block.type !== "toggle" || block.toggle.ganbaru_open !== false);
   const headingToggleable = $derived(isHeadingBlockType(block.type) && headingIsToggleable(block));
   const headingOpen = $derived(!isHeadingBlockType(block.type) || headingToggleOpen(block));
   const childPageTitle = $derived(
@@ -514,7 +514,7 @@
   }
 
   function toggleButtonLabel(): string {
-    if (block.type === "toggle") return toggleOpen ? t("notes.closeToggle") : t("notes.openToggle");
+    if (block.type === "toggle") return isToggleOpen ? t("notes.closeToggle") : t("notes.openToggle");
     if (headingToggleable) return headingOpen ? t("notes.closeToggle") : t("notes.openToggle");
     return t("notes.toggleBlock");
   }
@@ -696,12 +696,12 @@
       <button
         class="mt-1.5 flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
         aria-label={toggleButtonLabel()}
-        aria-expanded={toggleOpen}
+        aria-expanded={isToggleOpen}
         onclick={() => {
-          onToggleOpen(block.id, !toggleOpen);
+          onToggleOpen(block.id, !isToggleOpen);
         }}
       >
-        {#if toggleOpen}
+        {#if isToggleOpen}
           <ChevronDown class="size-4" />
         {:else}
           <ChevronRight class="size-4" />

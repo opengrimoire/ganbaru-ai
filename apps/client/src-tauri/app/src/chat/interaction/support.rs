@@ -37,7 +37,7 @@ pub(super) fn versioned_row(
 ) -> ChatResult<VersionedJson> {
     Ok(VersionedJson {
         schema_version: u32::try_from(row.try_get::<i64, _>(version).map_err(persistence_error)?)
-            .map_err(|_| corrupt_data())?,
+            .map_err(|_| corrupt_data_error())?,
         value: serde_json::from_str(&row.try_get::<String, _>(data).map_err(persistence_error)?)
             .map_err(json_error)?,
     })
@@ -59,7 +59,7 @@ pub(super) fn json_error<T>(_error: T) -> ChatError {
     )
 }
 
-pub(super) fn corrupt_data() -> ChatError {
+pub(super) fn corrupt_data_error() -> ChatError {
     ChatError::new(
         ChatErrorCode::Persistence,
         "Stored Chat interaction is invalid",

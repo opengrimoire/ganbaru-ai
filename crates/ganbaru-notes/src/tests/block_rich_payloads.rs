@@ -199,7 +199,7 @@ fn update_block_round_trips_inline_formatting_annotations() {
         .await
         .unwrap();
 
-        let children = reads::get_block_children(&pool, PAGE_A, None, Some(10))
+        let children = reads::block_children(&pool, PAGE_A, None, Some(10))
             .await
             .unwrap();
         let children_json = serde_json::to_value(children).unwrap();
@@ -261,7 +261,7 @@ fn rich_text_paste_payloads_round_trip_current_and_appended_blocks() {
         .await
         .unwrap();
 
-        let children = reads::get_block_children(&pool, PAGE_A, None, Some(10))
+        let children = reads::block_children(&pool, PAGE_A, None, Some(10))
             .await
             .unwrap();
         let children_json = serde_json::to_value(children).unwrap();
@@ -328,7 +328,7 @@ fn update_block_round_trips_inline_equations() {
         .await
         .unwrap();
 
-        let children = reads::get_block_children(&pool, PAGE_A, None, Some(10))
+        let children = reads::block_children(&pool, PAGE_A, None, Some(10))
             .await
             .unwrap();
         let children_json = serde_json::to_value(children).unwrap();

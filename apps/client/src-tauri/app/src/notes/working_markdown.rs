@@ -112,7 +112,7 @@ pub async fn notes_list_working_markdown<R: Runtime>(
             display_path: folder
                 .managed_relative_path
                 .unwrap_or_else(|| authorized.canonical_path.to_string_lossy().into_owned()),
-            nodes: scan.nodes.into_iter().map(read_node).collect(),
+            nodes: scan.nodes.into_iter().map(markdown_node_dto).collect(),
             truncated: scan.truncated,
         });
     }
@@ -138,7 +138,7 @@ pub async fn notes_read_working_markdown<R: Runtime>(
     .await?;
     let file = working_markdown::read_markdown(&authorized.canonical_path, &relative_path)
         .map_err(working_markdown_error)?;
-    Ok(read_file(working_folder_id, file))
+    Ok(markdown_file_dto(working_folder_id, file))
 }
 
 #[tauri::command]
@@ -164,7 +164,7 @@ pub async fn notes_save_working_markdown<R: Runtime>(
         &expected_revision,
     )
     .map_err(working_markdown_error)?;
-    Ok(read_file(working_folder_id, file))
+    Ok(markdown_file_dto(working_folder_id, file))
 }
 
 #[tauri::command]
@@ -206,7 +206,7 @@ async fn require_folder<R: Runtime>(
     authorize_working_folder(app, &pool, working_folder_id, operation).await
 }
 
-fn read_node(node: WorkingMarkdownNode) -> NotesWorkingMarkdownNode {
+fn markdown_node_dto(node: WorkingMarkdownNode) -> NotesWorkingMarkdownNode {
     NotesWorkingMarkdownNode {
         kind: match node.kind {
             WorkingMarkdownNodeKind::Directory => NotesWorkingMarkdownNodeKind::Directory,
@@ -214,11 +214,11 @@ fn read_node(node: WorkingMarkdownNode) -> NotesWorkingMarkdownNode {
         },
         name: node.name,
         relative_path: node.relative_path,
-        children: node.children.into_iter().map(read_node).collect(),
+        children: node.children.into_iter().map(markdown_node_dto).collect(),
     }
 }
 
-fn read_file(
+fn markdown_file_dto(
     working_folder_id: ProjectWorkingFolderId,
     file: WorkingMarkdownFile,
 ) -> NotesWorkingMarkdownFileRead {

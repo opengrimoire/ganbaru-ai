@@ -20,13 +20,13 @@
   let {
     color,
     theme,
-    onselect,
+    onSelect,
     buttonClass = "",
     mobileLayout = false,
   }: {
     color: EventColor;
     theme: Theme;
-    onselect: (color: EventColor) => void;
+    onSelect: (color: EventColor) => void;
     buttonClass?: string;
     mobileLayout?: boolean;
   } = $props();
@@ -98,7 +98,7 @@
   }
 
   function choose(next: EventColor): void {
-    onselect(next);
+    onSelect(next);
     closePicker();
   }
 

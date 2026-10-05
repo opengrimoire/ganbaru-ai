@@ -539,10 +539,10 @@ fn fixture_normalizes_partial_text_cursor_plan_usage_cost_and_completion() {
             .any(|event| matches!(event.event, CanonicalEvent::TurnCompleted(_)))
     );
     assert_eq!(
-        state.resume.last_assistant_uuid.as_deref(),
+        state.resume_cursor.last_assistant_uuid.as_deref(),
         Some("22222222-2222-4222-8222-222222222222")
     );
-    assert_eq!(state.resume.turn_count, 1);
+    assert_eq!(state.resume_cursor.turn_count, 1);
 }
 
 #[test]

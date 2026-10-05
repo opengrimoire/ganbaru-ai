@@ -6,37 +6,37 @@
   import {
     NOTES_DATABASE_QUERY_MAX_FILTERS, NOTES_DATABASE_QUERY_MAX_FILTER_GROUPS, NOTES_DATABASE_QUERY_MAX_FILTER_DEPTH,
     notesDatabaseAppendFilter, notesDatabaseFilterConditions, notesDatabaseFilterCount, notesDatabaseFilterGroupCount,
-    notesDatabaseFilterIsDate, notesDatabaseFilterNeedsValue, notesDatabaseIsFilterPredicate,
+    notesDatabaseIsDateFilterProperty, notesDatabaseFilterNeedsValue, notesDatabaseIsFilterPredicate,
     notesDatabaseNewFilter, notesDatabaseTransformFilter, notesDatabaseUpdatedFilters,
     type NotesDatabaseQueryProperty,
   } from "$lib/notes/database/query-controls";
-  import { notesDatabaseIsFilterDate } from "$lib/notes/database/filters";
+  import { notesDatabaseIsFilterDateValue } from "$lib/notes/database/filters";
   import type { NotesDatabaseTableFilter, NotesDatabaseTableFilterCondition, NotesDatabaseTableFilterPredicate } from "$lib/notes/types";
 
-  let { properties, filters, pending = false, propertyId = null, onchange }: {
+  let { properties, filters, pending = false, propertyId = null, onChange }: {
     properties: readonly NotesDatabaseQueryProperty[];
     filters: readonly NotesDatabaseTableFilter[];
     pending?: boolean;
     propertyId?: string | null;
-    onchange: (filters: NotesDatabaseTableFilter[]) => void;
+    onChange: (filters: NotesDatabaseTableFilter[]) => void;
   } = $props();
 
   const { t } = getLocalization();
   const available = $derived(properties.filter((property) => notesDatabaseFilterConditions(property).length));
   const target = $derived(propertyId ? available.find((property) => property.id === propertyId) : available[0]);
-  const count = $derived(notesDatabaseFilterCount(filters));
+  const filterCount = $derived(notesDatabaseFilterCount(filters));
   const groupCount = $derived(notesDatabaseFilterGroupCount(filters));
 
   /** Persist a checked scalar edit through the owning layout. */
   function update(path: number[], patch: Partial<NotesDatabaseTableFilterPredicate>): void {
-    if (!pending) onchange(notesDatabaseUpdatedFilters(filters, path, patch, properties));
+    if (!pending) onChange(notesDatabaseUpdatedFilters(filters, path, patch, properties));
   }
 
   /** Add a complete predicate or group within the shared native bounds. */
-  function add(path: number[], group = false): void {
-    if (pending || !target || count >= NOTES_DATABASE_QUERY_MAX_FILTERS || (group && groupCount >= NOTES_DATABASE_QUERY_MAX_FILTER_GROUPS)) return;
+  function add(path: number[], isGroup = false): void {
+    if (pending || !target || filterCount >= NOTES_DATABASE_QUERY_MAX_FILTERS || (isGroup && groupCount >= NOTES_DATABASE_QUERY_MAX_FILTER_GROUPS)) return;
     const predicate = notesDatabaseNewFilter(target);
-    onchange(notesDatabaseAppendFilter(filters, path, group ? { type: "and", filters: [predicate] } : predicate));
+    onChange(notesDatabaseAppendFilter(filters, path, isGroup ? { type: "and", filters: [predicate] } : predicate));
   }
 
   /** Persist only complete numbers and dates; leave invalid drafts available for correction. */
@@ -46,7 +46,7 @@
     if (property.type === "number") {
       if (!value.trim() || !Number.isFinite(Number(value))) { input.setCustomValidity(t("notes.databaseTableFilterInvalidNumber")); input.reportValidity(); return; }
       value = Number(value);
-    } else if (notesDatabaseFilterIsDate(property) && !notesDatabaseIsFilterDate(value)) {
+    } else if (notesDatabaseIsDateFilterProperty(property) && !notesDatabaseIsFilterDateValue(value)) {
       input.setCustomValidity(t("notes.databaseTableFilterInvalidDate")); input.reportValidity(); return;
     }
     input.setCustomValidity("");
@@ -98,13 +98,13 @@
               }} />
             <button type="button" class="inline-flex size-7 items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground"
               disabled={pending} aria-label={t("notes.databaseTableRemoveFilter")}
-              onclick={() => { if (!pending) onchange(notesDatabaseTransformFilter(filters, path, () => null)); }}>
+              onclick={() => { if (!pending) onChange(notesDatabaseTransformFilter(filters, path, () => null)); }}>
               <X class="size-3.5" aria-hidden="true" />
             </button>
           </div>
           {#if notesDatabaseFilterNeedsValue(filter.condition)}
             <input class="h-8 min-w-0 rounded-sm border border-input bg-background px-2 text-foreground outline-none focus-visible:ring-1 focus-visible:ring-ring"
-              type={property?.type === "number" ? "number" : property && notesDatabaseFilterIsDate(property) && String(filter.value ?? "").length === 10 ? "date" : "text"}
+              type={property?.type === "number" ? "number" : property && notesDatabaseIsDateFilterProperty(property) && String(filter.value ?? "").length === 10 ? "date" : "text"}
               step={property?.type === "number" ? "any" : undefined}
               value={String(filter.value ?? "")} disabled={pending} aria-label={t("notes.databaseTableFilterValue")}
               oninput={(event) => event.currentTarget.setCustomValidity("")}
@@ -118,10 +118,10 @@
         <div class="flex min-w-0 items-center gap-1">
           <Select inline appearance="quiet" class="min-w-0 flex-1" ariaLabel={t("notes.databaseTableFilterGroupOperator")}
             value={filter.type} disabled={pending} options={[{ value: "and", label: t("notes.databaseTableFilterMatchAll") }, { value: "or", label: t("notes.databaseTableFilterMatchAny") }]}
-            onChange={(value) => { if (!pending && (value === "and" || value === "or")) onchange(notesDatabaseTransformFilter(filters, path, () => ({ type: value, filters: filter.filters }))); }} />
+            onChange={(value) => { if (!pending && (value === "and" || value === "or")) onChange(notesDatabaseTransformFilter(filters, path, () => ({ type: value, filters: filter.filters }))); }} />
           <button type="button" class="inline-flex size-7 items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground"
             disabled={pending} aria-label={t("notes.databaseTableRemoveFilterGroup")}
-            onclick={() => { if (!pending) onchange(notesDatabaseTransformFilter(filters, path, () => null)); }}><X class="size-3.5" aria-hidden="true" /></button>
+            onclick={() => { if (!pending) onChange(notesDatabaseTransformFilter(filters, path, () => null)); }}><X class="size-3.5" aria-hidden="true" /></button>
         </div>
         {@render renderNodes(filter.filters, path, depth + 1)}
         {@render addButtons(path, depth + 1)}
@@ -133,12 +133,12 @@
 {#snippet addButtons(path: number[], depth: number)}
   <div class="flex flex-wrap gap-1">
     <button type="button" class="flex min-h-7 items-center gap-1.5 rounded-sm px-2 text-left text-muted-foreground hover:bg-accent hover:text-foreground"
-      disabled={pending || !target || count >= NOTES_DATABASE_QUERY_MAX_FILTERS} onclick={() => add(path)}>
+      disabled={pending || !target || filterCount >= NOTES_DATABASE_QUERY_MAX_FILTERS} onclick={() => add(path)}>
       <Plus class="size-3.5 shrink-0" aria-hidden="true" />{t("notes.databaseTableAddFilter")}
     </button>
     {#if propertyId === null}
       <button type="button" class="flex min-h-7 items-center gap-1.5 rounded-sm px-2 text-left text-muted-foreground hover:bg-accent hover:text-foreground"
-        disabled={pending || !target || count >= NOTES_DATABASE_QUERY_MAX_FILTERS || groupCount >= NOTES_DATABASE_QUERY_MAX_FILTER_GROUPS || depth >= NOTES_DATABASE_QUERY_MAX_FILTER_DEPTH}
+        disabled={pending || !target || filterCount >= NOTES_DATABASE_QUERY_MAX_FILTERS || groupCount >= NOTES_DATABASE_QUERY_MAX_FILTER_GROUPS || depth >= NOTES_DATABASE_QUERY_MAX_FILTER_DEPTH}
         onclick={() => add(path, true)}><Plus class="size-3.5 shrink-0" aria-hidden="true" />{t("notes.databaseTableAddFilterGroup")}</button>
     {/if}
   </div>

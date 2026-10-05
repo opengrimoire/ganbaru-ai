@@ -405,7 +405,7 @@ fn trash_block_hides_descendants_and_refreshes_parent() {
                 .await
                 .unwrap();
         assert_eq!(trashed_count, 2);
-        let visible_children = reads::get_block_children(&pool, PAGE_A, None, Some(50))
+        let visible_children = reads::block_children(&pool, PAGE_A, None, Some(50))
             .await
             .unwrap();
         let json = serde_json::to_value(visible_children).unwrap();

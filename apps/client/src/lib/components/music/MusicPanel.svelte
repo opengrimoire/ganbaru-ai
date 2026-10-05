@@ -40,13 +40,13 @@
   import { getMusicSourcesController } from "$lib/music/sources/controller.svelte";
 
   let {
-    onclose,
+    onClose,
     visible = true,
     presentation = "desktop",
     mobilePlayerPanelStyle = "",
     mobilePlaylistPanelStyle = "",
   }: {
-    onclose: () => void;
+    onClose: () => void;
     visible?: boolean;
     presentation?: "desktop" | "mobile";
     mobilePlayerPanelStyle?: string;
@@ -376,10 +376,10 @@
     if (!itemId) return;
     const playlistId = player.activePlaylistId;
     const now = Date.now();
-    const active = (await getMusicInspectorDetail(itemId)).snoozes.filter((entry) =>
+    const activeSnoozes = (await getMusicInspectorDetail(itemId)).snoozes.filter((entry) =>
       entry.startsAtMs <= now && (entry.endsAtMs === null || entry.endsAtMs > now)
       && (playlistId === null || entry.scope === "all-playlists" || entry.playlistId === playlistId));
-    await Promise.all(active.map((entry) => removeMusicSnooze(entry.id)));
+    await Promise.all(activeSnoozes.map((entry) => removeMusicSnooze(entry.id)));
     if (player.activeQueueItemIds[index] === itemId && player.activePlaylistId === playlistId) {
       player.clearQueueItemSnooze(index);
     }
@@ -450,7 +450,7 @@
       if (musicPage === "playlist-builder") return;
       if (typeof document !== "undefined" && document.querySelector("[data-app-floating-surface], [data-music-track-preferences-open]")) return;
       claimKeyboardShortcut(event);
-      onclose();
+      onClose();
       return;
     }
     if (event.key === "Tab") {
@@ -711,7 +711,7 @@
   hidden={!visible}
   class={cn("fixed z-40", mobileBuilderPresentation ? "bg-background" : !mobilePresentation && "inset-0")}
   style={mobilePresentation ? "left: var(--visual-viewport-offset-left); top: var(--visual-viewport-offset-top); width: var(--visual-viewport-width); height: var(--visual-viewport-height);" : undefined}
-  onclick={(event) => { if (!mobileBuilderPresentation && event.target === event.currentTarget) onclose(); }}
+  onclick={(event) => { if (!mobileBuilderPresentation && event.target === event.currentTarget) onClose(); }}
 ></div>
 {#if !mobilePresentation}
   <div

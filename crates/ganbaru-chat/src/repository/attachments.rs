@@ -95,7 +95,7 @@ pub async fn import_attachment_bytes(
     request: AttachmentBytesImport<'_>,
 ) -> ChatResult<ChatAttachmentRead> {
     if request.bytes.len() as u64 > MAX_ATTACHMENT_BYTES {
-        return Err(invalid_attachment());
+        return Err(invalid_attachment_error());
     }
     let display_name = request.display_name.trim();
     if display_name.is_empty()
@@ -133,7 +133,7 @@ async fn persist_attachment_bytes(
         extension
     );
     let destination = resolve_managed_path(vault_root, &relative_path)?;
-    let parent = destination.parent().ok_or_else(invalid_path)?;
+    let parent = destination.parent().ok_or_else(invalid_path_error)?;
     fs::create_dir_all(parent).map_err(io_error)?;
     write_restrictive(&destination, request.bytes)?;
     let inserted = sqlx::query(
@@ -147,7 +147,7 @@ async fn persist_attachment_bytes(
     .bind(wire_kind(request.requested_kind))
     .bind(&request.display_name)
     .bind(mime_type)
-    .bind(i64::try_from(request.bytes.len()).map_err(|_| invalid_attachment())?)
+    .bind(i64::try_from(request.bytes.len()).map_err(|_| invalid_attachment_error())?)
     .bind(&sha256)
     .bind(&relative_path)
     .bind(signature_kind)
@@ -160,7 +160,7 @@ async fn persist_attachment_bytes(
     }
     read_attachment(pool, &request.attachment_id)
         .await?
-        .ok_or_else(corrupt_data)
+        .ok_or_else(corrupt_data_error)
 }
 
 pub async fn read_attachment(
@@ -179,12 +179,12 @@ pub async fn read_attachment(
     row.map(|row| {
         Ok(ChatAttachmentRead {
             id: ChatAttachmentId::new(row.try_get::<String, _>("id").map_err(persistence_error)?)
-                .map_err(|_| corrupt_data())?,
+                .map_err(|_| corrupt_data_error())?,
             working_folder_id: ProjectWorkingFolderId::new(
                 row.try_get::<String, _>("working_folder_id")
                     .map_err(persistence_error)?,
             )
-            .map_err(|_| corrupt_data())?,
+            .map_err(|_| corrupt_data_error())?,
             kind: parse_kind(
                 &row.try_get::<String, _>("kind")
                     .map_err(persistence_error)?,
@@ -197,7 +197,7 @@ pub async fn read_attachment(
                 row.try_get::<i64, _>("byte_size")
                     .map_err(persistence_error)?,
             )
-            .map_err(|_| corrupt_data())?,
+            .map_err(|_| corrupt_data_error())?,
             sha256: row.try_get("sha256").map_err(persistence_error)?,
             managed_relative_path: row
                 .try_get("managed_relative_path")
@@ -207,7 +207,7 @@ pub async fn read_attachment(
                 row.try_get::<String, _>("created_at")
                     .map_err(persistence_error)?,
             )
-            .map_err(|_| corrupt_data())?,
+            .map_err(|_| corrupt_data_error())?,
         })
     })
     .transpose()
@@ -224,7 +224,7 @@ pub fn read_managed_attachment_bytes(
         || metadata.len() != attachment.byte_size
         || metadata.len() > MAX_ATTACHMENT_BYTES
     {
-        return Err(invalid_attachment());
+        return Err(invalid_attachment_error());
     }
     let bytes = fs::read(&path).map_err(io_error)?;
     if format!("{:x}", Sha256::digest(&bytes)) != attachment.sha256 {
@@ -402,7 +402,7 @@ fn inspect_signature(
 
 pub(super) fn resolve_managed_path(vault_root: &Path, relative_path: &str) -> ChatResult<PathBuf> {
     if !relative_path.starts_with(&format!("{CHAT_ATTACHMENT_DIRECTORY}/")) {
-        return Err(invalid_path());
+        return Err(invalid_path_error());
     }
     resolve_managed_chat_path(vault_root, relative_path)
 }
@@ -420,7 +420,7 @@ pub(super) fn resolve_managed_chat_path(
             .any(|part| !matches!(part, Component::Normal(_)))
         || !managed_directory
     {
-        return Err(invalid_path());
+        return Err(invalid_path_error());
     }
     Ok(vault_root.join(relative))
 }
@@ -463,13 +463,13 @@ fn parse_kind(value: &str) -> ChatResult<ChatAttachmentKind> {
     match value {
         "image" => Ok(ChatAttachmentKind::Image),
         "text_snippet" => Ok(ChatAttachmentKind::TextSnippet),
-        _ => Err(corrupt_data()),
+        _ => Err(corrupt_data_error()),
     }
 }
-fn invalid_attachment() -> ChatError {
+fn invalid_attachment_error() -> ChatError {
     ChatError::validation("attachment", "Attachment is too large")
 }
-fn invalid_path() -> ChatError {
+fn invalid_path_error() -> ChatError {
     ChatError::validation("attachment.path", "Managed attachment path is invalid")
 }
 fn io_error<T>(_error: T) -> ChatError {
@@ -486,7 +486,7 @@ fn persistence_error<T>(_error: T) -> ChatError {
         true,
     )
 }
-fn corrupt_data() -> ChatError {
+fn corrupt_data_error() -> ChatError {
     ChatError::new(
         ChatErrorCode::Persistence,
         "Stored Chat attachment is invalid",

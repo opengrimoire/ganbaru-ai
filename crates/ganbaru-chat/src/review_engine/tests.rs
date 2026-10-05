@@ -20,10 +20,10 @@ impl TestRepository {
         fs::create_dir(&path).expect("test repository should be created");
         let repository =
             Self(fs::canonicalize(path).expect("test repository path should canonicalize"));
-        repository.command(&["init", "-q"]);
-        repository.command(&["config", "user.name", "Ganbaru test"]);
-        repository.command(&["config", "user.email", "test@ganbaru.invalid"]);
-        repository.command(&["config", "commit.gpgsign", "false"]);
+        repository.run_git(&["init", "-q"]);
+        repository.run_git(&["config", "user.name", "Ganbaru test"]);
+        repository.run_git(&["config", "user.email", "test@ganbaru.invalid"]);
+        repository.run_git(&["config", "commit.gpgsign", "false"]);
         repository
     }
 
@@ -39,7 +39,7 @@ impl TestRepository {
         fs::write(path, contents).expect("test file should be written");
     }
 
-    fn command(&self, arguments: &[&str]) -> String {
+    fn run_git(&self, arguments: &[&str]) -> String {
         let output = Command::new("git")
             .arg("-C")
             .arg(&self.0)
@@ -59,8 +59,8 @@ impl TestRepository {
     }
 
     fn commit_all(&self) {
-        self.command(&["add", "-A", "--", "."]);
-        self.command(&["commit", "-q", "-m", "test: add review fixture"]);
+        self.run_git(&["add", "-A", "--", "."]);
+        self.run_git(&["commit", "-q", "-m", "test: add review fixture"]);
     }
 }
 
@@ -777,7 +777,7 @@ async fn exact_discard_restores_unstaged_rename_with_untracked_destination() {
     let repository = TestRepository::new();
     repository.write("src/original.rs", "pub fn original() {}\n");
     repository.commit_all();
-    repository.command(&["config", "status.renames", "false"]);
+    repository.run_git(&["config", "status.renames", "false"]);
     fs::rename(
         repository.path().join("src/original.rs"),
         repository.path().join("src/renamed.rs"),
@@ -833,7 +833,7 @@ async fn whole_scope_discard_restores_unstaged_rename_with_untracked_destination
     repository.write("src/original.rs", "pub fn original() {}\n");
     repository.write("src/modified.rs", "pub fn value() -> u8 { 1 }\n");
     repository.commit_all();
-    repository.command(&["config", "status.renames", "false"]);
+    repository.run_git(&["config", "status.renames", "false"]);
     fs::rename(
         repository.path().join("src/original.rs"),
         repository.path().join("src/renamed.rs"),

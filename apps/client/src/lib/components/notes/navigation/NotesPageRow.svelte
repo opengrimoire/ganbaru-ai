@@ -144,27 +144,27 @@
   let scrollObservationFrame: number | null = null;
   let rowElement = $state<HTMLDivElement | null>(null);
   let renameInput = $state<HTMLInputElement | null>(null);
-  let suppressNavigationSelect = false;
+  let shouldSuppressNavigationSelect = false;
   let destinationPickerLoadState = $state<LazyComponentLoadState<
     "destination-picker",
     LoadedNotesOptionalComponent
   > | null>(null);
 
   function handleNavigationDragStart(event: DragEvent): void {
-    suppressNavigationSelect = true;
+    shouldSuppressNavigationSelect = true;
     onNavigationDragStart?.(event);
   }
 
   function handleNavigationDragEnd(event: DragEvent): void {
     onNavigationDragEnd?.(event);
     window.setTimeout(() => {
-      suppressNavigationSelect = false;
+      shouldSuppressNavigationSelect = false;
     }, 0);
   }
 
   function handleSelect(): void {
-    if (suppressNavigationSelect) {
-      suppressNavigationSelect = false;
+    if (shouldSuppressNavigationSelect) {
+      shouldSuppressNavigationSelect = false;
       return;
     }
     onSelect();
@@ -271,12 +271,12 @@
 
     let previousScrollTop = scrollContainer.scrollTop;
     let stableFrames = 0;
-    let observedMovement = false;
+    let hasObservedMovement = false;
     let observedFrames = 0;
-    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
     row.scrollIntoView({
-      behavior: reducedMotion ? "auto" : "smooth",
+      behavior: prefersReducedMotion ? "auto" : "smooth",
       block: "center",
       inline: "nearest",
     });
@@ -290,13 +290,13 @@
       if (scrollDifference <= settledScrollTolerancePx) {
         stableFrames += 1;
       } else {
-        observedMovement = true;
+        hasObservedMovement = true;
         stableFrames = 0;
       }
       previousScrollTop = currentScrollTop;
 
       if (
-        (observedMovement && stableFrames >= settledScrollFrameCount)
+        (hasObservedMovement && stableFrames >= settledScrollFrameCount)
         || observedFrames >= maximumScrollObservationFrames
       ) {
         scrollObservationFrame = null;

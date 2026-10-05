@@ -102,7 +102,7 @@ fn handle_grok_prompt_completion(
     let session_id = object
         .get("sessionId")
         .and_then(Value::as_str)
-        .filter(|value| valid_identifier(value, 512))
+        .filter(|value| is_valid_identifier(value, 512))
         .ok_or_else(|| protocol_error("Grok prompt completion session ID"))?;
     let expected_session = resources
         .route
@@ -116,11 +116,11 @@ fn handle_grok_prompt_completion(
     let prompt_id = object
         .get("promptId")
         .and_then(Value::as_str)
-        .filter(|value| valid_identifier(value, 512));
+        .filter(|value| is_valid_identifier(value, 512));
     let stop_reason = object
         .get("stopReason")
         .and_then(Value::as_str)
-        .filter(|value| valid_identifier(value, 128))
+        .filter(|value| is_valid_identifier(value, 128))
         .unwrap_or("unknown");
     let sender = {
         let mut pending = resources

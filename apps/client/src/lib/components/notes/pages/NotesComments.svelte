@@ -79,7 +79,7 @@
     return text ? t("notes.blockCommentOn", text) : t("notes.blockComment");
   }
 
-  function threadAnchorMissing(thread: NotesCommentThread): boolean {
+  function isThreadAnchorMissing(thread: NotesCommentThread): boolean {
     if (!thread.anchor || !thread.block_id) return false;
     const block = notes.blockById(thread.block_id);
     return !block || !notesResolveCommentAnchor(thread, blockPlainText(block));
@@ -236,7 +236,7 @@
                       </span>
                     {/if}
                   </div>
-                  {#if threadAnchorMissing(thread)}
+                  {#if isThreadAnchorMissing(thread)}
                     <div class="mt-0.5 text-[0.733333rem] text-muted-foreground">
                       {t("notes.inlineCommentAnchorMissing")}
                     </div>

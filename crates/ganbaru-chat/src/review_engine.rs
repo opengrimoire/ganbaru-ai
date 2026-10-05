@@ -80,7 +80,7 @@ use registry::{ReviewFileInternal, completed_operation_key, file_id, snapshot_id
 use selection::{select_provider_patch_lines, select_text_range};
 #[cfg(test)]
 use validation::MAX_CONTEXT_LINES;
-pub use validation::{source_requires_thread, thread_required};
+pub use validation::{source_requires_thread, thread_required_error};
 use validation::{
     validate_action_request, validate_open_request, validate_patch_request, validate_path,
 };
@@ -186,7 +186,7 @@ pub async fn read_review_patches_service(
         };
         let mut patch = read_patch_page(&snapshot, file_id, start_hunk, remaining).await?;
         let mut encoded_bytes = serde_json::to_vec(&patch)
-            .map_err(|_| corrupt_data())?
+            .map_err(|_| corrupt_data_error())?
             .len();
         if encoded_bytes > remaining && !patches.is_empty() {
             response_cursor = Some(format!("{file_id}/{start_hunk}"));
@@ -195,7 +195,7 @@ pub async fn read_review_patches_service(
         if encoded_bytes > remaining {
             patch = unavailable_patch(file_id);
             encoded_bytes = serde_json::to_vec(&patch)
-                .map_err(|_| corrupt_data())?
+                .map_err(|_| corrupt_data_error())?
                 .len();
         }
         remaining = remaining.saturating_sub(encoded_bytes);
@@ -411,8 +411,8 @@ async fn git_text(root: &Path, arguments: &[&str], input: Option<&[u8]>) -> Chat
 }
 
 fn path_field(field: Option<&[u8]>) -> ChatResult<String> {
-    let value = field.ok_or_else(corrupt_data)?;
-    let path = std::str::from_utf8(value).map_err(|_| corrupt_data())?;
+    let value = field.ok_or_else(corrupt_data_error)?;
+    let path = std::str::from_utf8(value).map_err(|_| corrupt_data_error())?;
     validate_path(path)?;
     Ok(path.to_string())
 }
@@ -477,7 +477,7 @@ fn persistence_error<T>(_error: T) -> ChatError {
     )
 }
 
-fn corrupt_data() -> ChatError {
+fn corrupt_data_error() -> ChatError {
     ChatError::new(
         ChatErrorCode::Persistence,
         "Stored Chat review data is invalid",

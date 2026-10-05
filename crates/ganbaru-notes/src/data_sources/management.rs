@@ -6,7 +6,7 @@ use crate::{data_sources, databases, page_history, project_history};
 use serde_json::Value;
 use sqlx::{Sqlite, SqlitePool, Transaction};
 
-fn source_name(value: &str) -> Result<&str, String> {
+fn validate_name(value: &str) -> Result<&str, String> {
     let name = value.trim();
     if name.is_empty() || name.chars().count() > 200 || name.chars().any(char::is_control) {
         return Err(
@@ -47,8 +47,8 @@ pub async fn create_data_source(
     {
         return Err("data source, database, and view identities must differ".to_string());
     }
-    let title = source_name(&request.title)?;
-    let view_name = source_name(&request.view_name)?;
+    let title = validate_name(&request.title)?;
+    let view_name = validate_name(&request.view_name)?;
     let mut tx = pool
         .begin()
         .await
@@ -96,7 +96,7 @@ pub async fn attach_data_source(
     {
         return Err("data source, database, and view identities must differ".to_string());
     }
-    let view_name = source_name(&request.view_name)?;
+    let view_name = validate_name(&request.view_name)?;
     let mut tx = pool
         .begin()
         .await

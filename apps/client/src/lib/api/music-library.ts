@@ -299,7 +299,7 @@ export const upsertMusicSourceCollection = (request: MusicCollectionWrite): Prom
   call("music_library_upsert_source_collection", databaseArgs({ request }), parseWriteReceipt);
 
 export const getLocalRootBindings = (vaultId: string, rootIds: string[]): Promise<LocalRootBinding[]> =>
-  call("music_get_local_root_bindings", { vaultId, rootIds }, parseBindings);
+  call("music_local_root_bindings", { vaultId, rootIds }, parseBindings);
 export const setLocalRootBinding = (vaultId: string, rootId: string, folderPath: string): Promise<LocalRootBinding> =>
   call("music_set_local_root_binding", { vaultId, rootId, folderPath }, parseBindingResult);
 export const clearLocalRootBinding = (vaultId: string, rootId: string): Promise<LocalRootBinding> =>

@@ -349,7 +349,7 @@ fn read_usage_limit_entries(value: &Value) -> Option<Vec<UsageLimitEntry>> {
         return None;
     };
     let mut entries = Vec::new();
-    let mut seen = HashSet::new();
+    let mut seen_source_keys = HashSet::new();
     let mut seen_ids = HashSet::new();
     for item in items {
         let Some(entry) = read_usage_limit_entry(item) else {
@@ -359,7 +359,7 @@ fn read_usage_limit_entries(value: &Value) -> Option<Vec<UsageLimitEntry>> {
             return None;
         }
         for key in usage_limit_entry_source_keys(&entry) {
-            if !seen.insert(key) {
+            if !seen_source_keys.insert(key) {
                 return None;
             }
         }
@@ -424,7 +424,7 @@ pub(super) fn normalize_app_name(input: &str) -> Option<String> {
 
 pub(super) fn is_protected_app_name(name: &str) -> bool {
     let key = name.trim().to_lowercase();
-    let protected = [
+    let protected_names = [
         "ganbaru-ai",
         "ganbaru-ai-dev",
         "terminal",
@@ -440,7 +440,7 @@ pub(super) fn is_protected_app_name(name: &str) -> bool {
         "bash",
         "zsh",
     ];
-    protected.iter().any(|name| *name == key)
+    protected_names.iter().any(|protected| *protected == key)
 }
 
 pub(super) fn usage_limit_entry_source_keys(entry: &UsageLimitEntry) -> Vec<String> {

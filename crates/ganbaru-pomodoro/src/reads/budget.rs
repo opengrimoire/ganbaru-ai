@@ -35,11 +35,11 @@ impl AggregateBudget {
         domain: &str,
     ) -> Result<(), String> {
         let query = format!("SELECT COUNT(*) FROM ({source_sql} LIMIT ?)");
-        let mut count = sqlx::query_scalar::<_, i64>(&query).bind(policy_id);
+        let mut probe = sqlx::query_scalar::<_, i64>(&query).bind(policy_id);
         if let Some(before) = before {
-            count = count.bind(before);
+            probe = probe.bind(before);
         }
-        let count = count
+        let count = probe
             .bind(self.remaining + 1)
             .fetch_one(connection)
             .await

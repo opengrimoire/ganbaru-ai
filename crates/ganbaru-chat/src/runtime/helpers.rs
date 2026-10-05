@@ -6,7 +6,7 @@ pub(super) async fn run_driver_operation<T>(
 ) -> ChatResult<T> {
     tokio::time::timeout_at(tokio::time::Instant::from_std(context.deadline), future)
         .await
-        .map_err(|_| runtime_timeout())?
+        .map_err(|_| runtime_timeout_error())?
 }
 
 pub(super) async fn run_driver_operation_with_flush<T>(
@@ -17,14 +17,14 @@ pub(super) async fn run_driver_operation_with_flush<T>(
     loop {
         let now = Instant::now();
         if now >= context.deadline {
-            return Err(runtime_timeout());
+            return Err(runtime_timeout_error());
         }
         let tick_deadline = (now + STOP_FLUSH_INTERVAL).min(context.deadline);
         match tokio::time::timeout_at(tokio::time::Instant::from_std(tick_deadline), &mut future)
             .await
         {
             Ok(result) => return result,
-            Err(_) if tick_deadline == context.deadline => return Err(runtime_timeout()),
+            Err(_) if tick_deadline == context.deadline => return Err(runtime_timeout_error()),
             Err(_) => {
                 if let Some(sink) = event_sink.as_ref() {
                     run_driver_operation(context, sink.flush()).await?;
@@ -45,7 +45,7 @@ pub(super) fn operation_context(operation_id: &str, deadline: Instant) -> Driver
 pub(super) async fn receive_response<T>(
     receiver: oneshot::Receiver<ChatResult<T>>,
 ) -> ChatResult<T> {
-    receiver.await.map_err(|_| runtime_unavailable())?
+    receiver.await.map_err(|_| runtime_unavailable_error())?
 }
 
 pub(super) fn runtime_state_error() -> ChatError {
@@ -56,7 +56,7 @@ pub(super) fn runtime_state_error() -> ChatError {
     )
 }
 
-pub(super) fn runtime_unavailable() -> ChatError {
+pub(super) fn runtime_unavailable_error() -> ChatError {
     ChatError::new(
         ChatErrorCode::DriverUnavailable,
         "Chat thread session is not accepting commands",
@@ -64,7 +64,7 @@ pub(super) fn runtime_unavailable() -> ChatError {
     )
 }
 
-pub(super) fn runtime_timeout() -> ChatError {
+pub(super) fn runtime_timeout_error() -> ChatError {
     ChatError::new(
         ChatErrorCode::DriverUnavailable,
         "Chat provider operation exceeded its deadline",
@@ -72,7 +72,7 @@ pub(super) fn runtime_timeout() -> ChatError {
     )
 }
 
-pub(super) fn runtime_invalid_state(message: &'static str) -> ChatError {
+pub(super) fn runtime_invalid_state_error(message: &'static str) -> ChatError {
     ChatError::new(ChatErrorCode::InvalidStateTransition, message, true)
 }
 

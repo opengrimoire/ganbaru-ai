@@ -1,7 +1,7 @@
 use super::*;
 
 pub(super) fn changed_files_from_paths(values: &[Value]) -> ChatResult<Vec<ChangedFileSummary>> {
-    if values.len() > MAX_SAFE_COLLECTION {
+    if values.len() > MAX_SAFE_COLLECTION_ITEMS {
         return Err(protocol_error("patch file count"));
     }
     values
@@ -11,7 +11,7 @@ pub(super) fn changed_files_from_paths(values: &[Value]) -> ChatResult<Vec<Chang
                 .as_str()
                 .ok_or_else(|| protocol_error("patch file path"))?;
             Ok(ChangedFileSummary {
-                relative_path: bounded(path, 4096),
+                relative_path: bounded_text(path, 4096),
                 previous_relative_path: None,
                 additions: None,
                 deletions: None,
@@ -78,11 +78,11 @@ pub(super) fn text<'a>(object: &'a Map<String, Value>, key: &str) -> Option<&'a 
     object.get(key).and_then(Value::as_str)
 }
 
-pub(super) fn bounded(value: &str, maximum: usize) -> String {
-    if value.len() <= maximum {
+pub(super) fn bounded_text(value: &str, max_bytes: usize) -> String {
+    if value.len() <= max_bytes {
         return value.to_string();
     }
-    let mut end = maximum;
+    let mut end = max_bytes;
     while !value.is_char_boundary(end) {
         end -= 1;
     }
@@ -102,18 +102,18 @@ pub(super) fn safe_value(value: &Value, depth: usize) -> Value {
     }
     match value {
         Value::Null | Value::Bool(_) | Value::Number(_) => value.clone(),
-        Value::String(value) => Value::String(bounded(value, 4_096)),
+        Value::String(value) => Value::String(bounded_text(value, 4_096)),
         Value::Array(values) => Value::Array(
             values
                 .iter()
-                .take(MAX_SAFE_COLLECTION)
+                .take(MAX_SAFE_COLLECTION_ITEMS)
                 .map(|value| safe_value(value, depth + 1))
                 .collect(),
         ),
         Value::Object(values) => Value::Object(
             values
                 .iter()
-                .take(MAX_SAFE_COLLECTION)
+                .take(MAX_SAFE_COLLECTION_ITEMS)
                 .filter(|(key, _)| !sensitive_key(key))
                 .map(|(key, value)| (key.clone(), safe_value(value, depth + 1)))
                 .collect::<BTreeMap<_, _>>()

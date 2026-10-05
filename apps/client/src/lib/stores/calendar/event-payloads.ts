@@ -88,15 +88,15 @@ export function localTimezone(): string {
   return Intl.DateTimeFormat().resolvedOptions().timeZone;
 }
 
-export function prepareUpdateBlockPayload(
+export function prepareEventUpdatePayload(
   patch: Partial<CalendarEvent> & { id: string },
-  blocks: readonly CalendarEvent[],
+  sourceEvents: readonly CalendarEvent[],
 ): { parentId: string; toUpdate: Partial<CalendarEvent> & { id: string }; payload: CalendarEventUpdatePayload } {
   const parentId = patch.recurringParentId ?? patch.id;
   let toUpdate: Partial<CalendarEvent> & { id: string };
 
   if (patch.recurringParentId) {
-    const template = blocks.find((b) => b.id === parentId);
+    const template = sourceEvents.find((event) => event.id === parentId);
     toUpdate = { ...patch, id: parentId };
     delete toUpdate.recurringParentId;
     if (template) {
@@ -132,7 +132,7 @@ export function prepareUpdateBlockPayload(
     toUpdate.description = sanitizeCalendarDescriptionHtml(toUpdate.description ?? "");
   }
 
-  const existing = blocks.find((b) => b.id === parentId);
+  const existing = sourceEvents.find((event) => event.id === parentId);
   const homeZone = toUpdate.timezone ?? existing?.timezone ?? localTimezone();
   const allDayForDb = "allDay" in toUpdate ? !!toUpdate.allDay : !!existing?.allDay;
   const fields: CalendarUpdateField[] = [];
@@ -202,10 +202,10 @@ export function prepareUpdateBlockPayload(
         break;
       }
       case "notifications": {
-        const notifJson = toUpdate.notifications && toUpdate.notifications.length > 0
+        const notificationsJson = toUpdate.notifications && toUpdate.notifications.length > 0
           ? JSON.stringify(toUpdate.notifications)
           : null;
-        addField({ field: "notifications", value: notifJson });
+        addField({ field: "notifications", value: notificationsJson });
         break;
       }
       case "exceptions": {
@@ -282,13 +282,13 @@ export function prepareUpdateBlockPayload(
         });
         break;
       case "guestPermissions": {
-        const gp = toUpdate.guestPermissions;
+        const guestPermissions = toUpdate.guestPermissions;
         addField({
           field: "guestPermissions",
           value: {
-            guestCanModify: gp?.canModify ?? false,
-            guestCanInviteOthers: gp?.canInviteOthers ?? true,
-            guestCanSeeOtherGuests: gp?.canSeeOtherGuests ?? true,
+            guestCanModify: guestPermissions?.canModify ?? false,
+            guestCanInviteOthers: guestPermissions?.canInviteOthers ?? true,
+            guestCanSeeOtherGuests: guestPermissions?.canSeeOtherGuests ?? true,
           },
         });
         break;

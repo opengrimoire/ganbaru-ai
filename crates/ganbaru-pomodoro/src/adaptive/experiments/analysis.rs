@@ -79,9 +79,9 @@ fn analyze_scope(
     );
     let c = &control.values;
     let t = &treatment.values;
-    let evidence = c.run_observed_count >= MIN_RUNS && t.run_observed_count >= MIN_RUNS;
-    let breached = evidence && guardrail_breached(lane, c, t);
-    let decision = if !evidence {
+    let has_evidence = c.run_observed_count >= MIN_RUNS && t.run_observed_count >= MIN_RUNS;
+    let breached = has_evidence && guardrail_breached(lane, c, t);
+    let decision = if !has_evidence {
         "insufficient_data"
     } else if breached {
         "prefer_control"
@@ -149,7 +149,7 @@ fn analyze_scope(
 }
 
 fn guardrail_breached(lane: ExperimentLane, c: &OutcomeValues, t: &OutcomeValues) -> bool {
-    let basic = rate_harm(
+    let basic_breached = rate_harm(
         c.run_completed_count,
         c.run_observed_count,
         t.run_completed_count,
@@ -197,7 +197,7 @@ fn guardrail_breached(lane: ExperimentLane, c: &OutcomeValues, t: &OutcomeValues
                 NEXT_DAY_DROP,
                 SEVERE_NEXT_DAY_DROP,
             ));
-    if basic {
+    if basic_breached {
         return true;
     }
     if lane == ExperimentLane::FocusDuration {
@@ -402,17 +402,25 @@ fn clean_focus_loss(c: &OutcomeValues, t: &OutcomeValues) -> bool {
     )
 }
 fn rate_harm(
-    c: f64,
-    cn: f64,
-    t: f64,
-    tn: f64,
+    control_successes: f64,
+    control_trials: f64,
+    treatment_successes: f64,
+    treatment_trials: f64,
     direction: ComparisonDirection,
     minimum: f64,
     severe: f64,
 ) -> bool {
     stats::compare_rate_guardrail(
-        stats::estimate_rate(c, cn, stats::DEFAULT_CONFIDENCE_Z),
-        stats::estimate_rate(t, tn, stats::DEFAULT_CONFIDENCE_Z),
+        stats::estimate_rate(
+            control_successes,
+            control_trials,
+            stats::DEFAULT_CONFIDENCE_Z,
+        ),
+        stats::estimate_rate(
+            treatment_successes,
+            treatment_trials,
+            stats::DEFAULT_CONFIDENCE_Z,
+        ),
         direction,
         minimum,
         severe,

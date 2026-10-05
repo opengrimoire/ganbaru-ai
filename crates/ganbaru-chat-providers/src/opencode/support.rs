@@ -127,12 +127,12 @@ pub fn session_directory(value: &Value) -> Option<&str> {
 }
 
 pub fn new_local_session_id(instance_id: &ProviderInstanceId) -> ChatResult<ProviderSessionId> {
-    let created = std::time::SystemTime::now()
+    let created_at_nanos = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_err(|_| protocol_error("local session ID"))?
         .as_nanos();
     ProviderSessionId::new(format!(
-        "opencode-{}-{}-{created}-{}",
+        "opencode-{}-{}-{created_at_nanos}-{}",
         instance_id.as_str(),
         std::process::id(),
         NEXT_SESSION_ID.fetch_add(1, Ordering::Relaxed)

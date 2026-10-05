@@ -165,7 +165,7 @@ fn create_nested_page_appends_child_page_block_to_parent_page() {
         .await
         .unwrap();
 
-        let parent_blocks = reads::get_block_children(&pool, PAGE_A, None, Some(10))
+        let parent_blocks = reads::block_children(&pool, PAGE_A, None, Some(10))
             .await
             .unwrap();
         let parent_json = serde_json::to_value(parent_blocks).unwrap();
@@ -176,7 +176,7 @@ fn create_nested_page_appends_child_page_block_to_parent_page() {
             "Nested page"
         );
 
-        let child_blocks = reads::get_block_children(&pool, PAGE_B, None, Some(10))
+        let child_blocks = reads::block_children(&pool, PAGE_B, None, Some(10))
             .await
             .unwrap();
         let child_json = serde_json::to_value(child_blocks).unwrap();
@@ -343,7 +343,7 @@ fn page_history_snapshots_restore_copy_and_retention_settings() {
         let pool = migrated_memory_pool().await;
         create_page(&pool, PAGE_A, BLOCK_A).await;
 
-        let settings = page_history::get_page_history_settings(&pool)
+        let settings = page_history::load_page_history_settings(&pool)
             .await
             .unwrap();
         let settings_json = serde_json::to_value(settings).unwrap();
@@ -361,7 +361,7 @@ fn page_history_snapshots_restore_copy_and_retention_settings() {
             .unwrap();
         let snapshots_json = serde_json::to_value(&snapshots).unwrap();
         let local_user_json =
-            serde_json::to_value(local_user::get_local_user(&pool).await.unwrap()).unwrap();
+            serde_json::to_value(local_user::load_local_user(&pool).await.unwrap()).unwrap();
         assert_eq!(snapshots_json.as_array().unwrap().len(), 1);
         assert_eq!(snapshots_json[0]["block_count"], 1);
         assert_eq!(snapshots_json[0]["created_by"]["id"], local_user_json["id"]);
@@ -764,7 +764,7 @@ fn create_nested_page_can_insert_after_block_parent_sibling() {
         .await
         .unwrap();
 
-        let children = reads::get_block_children(&pool, BLOCK_A, None, Some(10))
+        let children = reads::block_children(&pool, BLOCK_A, None, Some(10))
             .await
             .unwrap();
         let children_json = serde_json::to_value(children).unwrap();

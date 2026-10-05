@@ -90,7 +90,7 @@ pub(super) struct BudgetTotal {
     pub entries: Vec<EntryTotal>,
 }
 
-fn valid_id(id: &str) -> bool {
+fn is_valid_id(id: &str) -> bool {
     !id.is_empty()
         && id.len() <= 80
         && id.as_bytes()[0].is_ascii_alphanumeric()
@@ -113,7 +113,7 @@ pub(super) fn parse_config(root: &Value) -> Result<LimitsConfig, String> {
     let mut ids = HashSet::new();
     let mut entry_count = 0;
     for limit in &config.items {
-        if !valid_id(&limit.id) || !ids.insert(&limit.id) || limit.name.len() > 512 {
+        if !is_valid_id(&limit.id) || !ids.insert(&limit.id) || limit.name.len() > 512 {
             return Err("usage limit identity or name is invalid".into());
         }
         if limit.minutes_per_day.is_none() && limit.minutes_per_week.is_none()
@@ -132,7 +132,7 @@ pub(super) fn parse_config(root: &Value) -> Result<LimitsConfig, String> {
         }
         let mut entry_ids = HashSet::new();
         for entry in &limit.entries {
-            if !valid_id(&entry.id)
+            if !is_valid_id(&entry.id)
                 || !entry_ids.insert(&entry.id)
                 || entry.desktop_app_match_names.len() > MAX_MATCH_NAMES
             {
@@ -173,7 +173,7 @@ pub(super) fn configuration_digest(root: &Value) -> Result<String, String> {
 
 /// Compute the Monday-based week without assuming seven fixed-duration local days.
 pub(super) fn week_start(local_date: &str) -> Result<String, String> {
-    if !validate_local_date(local_date) {
+    if !is_valid_local_date(local_date) {
         return Err("usage local date is invalid".into());
     }
     let date =
@@ -182,7 +182,7 @@ pub(super) fn week_start(local_date: &str) -> Result<String, String> {
         date.weekday().num_days_from_monday(),
     )))
     .map(|value| value.format("%Y-%m-%d").to_string())
-    .filter(|value| validate_local_date(value))
+    .filter(|value| is_valid_local_date(value))
     .ok_or_else(|| "usage week start is outside the supported range".into())
 }
 
@@ -219,7 +219,7 @@ fn add_seconds(left: i64, right: i64) -> Result<i64, String> {
         .ok_or_else(|| "usage total exceeds the supported integer range".into())
 }
 
-pub(crate) fn validate_local_date(value: &str) -> bool {
+pub(crate) fn is_valid_local_date(value: &str) -> bool {
     let bytes = value.as_bytes();
     bytes.len() == 10
         && bytes[4] == b'-'
@@ -256,7 +256,7 @@ pub(super) fn totals(
         return Err("usage source count exceeds the native limit".into());
     }
     for source in sources {
-        if !validate_local_date(&source.local_date)
+        if !is_valid_local_date(&source.local_date)
             || source.source_key.len() > 512
             || !matches!(
                 source.source_type.as_str(),
@@ -271,8 +271,8 @@ pub(super) fn totals(
     let mut result = Vec::new();
     let mut comparisons = 0;
     for limit in &config.items {
-        let mut day = vec![0; limit.entries.len()];
-        let mut weekly = day.clone();
+        let mut daily = vec![0; limit.entries.len()];
+        let mut weekly = daily.clone();
         for source in sources {
             if source.local_date.as_str() < week.as_str() || source.local_date.as_str() > local_date
             {
@@ -286,14 +286,14 @@ pub(super) fn totals(
                 if matches(entry, source) {
                     weekly[index] = add_seconds(weekly[index], source.elapsed_seconds)?;
                     if source.local_date == local_date {
-                        day[index] = add_seconds(day[index], source.elapsed_seconds)?;
+                        daily[index] = add_seconds(daily[index], source.elapsed_seconds)?;
                     }
                     break;
                 }
             }
         }
         for (period, minutes, start, allocation) in [
-            ("day", limit.minutes_per_day, local_date, day),
+            ("day", limit.minutes_per_day, local_date, daily),
             ("week", limit.minutes_per_week, week.as_str(), weekly),
         ] {
             let Some(minutes) = minutes else { continue };

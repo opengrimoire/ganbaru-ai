@@ -1,6 +1,6 @@
 //! Typed Guardian capture and rule projection derived from persisted native policy.
 
-use super::{MAX_JOURNAL_EVENTS, PendingEvent, normalize_event, valid_package_name};
+use super::{MAX_JOURNAL_EVENTS, PendingEvent, is_valid_package_name, normalize_event};
 use crate::distractions::limits::{self as limits, BudgetTotal, UsageSourceDay};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -95,8 +95,8 @@ impl GuardianCapture {
         for source in &mut capture.local_sources {
             source.source_key = source.source_key.to_ascii_lowercase();
             if source.source_type != "mobile-app"
-                || !valid_package_name(&source.source_key)
-                || !limits::validate_local_date(&source.local_date)
+                || !is_valid_package_name(&source.source_key)
+                || !limits::is_valid_local_date(&source.local_date)
                 || source.local_date < capture.week_start_local_date
                 || source.local_date > capture.local_date
                 || !(0..=MAX_SAFE_SECONDS).contains(&source.elapsed_seconds)
@@ -262,7 +262,7 @@ pub(super) fn build(
             .package_name
             .as_mut()
             .ok_or("Guardian application package is missing")?;
-        if !valid_package_name(package)
+        if !is_valid_package_name(package)
             || rule.name.trim().is_empty()
             || rule.name.chars().count() > 120
         {
@@ -285,7 +285,9 @@ pub(super) fn build(
             continue;
         }
         if packages.len() > MAX_MOBILE_RULES
-            || packages.iter().any(|package| !valid_package_name(package))
+            || packages
+                .iter()
+                .any(|package| !is_valid_package_name(package))
         {
             return Err("persisted Guardian limit packages are invalid".into());
         }

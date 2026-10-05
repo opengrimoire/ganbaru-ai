@@ -298,7 +298,10 @@ impl Owner {
                 let definition = SessionQueueIntent::SavedPlaylist {
                     playlist_id,
                     explicit_item_id: None,
-                    avoid_item_id: self.state.entry().and_then(|entry| entry.item_id.clone()),
+                    avoid_item_id: self
+                        .state
+                        .current_entry()
+                        .and_then(|entry| entry.item_id.clone()),
                 };
                 queue::load_queue(
                     &mut transaction,
@@ -320,7 +323,7 @@ impl Owner {
                     next.shuffle.clear();
                     let avoid = self
                         .state
-                        .entry()
+                        .current_entry()
                         .and_then(|entry| entry.item_id.as_deref());
                     let autoplay = behavior == MusicAssignmentBehavior::PlayAutomatically;
                     if let Some(context) = &mut next.context {

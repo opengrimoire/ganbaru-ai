@@ -19,7 +19,7 @@ enum SnapshotInsertMode {
     CopyWithFreshIds,
 }
 
-pub async fn get_page_history_settings(
+pub async fn load_page_history_settings(
     pool: &SqlitePool,
 ) -> Result<NotePageHistorySettingsDto, String> {
     ensure_settings_row(pool).await?;
@@ -67,7 +67,7 @@ pub async fn update_page_history_settings(
     tx.commit()
         .await
         .map_err(|e| format!("commit notes page history settings update: {e}"))?;
-    get_page_history_settings(pool).await
+    load_page_history_settings(pool).await
 }
 
 pub async fn list_page_history_snapshots(
@@ -344,7 +344,7 @@ async fn insert_snapshot_blocks(
         id_map.insert(block.id.clone(), next_id);
     }
 
-    let mut databases = Vec::new();
+    let mut database_copies = Vec::new();
     let mut budget = crate::writes::copy_budget::CopyBudget::default();
     let mut copy_context = crate::writes::copy_budget::CopyContext {
         reserved_ids: &mut reserved_ids,
@@ -358,7 +358,7 @@ async fn insert_snapshot_blocks(
             .filter(|block| block.block_type == "child_database")
         {
             if crate::writes::database_copy::has_database_graph(block)? {
-                databases.push(
+                database_copies.push(
                     crate::writes::database_copy::plan_database_copy(
                         tx,
                         block,
@@ -454,16 +454,16 @@ async fn insert_snapshot_blocks(
             .await?;
         }
     }
-    for database in &databases {
+    for database_copy in &database_copies {
         sqlx::query("UPDATE notes_blocks SET payload = ? WHERE id = ?")
-            .bind(database.payload.to_string())
-            .bind(&database.id)
+            .bind(database_copy.payload.to_string())
+            .bind(&database_copy.id)
             .execute(&mut **tx)
             .await
             .map_err(|e| format!("set copied history database references: {e}"))?;
-        crate::writes::database_copy::insert_database_copy(tx, database).await?;
+        crate::writes::database_copy::insert_database_copy(tx, database_copy).await?;
     }
-    crate::writes::database_copy::finalize_copies(tx, &databases, &[], &id_map).await?;
+    crate::writes::database_copy::finalize_copies(tx, &database_copies, &[], &id_map).await?;
     Ok(root_ids)
 }
 
@@ -1036,11 +1036,11 @@ async fn load_blocks_by_ids(
     for id in ids {
         rows.push(crate::reads::get_block_row(pool, &id, false).await?);
     }
-    let results = rows
+    let block_dtos = rows
         .into_iter()
         .map(NoteBlockDto::new)
         .collect::<Result<Vec<_>, _>>()?;
-    Ok(NotePaginatedBlockList::new(results, None, false))
+    Ok(NotePaginatedBlockList::new(block_dtos, None, false))
 }
 
 async fn ensure_settings_row(pool: &SqlitePool) -> Result<(), String> {

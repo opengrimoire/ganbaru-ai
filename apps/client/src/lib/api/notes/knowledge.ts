@@ -95,9 +95,9 @@ export async function resolveNotesUnresolvedLink(
 
 export async function getNotesPageBreadcrumb(pageId: string): Promise<NotesPageBreadcrumbItem[]> {
   const dbUrl = await ensureDbUrl();
-  const rows = await invoke<unknown>("notes_get_page_breadcrumb", { dbUrl, pageId });
+  const rows = await invoke<unknown>("notes_page_breadcrumb", { dbUrl, pageId });
   if (!Array.isArray(rows)) {
-    throw new Error("notes_get_page_breadcrumb returned a non-array payload");
+    throw new Error("notes_page_breadcrumb returned a non-array payload");
   }
   return rows.map(mapNotesPageBreadcrumbItemDto);
 }

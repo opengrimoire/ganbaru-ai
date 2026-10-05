@@ -21,7 +21,7 @@
 
   const preferences = getPreferences();
   const zoom = getZoom();
-  const calZoom = getCalendarZoom();
+  const calendarZoom = getCalendarZoom();
   const { t } = getLocalization();
   const mobileShell = BUILD_PLATFORM_PROFILE.shell === "mobile";
 
@@ -40,7 +40,7 @@
   function handleCalendarZoomChange(value: string) {
     const percent = Number(value);
     if (!Number.isFinite(percent)) return;
-    calZoom.setZoomPercent(percent);
+    calendarZoom.setZoomPercent(percent);
   }
 
   function handleFontScaleChange(value: string) {
@@ -183,11 +183,11 @@
       <Select
         label={t("settings.appearance.calendarZoom")}
         descriptionShortcuts={mobileShell ? [] : ["Shift + +", "Shift + -", "Shift + 0"]}
-        value={percentString(calZoom.zoomPercent)}
+        value={percentString(calendarZoom.zoomPercent)}
         options={calendarZoomOptions}
         onChange={handleCalendarZoomChange}
-        canReset={!calZoom.isDefault}
-        onReset={() => calZoom.reset()}
+        canReset={!calendarZoom.isDefault}
+        onReset={() => calendarZoom.reset()}
       />
       <Select
         label={t("settings.appearance.timeFormat")}

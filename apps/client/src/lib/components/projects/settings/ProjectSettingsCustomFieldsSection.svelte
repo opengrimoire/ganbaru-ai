@@ -18,6 +18,7 @@
     NewCustomFieldOptionDraft,
   } from "$lib/projects/settings/custom-field-drafts";
   import type {
+    MoveDirection,
     ProjectCustomField,
     ProjectCustomFieldOption,
     ProjectCustomFieldType,
@@ -26,12 +27,10 @@
   import ProjectSettingsCustomFieldTypePicker from "./ProjectSettingsCustomFieldTypePicker.svelte";
   import ProjectSettingsNewRowDragHandle from "./ProjectSettingsNewRowDragHandle.svelte";
   import ProjectSettingsSectionHeading from "./ProjectSettingsSectionHeading.svelte";
-  import { cn } from "$lib/utils";
+  import { cn, type MaybePromise } from "$lib/utils";
 
   type CustomFieldDropPosition = ProjectSettingsDropPosition;
   type CustomFieldOptionDropPosition = ProjectSettingsDropPosition;
-  type SortDirection = -1 | 1;
-  type ActionResult = void | Promise<void>;
 
   let {
     projectCustomFields,
@@ -56,13 +55,13 @@
     onCustomFieldDrop,
     onCustomFieldDragStart,
     clearCustomFieldDrag,
-    moveProjectCustomField,
+    moveCustomFieldByDirection,
     requestDeleteCustomField,
     onCustomFieldOptionDragOver,
     onCustomFieldOptionDrop,
     onCustomFieldOptionDragStart,
     clearCustomFieldOptionDrag,
-    moveProjectCustomFieldOption,
+    moveCustomFieldOptionByDirection,
     requestDeleteCustomFieldOption,
     setCustomFieldOptionCreateDraftName,
     removeCustomFieldOptionCreateDraft,
@@ -101,23 +100,23 @@
       field: ProjectCustomField,
       target: HTMLElement,
     ) => void;
-    onCustomFieldDrop: (event: DragEvent, field: ProjectCustomField) => ActionResult;
+    onCustomFieldDrop: (event: DragEvent, field: ProjectCustomField) => MaybePromise;
     onCustomFieldDragStart: (event: DragEvent, field: ProjectCustomField) => void;
     clearCustomFieldDrag: () => void;
-    moveProjectCustomField: (field: ProjectCustomField, direction: SortDirection) => ActionResult;
+    moveCustomFieldByDirection: (field: ProjectCustomField, direction: MoveDirection) => MaybePromise;
     requestDeleteCustomField: (field: ProjectCustomField) => void;
     onCustomFieldOptionDragOver: (
       event: DragEvent,
       option: ProjectCustomFieldOption,
       target: HTMLElement,
     ) => void;
-    onCustomFieldOptionDrop: (event: DragEvent, option: ProjectCustomFieldOption) => ActionResult;
+    onCustomFieldOptionDrop: (event: DragEvent, option: ProjectCustomFieldOption) => MaybePromise;
     onCustomFieldOptionDragStart: (event: DragEvent, option: ProjectCustomFieldOption) => void;
     clearCustomFieldOptionDrag: () => void;
-    moveProjectCustomFieldOption: (
+    moveCustomFieldOptionByDirection: (
       option: ProjectCustomFieldOption,
-      direction: SortDirection,
-    ) => ActionResult;
+      direction: MoveDirection,
+    ) => MaybePromise;
     requestDeleteCustomFieldOption: (option: ProjectCustomFieldOption) => void;
     setCustomFieldOptionCreateDraftName: (
       fieldId: string,
@@ -134,7 +133,7 @@
     setCustomFieldCreateDraftPendingOptionName: (fieldId: string, optionName: string) => void;
     removeCustomFieldCreateDraft: (fieldId: string) => void;
     removeCustomFieldCreateDraftOption: (fieldId: string, optionId: string) => void;
-    submitCustomFieldOption: (field: ProjectCustomField) => ActionResult;
+    submitCustomFieldOption: (field: ProjectCustomField) => MaybePromise;
     submitCustomFieldCreateDraftOption: (field: NewCustomFieldDraft) => void;
     submitCustomField: () => void;
     setNewCustomFieldOptionDraftName: (optionId: string, name: string) => void;
@@ -209,11 +208,11 @@
             onkeydown={(event) => {
               if (event.key === "ArrowUp") {
                 event.preventDefault();
-                void moveProjectCustomField(field, -1);
+                void moveCustomFieldByDirection(field, -1);
               }
               if (event.key === "ArrowDown") {
                 event.preventDefault();
-                void moveProjectCustomField(field, 1);
+                void moveCustomFieldByDirection(field, 1);
               }
             }}
           >
@@ -285,11 +284,11 @@
                       onkeydown={(event) => {
                         if (event.key === "ArrowUp") {
                           event.preventDefault();
-                          void moveProjectCustomFieldOption(option, -1);
+                          void moveCustomFieldOptionByDirection(option, -1);
                         }
                         if (event.key === "ArrowDown") {
                           event.preventDefault();
-                          void moveProjectCustomFieldOption(option, 1);
+                          void moveCustomFieldOptionByDirection(option, 1);
                         }
                       }}
                     >

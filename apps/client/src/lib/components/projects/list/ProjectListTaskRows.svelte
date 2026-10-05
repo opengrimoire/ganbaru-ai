@@ -156,7 +156,7 @@
       {subtasks}
       scheduled={scheduledLabel(task.id)}
       taskTags={visibleTaskTags(task)}
-      hiddenTags={hiddenTaskTagCount(task)}
+      hiddenTagCount={hiddenTaskTagCount(task)}
       blockedByCount={blockedByDependencies(task).length}
       blocksCount={blocksDependencies(task).length}
       {taskListColumns}

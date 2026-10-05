@@ -15,7 +15,7 @@ import {
   isThemeCalendarDark,
   isThemeDark,
   pickQuickToggleTarget,
-  resolveCalCanvas,
+  resolveCalendarCanvas,
   resolveCanvas,
   computeThemeTokenOps,
   generateThemeId,
@@ -269,10 +269,10 @@ describe("computeThemeTokenOps", () => {
 
   it("paints editable snapshot tokens and derived runtime tokens", () => {
     const customApp = { ...BASE_APP_TOKENS.dark, "--primary": "#abc", "--background": "#fff" };
-    const customCal = { ...BASE_CALENDAR_TOKENS.dark, "--cal-bg": "#eee" };
+    const customCalendarTokens = { ...BASE_CALENDAR_TOKENS.dark, "--cal-bg": "#eee" };
     const theme = makeUserTheme({
       appTokens: customApp,
-      calendarTokens: customCal,
+      calendarTokens: customCalendarTokens,
     });
     const result = computeThemeTokenOps(theme, new Set());
     expect(result.toSet.get("--primary")).toBe("#abc");
@@ -411,8 +411,8 @@ describe("luminance-driven canvas resolution", () => {
   it("falls back to base CSS for built-ins", () => {
     expect(resolveCanvas(lightTheme).toLowerCase()).toBe("#f4f4f7");
     expect(resolveCanvas(darkTheme).toLowerCase()).toBe("#27282a");
-    expect(resolveCalCanvas(lightTheme).toLowerCase()).toBe("#ffffff");
-    expect(resolveCalCanvas(darkTheme).toLowerCase()).toBe("#131314");
+    expect(resolveCalendarCanvas(lightTheme).toLowerCase()).toBe("#ffffff");
+    expect(resolveCalendarCanvas(darkTheme).toLowerCase()).toBe("#131314");
     expect(isThemeDark(lightTheme)).toBe(false);
     expect(isThemeDark(darkTheme)).toBe(true);
     expect(isThemeCalendarDark(lightTheme)).toBe(false);

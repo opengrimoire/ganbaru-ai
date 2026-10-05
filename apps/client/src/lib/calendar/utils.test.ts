@@ -366,8 +366,8 @@ describe("formatTimeLabel", () => {
 
 describe("getHourInTimezone", () => {
   it("uses the selected calendar time format", () => {
-    const localTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    expect(getHourInTimezone(new Date(2026, 4, 21), 13, localTz, "12h")).toBe("1 pm");
+    const localTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    expect(getHourInTimezone(new Date(2026, 4, 21), 13, localTimezone, "12h")).toBe("1 pm");
   });
 });
 

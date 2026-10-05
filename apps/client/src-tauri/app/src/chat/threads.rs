@@ -417,7 +417,7 @@ pub async fn chat_delete_thread_permanently(
     app.state::<super::internal_mcp::InternalMcpRegistry>()
         .stop_thread_endpoint(&thread_id)
         .await;
-    app.state::<super::preview::ChatPreviewManager>()
+    app.state::<super::preview::ChatBrowserManager>()
         .close_thread(&app, &thread_id);
     synchronize_provider_lifecycle(
         &app,

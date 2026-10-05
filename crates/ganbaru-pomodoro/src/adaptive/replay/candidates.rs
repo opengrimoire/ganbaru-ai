@@ -115,33 +115,33 @@ pub(super) fn components(candidate: &BoundedCandidate) -> Vec<BoundedCandidate> 
 }
 
 type Adjustment = (&'static str, Option<f64>, Option<f64>, i64, i64);
-fn adjustments(c: &BoundedCandidate) -> [Adjustment; 4] {
+fn adjustments(candidate: &BoundedCandidate) -> [Adjustment; 4] {
     [
         (
             "focus_duration_minutes",
-            c.focus_duration_minutes,
-            c.focus_duration_delta_minutes,
+            candidate.focus_duration_minutes,
+            candidate.focus_duration_delta_minutes,
             15,
             60,
         ),
         (
             "short_break_minutes",
-            c.short_break_minutes,
-            c.short_break_delta_minutes,
+            candidate.short_break_minutes,
+            candidate.short_break_delta_minutes,
             3,
             12,
         ),
         (
             "long_break_minutes",
-            c.long_break_minutes,
-            c.long_break_delta_minutes,
+            candidate.long_break_minutes,
+            candidate.long_break_delta_minutes,
             10,
             30,
         ),
         (
             "long_break_after_focus_count",
-            c.long_break_after_focus_count,
-            c.long_break_after_focus_count_delta,
+            candidate.long_break_after_focus_count,
+            candidate.long_break_after_focus_count_delta,
             2,
             5,
         ),

@@ -53,7 +53,7 @@ pub async fn database_reference(
         .await
         .map_err(|e| format!("read Notes database title: {e}"))?;
     Ok(NoteDatabaseReferenceDto {
-        editing_locked: editing_lock::payload_locked(
+        editing_locked: editing_lock::is_editing_locked(
             &serde_json::from_str(&block.payload)
                 .map_err(|error| format!("read database editing preference: {error}"))?,
         )?,
@@ -117,7 +117,7 @@ pub(crate) async fn duplicate_database_tx(
         request.after_block_id.as_deref(),
         request.replace_block_id.as_deref(),
     )?;
-    let source = load_block_row_tx(tx, &request.source_block_id).await?;
+    let source = load_active_block_row_tx(tx, &request.source_block_id).await?;
     if source.block_type != "child_database" {
         return Err("database source must be a local database block".to_string());
     }
@@ -155,7 +155,8 @@ pub(crate) async fn duplicate_database_tx(
         .await?;
     writes::refresh_parent_has_children(tx, &placement.parent).await?;
     writes::touch_page(tx, &placement.parent.page_id).await?;
-    let (source_id, view_id) = source_database_refs(&load_block_row_tx(tx, &request.id).await?)?;
+    let (source_id, view_id) =
+        source_database_refs(&load_active_block_row_tx(tx, &request.id).await?)?;
     let created = load_created_linked_database_tx(tx, &request.id, &source_id, &view_id).await?;
     Ok(created)
 }
@@ -218,7 +219,7 @@ async fn resolve_database_destination(
     replacement: Option<&str>,
 ) -> Result<DatabasePlacement, String> {
     if let Some(replacement) = replacement {
-        let current = load_block_row_tx(tx, replacement).await?;
+        let current = load_active_block_row_tx(tx, replacement).await?;
         validate_replacement_block(&current)?;
         let has_children: bool = sqlx::query_scalar(
             "SELECT EXISTS(SELECT 1 FROM notes_blocks WHERE parent_block_id = ?)",
@@ -331,7 +332,7 @@ pub async fn rename_database(
         .await
         .map_err(|error| format!("begin Notes database rename: {error}"))?;
     editing_lock::ensure_unlocked_tx(&mut tx, database_id).await?;
-    let block = load_block_row_tx(&mut tx, database_id).await?;
+    let block = load_active_block_row_tx(&mut tx, database_id).await?;
     if block.block_type != "child_database" {
         return Err("database block not found".to_string());
     }
@@ -411,7 +412,7 @@ pub(crate) async fn create_database_tx(
 ) -> Result<NoteCreatedDatabaseDto, String> {
     validate_database_create(&request)?;
     let (parent, title) = if let Some(replace_block_id) = &request.replace_block_id {
-        let current = load_block_row_tx(tx, replace_block_id).await?;
+        let current = load_active_block_row_tx(tx, replace_block_id).await?;
         validate_replacement_block(&current)?;
         let parent = writes::parent_target_from_block_row(&current);
         let title = request.title.trim().to_string();
@@ -483,7 +484,7 @@ pub(crate) async fn create_linked_database_view_tx(
     record_history: bool,
 ) -> Result<NoteCreatedDatabaseDto, String> {
     validate_linked_database_create(&request)?;
-    let source_block = load_block_row_tx(tx, &request.source_block_id).await?;
+    let source_block = load_active_block_row_tx(tx, &request.source_block_id).await?;
     if source_block.block_type != "child_database" {
         return Err("linked database source must be a local database block".to_string());
     }
@@ -717,11 +718,11 @@ async fn load_created_database_tx(
     .fetch_one(&mut **tx)
     .await
     .map_err(|e| format!("load created notes database view: {e}"))?;
-    let block = load_block_row_tx(tx, database_id).await?;
+    let block = load_active_block_row_tx(tx, database_id).await?;
     NoteCreatedDatabaseDto::new(database, data_source, view, block)
 }
 
-async fn load_block_row_tx(
+async fn load_active_block_row_tx(
     tx: &mut Transaction<'_, Sqlite>,
     block_id: &str,
 ) -> Result<NoteBlockRow, String> {
@@ -971,7 +972,7 @@ async fn load_created_linked_database_tx(
     .fetch_one(&mut **tx)
     .await
     .map_err(|e| format!("load created linked notes database view: {e}"))?;
-    let block = load_block_row_tx(tx, database_id).await?;
+    let block = load_active_block_row_tx(tx, database_id).await?;
     NoteCreatedDatabaseDto::new(database, data_source, view, block)
 }
 
@@ -1021,15 +1022,9 @@ fn linked_database_title(
         .unwrap_or_default()
         .trim()
         .to_string()
-        .or_else_not_empty()
-        .or_else(|| {
-            source_block
-                .plain_text
-                .trim()
-                .to_string()
-                .or_else_not_empty()
-        })
-        .or_else(|| source.title.trim().to_string().or_else_not_empty())
+        .into_non_empty()
+        .or_else(|| source_block.plain_text.trim().to_string().into_non_empty())
+        .or_else(|| source.title.trim().to_string().into_non_empty())
         .unwrap_or_else(|| DEFAULT_DATABASE_TITLE.to_string())
 }
 
@@ -1080,11 +1075,11 @@ pub(super) fn rich_text_array(text: &str) -> Value {
 }
 
 trait NonEmptyString {
-    fn or_else_not_empty(self) -> Option<String>;
+    fn into_non_empty(self) -> Option<String>;
 }
 
 impl NonEmptyString for String {
-    fn or_else_not_empty(self) -> Option<String> {
+    fn into_non_empty(self) -> Option<String> {
         if self.is_empty() { None } else { Some(self) }
     }
 }

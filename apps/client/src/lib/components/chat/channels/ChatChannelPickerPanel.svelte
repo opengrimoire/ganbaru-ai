@@ -8,9 +8,8 @@
   import type { ChatChannelRead } from "$lib/chat/contracts";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import { getMobileBackStack } from "$lib/stores/mobile-back-stack.svelte";
-  import { cn } from "$lib/utils";
+  import { cn, type MaybePromise } from "$lib/utils";
 
-  type MaybePromise<T> = T | Promise<T>;
 
   let {
     rootElement = $bindable<HTMLDivElement | undefined>(),

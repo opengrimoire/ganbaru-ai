@@ -114,15 +114,15 @@ function planOutdentDrop(
   const parentBlock = state.blocksById[target.parent.block_id];
   if (!parentBlock || parentBlock.in_trash) return null;
   if (blockSubtreeContains(state, source.id, parentBlock.id)) return null;
-  const newParentId = parentIdForBlock(parentBlock);
-  if (!parentCanAcceptSource(state, newParentId, source)) return null;
-  const siblings = activeChildIdsForParent(state, newParentId);
+  const grandparentId = parentIdForBlock(parentBlock);
+  if (!parentCanAcceptSource(state, grandparentId, source)) return null;
+  const siblings = activeChildIdsForParent(state, grandparentId);
   const sourceIndex = siblings.indexOf(source.id);
   const parentIndex = siblings.indexOf(parentBlock.id);
   if (sourceIndex === parentIndex + 1) return null;
   return {
     blockId: source.id,
-    parentId: newParentId,
+    parentId: grandparentId,
     after: parentBlock.id,
     before: null,
     indicator: "outdent",

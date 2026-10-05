@@ -7,7 +7,7 @@ use serde_json::Value;
 use sqlx::{Sqlite, SqlitePool, Transaction};
 
 /// Read the optional flag on older shells as unlocked.
-pub(crate) fn payload_locked(payload: &Value) -> Result<bool, String> {
+pub(crate) fn is_editing_locked(payload: &Value) -> Result<bool, String> {
     match payload.get("editing_locked") {
         None => Ok(false),
         Some(Value::Bool(locked)) => Ok(*locked),
@@ -23,7 +23,7 @@ pub(crate) async fn ensure_unlocked_tx(
     let block = load_shell_tx(tx, database_id).await?;
     let payload: Value = serde_json::from_str(&block.payload)
         .map_err(|error| format!("read database editing lock: {error}"))?;
-    if payload_locked(&payload)? {
+    if is_editing_locked(&payload)? {
         return Err("database layout is locked; unlock it before changing structure".to_string());
     }
     Ok(())
@@ -53,7 +53,7 @@ pub async fn set_database_editing_lock(
     let block = load_shell_tx(&mut tx, database_id).await?;
     let mut payload: Value = serde_json::from_str(&block.payload)
         .map_err(|error| format!("read database editing preference: {error}"))?;
-    if payload_locked(&payload)? != locked {
+    if is_editing_locked(&payload)? != locked {
         page_history::record_page_snapshot_tx(&mut tx, &block.page_id, "database_editing_lock")
             .await?;
         project_history::mark_page_dirty_tx(

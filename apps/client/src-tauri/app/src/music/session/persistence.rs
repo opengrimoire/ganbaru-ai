@@ -42,7 +42,7 @@ pub(super) fn checkpoint(state: &SessionPolicy) -> SessionCheckpoint {
         generation: state.generation,
         queue: portable.cloned(),
         selected_entry_id: portable
-            .and_then(|_| state.entry().and_then(entry_id))
+            .and_then(|_| state.current_entry().and_then(entry_id))
             .map(str::to_string),
         history: if portable.is_some() {
             state.history.iter().filter_map(id_at).collect()

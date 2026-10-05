@@ -9,7 +9,7 @@ const SHELL_PROJECT: &str = "view-history-requesting-shell";
 async fn attached_view(pool: &SqlitePool, kind: &str) -> Value {
     match kind {
         "table" => serde_json::to_value(
-            data_sources::layouts::table::get_data_source_table_view(
+            data_sources::layouts::table::data_source_table_view(
                 pool,
                 DATA_SOURCE_A,
                 Some(DATABASE_B),
@@ -20,7 +20,7 @@ async fn attached_view(pool: &SqlitePool, kind: &str) -> Value {
         )
         .unwrap(),
         "board" => serde_json::to_value(
-            data_sources::layouts::board::get_data_source_board_view(
+            data_sources::layouts::board::data_source_board_view(
                 pool,
                 DATA_SOURCE_A,
                 Some(DATABASE_B),
@@ -31,7 +31,7 @@ async fn attached_view(pool: &SqlitePool, kind: &str) -> Value {
         )
         .unwrap(),
         "gallery" => serde_json::to_value(
-            data_sources::layouts::gallery::get_data_source_gallery_view(
+            data_sources::layouts::gallery::data_source_gallery_view(
                 pool,
                 DATA_SOURCE_A,
                 Some(DATABASE_B),
@@ -42,7 +42,7 @@ async fn attached_view(pool: &SqlitePool, kind: &str) -> Value {
         )
         .unwrap(),
         "list" => serde_json::to_value(
-            data_sources::layouts::list::get_data_source_list_view(
+            data_sources::layouts::list::data_source_list_view(
                 pool,
                 DATA_SOURCE_A,
                 Some(DATABASE_B),
@@ -53,7 +53,7 @@ async fn attached_view(pool: &SqlitePool, kind: &str) -> Value {
         )
         .unwrap(),
         "calendar" => serde_json::to_value(
-            data_sources::layouts::calendar::get_data_source_calendar_view(
+            data_sources::layouts::calendar::data_source_calendar_view(
                 pool,
                 DATA_SOURCE_A,
                 Some(DATABASE_B),
@@ -64,7 +64,7 @@ async fn attached_view(pool: &SqlitePool, kind: &str) -> Value {
         )
         .unwrap(),
         "timeline" => serde_json::to_value(
-            data_sources::layouts::timeline::get_data_source_timeline_view(
+            data_sources::layouts::timeline::data_source_timeline_view(
                 pool,
                 DATA_SOURCE_A,
                 Some(DATABASE_B),

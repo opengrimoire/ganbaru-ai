@@ -83,7 +83,7 @@ export async function deleteNotesPageTemplate(templateId: string): Promise<strin
 export async function getNotesPageHistorySettings(): Promise<NotesPageHistorySettings> {
   const dbUrl = await ensureDbUrl();
   return mapNotesPageHistorySettingsDto(
-    await invoke<unknown>("notes_get_page_history_settings", { dbUrl }),
+    await invoke<unknown>("notes_load_page_history_settings", { dbUrl }),
   );
 }
 

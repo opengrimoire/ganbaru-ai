@@ -80,14 +80,10 @@ fn csv_import_writes_valid_rows_as_canonical_database_pages() {
         assert_eq!(value["imported_row_count"], 2);
         assert_eq!(value["valid_row_count"], 2);
 
-        let table = data_sources::layouts::table::get_data_source_table_view(
-            &pool,
-            DATA_SOURCE_A,
-            None,
-            None,
-        )
-        .await
-        .unwrap();
+        let table =
+            data_sources::layouts::table::data_source_table_view(&pool, DATA_SOURCE_A, None, None)
+                .await
+                .unwrap();
         let table_json = serde_json::to_value(table).unwrap();
         let rows = table_json["rows"].as_array().unwrap();
         assert_eq!(rows.len(), 2);

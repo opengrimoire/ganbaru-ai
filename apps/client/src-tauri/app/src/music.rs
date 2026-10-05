@@ -615,13 +615,13 @@ fn scan_media_folder_with_cancel(
     let mut truncated = false;
     let mut artwork_cache: HashMap<PathBuf, Vec<PathBuf>> = HashMap::new();
 
-    while let Some(dir) = queue.pop_front() {
+    while let Some(directory) = queue.pop_front() {
         if is_cancelled() {
             truncated = true;
             break;
         }
-        let mut entries = fs::read_dir(&dir)
-            .map_err(|e| format!("failed to read media folder '{}': {e}", dir.display()))?
+        let mut entries = fs::read_dir(&directory)
+            .map_err(|e| format!("failed to read media folder '{}': {e}", directory.display()))?
             .collect::<Result<Vec<_>, _>>()
             .map_err(|e| format!("failed to read media folder entry: {e}"))?;
         entries.sort_by_key(|entry| entry.path());
@@ -862,7 +862,7 @@ mod tests {
 
     #[test]
     fn music_folder_start_directory_uses_only_existing_directories() {
-        let root = unique_temp_dir("ganbaru-ai-music-start-dir");
+        let root = unique_temporary_dir("ganbaru-ai-music-start-dir");
         let music_dir = root.join("localized-audio");
         let file_path = root.join("not-a-directory");
         fs::create_dir_all(&music_dir).unwrap();
@@ -880,7 +880,7 @@ mod tests {
 
     #[test]
     fn automatic_music_folder_detection_stops_after_the_first_supported_file() {
-        let root = unique_temp_dir("ganbaru-ai-music-detection");
+        let root = unique_temporary_dir("ganbaru-ai-music-detection");
         fs::create_dir_all(root.join("album")).unwrap();
         fs::write(root.join("notes.txt"), []).unwrap();
         assert!(detect_non_empty_media_folder(&root).unwrap().is_none());
@@ -899,7 +899,7 @@ mod tests {
     fn media_folder_scan_returns_deterministic_partial_results_on_cancellation() {
         use std::cell::Cell;
 
-        let root = unique_temp_dir("ganbaru-ai-music-cancel");
+        let root = unique_temporary_dir("ganbaru-ai-music-cancel");
         fs::create_dir_all(&root).unwrap();
         for name in ["c.mp3", "a.mp3", "b.mp3"] {
             fs::write(root.join(name), []).unwrap();
@@ -921,7 +921,7 @@ mod tests {
 
     #[test]
     fn media_folder_scan_handles_deep_trees_without_recursion() {
-        let root = unique_temp_dir("ganbaru-ai-music-deep");
+        let root = unique_temporary_dir("ganbaru-ai-music-deep");
         let mut directory = root.clone();
         for index in 0..128 {
             directory = directory.join(format!("d{index}"));
@@ -940,8 +940,8 @@ mod tests {
     fn media_folder_scan_does_not_follow_symlinks() {
         use std::os::unix::fs::symlink;
 
-        let root = unique_temp_dir("ganbaru-ai-music-symlink");
-        let outside = unique_temp_dir("ganbaru-ai-music-outside");
+        let root = unique_temporary_dir("ganbaru-ai-music-symlink");
+        let outside = unique_temporary_dir("ganbaru-ai-music-outside");
         fs::create_dir_all(&root).unwrap();
         fs::create_dir_all(&outside).unwrap();
         fs::write(outside.join("outside.mp3"), []).unwrap();
@@ -955,7 +955,7 @@ mod tests {
 
     #[test]
     fn media_folder_scan_stops_at_five_thousand_tracks() {
-        let root = unique_temp_dir("ganbaru-ai-music-cap");
+        let root = unique_temporary_dir("ganbaru-ai-music-cap");
         fs::create_dir_all(&root).unwrap();
         for index in 0..=MAX_MEDIA_FOLDER_FILES {
             fs::write(root.join(format!("{index:05}.mp3")), []).unwrap();
@@ -1006,7 +1006,7 @@ mod tests {
 
     #[test]
     fn artwork_lookup_uses_parent_album_front_image() {
-        let root = unique_temp_dir("ganbaru-ai-artwork-parent");
+        let root = unique_temporary_dir("ganbaru-ai-artwork-parent");
         let album_dir = root.join("Anime/Made in Abyss/2017 - Made in Abyss OST");
         let disc_dir = album_dir.join("CD 1");
         fs::create_dir_all(&disc_dir).unwrap();
@@ -1024,7 +1024,7 @@ mod tests {
 
     #[test]
     fn artwork_lookup_prefers_matching_sidecar_image() {
-        let root = unique_temp_dir("ganbaru-ai-artwork-sidecar");
+        let root = unique_temporary_dir("ganbaru-ai-artwork-sidecar");
         fs::create_dir_all(&root).unwrap();
         let track = root.join("02 - Focus.mp3");
         let sidecar = root.join("02 - Focus.jpg");
@@ -1102,7 +1102,7 @@ mod tests {
 
     #[test]
     fn mp4_cover_atom_parser_extracts_cover_art() {
-        let root = unique_temp_dir("ganbaru-ai-artwork-mp4");
+        let root = unique_temporary_dir("ganbaru-ai-artwork-mp4");
         fs::create_dir_all(&root).unwrap();
         let path = root.join("theme.m4a");
         let mut data_content = Vec::new();
@@ -1141,7 +1141,7 @@ mod tests {
         atom
     }
 
-    fn unique_temp_dir(name: &str) -> PathBuf {
+    fn unique_temporary_dir(name: &str) -> PathBuf {
         let nanos = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()

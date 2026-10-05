@@ -24,16 +24,16 @@
   let {
     description,
     readOnly = false,
-    onchange,
+    onChange,
   }: {
     description: string;
     readOnly?: boolean;
-    onchange: (html: string) => void;
+    onChange: (html: string) => void;
   } = $props();
 
-  let descOpen = $state(false);
+  let editorOpen = $state(false);
   let editorEl: HTMLDivElement | undefined = $state();
-  let descAreaEl: HTMLDivElement | undefined = $state();
+  let rootEl: HTMLDivElement | undefined = $state();
   let toolbarEl: HTMLDivElement | undefined = $state();
   let toolbarFocusIndex = $state(0);
   const sanitizedDescription = $derived(sanitizeCalendarDescriptionHtml(description));
@@ -48,9 +48,9 @@
     { icon: List, cmd: "insertUnorderedList", title: t("calendar.description.bulletedList") },
   ]);
 
-  function openDescEditor() {
+  function openEditor() {
     if (readOnly) return;
-    descOpen = true;
+    editorOpen = true;
     requestAnimationFrame(() => {
       if (editorEl) {
         editorEl.innerHTML = sanitizedDescription;
@@ -64,10 +64,10 @@
     });
   }
 
-  function closeDescEditor() {
-    if (!descOpen) return;
+  function closeEditor() {
+    if (!editorOpen) return;
     sanitizeEditorDom();
-    descOpen = false;
+    editorOpen = false;
   }
 
   function handleEditorInput() {
@@ -80,7 +80,7 @@
     if (safeHtml !== editorEl.innerHTML) {
       editorEl.innerHTML = safeHtml;
     }
-    onchange(safeHtml);
+    onChange(safeHtml);
   }
 
   function execFormat(command: string, value?: string) {
@@ -132,13 +132,13 @@
   let linkPopoverOpen = $state(false);
   let linkPopoverSource: "keyboard" | "pointer" = $state("pointer");
   let linkUrl = $state("https://");
-  let linkBtnEl: HTMLButtonElement | undefined = $state();
+  let linkButtonEl: HTMLButtonElement | undefined = $state();
   let linkInputEl: HTMLInputElement | undefined = $state();
   let savedSelection: Range | null = null;
 
   async function focusLinkButton() {
     await tick();
-    linkBtnEl?.focus();
+    linkButtonEl?.focus();
   }
 
   function closeLinkPopover(source: "keyboard" | "pointer" = linkPopoverSource) {
@@ -218,47 +218,47 @@
       event.stopPropagation();
       return;
     }
-    if (!descOpen) openDescEditor();
+    if (!editorOpen) openEditor();
   }
 
   function handleDescriptionRowKeydown(event: KeyboardEvent) {
-    if (readOnly || descOpen) return;
+    if (readOnly || editorOpen) return;
     if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
     if (event.key !== "Enter" && event.key !== " ") return;
     event.preventDefault();
     event.stopPropagation();
-    openDescEditor();
+    openEditor();
   }
 
   function positionLinkPopover(node: HTMLElement) {
-    if (!linkBtnEl) return { destroy() {} };
-    const r = linkBtnEl.getBoundingClientRect();
-    const pw = node.offsetWidth || 220;
-    let left = r.left + r.width / 2 - pw / 2;
-    left = Math.max(8, Math.min(window.innerWidth - pw - 8, left));
+    if (!linkButtonEl) return { destroy() {} };
+    const buttonRect = linkButtonEl.getBoundingClientRect();
+    const popoverWidth = node.offsetWidth || 220;
+    let left = buttonRect.left + buttonRect.width / 2 - popoverWidth / 2;
+    left = Math.max(8, Math.min(window.innerWidth - popoverWidth - 8, left));
     node.style.left = `${left}px`;
-    node.style.top = `${r.bottom + 4}px`;
+    node.style.top = `${buttonRect.bottom + 4}px`;
     return { destroy() {} };
   }
 
-  const descPreview = $derived.by(() => {
+  const previewText = $derived.by(() => {
     if (!sanitizedDescription) return "";
     return calendarDescriptionPreviewText(sanitizedDescription);
   });
 
   // Sync editor content when it first appears (e.g. editing existing event with description)
   $effect(() => {
-    if (descOpen && editorEl && editorEl.innerHTML !== sanitizedDescription) {
+    if (editorOpen && editorEl && editorEl.innerHTML !== sanitizedDescription) {
       editorEl.innerHTML = sanitizedDescription;
     }
   });
 
   // Close on click outside (capture phase to work with stopPropagation on panel root)
   $effect(() => {
-    if (!descOpen) return;
+    if (!editorOpen) return;
     function handleCapture(e: MouseEvent) {
-      if (descAreaEl && !descAreaEl.contains(e.target as Node)) {
-        closeDescEditor();
+      if (rootEl && !rootEl.contains(e.target as Node)) {
+        closeEditor();
       }
     }
     document.addEventListener("click", handleCapture, true);
@@ -267,8 +267,8 @@
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<div bind:this={descAreaEl}>
-  {#if descOpen}
+<div bind:this={rootEl}>
+  {#if editorOpen}
     <div bind:this={toolbarEl} transition:slide={{ duration: 250, easing: cubicOut }} class="flex items-center gap-1 py-1" style="padding-left: 26px;">
       {#each textFormatButtons as btn, index}
         {@const Icon = btn.icon}
@@ -299,7 +299,7 @@
         ><Icon size={14} /></button>
       {/each}
       <div class="mx-0.5 h-4 w-px bg-border/60"></div>
-      <button bind:this={linkBtnEl}
+      <button bind:this={linkButtonEl}
         onmousedown={(e) => e.preventDefault()}
         onclick={() => openLinkPopover("pointer")}
         onfocus={() => { toolbarFocusIndex = 5; }}
@@ -338,7 +338,7 @@
       ><RemoveFormatting size={14} /></button>
       <button
         onmousedown={(e) => e.preventDefault()}
-        onclick={closeDescEditor}
+        onclick={closeEditor}
         onfocus={() => { toolbarFocusIndex = 7; }}
         onkeydown={(e) => handleToolbarButtonKeydown(e, 7)}
         data-description-toolbar-index="7"
@@ -351,15 +351,15 @@
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
   <div
-    role={!descOpen && !readOnly ? "button" : undefined}
-    tabindex={!descOpen && !readOnly ? 0 : undefined}
-    class="flex items-center gap-3 leading-none {!descOpen && !readOnly ? 'cursor-text' : ''}"
+    role={!editorOpen && !readOnly ? "button" : undefined}
+    tabindex={!editorOpen && !readOnly ? 0 : undefined}
+    class="flex items-center gap-3 leading-none {!editorOpen && !readOnly ? 'cursor-text' : ''}"
     onclick={handleDescriptionRowClick}
     onkeydown={handleDescriptionRowKeydown}
   >
     <AlignLeft size={14} class="shrink-0 text-foreground" />
     <div class="min-w-0 flex-1">
-      {#if descOpen}
+      {#if editorOpen}
         <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div
           bind:this={editorEl}
@@ -373,22 +373,22 @@
           ondrop={handleEditorDrop}
           onblur={sanitizeEditorDom}
           onkeydown={(e) => {
-            if (!descOpen) return;
+            if (!editorOpen) return;
             if (!e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && e.key === "Escape") {
               e.preventDefault();
               e.stopPropagation();
-              closeDescEditor();
+              closeEditor();
               return;
             }
             e.stopPropagation();
           }}
         ></div>
-      {:else if descPreview}
+      {:else if previewText}
         <div
           data-selectable-content
           class="desc-preview max-h-12 overflow-hidden text-[0.8rem] leading-4 text-foreground"
-          title={descPreview}
-        >{descPreview}</div>
+          title={previewText}
+        >{previewText}</div>
       {:else}
         <span class="text-[0.8rem] text-muted-foreground/40">{t("calendar.description.addDescription")}</span>
       {/if}

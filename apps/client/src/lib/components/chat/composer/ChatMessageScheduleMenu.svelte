@@ -32,20 +32,20 @@
     selectedScheduledFor = null,
     scheduledMessages = [],
     disabled = false,
-    onselect = () => {},
-    onclear = () => {},
-    onclose = () => {},
-    onmessageschange = () => {},
+    onSelect = () => {},
+    onClear = () => {},
+    onClose = () => {},
+    onMessagesChange = () => {},
   }: {
     mode?: ScheduleMenuMode;
     align?: "left" | "right";
     selectedScheduledFor?: string | null;
     scheduledMessages?: ChatScheduledMessageRead[];
     disabled?: boolean;
-    onselect?: (scheduledFor: string) => void;
-    onclear?: () => void;
-    onclose?: () => void;
-    onmessageschange?: (messages: ChatScheduledMessageRead[]) => void;
+    onSelect?: (scheduledFor: string) => void;
+    onClear?: () => void;
+    onClose?: () => void;
+    onMessagesChange?: (messages: ChatScheduledMessageRead[]) => void;
   } = $props();
 
   const chat = getChat();
@@ -127,13 +127,13 @@
       error = t("chat.organization.invalidScheduleTime");
       return;
     }
-    onselect(scheduledFor);
-    onclose();
+    onSelect(scheduledFor);
+    onClose();
   }
 
   function clearSchedule(): void {
-    onclear();
-    onclose();
+    onClear();
+    onClose();
   }
 
   async function cancelScheduledMessage(id: ChatScheduledMessageId): Promise<void> {
@@ -143,8 +143,8 @@
     try {
       await chat.cancelScheduledOrganizationalMessage(id);
       const remaining = scheduledMessages.filter((message) => message.id !== id);
-      onmessageschange(remaining);
-      if (remaining.length === 0) onclose();
+      onMessagesChange(remaining);
+      if (remaining.length === 0) onClose();
     } catch (cause: unknown) {
       error = cause instanceof Error ? cause.message : String(cause);
     } finally {
@@ -158,7 +158,7 @@
     error = null;
     try {
       const retried = await chat.retryScheduledOrganizationalMessage(id);
-      onmessageschange(scheduledMessages.map((message) => message.id === id ? retried : message));
+      onMessagesChange(scheduledMessages.map((message) => message.id === id ? retried : message));
     } catch (cause: unknown) {
       error = cause instanceof Error ? cause.message : String(cause);
     } finally {
@@ -173,8 +173,8 @@
     try {
       await chat.sendScheduledOrganizationalMessageNow(id);
       const remaining = scheduledMessages.filter((message) => message.id !== id);
-      onmessageschange(remaining);
-      if (remaining.length === 0) onclose();
+      onMessagesChange(remaining);
+      if (remaining.length === 0) onClose();
     } catch (cause: unknown) {
       error = cause instanceof Error ? cause.message : String(cause);
     } finally {
@@ -230,16 +230,16 @@
   {#if mode === "manage"}
     <div class="schedule-header">
       <strong>{t("chat.organization.scheduledMessagesCount", scheduledMessages.length)}</strong>
-      <button class="header-icon" type="button" aria-label={t("chat.organization.closeScheduledMessages")} onclick={onclose}><X size={14} /></button>
+      <button class="header-icon" type="button" aria-label={t("chat.organization.closeScheduledMessages")} onclick={onClose}><X size={14} /></button>
     </div>
     <div class="scheduled-list">
       {#each scheduledMessages as scheduled (scheduled.id)}
         <ChatScheduledMessagePreview
           message={scheduled}
           pending={pendingMessageIds.has(scheduled.id)}
-          onsendnow={() => { void sendScheduledMessageNow(scheduled.id); }}
-          onretry={() => { void retryScheduledMessage(scheduled.id); }}
-          oncancel={() => { void cancelScheduledMessage(scheduled.id); }}
+          onSendNow={() => { void sendScheduledMessageNow(scheduled.id); }}
+          onRetry={() => { void retryScheduledMessage(scheduled.id); }}
+          onCancel={() => { void cancelScheduledMessage(scheduled.id); }}
         />
       {/each}
     </div>
@@ -261,8 +261,8 @@
           small
           highlightMode="none"
           activeHighlight="primary"
-          onselect={(date) => { scheduleDate = date; }}
-          oncancel={() => { customScheduleOpen = false; scheduleTimePickerOpen = false; }}
+          onSelect={(date) => { scheduleDate = date; }}
+          onCancel={() => { customScheduleOpen = false; scheduleTimePickerOpen = false; }}
         />
         <button
           bind:this={scheduleTimeTrigger}
@@ -288,8 +288,8 @@
               activeTime={scheduleTime}
               scrollTime={scheduleTime}
               focusOnOpen
-              onselect={(time) => { scheduleTime = time; scheduleTimePickerOpen = false; }}
-              oncancel={() => { scheduleTimePickerOpen = false; }}
+              onSelect={(time) => { scheduleTime = time; scheduleTimePickerOpen = false; }}
+              onCancel={() => { scheduleTimePickerOpen = false; }}
             />
           </div>
         {/if}

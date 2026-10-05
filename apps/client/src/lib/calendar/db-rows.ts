@@ -244,7 +244,7 @@ export function toDbTime(
 /**
  * Build the slim in-memory `CalendarEvent`. Only keys with meaningful values
  * are assigned (no `key: undefined`); this keeps the V8 hidden class compact
- * and prevents the patch-based `updateBlock` from receiving spurious keys
+ * and prevents patch-based event updates from receiving spurious keys
  * that would clear heavy DB columns when callers spread `{...slimEvent}`.
  */
 export function mapRow(r: DbCalendarEvent, renderZone: string): CalendarEvent {

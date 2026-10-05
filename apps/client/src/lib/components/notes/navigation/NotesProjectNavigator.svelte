@@ -39,11 +39,10 @@
   import type { ProjectNavigatorPanelMode } from "$lib/projects/toolbar";
   import { getNotes } from "$lib/stores/notes.svelte";
   import { getProjects } from "$lib/stores/projects.svelte";
-  import { cn } from "$lib/utils";
+  import { cn, type MaybePromise } from "$lib/utils";
   import ProjectIcon from "$lib/components/projects/ProjectIcon.svelte";
   import NotesHierarchyPickerPanel from "./NotesHierarchyPickerPanel.svelte";
 
-  type MaybePromise<T> = T | Promise<T>;
 
   interface ProjectSearchResultGroup {
     group: ProjectGroup;
@@ -76,20 +75,20 @@
   const iconStrokeWidth = 1.6;
   const iconSize = 13;
   const emojiScale = 0.94;
-  const panelFallbackHeaderHeight = 40;
-  const panelFallbackFooterHeight = 44;
-  const panelListPadding = 6;
+  const panelFallbackHeaderHeightPx = 40;
+  const panelFallbackFooterHeightPx = 44;
+  const panelListPaddingPx = 6;
   const panelRowHeightRem = 2;
-  const panelFallbackRowHeight = 30;
-  const subpanelListPadding = 8;
-  const subpanelFallbackFooterHeight = 44;
-  const subpanelRowHeight = 32;
-  const subpanelGap = 4;
+  const panelFallbackRowHeightPx = 30;
+  const subpanelListPaddingPx = 8;
+  const subpanelFallbackFooterHeightPx = 44;
+  const subpanelRowHeightPx = 32;
+  const subpanelGapPx = 4;
   const zIndexClass = "z-81";
 
   let projectSearch = $state("");
   let groupDraft = $state("");
-  let createGroupOpen = $state(false);
+  let isCreateGroupOpen = $state(false);
   let createProjectGroupId = $state<string | null>(null);
   let projectDraftByGroup = $state<Record<string, string>>({});
   let projectTemplateDraftByGroup = $state<Record<string, ProjectTemplateId>>({});
@@ -104,7 +103,7 @@
   let panelStyle = $state("");
   let groupScrollElement = $state<HTMLElement | undefined>();
   let groupScrollContentElement = $state<HTMLElement | undefined>();
-  let groupScrollable = $state(false);
+  let isGroupScrollable = $state(false);
   let groupCanScrollUp = $state(false);
   let groupCanScrollDown = $state(false);
   let groupScrollStateFrame: number | null = null;
@@ -115,7 +114,7 @@
   let projectSubpanelBridgeStyle = $state("");
   let projectScrollElement = $state<HTMLElement | undefined>();
   let projectScrollContentElement = $state<HTMLElement | undefined>();
-  let projectScrollable = $state(false);
+  let isProjectScrollable = $state(false);
   let projectCanScrollUp = $state(false);
   let projectCanScrollDown = $state(false);
   let projectScrollStateFrame: number | null = null;
@@ -127,9 +126,9 @@
   const selectedProject = $derived(projects.projectById(selectedProjectId));
   const selectedGroup = $derived(projects.groupById(selectedProject?.groupId ?? selectedGroupId));
   const normalizedSearch = $derived(projectSearch.trim().toLowerCase());
-  const searchActive = $derived(normalizedSearch.length > 0);
+  const isSearchActive = $derived(normalizedSearch.length > 0);
   const groups = $derived.by(() => projects.visibleGroups());
-  const visibleGroups = $derived.by(() => groups.filter(groupVisible));
+  const visibleGroups = $derived.by(() => groups.filter(isGroupVisible));
   const searchResultGroups = $derived.by((): ProjectSearchResultGroup[] =>
     groups
       .map((group) => ({ group, projects: projectsInGroup(group) }))
@@ -158,7 +157,7 @@
     );
   }
 
-  function groupVisible(group: ProjectGroup): boolean {
+  function isGroupVisible(group: ProjectGroup): boolean {
     if (!normalizedSearch) return true;
     return projectsInGroup(group).length > 0;
   }
@@ -176,7 +175,7 @@
     const rootFontSize = Number.parseFloat(getComputedStyle(document.documentElement).fontSize);
     return Number.isFinite(rootFontSize)
       ? rootFontSize * panelRowHeightRem
-      : panelFallbackRowHeight;
+      : panelFallbackRowHeightPx;
   }
 
   function cssPixelValue(value: string): number {
@@ -191,7 +190,7 @@
   }
 
   function mainListEstimatedHeight(): number {
-    const itemCount = searchActive
+    const itemCount = isSearchActive
       ? searchResultGroups.reduce((count, entry) => count + entry.projects.length, 0)
       : panelMode === "projects" && directProjectGroup
         ? projectsInGroup(directProjectGroup).length
@@ -199,20 +198,20 @@
     return projectPickerPanelEstimatedListHeight({
       itemCount,
       visibleRows: null,
-      listPadding: panelListPadding,
+      listPadding: panelListPaddingPx,
       rowHeight: rowHeight(),
     });
   }
 
   function updatePanelStyle(): void {
-    const headerHeight = panelHeaderElement?.offsetHeight ?? panelFallbackHeaderHeight;
-    const footerHeight = searchActive
+    const headerHeight = panelHeaderElement?.offsetHeight ?? panelFallbackHeaderHeightPx;
+    const footerHeight = isSearchActive
       ? 0
-      : panelFooterElement?.offsetHeight ?? panelFallbackFooterHeight;
+      : panelFooterElement?.offsetHeight ?? panelFallbackFooterHeightPx;
     const measuredListHeight = groupScrollContentElement
       ? groupScrollContentElement.scrollHeight + scrollAreaVerticalPadding(
         groupScrollElement,
-        panelListPadding,
+        panelListPaddingPx,
       )
       : undefined;
     const listHeight = measuredListHeight ?? mainListEstimatedHeight();
@@ -222,7 +221,7 @@
       listHeight,
       maxHeight: panelMaxHeight,
       visibleRows: null,
-      listPadding: panelListPadding,
+      listPadding: panelListPaddingPx,
       rowHeight: rowHeight(),
     });
     panelStyle = [
@@ -249,7 +248,7 @@
     };
   }
 
-  function pointerAimingAtProjectSubpanel(point: MenuAimPoint): boolean {
+  function isPointerAimingAtProjectSubpanel(point: MenuAimPoint): boolean {
     if (!activeGroupAnchorElement || !projectSubpanelElement) return false;
     const anchorRect = activeGroupAnchorElement.getBoundingClientRect();
     const subpanelRect = projectSubpanelElement.getBoundingClientRect();
@@ -266,7 +265,7 @@
     });
   }
 
-  function pointerAimingAtNoteSubpanel(point: MenuAimPoint): boolean {
+  function isPointerAimingAtNoteSubpanel(point: MenuAimPoint): boolean {
     if (!activeProjectAnchorElement || !noteSubpanelElement) return false;
     const anchorRect = activeProjectAnchorElement.getBoundingClientRect();
     const subpanelRect = noteSubpanelElement.getBoundingClientRect();
@@ -288,25 +287,25 @@
     const anchorRect = activeGroupAnchorElement.getBoundingClientRect();
     const panelRect = panelRootElement.getBoundingClientRect();
     const bounds = currentPanelBounds();
-    const footerHeight = projectSubpanelFooterElement?.offsetHeight ?? subpanelFallbackFooterHeight;
+    const footerHeight = projectSubpanelFooterElement?.offsetHeight ?? subpanelFallbackFooterHeightPx;
     const projectCount = activeGroup ? projectsInGroup(activeGroup).length : 0;
     const measuredListHeight = projectScrollContentElement
       ? projectScrollContentElement.scrollHeight + scrollAreaVerticalPadding(
         projectScrollElement,
-        subpanelListPadding,
+        subpanelListPaddingPx,
       )
       : undefined;
     const geometry = projectPickerSubpanelGeometry({
       anchorRect,
       panelRect,
       bounds,
-      gap: subpanelGap,
+      gap: subpanelGapPx,
       footerHeight,
       projectCount,
       visibleRows: null,
       listHeight: measuredListHeight,
-      listPadding: subpanelListPadding,
-      rowHeight: subpanelRowHeight,
+      listPadding: subpanelListPaddingPx,
+      rowHeight: subpanelRowHeightPx,
     });
 
     projectSubpanelStyle = projectPickerPanelFrameStyle(geometry.panel);
@@ -322,13 +321,13 @@
       anchorRect,
       panelRect,
       bounds,
-      gap: subpanelGap,
-      footerHeight: subpanelFallbackFooterHeight,
+      gap: subpanelGapPx,
+      footerHeight: subpanelFallbackFooterHeightPx,
       panelHeight: noteSubpanelElement?.getBoundingClientRect().height || undefined,
       projectCount: Math.max(1, activeProjectRootItems.length),
       visibleRows: null,
-      listPadding: subpanelListPadding,
-      rowHeight: subpanelRowHeight,
+      listPadding: subpanelListPaddingPx,
+      rowHeight: subpanelRowHeightPx,
     });
 
     noteSubpanelStyle = projectPickerPanelFrameStyle(geometry.panel);
@@ -339,13 +338,13 @@
     groupScrollStateFrame = null;
     const element = groupScrollElement;
     if (!element) {
-      groupScrollable = false;
+      isGroupScrollable = false;
       groupCanScrollUp = false;
       groupCanScrollDown = false;
       return;
     }
     const state = projectPickerScrollState(element);
-    groupScrollable = state.scrollable;
+    isGroupScrollable = state.scrollable;
     groupCanScrollUp = state.canScrollUp;
     groupCanScrollDown = state.canScrollDown;
   }
@@ -359,13 +358,13 @@
     projectScrollStateFrame = null;
     const element = projectScrollElement;
     if (!element) {
-      projectScrollable = false;
+      isProjectScrollable = false;
       projectCanScrollUp = false;
       projectCanScrollDown = false;
       return;
     }
     const state = projectPickerScrollState(element);
-    projectScrollable = state.scrollable;
+    isProjectScrollable = state.scrollable;
     projectCanScrollUp = state.canScrollUp;
     projectCanScrollDown = state.canScrollDown;
   }
@@ -429,7 +428,7 @@
 
   function handleGroupPointerEnter(group: ProjectGroup, event: PointerEvent): void {
     const point = projectPickerPointerPoint(event);
-    if (activeGroupId && activeGroupId !== group.id && pointerAimingAtProjectSubpanel(point)) {
+    if (activeGroupId && activeGroupId !== group.id && isPointerAimingAtProjectSubpanel(point)) {
       return;
     }
     showProjectSubpanel(group, event.currentTarget);
@@ -440,7 +439,7 @@
     if (activeGroupId === group.id) {
       return;
     }
-    if (activeGroupId && pointerAimingAtProjectSubpanel(point)) {
+    if (activeGroupId && isPointerAimingAtProjectSubpanel(point)) {
       return;
     }
     showProjectSubpanel(group, event.currentTarget);
@@ -452,7 +451,7 @@
     sourcePanelElement: HTMLDivElement | null | undefined,
   ): void {
     const point = projectPickerPointerPoint(event);
-    if (activeProjectId && activeProjectId !== project.id && pointerAimingAtNoteSubpanel(point)) {
+    if (activeProjectId && activeProjectId !== project.id && isPointerAimingAtNoteSubpanel(point)) {
       return;
     }
     showNoteSubpanel(project, event.currentTarget, sourcePanelElement);
@@ -467,7 +466,7 @@
     if (activeProjectId === project.id) {
       return;
     }
-    if (activeProjectId && pointerAimingAtNoteSubpanel(point)) {
+    if (activeProjectId && isPointerAimingAtNoteSubpanel(point)) {
       return;
     }
     showNoteSubpanel(project, event.currentTarget, sourcePanelElement);
@@ -496,13 +495,13 @@
 
   function handleProjectSubpanelBoundaryLeave(event: PointerEvent): void {
     if (isProjectSubpanelBoundaryTarget(event.relatedTarget)) return;
-    if (pointerAimingAtProjectSubpanel(projectPickerPointerPoint(event))) return;
+    if (isPointerAimingAtProjectSubpanel(projectPickerPointerPoint(event))) return;
     closeProjectSubpanel();
   }
 
   function handleNoteSubpanelBoundaryLeave(event: PointerEvent): void {
     if (isNoteSubpanelBoundaryTarget(event.relatedTarget)) return;
-    if (pointerAimingAtNoteSubpanel(projectPickerPointerPoint(event))) return;
+    if (isPointerAimingAtNoteSubpanel(projectPickerPointerPoint(event))) return;
     closeNoteSubpanel();
   }
 
@@ -517,7 +516,7 @@
     if (!name) return;
     await projects.addGroup(name);
     groupDraft = "";
-    createGroupOpen = false;
+    isCreateGroupOpen = false;
   }
 
   async function submitProject(groupId: string): Promise<void> {
@@ -532,7 +531,7 @@
   }
 
   $effect(() => {
-    if (searchActive) {
+    if (isSearchActive) {
       closeProjectSubpanel();
       closeNoteSubpanel();
       return;
@@ -555,23 +554,23 @@
 
   $effect(() => {
     const maxHeight = panelMaxHeight;
-    const activeSearch = searchActive;
+    const hasActiveSearch = isSearchActive;
     const mode = panelMode;
     const groupCount = visibleGroups.length;
     const resultCount = searchResultGroups.reduce((count, entry) => count + entry.projects.length, 0);
     const directProjectCount = directProjectGroup ? projectsInGroup(directProjectGroup).length : 0;
     const noteCount = activeProjectRootItems.length;
-    const creatingGroup = createGroupOpen;
-    const creatingProject = createProjectGroupId;
+    const isCreatingGroup = isCreateGroupOpen;
+    const creatingProjectGroupId = createProjectGroupId;
     void maxHeight;
-    void activeSearch;
+    void hasActiveSearch;
     void mode;
     void groupCount;
     void resultCount;
     void directProjectCount;
     void noteCount;
-    void creatingGroup;
-    void creatingProject;
+    void isCreatingGroup;
+    void creatingProjectGroupId;
     requestAnimationFrame(() => {
       updatePanelStyle();
       requestGroupScrollStateRefresh();
@@ -694,10 +693,10 @@
       bind:this={groupScrollElement}
       class={cn(
         "project-picker-scroll-area hide-scrollbar h-full min-h-0 overflow-y-auto pb-1 pt-0.5",
-        groupScrollable && "pr-2",
-        groupScrollable && groupCanScrollUp && groupCanScrollDown && "project-picker-scroll-both",
-        groupScrollable && groupCanScrollUp && !groupCanScrollDown && "project-picker-scroll-top",
-        groupScrollable && !groupCanScrollUp && groupCanScrollDown && "project-picker-scroll-bottom",
+        isGroupScrollable && "pr-2",
+        isGroupScrollable && groupCanScrollUp && groupCanScrollDown && "project-picker-scroll-both",
+        isGroupScrollable && groupCanScrollUp && !groupCanScrollDown && "project-picker-scroll-top",
+        isGroupScrollable && !groupCanScrollUp && groupCanScrollDown && "project-picker-scroll-bottom",
       )}
       onscroll={handleGroupScroll}
     >
@@ -710,11 +709,11 @@
           <div class="px-3 py-2 text-[0.8rem] text-destructive">
             {t("projects.loadFailed", projects.loadError)}
           </div>
-        {:else if searchActive && searchResultGroups.length === 0}
+        {:else if isSearchActive && searchResultGroups.length === 0}
           <div class="px-3 py-2 text-[0.8rem] text-popover-foreground/60">
             {t("calendar.eventPanel.noProjectsFound")}
           </div>
-        {:else if searchActive}
+        {:else if isSearchActive}
           <div class="grid px-1">
             {#each searchResultGroups as resultGroup (resultGroup.group.id)}
               <div class="px-1 pb-1">
@@ -803,11 +802,11 @@
     />
   </div>
 
-  {#if !searchActive}
+  {#if !isSearchActive}
     <div bind:this={panelFooterElement} class="relative z-10 shrink-0 bg-popover p-1.5">
       <div class="pointer-events-none absolute left-1.5 right-1.5 top-0 border-t border-border/70"></div>
       {#if panelMode === "groups"}
-        {#if createGroupOpen}
+        {#if isCreateGroupOpen}
           <form class="flex gap-1" onsubmit={(event) => { event.preventDefault(); void submitGroup(); }}>
             <input
               bind:value={groupDraft}
@@ -822,7 +821,7 @@
           <button
             type="button"
             class="flex min-h-8 w-full items-center justify-center gap-1.5 rounded-md text-[0.8rem] text-popover-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
-            onclick={() => { createGroupOpen = true; }}
+            onclick={() => { isCreateGroupOpen = true; }}
           >
             <Plus size={13} strokeWidth={iconStrokeWidth} />
             <span>{t("calendar.eventPanel.createGroup")}</span>
@@ -886,7 +885,7 @@
   {/if}
 </div>
 
-{#if panelMode === "groups" && !searchActive && activeGroup && activeGroupAnchorElement}
+{#if panelMode === "groups" && !isSearchActive && activeGroup && activeGroupAnchorElement}
   {@const activeGroupProjects = projectsInGroup(activeGroup)}
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
@@ -908,10 +907,10 @@
         bind:this={projectScrollElement}
         class={cn(
           "project-picker-scroll-area hide-scrollbar h-full min-h-0 overflow-y-auto py-1",
-          projectScrollable ? "px-1 pr-2" : "px-1",
-          projectScrollable && projectCanScrollUp && projectCanScrollDown && "project-picker-scroll-both",
-          projectScrollable && projectCanScrollUp && !projectCanScrollDown && "project-picker-scroll-top",
-          projectScrollable && !projectCanScrollUp && projectCanScrollDown && "project-picker-scroll-bottom",
+          isProjectScrollable ? "px-1 pr-2" : "px-1",
+          isProjectScrollable && projectCanScrollUp && projectCanScrollDown && "project-picker-scroll-both",
+          isProjectScrollable && projectCanScrollUp && !projectCanScrollDown && "project-picker-scroll-top",
+          isProjectScrollable && !projectCanScrollUp && projectCanScrollDown && "project-picker-scroll-bottom",
         )}
         onscroll={handleProjectScroll}
       >

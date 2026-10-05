@@ -22,7 +22,7 @@
   import { perfLog, type PerfLogEntry, clear as clearPerfLog, setTracking } from "$lib/stores/perf-log.svelte";
   import MemoryChart from "./MemoryChart.svelte";
   import type { MemorySample } from "$lib/diagnostics/memory-samples";
-  import { SAMPLE_CAP, SAMPLE_INTERVAL_MS, samplesToCSV } from "$lib/diagnostics/memory-samples";
+  import { SAMPLE_CAP, SAMPLE_INTERVAL_MS, samplesToCsv } from "$lib/diagnostics/memory-samples";
   import {
     memoryDisplayRows,
     type MemoryDisplayLabel,
@@ -95,13 +95,13 @@
         pollIndex++;
         return next;
       });
-      invoke<MemoryReport>("get_memory_report")
-        .then((r) => {
-          liveReport = r;
+      invoke<MemoryReport>("memory_report")
+        .then((report) => {
+          liveReport = report;
           memorySamples.push({
             t,
-            totalMb: r.total_mb,
-            processes: r.processes.map((p) => ({ name: p.name, mb: p.mb })),
+            totalMb: report.total_mb,
+            processes: report.processes.map((p) => ({ name: p.name, mb: p.mb })),
           });
           if (memorySamples.length > SAMPLE_CAP) memorySamples.shift();
         })
@@ -132,18 +132,18 @@
       rows.push({ label: "shell-startup", deltaMs: shellStartupMs });
     }
     let prev: PerfLogEntry | null = null;
-    for (const e of perfLog.entries) {
-      if (!e.tag.startsWith("boot.")) continue;
-      if (HIDDEN_BOOT_TAGS.has(e.tag)) continue;
+    for (const entry of perfLog.entries) {
+      if (!entry.tag.startsWith("boot.")) continue;
+      if (HIDDEN_BOOT_TAGS.has(entry.tag)) continue;
       if (prev === null) {
-        prev = e;
+        prev = entry;
         continue;
       }
       rows.push({
-        label: e.tag.replace(/^boot\./, ""),
-        deltaMs: Math.round((e.t - prev.t) * 10) / 10,
+        label: entry.tag.replace(/^boot\./, ""),
+        deltaMs: Math.round((entry.t - prev.t) * 10) / 10,
       });
-      prev = e;
+      prev = entry;
     }
     return rows;
   });
@@ -196,9 +196,9 @@
   const actionChains = $derived.by<ChainRow[]>(() => {
     const results: ChainRow[] = [];
     const stacks: Record<string, PendingChain[]> = {};
-    for (const e of perfLog.entries) {
-      if (e.tag === "nav.release-tail") {
-        const ms = e.detail?.ms;
+    for (const entry of perfLog.entries) {
+      if (entry.tag === "nav.release-tail") {
+        const ms = entry.detail?.ms;
         results.push({
           prefix: "nav",
           action: "release tail",
@@ -207,39 +207,39 @@
         });
         continue;
       }
-      const m = /^(nav|view|panel)\.(start|module-ready|details-ready|state-open|flush-done|paint-done)$/.exec(e.tag);
-      if (!m) continue;
-      const prefix = m[1];
-      const sub = m[2];
-      if (sub === "start") {
-        (stacks[prefix] ??= []).push({ start: e, steps: [] });
+      const match = /^(nav|view|panel)\.(start|module-ready|details-ready|state-open|flush-done|paint-done)$/.exec(entry.tag);
+      if (!match) continue;
+      const prefix = match[1];
+      const mark = match[2];
+      if (mark === "start") {
+        (stacks[prefix] ??= []).push({ start: entry, steps: [] });
         continue;
       }
       const stack = stacks[prefix];
       if (!stack || stack.length === 0) continue;
-      const chainIndex = prefix === "panel" ? findPanelChainIndex(stack, e) : stack.length - 1;
+      const chainIndex = prefix === "panel" ? findPanelChainIndex(stack, entry) : stack.length - 1;
       if (chainIndex < 0) continue;
       const active = stack[chainIndex];
-      if (prefix === "panel" && sub !== "paint-done") {
-        active.steps.push(e);
+      if (prefix === "panel" && mark !== "paint-done") {
+        active.steps.push(entry);
         continue;
       }
       const [chain] = stack.splice(chainIndex, 1);
       if (!chain) continue;
       const start = chain.start;
-      const d = start.detail ?? {};
+      const detail = start.detail ?? {};
       let action = "";
-      if (prefix === "nav") action = String(d.dir ?? "");
-      else if (prefix === "view") action = `${d.from} -> ${d.to}`;
+      if (prefix === "nav") action = String(detail.dir ?? "");
+      else if (prefix === "view") action = `${detail.from} -> ${detail.to}`;
       else if (prefix === "panel") {
-        const state = d.state ? ` ${d.state}` : "";
-        const moduleState = d.module ? `/${d.module}` : "";
-        action = `${String(d.mode ?? "")}${state}${moduleState}`;
+        const state = detail.state ? ` ${detail.state}` : "";
+        const moduleState = detail.module ? `/${detail.module}` : "";
+        action = `${String(detail.mode ?? "")}${state}${moduleState}`;
       }
       results.push({
         prefix: prefix as ChainRow["prefix"],
         action,
-        durationMs: Math.round((e.t - start.t) * 10) / 10,
+        durationMs: Math.round((entry.t - start.t) * 10) / 10,
         steps: chain.steps.map((step) => ({
           label: panelStepLabel(step.tag),
           ms: Math.round((step.t - start.t) * 10) / 10,
@@ -413,7 +413,7 @@
   }
 
   function copyChart() {
-    copyToClipboard("chart", samplesToCSV(memorySamples, liveReport?.metric.slug));
+    copyToClipboard("chart", samplesToCsv(memorySamples, liveReport?.metric.slug));
   }
 
   function copySpeedLog() {
@@ -557,7 +557,7 @@
         samples={memorySamples}
         width={240}
         height={64}
-        onhover={(s) => { chartHoverSample = s; }}
+        onHover={(s) => { chartHoverSample = s; }}
       />
     </div>
     <div class="mt-3 grid grid-cols-2 gap-1.5">

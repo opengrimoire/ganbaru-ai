@@ -4,7 +4,7 @@ use crate::adaptive::decision::{
     AdaptiveDecision, AdaptiveDecisionInput, decide_boundary, decide_run_start,
 };
 use crate::adaptive::models::{LocalTimeFact, LocalTimeFacts, StateScores};
-use crate::adaptive::snapshots::{SnapshotIds, boundary, run_start};
+use crate::adaptive::snapshots::{SnapshotIds, decision_envelope, run_start_snapshot};
 use crate::adaptive::tests::{fixture, state_near};
 use crate::{
     PomodoroAdaptiveDecisionEnvelopeWrite, PomodoroAdaptiveStateScoresWrite,
@@ -85,7 +85,7 @@ fn matches_complete_typescript_decisions_and_persisted_snapshots_for_all_seven_l
         );
         if let Some(expected) = case.snapshot {
             snapshots += 1;
-            let mut snapshot = run_start(&actual, ids(), Vec::new());
+            let mut snapshot = run_start_snapshot(&actual, ids(), Vec::new());
             state_near(
                 scores(&snapshot.decision.state_scores),
                 scores(&expected.decision.state_scores),
@@ -101,7 +101,7 @@ fn matches_complete_typescript_decisions_and_persisted_snapshots_for_all_seven_l
             case.name
         );
         if let Some(expected) = case.envelope {
-            let mut envelope = boundary(&actual, ids(), "focus_start");
+            let mut envelope = decision_envelope(&actual, ids(), "focus_start");
             state_near(
                 scores(&envelope.decision.state_scores),
                 scores(&expected.decision.state_scores),

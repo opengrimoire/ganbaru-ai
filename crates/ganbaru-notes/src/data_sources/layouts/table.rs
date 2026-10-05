@@ -29,13 +29,13 @@ const MAX_TABLE_CONFIGURATION_BYTES: usize = 50 * 1024;
 const ROW_OPEN_MODES: &[&str] = &["full_page", "side_panel"];
 
 #[cfg(test)]
-pub async fn get_data_source_table_view(
+pub async fn data_source_table_view(
     pool: &SqlitePool,
     data_source_id: &str,
     database_id: Option<&str>,
     view_id: Option<&str>,
 ) -> Result<NoteDataSourceTableViewDto, String> {
-    get_data_source_table_view_window(
+    data_source_table_view_window(
         pool,
         data_source_id,
         database_id,
@@ -45,7 +45,7 @@ pub async fn get_data_source_table_view(
     .await
 }
 
-pub async fn get_data_source_table_view_window(
+pub async fn data_source_table_view_window(
     pool: &SqlitePool,
     data_source_id: &str,
     database_id: Option<&str>,
@@ -317,7 +317,7 @@ pub(crate) async fn ensure_table_view_row_tx(
     }
     let database_id = data_sources::views::scoped_database_id(data_source, database_id);
     crate::databases::editing_lock::ensure_unlocked_tx(tx, database_id).await?;
-    let id = data_sources::views::generated_uuid_tx(
+    let id = data_sources::views::generate_uuid_tx(
         tx,
         "generate database view id",
         "generated_database_view_id",

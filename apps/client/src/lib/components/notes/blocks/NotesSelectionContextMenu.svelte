@@ -22,7 +22,7 @@
       element.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus({ preventScroll: true });
     });
   });
-  function keydown(event: KeyboardEvent): void {
+  function handleKeydown(event: KeyboardEvent): void {
     if (!["ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return;
     event.preventDefault();
     const buttons = Array.from(element.querySelectorAll<HTMLButtonElement>("button:not(:disabled)"));
@@ -34,7 +34,7 @@
 </script>
 
 <div bind:this={element} data-notes-selection-menu role="menu" tabindex="-1"
-  aria-label={t("notes.selectionActions")} onkeydown={keydown}
+  aria-label={t("notes.selectionActions")} onkeydown={handleKeydown}
   use:dismissOnOutside={{ onDismiss: onClose }}
   style:left={`${left}px`} style:top={`${top}px`}
   class="fixed z-50 flex min-w-40 flex-col rounded-md border border-border bg-popover p-1 text-sm text-popover-foreground shadow-md"

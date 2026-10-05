@@ -4,7 +4,7 @@ mod config;
 
 pub(super) use config::{confirmed_session_not_found, find_mode, resolve_configuration_updates};
 use config::{
-    derive_modes_from_config, ensure_select_value, model_config_id, model_option_definitions,
+    derive_modes_from_config, ensure_select_value, model_config_option, model_option_definitions,
     validate_config_options, validate_modes,
 };
 
@@ -259,7 +259,7 @@ pub fn parse_initialize(value: Value) -> ChatResult<AcpInitializeResponse> {
     }
     if response.auth_methods.len() > 32
         || response.auth_methods.iter().any(|method| {
-            !valid_identifier(&method.id, 128)
+            !is_valid_identifier(&method.id, 128)
                 || method.name.len() > 256
                 || method.name.chars().any(char::is_control)
         })
@@ -276,7 +276,7 @@ pub fn parse_session_setup(value: Value, fresh: bool) -> ChatResult<AcpSessionSe
         && response
             .session_id
             .as_deref()
-            .is_none_or(|id| !valid_identifier(id, 512))
+            .is_none_or(|id| !is_valid_identifier(id, 512))
     {
         return Err(protocol_error("new session ID"));
     }
@@ -311,7 +311,7 @@ pub fn ensure_grok_model_state(setup: &mut AcpSessionSetup) {
 fn validate_acp_models(models: &AcpModelState) -> ChatResult<()> {
     if models.available_models.is_empty()
         || models.available_models.len() > MAX_MODELS
-        || !valid_identifier(&models.current_model_id, 256)
+        || !is_valid_identifier(&models.current_model_id, 256)
     {
         return Err(protocol_error("ACP model state"));
     }
@@ -319,7 +319,7 @@ fn validate_acp_models(models: &AcpModelState) -> ChatResult<()> {
     for model in &models.available_models {
         let id = model.model_id.trim();
         let name = model.name.trim();
-        if !valid_identifier(id, 256)
+        if !is_valid_identifier(id, 256)
             || name.is_empty()
             || name.len() > 256
             || name.chars().any(char::is_control)
@@ -399,7 +399,7 @@ pub fn parse_available_models(value: Value) -> ChatResult<Vec<ProviderModel>> {
         .map(|model| {
             let id = model.value.trim();
             let name = model.name.trim();
-            if !valid_identifier(id, 256)
+            if !is_valid_identifier(id, 256)
                 || name.is_empty()
                 || name.len() > 256
                 || !seen.insert(id.to_string())
@@ -462,7 +462,7 @@ pub fn parse_resume_cursor(value: &VersionedJson) -> ChatResult<AcpResumeCursor>
         .value
         .get("sessionId")
         .and_then(Value::as_str)
-        .filter(|id| valid_identifier(id, 512))
+        .filter(|id| is_valid_identifier(id, 512))
         .ok_or_else(|| ChatError::validation("resumeCursor", "Cursor session ID is invalid"))?;
     Ok(AcpResumeCursor {
         session_id: session_id.to_string(),
@@ -503,7 +503,7 @@ pub fn negotiated_capabilities_for(
     let provider_name = flavor.display_name();
     let models_are_dynamic = match flavor {
         super::driver::AcpProviderFlavor::Cursor => {
-            model_config_id(&setup.config_options).is_some()
+            model_config_option(&setup.config_options).is_some()
         }
         super::driver::AcpProviderFlavor::Grok => setup.models.is_some(),
     };
@@ -511,7 +511,7 @@ pub fn negotiated_capabilities_for(
         .modes
         .as_ref()
         .is_some_and(|modes| find_mode(modes, InteractionMode::Plan).is_some());
-    let values = acp_capability_kinds(flavor)
+    let entries = acp_capability_kinds(flavor)
         .into_iter()
         .map(|capability| {
             let supported = match capability {
@@ -551,7 +551,7 @@ pub fn negotiated_capabilities_for(
             }
         })
         .collect();
-    ProviderCapabilities { entries: values }
+    ProviderCapabilities { entries }
 }
 
 fn validate_endpoint(value: &str) -> ChatResult<()> {
@@ -578,15 +578,15 @@ fn validate_endpoint(value: &str) -> ChatResult<()> {
     Ok(())
 }
 
-pub fn valid_identifier(value: &str, maximum: usize) -> bool {
-    !value.trim().is_empty() && value.len() <= maximum && !value.chars().any(char::is_control)
+pub fn is_valid_identifier(value: &str, max_bytes: usize) -> bool {
+    !value.trim().is_empty() && value.len() <= max_bytes && !value.chars().any(char::is_control)
 }
 
-pub fn bounded_text(value: &str, maximum: usize) -> String {
-    if value.len() <= maximum {
+pub fn bounded_text(value: &str, max_bytes: usize) -> String {
+    if value.len() <= max_bytes {
         return value.to_string();
     }
-    let mut end = maximum;
+    let mut end = max_bytes;
     while end > 0 && !value.is_char_boundary(end) {
         end -= 1;
     }

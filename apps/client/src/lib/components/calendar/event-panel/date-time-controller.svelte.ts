@@ -38,8 +38,8 @@ function nextLocalDate(date: string): string {
 
 /** Owns the event panel date range, time input, and picker interaction state. */
 export class EventPanelDateTimeController {
-  datepickerOpen = $state(false);
-  endDatepickerOpen = $state(false);
+  startDatePickerOpen = $state(false);
+  endDatePickerOpen = $state(false);
   timePickerTarget = $state<EventPanelTimeTarget | null>(null);
   timePickerKeyboardOpen = $state(false);
   startDateButton = $state<HTMLButtonElement>();
@@ -70,8 +70,8 @@ export class EventPanelDateTimeController {
   }
 
   resetInteraction(): void {
-    this.datepickerOpen = false;
-    this.endDatepickerOpen = false;
+    this.startDatePickerOpen = false;
+    this.endDatePickerOpen = false;
     this.timePickerTarget = null;
     this.timePickerKeyboardOpen = false;
     this.timePickerInputNavigation = null;
@@ -88,8 +88,8 @@ export class EventPanelDateTimeController {
   }
 
   cancelDatePicker(target: EventPanelTimeTarget, source?: "keyboard" | "pointer"): void {
-    if (target === "start") this.datepickerOpen = false;
-    else this.endDatepickerOpen = false;
+    if (target === "start") this.startDatePickerOpen = false;
+    else this.endDatePickerOpen = false;
     if (source === "keyboard") void this.focusDateButton(target);
   }
 
@@ -118,11 +118,11 @@ export class EventPanelDateTimeController {
     if (this.options.controlsDisabled() || (target === "start" && this.options.lockStartControls())) return;
     this.closeTimePicker();
     if (target === "start") {
-      this.endDatepickerOpen = false;
-      this.datepickerOpen = source === "keyboard" ? true : !this.datepickerOpen;
+      this.endDatePickerOpen = false;
+      this.startDatePickerOpen = source === "keyboard" ? true : !this.startDatePickerOpen;
     } else {
-      this.datepickerOpen = false;
-      this.endDatepickerOpen = source === "keyboard" ? true : !this.endDatepickerOpen;
+      this.startDatePickerOpen = false;
+      this.endDatePickerOpen = source === "keyboard" ? true : !this.endDatePickerOpen;
     }
   }
 
@@ -155,8 +155,8 @@ export class EventPanelDateTimeController {
 
   openTimePicker(target: EventPanelTimeTarget, source: "keyboard" | "pointer" = "pointer"): void {
     if (this.options.controlsDisabled() || (target === "start" && this.options.lockStartControls())) return;
-    this.datepickerOpen = false;
-    this.endDatepickerOpen = false;
+    this.startDatePickerOpen = false;
+    this.endDatePickerOpen = false;
     this.timePickerKeyboardOpen = source === "keyboard";
     this.timePickerInputNavigation = null;
     this.timePickerTarget = target;

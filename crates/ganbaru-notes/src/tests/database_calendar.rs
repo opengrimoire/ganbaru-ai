@@ -136,7 +136,7 @@ fn calendar_database_view_uses_date_ranges_filters_sorts_and_configuration() {
         .await
         .unwrap();
 
-        let default_calendar = data_sources::layouts::calendar::get_data_source_calendar_view(
+        let default_calendar = data_sources::layouts::calendar::data_source_calendar_view(
             &pool,
             DATA_SOURCE_A,
             None,

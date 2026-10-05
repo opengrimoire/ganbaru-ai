@@ -256,7 +256,7 @@ fn database_sources_create_attach_and_keep_shared_rows_with_independent_views() 
             serde_json::to_value(attached).unwrap()["data_source"]["parent"]["database_id"],
             DATABASE_B
         );
-        let linked = data_sources::layouts::table::get_data_source_table_view(
+        let linked = data_sources::layouts::table::data_source_table_view(
             &pool,
             DATA_SOURCE_B,
             Some(DATABASE_A),

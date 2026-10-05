@@ -216,7 +216,7 @@ pub fn compare_mean_estimates(
     )
 }
 
-fn guardrail(
+fn guardrail_comparison(
     control_point: f64,
     treatment_point: f64,
     conservative_harm: f64,
@@ -253,7 +253,7 @@ pub fn compare_rate_guardrail(
         ComparisonDirection::HigherIsBetter => control.lower_bound - treatment.upper_bound,
         ComparisonDirection::LowerIsBetter => treatment.lower_bound - control.upper_bound,
     };
-    guardrail(
+    guardrail_comparison(
         control.point,
         treatment.point,
         harm,
@@ -274,7 +274,7 @@ pub fn compare_mean_guardrail(
         ComparisonDirection::HigherIsBetter => control.lower_bound - treatment.upper_bound,
         ComparisonDirection::LowerIsBetter => treatment.lower_bound - control.upper_bound,
     };
-    guardrail(
+    guardrail_comparison(
         control.point,
         treatment.point,
         harm,

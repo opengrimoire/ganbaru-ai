@@ -92,7 +92,7 @@ fn append_and_update_table_blocks_round_trip() {
         .await
         .unwrap();
 
-        let table_children = reads::get_block_children(&pool, BLOCK_B, None, Some(10))
+        let table_children = reads::block_children(&pool, BLOCK_B, None, Some(10))
             .await
             .unwrap();
         let table_children_json = serde_json::to_value(table_children).unwrap();
@@ -257,7 +257,7 @@ fn append_and_update_tab_blocks_round_trip() {
         .await
         .unwrap();
 
-        let tab_children = reads::get_block_children(&pool, BLOCK_B, None, Some(10))
+        let tab_children = reads::block_children(&pool, BLOCK_B, None, Some(10))
             .await
             .unwrap();
         let tab_children_json = serde_json::to_value(tab_children).unwrap();
@@ -276,7 +276,7 @@ fn append_and_update_tab_blocks_round_trip() {
             "✅"
         );
 
-        let first_tab_panel = reads::get_block_children(&pool, BLOCK_D, None, Some(10))
+        let first_tab_panel = reads::block_children(&pool, BLOCK_D, None, Some(10))
             .await
             .unwrap();
         let first_tab_panel_json = serde_json::to_value(first_tab_panel).unwrap();
@@ -607,7 +607,7 @@ fn append_and_read_column_blocks_round_trip() {
         .await
         .unwrap();
 
-        let column_list_children = reads::get_block_children(&pool, BLOCK_B, None, Some(10))
+        let column_list_children = reads::block_children(&pool, BLOCK_B, None, Some(10))
             .await
             .unwrap();
         let column_list_children_json = serde_json::to_value(column_list_children).unwrap();
@@ -628,7 +628,7 @@ fn append_and_read_column_blocks_round_trip() {
             0.3
         );
 
-        let left_column_children = reads::get_block_children(&pool, BLOCK_C, None, Some(10))
+        let left_column_children = reads::block_children(&pool, BLOCK_C, None, Some(10))
             .await
             .unwrap();
         let left_column_children_json = serde_json::to_value(left_column_children).unwrap();

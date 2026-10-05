@@ -24,31 +24,31 @@
     startDate,
     rdate,
     expanded,
-    ontoggle,
-    onexpand,
-    onchange,
+    onToggle,
+    onExpand,
+    onChange,
   }: {
     recurrence: RecurrenceConfig | undefined;
     startDate: string;
     rdate?: string[];
     expanded: boolean;
-    ontoggle: () => void;
-    onexpand: () => void;
-    onchange: () => void;
+    onToggle: () => void;
+    onExpand: () => void;
+    onChange: () => void;
   } = $props();
 
   const localization = getLocalization();
   const { t } = localization;
   const locale = $derived(localization.locale);
 
-  const FREQ_OPTIONS = $derived.by((): { value: RecurrenceFrequency; label: string }[] => [
+  const frequencyOptions = $derived.by((): { value: RecurrenceFrequency; label: string }[] => [
     { value: "daily", label: t("calendar.recurrence.unitDays") },
     { value: "weekly", label: t("calendar.recurrence.unitWeeks") },
     { value: "monthly", label: t("calendar.recurrence.unitMonths") },
     { value: "yearly", label: t("calendar.recurrence.unitYears") },
   ]);
 
-  const ALL_WEEKDAYS = $derived.by((): { value: Weekday; label: string }[] => [
+  const weekdayOptions = $derived.by((): { value: Weekday; label: string }[] => [
     { value: "MO", label: weekdayLabel("MO") },
     { value: "TU", label: weekdayLabel("TU") },
     { value: "WE", label: weekdayLabel("WE") },
@@ -92,7 +92,7 @@
   });
 
   $effect(() => {
-    const frequencyIndex = FREQ_OPTIONS.findIndex((option) => option.value === recFrequency);
+    const frequencyIndex = frequencyOptions.findIndex((option) => option.value === recFrequency);
     if (frequencyIndex >= 0) frequencyFocusIndex = frequencyIndex;
   });
 
@@ -149,7 +149,7 @@
       const ow = getEventOrdinalWeekday();
       recurrence = { ...recurrence, byMonthDay: undefined, ordinalWeekdays: [{ day: ow.day, ordinal: ow.ordinal }] };
     }
-    onchange();
+    onChange();
   }
 
   function updateFrequency(freq: RecurrenceFrequency) {
@@ -157,13 +157,13 @@
     let weekdays = freq === "weekly" ? recurrence.weekdays : undefined;
     if (freq === "weekly" && (!weekdays || weekdays.length === 0)) weekdays = [getEventWeekday()];
     recurrence = { ...recurrence, frequency: freq, weekdays, ordinalWeekdays: undefined, byMonthDay: undefined, byMonth: undefined };
-    onchange();
+    onChange();
   }
 
   function updateInterval(val: number) {
     if (!recurrence) return;
     recurrence = { ...recurrence, interval: Math.max(1, val) };
-    onchange();
+    onChange();
   }
 
   function toggleWeekday(day: Weekday) {
@@ -172,8 +172,8 @@
     if (current.has(day)) current.delete(day);
     else current.add(day);
     if (current.size === 0) return;
-    recurrence = { ...recurrence, weekdays: ALL_WEEKDAYS.map((w) => w.value).filter((d) => current.has(d)) };
-    onchange();
+    recurrence = { ...recurrence, weekdays: weekdayOptions.map((w) => w.value).filter((d) => current.has(d)) };
+    onChange();
   }
 
   function updateEndType(type: "never" | "until" | "count") {
@@ -181,19 +181,19 @@
     if (type === "never") recurrence = { ...recurrence, end: { type: "never" } };
     else if (type === "until") recurrence = { ...recurrence, end: { type: "until", date: defaultUntilDate() } };
     else recurrence = { ...recurrence, end: { type: "count", count: 13 } };
-    onchange();
+    onChange();
   }
 
   function updateEndDate(date: string) {
     if (!recurrence) return;
     recurrence = { ...recurrence, end: { type: "until", date } };
-    onchange();
+    onChange();
   }
 
   function updateEndCount(count: number) {
     if (!recurrence) return;
     recurrence = { ...recurrence, end: { type: "count", count: Math.max(1, count) } };
-    onchange();
+    onChange();
   }
 
   async function focusRovingButton(group: string, index: number) {
@@ -265,7 +265,7 @@
 
   // ─── End date picker ──────────────────────────────────────────
   let pickerOpen = $state(false);
-  let dateBtn: HTMLInputElement | undefined = $state();
+  let endDateInput: HTMLInputElement | undefined = $state();
   let dateText = $state("");
 
   function syncDateText() {
@@ -315,17 +315,17 @@
   });
 
   function positionPicker(node: HTMLElement) {
-    if (!dateBtn) return { destroy() {} };
+    if (!endDateInput) return { destroy() {} };
     const margin = 8;
     const gap = 4;
     const pickerWidth = 240;
 
     function updatePosition() {
-      if (!dateBtn) return;
+      if (!endDateInput) return;
       node.style.maxHeight = `${Math.max(96, window.innerHeight - margin * 2)}px`;
       node.style.overflowY = "auto";
 
-      const inputRect = dateBtn.getBoundingClientRect();
+      const inputRect = endDateInput.getBoundingClientRect();
       const pickerRect = node.getBoundingClientRect();
       const pickerHeight = pickerRect.height;
 
@@ -359,15 +359,15 @@
 
   async function focusDateInput() {
     await tick();
-    dateBtn?.focus();
+    endDateInput?.focus();
   }
 
-  function cancelCalDay(source?: "keyboard" | "pointer") {
+  function cancelCalendarDay(source?: "keyboard" | "pointer") {
     pickerOpen = false;
     if (source === "keyboard") void focusDateInput();
   }
 
-  function selectCalDay(dateStr: string, source?: "keyboard" | "pointer") {
+  function selectCalendarDay(dateStr: string, source?: "keyboard" | "pointer") {
     updateEndDate(dateStr);
     pickerOpen = false;
     if (source === "keyboard") void focusDateInput();
@@ -376,12 +376,12 @@
 
 <div bind:this={sectionEl} class="flex flex-col rounded-none overflow-hidden" style="background-color: var(--panel-contrast);">
   <div class="section-header flex items-stretch">
-    <button onclick={ontoggle}
+    <button onclick={onToggle}
       class="flex w-10 shrink-0 items-center justify-center
         {recurrence ? 'bg-black/3 dark:bg-black/30 text-foreground' : 'text-muted-foreground/50'}">
       <Repeat size={14} />
     </button>
-    <button onclick={onexpand}
+    <button onclick={onExpand}
       class="flex flex-1 items-center gap-2.5 px-3 py-2 text-left">
       <span class="translate-y-[1.13px] text-[0.8rem] {recurrence ? 'text-foreground' : 'text-muted-foreground'}">{t("calendar.recurrence.repeat")}</span>
       <span class="ml-auto translate-y-[1.13px] truncate text-[0.733333rem] text-muted-foreground">{recurrence ? label : ""}</span>
@@ -399,10 +399,10 @@
           class="num-input w-11 shrink-0 rounded-none bg-black/5 px-1 py-0.5 text-center text-[0.8rem] text-event-panel-input-text outline-none dark:bg-black/15"
           onkeydown={(e) => handleNumberDraftKeydown(e, commitIntervalDraft, () => { intervalDraft = String(recInterval); })} />
         <div class="flex min-w-0 flex-1 flex-wrap gap-1.5">
-          {#each FREQ_OPTIONS as opt, index}
+          {#each frequencyOptions as opt, index}
             <button onclick={() => updateFrequency(opt.value)}
               onfocus={() => { frequencyFocusIndex = index; }}
-              onkeydown={(e) => handleRovingKeydown(e, "frequency", index, FREQ_OPTIONS.length, "horizontal")}
+              onkeydown={(e) => handleRovingKeydown(e, "frequency", index, frequencyOptions.length, "horizontal")}
               data-recurrence-roving="frequency"
               data-roving-index={index}
               tabindex={frequencyFocusIndex === index ? 0 : -1}
@@ -420,10 +420,10 @@
         <div class="flex flex-col gap-1.5">
           <span class="text-[0.733333rem] uppercase tracking-wider text-muted-foreground">{t("calendar.recurrence.repeatOn")}</span>
           <div class="grid grid-cols-7 gap-1">
-            {#each ALL_WEEKDAYS as wd, index}
+            {#each weekdayOptions as wd, index}
               <button onclick={() => toggleWeekday(wd.value)}
                 onfocus={() => { weekdayFocusIndex = index; }}
-                onkeydown={(e) => handleRovingKeydown(e, "weekday", index, ALL_WEEKDAYS.length, "grid", 7)}
+                onkeydown={(e) => handleRovingKeydown(e, "weekday", index, weekdayOptions.length, "grid", 7)}
                 data-recurrence-roving="weekday"
                 data-roving-index={index}
                 tabindex={weekdayFocusIndex === index ? 0 : -1}
@@ -507,7 +507,7 @@
             <span>{t("calendar.recurrence.on")}</span>
           </button>
           <div class="relative">
-            <input bind:this={dateBtn}
+            <input bind:this={endDateInput}
               type="text"
               bind:value={dateText}
               onclick={() => { if (recEndType !== "until") updateEndType("until"); pickerOpen = !pickerOpen; }}
@@ -528,8 +528,8 @@
                   small
                   highlightToday={false}
                   activeHighlight="primary"
-                  onselect={selectCalDay}
-                  oncancel={cancelCalDay}
+                  onSelect={selectCalendarDay}
+                  onCancel={cancelCalendarDay}
                 />
               </div>
             {/if}

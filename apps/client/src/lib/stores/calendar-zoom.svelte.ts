@@ -6,16 +6,16 @@ const ZOOM_LEVELS: readonly number[] = CALENDAR_ZOOM_PERCENT_LEVELS.map(
   (percent) => (DEFAULT_HOUR_HEIGHT * percent) / 100,
 );
 const DEFAULT_INDEX = CALENDAR_ZOOM_PERCENT_LEVELS.indexOf(100);
-const ANIM_DURATION = 150; // ms for smooth zoom animation
+const ANIMATION_DURATION_MS = 150; // ms for smooth zoom animation
 
 function findClosestIndex(height: number): number {
   let best = 0;
-  let bestDist = Math.abs(ZOOM_LEVELS[0] - height);
+  let bestDistance = Math.abs(ZOOM_LEVELS[0] - height);
   for (let i = 1; i < ZOOM_LEVELS.length; i++) {
-    const dist = Math.abs(ZOOM_LEVELS[i] - height);
-    if (dist < bestDist) {
+    const distance = Math.abs(ZOOM_LEVELS[i] - height);
+    if (distance < bestDistance) {
       best = i;
-      bestDist = dist;
+      bestDistance = distance;
     }
   }
   return best;
@@ -30,10 +30,10 @@ function loadSaved(): number {
   return parsed;
 }
 
-function deriveGridMinutes(h: number): number {
-  if (h >= 120) return 5;
-  if (h >= 60) return 10;
-  if (h >= 40) return 15;
+function deriveGridMinutes(height: number): number {
+  if (height >= 120) return 5;
+  if (height >= 60) return 10;
+  if (height >= 40) return 15;
   return 30;
 }
 
@@ -50,7 +50,7 @@ let hourHeight = $state(ZOOM_LEVELS[levelIndex]);
 
 // Zoom state
 let scrollRef: HTMLElement | null = null;
-let stickyH = 0;
+let stickyHeaderHeight = 0;
 let zoomRaf = 0;
 let gestureActive = $state(false);
 let commitTimer = 0;
@@ -58,40 +58,40 @@ let commitTimer = 0;
 // Animation state
 let animating = $state(false);
 let animStartTime = 0;
-let animFromH = 0;
-let animToH = 0;
+let animFromHeight = 0;
+let animToHeight = 0;
 let animFromScroll = 0;
 let animToScroll = 0;
 
-function computeScrollForH(
-  h: number,
+function computeScrollForHeight(
+  height: number,
   centerMinute: number,
-  viewportH: number,
+  viewportHeight: number,
 ): number {
-  const centerOffset = (viewportH - stickyH) / 2;
-  const newScrollTop = (centerMinute / 60) * h - centerOffset;
-  const maxScroll = Math.max(0, 24 * h - viewportH);
-  return Math.max(0, Math.min(newScrollTop, maxScroll));
+  const centerOffset = (viewportHeight - stickyHeaderHeight) / 2;
+  const targetScrollTop = (centerMinute / 60) * height - centerOffset;
+  const maxScroll = Math.max(0, 24 * height - viewportHeight);
+  return Math.max(0, Math.min(targetScrollTop, maxScroll));
 }
 
 function animateTick() {
-  const sc = scrollRef;
-  if (!sc) {
+  const scrollContainer = scrollRef;
+  if (!scrollContainer) {
     zoomRaf = 0;
     animating = false;
     return;
   }
 
   const elapsed = performance.now() - animStartTime;
-  const t = Math.min(1, elapsed / ANIM_DURATION);
+  const t = Math.min(1, elapsed / ANIMATION_DURATION_MS);
   const eased = easeOutCubic(t);
 
-  const currentH = animFromH + (animToH - animFromH) * eased;
+  const currentHeight = animFromHeight + (animToHeight - animFromHeight) * eased;
   const currentScroll = animFromScroll + (animToScroll - animFromScroll) * eased;
 
-  sc.style.setProperty("--hour-h", String(currentH));
-  sc.scrollTop = currentScroll;
-  sc.dispatchEvent(new CustomEvent(CALENDAR_ZOOM_FRAME_EVENT));
+  scrollContainer.style.setProperty("--hour-h", String(currentHeight));
+  scrollContainer.scrollTop = currentScroll;
+  scrollContainer.dispatchEvent(new CustomEvent(CALENDAR_ZOOM_FRAME_EVENT));
 
   if (t < 1) {
     zoomRaf = requestAnimationFrame(animateTick);
@@ -101,26 +101,26 @@ function animateTick() {
   }
 }
 
-function startOrRetargetAnimation(toH: number) {
-  const sc = scrollRef;
-  if (!sc) return;
+function startOrRetargetAnimation(toHeight: number) {
+  const scrollContainer = scrollRef;
+  if (!scrollContainer) return;
 
-  const viewportH = sc.clientHeight;
-  const centerOffset = (viewportH - stickyH) / 2;
+  const viewportHeight = scrollContainer.clientHeight;
+  const centerOffset = (viewportHeight - stickyHeaderHeight) / 2;
 
   // Get current state (either mid-animation or static)
-  const fromH = getRenderedHourHeight(sc);
-  const fromScroll = sc.scrollTop;
+  const fromHeight = getRenderedHourHeight(scrollContainer);
+  const fromScroll = scrollContainer.scrollTop;
 
   // Compute center time at current state
-  const centerMinute = (fromScroll + centerOffset) / fromH * 60;
+  const centerMinute = (fromScroll + centerOffset) / fromHeight * 60;
 
   // Compute target scroll for target H
-  const toScroll = computeScrollForH(toH, centerMinute, viewportH);
+  const toScroll = computeScrollForHeight(toHeight, centerMinute, viewportHeight);
 
   // Start animation
-  animFromH = fromH;
-  animToH = toH;
+  animFromHeight = fromHeight;
+  animToHeight = toHeight;
   animFromScroll = fromScroll;
   animToScroll = toScroll;
   animStartTime = performance.now();
@@ -141,48 +141,48 @@ function commitZoom() {
   }
 
   gestureActive = false;
-  const sc = scrollRef;
-  const finalH = ZOOM_LEVELS[levelIndex];
+  const scrollContainer = scrollRef;
+  const finalHeight = ZOOM_LEVELS[levelIndex];
 
   // Ensure final state is exact
-  if (sc) {
-    sc.style.setProperty("--hour-h", String(finalH));
-    sc.dispatchEvent(new CustomEvent(CALENDAR_ZOOM_FRAME_EVENT));
+  if (scrollContainer) {
+    scrollContainer.style.setProperty("--hour-h", String(finalHeight));
+    scrollContainer.dispatchEvent(new CustomEvent(CALENDAR_ZOOM_FRAME_EVENT));
   }
 
   // Update Svelte state (triggers reactivity)
-  hourHeight = finalH;
+  hourHeight = finalHeight;
 
   // Dispatch custom event for components that need to update after zoom
-  if (sc) {
-    sc.dispatchEvent(new CustomEvent("zoomcommit", { bubbles: true }));
+  if (scrollContainer) {
+    scrollContainer.dispatchEvent(new CustomEvent("zoomcommit", { bubbles: true }));
   }
 }
 
-function persist(h: number) {
-  localStorage.setItem(STORAGE_KEY, String(h));
+function persist(height: number) {
+  localStorage.setItem(STORAGE_KEY, String(height));
 }
 
-function getRenderedHourHeight(sc: HTMLElement): number {
-  const currentHStr = sc.style.getPropertyValue("--hour-h");
-  const currentH = currentHStr ? parseFloat(currentHStr) : Number.NaN;
-  return Number.isFinite(currentH) && currentH > 0 ? currentH : hourHeight;
+function getRenderedHourHeight(scrollContainer: HTMLElement): number {
+  const currentHeightValue = scrollContainer.style.getPropertyValue("--hour-h");
+  const currentHeight = currentHeightValue ? parseFloat(currentHeightValue) : Number.NaN;
+  return Number.isFinite(currentHeight) && currentHeight > 0 ? currentHeight : hourHeight;
 }
 
 function setZoomIndex(targetIndex: number): void {
   if (targetIndex === levelIndex) return;
 
   levelIndex = targetIndex;
-  const newH = ZOOM_LEVELS[targetIndex];
-  persist(newH);
+  const nextHeight = ZOOM_LEVELS[targetIndex];
+  persist(nextHeight);
 
   if (scrollRef) {
     gestureActive = true;
-    startOrRetargetAnimation(newH);
+    startOrRetargetAnimation(nextHeight);
     clearTimeout(commitTimer);
-    commitTimer = window.setTimeout(commitZoom, ANIM_DURATION + 50);
+    commitTimer = window.setTimeout(commitZoom, ANIMATION_DURATION_MS + 50);
   } else {
-    hourHeight = newH;
+    hourHeight = nextHeight;
   }
 }
 
@@ -200,10 +200,10 @@ export function getCalendarZoom() {
     /** Register scroll container so buttons/keyboard can animate. */
     registerScrollContainer(container: HTMLElement, stickyHeight: number) {
       scrollRef = container;
-      stickyH = stickyHeight;
+      stickyHeaderHeight = stickyHeight;
     },
     reset() {
-      const defaultH = ZOOM_LEVELS[DEFAULT_INDEX];
+      const defaultHeight = ZOOM_LEVELS[DEFAULT_INDEX];
       if (zoomRaf) {
         cancelAnimationFrame(zoomRaf);
         zoomRaf = 0;
@@ -212,17 +212,17 @@ export function getCalendarZoom() {
       commitTimer = 0;
       animating = false;
       levelIndex = DEFAULT_INDEX;
-      persist(defaultH);
+      persist(defaultHeight);
 
-      if (scrollRef && getRenderedHourHeight(scrollRef) !== defaultH) {
+      if (scrollRef && getRenderedHourHeight(scrollRef) !== defaultHeight) {
         gestureActive = true;
-        startOrRetargetAnimation(defaultH);
-        commitTimer = window.setTimeout(commitZoom, ANIM_DURATION + 50);
+        startOrRetargetAnimation(defaultHeight);
+        commitTimer = window.setTimeout(commitZoom, ANIMATION_DURATION_MS + 50);
       } else {
         gestureActive = false;
-        hourHeight = defaultH;
+        hourHeight = defaultHeight;
         if (scrollRef) {
-          scrollRef.style.setProperty("--hour-h", String(defaultH));
+          scrollRef.style.setProperty("--hour-h", String(defaultHeight));
           scrollRef.dispatchEvent(new CustomEvent(CALENDAR_ZOOM_FRAME_EVENT));
         }
       }

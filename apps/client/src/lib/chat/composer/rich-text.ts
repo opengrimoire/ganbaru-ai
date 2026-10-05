@@ -203,10 +203,10 @@ export function toggleChatComposerMark(
   if (start === end) return normalizeChatComposerDocument(document);
   const selected = sliceSegments(segments, start, end);
   const markedText = selected.filter((segment) => segment.text !== "\n");
-  const remove = markedText.length > 0 && markedText.every((segment) => segment.marks.includes(mark));
+  const shouldRemove = markedText.length > 0 && markedText.every((segment) => segment.marks.includes(mark));
   const changed = selected.map((segment) => segment.text === "\n" ? segment : {
     text: segment.text,
-    marks: remove
+    marks: shouldRemove
       ? segment.marks.filter((candidate) => candidate !== mark)
       : normalizeMarks([...segment.marks, mark]),
   });

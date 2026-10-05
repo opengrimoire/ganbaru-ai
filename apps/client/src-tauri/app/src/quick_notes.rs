@@ -541,7 +541,7 @@ pub async fn quick_notes_list<R: Runtime>(
 }
 
 #[tauri::command]
-pub async fn quick_notes_get<R: Runtime>(
+pub async fn quick_notes_load<R: Runtime>(
     app: AppHandle<R>,
     db_url: String,
     id: String,
@@ -968,7 +968,7 @@ pub async fn quick_notes_empty_trash<R: Runtime>(
 }
 
 #[tauri::command]
-pub async fn quick_note_tags_list<R: Runtime>(
+pub async fn quick_notes_list_tags<R: Runtime>(
     app: AppHandle<R>,
     db_url: String,
 ) -> Result<Vec<QuickNoteTagRead>, String> {
@@ -976,7 +976,7 @@ pub async fn quick_note_tags_list<R: Runtime>(
 }
 
 #[tauri::command]
-pub async fn quick_note_tags_create<R: Runtime>(
+pub async fn quick_notes_create_tag<R: Runtime>(
     app: AppHandle<R>,
     db_url: String,
     tag: QuickNoteTagWrite,

@@ -6,11 +6,11 @@
   import { NOTES_DATABASE_QUERY_MAX_SORTS, type NotesDatabaseQueryProperty } from "$lib/notes/database/query-controls";
   import type { NotesDatabaseTableSort } from "$lib/notes/types";
 
-  let { properties, sorts, pending = false, onchange }: {
+  let { properties, sorts, pending = false, onChange }: {
     properties: readonly NotesDatabaseQueryProperty[];
     sorts: readonly NotesDatabaseTableSort[];
     pending?: boolean;
-    onchange: (sorts: NotesDatabaseTableSort[]) => void;
+    onChange: (sorts: NotesDatabaseTableSort[]) => void;
   } = $props();
 
   const { t } = getLocalization();
@@ -19,13 +19,13 @@
   /** Retain existing sort priority and prevent repeated property identities. */
   function update(index: number, patch: Partial<NotesDatabaseTableSort>): void {
     if (pending || (patch.property_id && sorts.some((sort, sortIndex) => sortIndex !== index && sort.property_id === patch.property_id))) return;
-    onchange(sorts.map((sort, sortIndex) => sortIndex === index ? { ...sort, ...patch } : { ...sort }));
+    onChange(sorts.map((sort, sortIndex) => sortIndex === index ? { ...sort, ...patch } : { ...sort }));
   }
 
   /** Add the first remaining property within the native sort bound. */
   function add(): void {
     if (pending || !unusedProperty || sorts.length >= NOTES_DATABASE_QUERY_MAX_SORTS) return;
-    onchange([...sorts, { property_id: unusedProperty.id, direction: "ascending" }]);
+    onChange([...sorts, { property_id: unusedProperty.id, direction: "ascending" }]);
   }
 </script>
 
@@ -43,7 +43,7 @@
         onChange={(direction) => update(index, { direction: direction === "descending" ? "descending" : "ascending" })}
         triggerProps={{ "onkeydown": (event) => event.stopPropagation() }} />
       <button type="button" class="inline-flex size-7 items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground"
-        disabled={pending} aria-label={t("notes.databaseTableRemoveSort")} onclick={() => onchange(sorts.filter((_, sortIndex) => sortIndex !== index))}>
+        disabled={pending} aria-label={t("notes.databaseTableRemoveSort")} onclick={() => onChange(sorts.filter((_, sortIndex) => sortIndex !== index))}>
         <X class="size-3.5" aria-hidden="true" />
       </button>
     </div>

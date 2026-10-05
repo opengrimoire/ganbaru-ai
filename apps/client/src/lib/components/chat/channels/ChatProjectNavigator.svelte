@@ -18,11 +18,10 @@
   import type { Project } from "$lib/projects/types";
   import { getChat } from "$lib/stores/chat.svelte";
   import { getProjects } from "$lib/stores/projects.svelte";
-  import { cn } from "$lib/utils";
+  import { cn, type MaybePromise } from "$lib/utils";
   import ProjectPickerPanels from "$lib/components/projects/pickers/ProjectPickerPanels.svelte";
   import ChatChannelPickerPanel from "./ChatChannelPickerPanel.svelte";
 
-  type MaybePromise<T> = T | Promise<T>;
 
   let {
     selectedProjectId,

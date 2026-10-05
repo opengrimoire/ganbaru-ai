@@ -1,7 +1,7 @@
 //! Bounded line and column selection for review comments.
 
 use super::super::models::{ChatError, ChatResult};
-use super::corrupt_data;
+use super::corrupt_data_error;
 use super::patch_parser::parse_hunk_header;
 
 const MAX_COMMENT_SELECTION_BYTES: usize = 1024 * 1024;
@@ -13,8 +13,8 @@ pub fn select_text_range(
     end_line: u64,
     end_column: u64,
 ) -> ChatResult<String> {
-    let start = usize::try_from(start_line.saturating_sub(1)).map_err(|_| corrupt_data())?;
-    let end = usize::try_from(end_line.saturating_sub(1)).map_err(|_| corrupt_data())?;
+    let start = usize::try_from(start_line.saturating_sub(1)).map_err(|_| corrupt_data_error())?;
+    let end = usize::try_from(end_line.saturating_sub(1)).map_err(|_| corrupt_data_error())?;
     if end < start {
         return Err(ChatError::validation(
             "range",
@@ -63,7 +63,7 @@ pub fn select_text_range(
 }
 
 fn column_byte_index(line: &str, column: u64) -> ChatResult<usize> {
-    let target = usize::try_from(column.saturating_sub(1)).map_err(|_| corrupt_data())?;
+    let target = usize::try_from(column.saturating_sub(1)).map_err(|_| corrupt_data_error())?;
     line.char_indices()
         .map(|(index, _)| index)
         .chain(std::iter::once(line.len()))

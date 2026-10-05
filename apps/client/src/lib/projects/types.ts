@@ -14,6 +14,9 @@ import type { ProjectDefaultEventTimeMode } from "$lib/projects/settings/duratio
 import type { NotesPageOpenMode } from "$lib/notes/pages/open-mode";
 import type { NotesHistoryRetentionDays } from "$lib/notes/history/retention";
 
+/** One step toward the start (-1) or the end (1) of a manual order. */
+export type MoveDirection = -1 | 1;
+
 export const PROJECT_VIEW_IDS = ["dashboard", "list", "kanban", "calendar", "gantt"] as const;
 export type ProjectViewId = (typeof PROJECT_VIEW_IDS)[number];
 

@@ -80,7 +80,7 @@ fn observe(
             session_id: session.session_id.clone(),
             generation: session.generation,
             sequence,
-            source_identity: session.entry().unwrap().source.identity.clone(),
+            source_identity: session.current_entry().unwrap().source.identity.clone(),
             status,
             position_ms,
             duration_ms: Some(60_000),
@@ -322,7 +322,7 @@ fn native_music_snooze_expiry_and_explicit_selection_keep_disabled_protection() 
     state.initial(Some("item-0"), None, true, 100);
     assert_eq!(state.current, Some(0));
     Arc::make_mut(&mut state.queue)[0].enabled = false;
-    assert_eq!(state.reason(0, true, 100), Some(SkipReason::Disabled));
+    assert_eq!(state.skip_reason(0, true, 100), Some(SkipReason::Disabled));
 }
 
 #[test]
@@ -403,7 +403,10 @@ fn native_music_review_restore_uses_its_native_checkpoint_once() {
         },
         400,
     );
-    assert_eq!(state.entry().unwrap().item_id.as_deref(), Some("item-0"));
+    assert_eq!(
+        state.current_entry().unwrap().item_id.as_deref(),
+        Some("item-0")
+    );
     assert_eq!(state.position_ms, 8_000);
     assert!(
         !state

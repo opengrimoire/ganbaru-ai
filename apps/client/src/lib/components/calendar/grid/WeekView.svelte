@@ -5,7 +5,7 @@
     formatDayName,
     formatDatePart,
     getEventColor,
-    GUTTER_WIDTH_PER_TZ,
+    GUTTER_WIDTH_PER_TIMEZONE,
     visibleMinuteRangeForScroll,
   } from "$lib/calendar/utils";
   import { createTimelineWheelScroll } from "$lib/calendar/timeline-scroll";
@@ -40,7 +40,7 @@
     positionedAllDayEvents,
     theme,
     timezones = [] as string[],
-    tzAbbrMode = "acronym" as TimezoneAbbrMode,
+    timezoneAbbreviationMode = "acronym" as TimezoneAbbrMode,
     onEventClick,
     onEventPrefetch,
     onEventUpdate,
@@ -53,7 +53,7 @@
     onAddTimezone,
     onRemoveTimezone,
     onReorderTimezone,
-    onTzAbbrModeChange,
+    onTimezoneAbbreviationModeChange,
     onWheelNavigate,
     onDayHeaderClick,
     mobileLayout = false,
@@ -67,7 +67,7 @@
     positionedAllDayEvents: PositionedAllDayEvent[];
     theme: Theme;
     timezones?: string[];
-    tzAbbrMode?: TimezoneAbbrMode;
+    timezoneAbbreviationMode?: TimezoneAbbrMode;
     onEventClick: (event: CalendarEvent, rect?: DOMRect) => void;
     onEventPrefetch?: (event: CalendarEvent) => void;
     onEventUpdate: (event: CalendarEvent) => void;
@@ -80,7 +80,7 @@
     onAddTimezone?: (tz: string) => void;
     onRemoveTimezone?: (index: number) => void;
     onReorderTimezone?: (from: number, to: number) => void;
-    onTzAbbrModeChange?: (mode: TimezoneAbbrMode) => void;
+    onTimezoneAbbreviationModeChange?: (mode: TimezoneAbbrMode) => void;
     onWheelNavigate?: (direction: "back" | "forward") => void;
     onDayHeaderClick?: (date: Date) => void;
     mobileLayout?: boolean;
@@ -101,9 +101,9 @@
 
   const allDayPositioned = $derived(positionedAllDayEvents);
   const allDayMaxRow = $derived(allDayPositioned.length > 0 ? Math.max(...allDayPositioned.map((p) => p.row)) + 1 : 0);
-  const tzCount = $derived(Math.max(1, timezones.length));
+  const timezoneCount = $derived(Math.max(1, timezones.length));
   const gridCols = $derived(
-    `repeat(${tzCount}, ${GUTTER_WIDTH_PER_TZ}px) repeat(${dayCount}, 1fr)`,
+    `repeat(${timezoneCount}, ${GUTTER_WIDTH_PER_TIMEZONE}px) repeat(${dayCount}, 1fr)`,
   );
 
   let allDayExpanded = $state(false);
@@ -144,7 +144,7 @@
   let visibleStartMinute = $state(0);
   let visibleEndMinute = $state(1440);
 
-  const calZoom = getCalendarZoom();
+  const calendarZoom = getCalendarZoom();
   const timelineWheelScroll = createTimelineWheelScroll(() => scrollContainer);
   const localization = getLocalization();
   const { t } = localization;
@@ -153,7 +153,7 @@
   function renderedHourHeight(): number {
     const raw = scrollContainer?.style.getPropertyValue("--hour-h") ?? "";
     const parsed = raw ? Number.parseFloat(raw) : Number.NaN;
-    return Number.isFinite(parsed) && parsed > 0 ? parsed : calZoom.hourHeight;
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : calendarZoom.hourHeight;
   }
 
   function updateVisibleMinuteRange() {
@@ -202,7 +202,7 @@
   let lastScrollAt = 0;
 
   function updateCurrentTime() {
-    if (calZoom.isAnimating) return;
+    if (calendarZoom.isAnimating) return;
     if (performance.now() - lastScrollAt < SCROLL_SETTLE_MS) return;
     const now = new Date();
     currentTimeMinute = now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60;
@@ -222,18 +222,18 @@
 
     if (scrollContainer) {
       // Set --hour-h before any scroll/layout so the initial paint is correct
-      scrollContainer.style.setProperty("--hour-h", String(calZoom.hourHeight));
+      scrollContainer.style.setProperty("--hour-h", String(calendarZoom.hourHeight));
 
       // Register scroll container so buttons/keyboard can animate
-      calZoom.registerScrollContainer(scrollContainer, 0);
+      calendarZoom.registerScrollContainer(scrollContainer, 0);
 
-      const hh = calZoom.hourHeight;
+      const hourHeight = calendarZoom.hourHeight;
       if (initialScrollMinute >= 0) {
-        scrollContainer.scrollTop = scrollTopForMinute(initialScrollMinute, hh);
+        scrollContainer.scrollTop = scrollTopForMinute(initialScrollMinute, hourHeight);
       } else {
         const now = new Date();
         const targetHour = Math.max(0, now.getHours() - 2);
-        scrollContainer.scrollTop = scrollTopForMinute(targetHour * 60, hh);
+        scrollContainer.scrollTop = scrollTopForMinute(targetHour * 60, hourHeight);
       }
 
       scrollContainer.addEventListener("scroll", handleScroll);
@@ -261,13 +261,13 @@
 
       if (resetZoom) {
         e.preventDefault();
-        calZoom.reset();
+        calendarZoom.reset();
       } else if (zoomIn) {
         e.preventDefault();
-        calZoom.zoomStep(1);
+        calendarZoom.zoomStep(1);
       } else if (e.key === "-" || e.key === "_") {
         e.preventDefault();
-        calZoom.zoomStep(-1);
+        calendarZoom.zoomStep(-1);
       }
     }
     window.addEventListener("keydown", handleKeyDown);
@@ -286,26 +286,26 @@
   // center time stable. Skipped during animations because the store
   // manages --hour-h imperatively until commit.
   $effect(() => {
-    const newH = calZoom.hourHeight;
-    if (!scrollContainer || calZoom.isAnimating) return;
+    const nextHourHeight = calendarZoom.hourHeight;
+    if (!scrollContainer || calendarZoom.isAnimating) return;
 
-    const oldHStr = scrollContainer.style.getPropertyValue("--hour-h");
-    const oldH = oldHStr ? parseFloat(oldHStr) : newH;
+    const previousHourHeightValue = scrollContainer.style.getPropertyValue("--hour-h");
+    const previousHourHeight = previousHourHeightValue ? parseFloat(previousHourHeightValue) : nextHourHeight;
 
-    if (oldH !== newH && oldH > 0) {
+    if (previousHourHeight !== nextHourHeight && previousHourHeight > 0) {
       // Compute center time at old zoom level
-      const viewportH = scrollContainer.clientHeight;
-      const centerOffset = viewportH / 2;
-      const centerMinute = scrollMinuteFromTop(scrollContainer.scrollTop + centerOffset, oldH);
+      const viewportHeight = scrollContainer.clientHeight;
+      const centerOffset = viewportHeight / 2;
+      const centerMinute = scrollMinuteFromTop(scrollContainer.scrollTop + centerOffset, previousHourHeight);
 
       // Apply new zoom
-      scrollContainer.style.setProperty("--hour-h", String(newH));
+      scrollContainer.style.setProperty("--hour-h", String(nextHourHeight));
 
       // Adjust scrollTop to keep the same center time visible
-      const newScrollTop = scrollTopForMinute(centerMinute, newH) - centerOffset;
-      scrollContainer.scrollTop = Math.max(0, newScrollTop);
+      const nextScrollTop = scrollTopForMinute(centerMinute, nextHourHeight) - centerOffset;
+      scrollContainer.scrollTop = Math.max(0, nextScrollTop);
     } else {
-      scrollContainer.style.setProperty("--hour-h", String(newH));
+      scrollContainer.style.setProperty("--hour-h", String(nextHourHeight));
     }
     updateVisibleMinuteRange();
   });
@@ -327,8 +327,8 @@
   function handleScroll() {
     lastScrollAt = performance.now();
     updateVisibleMinuteRange();
-    if (!scrollContainer || !onScrollChange || calZoom.isAnimating) return;
-    const minute = scrollMinuteFromTop(scrollContainer.scrollTop, calZoom.hourHeight);
+    if (!scrollContainer || !onScrollChange || calendarZoom.isAnimating) return;
+    const minute = scrollMinuteFromTop(scrollContainer.scrollTop, calendarZoom.hourHeight);
     onScrollChange(Math.round(minute));
   }
 
@@ -367,7 +367,7 @@
 
   const drag = createTimedEventDragController({
     events: () => events,
-    hourHeight: () => calZoom.hourHeight,
+    hourHeight: () => calendarZoom.hourHeight,
     getColumnDate,
     getScrollContainer: () => scrollContainer ?? null,
     onEventUpdate: (e) => onEventUpdate(e),
@@ -404,9 +404,9 @@
 
   const allDayEffectiveRows = $derived.by(() => {
     const base = Math.max(1, allDayGridRows);
-    const dp = allDayDrag.allDayDragPreview;
-    if (!dp) return base;
-    return Math.max(base, dp.row + 1);
+    const preview = allDayDrag.allDayDragPreview;
+    if (!preview) return base;
+    return Math.max(base, preview.row + 1);
   });
 
   // Per-column count of hidden events when collapsed
@@ -467,12 +467,12 @@
     >
       <TimezoneSelector
         {timezones}
-        tzCount={tzCount}
-        abbrMode={tzAbbrMode}
+        timezoneCount={timezoneCount}
+        abbrMode={timezoneAbbreviationMode}
         onAdd={(tz) => onAddTimezone?.(tz)}
         onRemove={(i) => onRemoveTimezone?.(i)}
         onReorder={(from, to) => onReorderTimezone?.(from, to)}
-        onAbbrModeChange={(m) => onTzAbbrModeChange?.(m)}
+        onAbbrModeChange={(m) => onTimezoneAbbreviationModeChange?.(m)}
       />
 
       <div
@@ -531,7 +531,7 @@
       "
     >
       <!-- Gutter spacer -->
-      <div style="grid-column: span {tzCount};"></div>
+      <div style="grid-column: span {timezoneCount};"></div>
       <!-- Event grid -->
       <div
         bind:this={allDayGridEl}
@@ -591,9 +591,9 @@
               canDrag={(!editingId || pos.event.id === editingId) && !isLockedCalendarEvent(pos.event.id)}
               {mobileLayout}
               isPast={endDateStr < todayStr}
-              onclick={(rect) => { if (!allDayDrag.didDrag) onEventClick(pos.event, rect); }}
-              onprefetch={() => onEventPrefetch?.(pos.event)}
-              onpointerdown={(e) => allDayDrag.handleDragStart(pos.event.id, e)}
+              onClick={(rect) => { if (!allDayDrag.didDrag) onEventClick(pos.event, rect); }}
+              onPrefetch={() => onEventPrefetch?.(pos.event)}
+              onPointerDown={(e) => allDayDrag.handleDragStart(pos.event.id, e)}
             />
           </div>
         {/each}
@@ -621,16 +621,16 @@
 
         <!-- Drag preview -->
         {#if allDayDrag.allDayDragPreview}
-          {@const dp = allDayDrag.allDayDragPreview}
-          {@const dpColor = getEventColor(dp.event.color, theme)}
-          {@const dpIconColor = `color-mix(in srgb, ${dpColor.text} 70%, ${dpColor.bg})`}
-          {@const dpIndicators = getEventIndicatorState(dp.event)}
+          {@const preview = allDayDrag.allDayDragPreview}
+          {@const previewColor = getEventColor(preview.event.color, theme)}
+          {@const previewIconColor = `color-mix(in srgb, ${previewColor.text} 70%, ${previewColor.bg})`}
+          {@const previewIndicators = getEventIndicatorState(preview.event)}
           <div
             class="pointer-events-none absolute flex items-center px-0.5"
             style="
-              left: {(dp.startCol / dayCount) * 100}%;
-              width: {(dp.spanCols / dayCount) * 100}%;
-              top: {ALL_DAY_PAD + dp.row * (ALL_DAY_ROW_H + ALL_DAY_GAP)}px;
+              left: {(preview.startCol / dayCount) * 100}%;
+              width: {(preview.spanCols / dayCount) * 100}%;
+              top: {ALL_DAY_PAD + preview.row * (ALL_DAY_ROW_H + ALL_DAY_GAP)}px;
               height: {ALL_DAY_ROW_H}px;
               z-index: 10;
               min-width: 0;
@@ -639,34 +639,34 @@
           <div
             class="allday-drag-preview min-w-0 flex-1 select-none truncate rounded px-1.5 text-[0.666667rem] leading-5"
             style="
-              background-color: {dpColor.bg};
-              color: {dpColor.text};
-              --event-bg: {dpColor.bg};
-              --outline-mix: {dpColor.text};
+              background-color: {previewColor.bg};
+              color: {previewColor.text};
+              --event-bg: {previewColor.bg};
+              --outline-mix: {previewColor.text};
             "
           >
-            {#if dpIndicators.iconCount > 0}
-              <span class="absolute right-1 top-0.75 flex items-center gap-0.5" style="color: {dpIconColor};">
-                {#if dpIndicators.hasRepeat}
+            {#if previewIndicators.iconCount > 0}
+              <span class="absolute right-1 top-0.75 flex items-center gap-0.5" style="color: {previewIconColor};">
+                {#if previewIndicators.hasRepeat}
                   <Repeat size={8} class="shrink-0" />
                 {/if}
-                {#if dpIndicators.hasCallLink}
+                {#if previewIndicators.hasCallLink}
                   <Video size={8} class="shrink-0" />
                 {/if}
-                {#if dpIndicators.hasLocation}
+                {#if previewIndicators.hasLocation}
                   <MapPin size={8} class="shrink-0" />
                 {/if}
-                {#if dpIndicators.hasGenericMeeting}
+                {#if previewIndicators.hasGenericMeeting}
                   <Users size={8} class="shrink-0" />
                 {/if}
               </span>
             {/if}
             <span
               class="truncate"
-              class:pr-5={dpIndicators.iconCount > 0 && dpIndicators.iconCount <= 2}
-              class:pr-8={dpIndicators.iconCount > 2}
+              class:pr-5={previewIndicators.iconCount > 0 && previewIndicators.iconCount <= 2}
+              class:pr-8={previewIndicators.iconCount > 2}
             >
-              {#if dp.event.title}{dp.event.title}{:else}{t("calendar.event.noTitle")}{/if}
+              {#if preview.event.title}{preview.event.title}{:else}{t("calendar.event.noTitle")}{/if}
             </span>
           </div>
           </div>
@@ -682,7 +682,7 @@
     data-calendar-scroll-container
     onwheel={scrollTimelineByWheel}
     class="hide-scrollbar absolute inset-x-0 bottom-0 overflow-y-auto overflow-x-hidden"
-    style="top: {gutterTopHeight}px; --hour-h: {calZoom.hourHeight}; background-color: var(--cal-bg);"
+    style="top: {gutterTopHeight}px; --hour-h: {calendarZoom.hourHeight}; background-color: var(--cal-bg);"
   >
     <div class="relative" style="height: calc({allDayOverlayHeight}px + 24 * var(--hour-h) * 1px);">
     <div
@@ -693,9 +693,9 @@
       <div
         data-zoom-body
         class="grid"
-        style="grid-column: 1 / -1; grid-template-columns: subgrid; {calZoom.isAnimating ? 'pointer-events: none;' : ''}"
+        style="grid-column: 1 / -1; grid-template-columns: subgrid; {calendarZoom.isAnimating ? 'pointer-events: none;' : ''}"
       >
-      <TimeGutter {timezones} {anchorDate} tzCount={tzCount} />
+      <TimeGutter {timezones} {anchorDate} timezoneCount={timezoneCount} />
 
       <div
         data-calendar-edit-close-zone

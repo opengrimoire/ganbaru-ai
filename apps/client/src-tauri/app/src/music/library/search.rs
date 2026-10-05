@@ -216,7 +216,7 @@ pub(crate) async fn refresh_playlist(
     Ok(())
 }
 
-pub(crate) fn query(value: &str) -> Option<String> {
+pub(crate) fn match_expression(value: &str) -> Option<String> {
     let tokens = value
         .split_whitespace()
         .map(|token| token.trim_matches(|character: char| !character.is_alphanumeric()))

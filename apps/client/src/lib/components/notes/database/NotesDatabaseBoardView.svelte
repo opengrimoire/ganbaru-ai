@@ -439,12 +439,12 @@
 
         <CollectionMenu fullWidth disabled={editingLocked} label={t("notes.databaseTableSorts")} kind="sort" activeCount={sorts.length} summary={formatList(localization.locale, sorts.map((sort) => columns.find((column) => column.id === sort.property_id)?.name ?? ""))}>
 
-          <NotesDatabaseSortControls properties={columns} {sorts} pending={mutating || editingLocked} onchange={saveSorts} />
+          <NotesDatabaseSortControls properties={columns} {sorts} pending={mutating || editingLocked} onChange={saveSorts} />
         </CollectionMenu>
 
         <CollectionMenu fullWidth disabled={editingLocked} label={t("notes.databaseTableFilters")} kind="filter" activeCount={notesDatabaseFilterCount(filters)} summary={notesDatabaseFilterCount(filters) ? formatNumber(localization.locale, notesDatabaseFilterCount(filters)) : ""}>
 
-          <NotesDatabaseFilterControls properties={columns} {filters} pending={mutating || editingLocked} onchange={saveFilters} />
+          <NotesDatabaseFilterControls properties={columns} {filters} pending={mutating || editingLocked} onChange={saveFilters} />
         </CollectionMenu>
       </div>
 
@@ -475,7 +475,7 @@
   <NotesDatabaseQueryBar properties={columns} {filters} {sorts} pending={mutating || editingLocked} onFiltersChange={saveFilters} onSortsChange={saveSorts} />
   {#if error}<p class="text-[0.8rem] text-destructive" role="alert">{error}</p>{/if}
   {#if settingsOpen}
-    <CollectionSettings label={t("notes.databaseViewSettings")} anchor={settingsAnchor} onclose={onCloseSettings}>
+    <CollectionSettings label={t("notes.databaseViewSettings")} anchor={settingsAnchor} onClose={onCloseSettings}>
       {@render settingsHeader?.()}
       {@render viewControls()}
       {#if board}{@render propertyControls()}{/if}
@@ -490,7 +490,7 @@
     <div use:rememberDatabaseScroll={databaseResource("board", dataSourceId, viewScope()).key} class="grid gap-2 @container">
       <CollectionBoard groups={visibleGroups} items={(group) => group.rows} label={(group) => group.name}
         emptyLabel={t("notes.databaseRowsEmpty")} dragLabel={(row) => t("notes.databaseBoardDragCard", rowTitle(row))}
-        canMove={() => canMoveCards} disabled={mutating} onmove={moveCardToGroup}>
+        canMove={() => canMoveCards} disabled={mutating} onMove={moveCardToGroup}>
         {#snippet header(group)}
           <div class="min-w-0 flex-1"><NotesDatabaseOptionBadge label={group.name} color={group.color} /></div>
           <span class="text-[0.8rem] tabular-nums text-muted-foreground">{formatNumber(localization.locale, board?.group_counts[group.id] ?? group.rows.length)}</span>
@@ -500,7 +500,7 @@
         {/snippet}
         {#snippet card(row, group, dragHandle)}
           {@const title = rowTitle(row)}
-          <CollectionCard {title} onopen={() => openCard(row)}>
+          <CollectionCard {title} onOpen={() => openCard(row)}>
             {#snippet leading()}{@render dragHandle()}{/snippet}
             {#snippet actions()}
               <CollectionMenu kind="actions" iconOnly showHeader={false} label={t("notes.databaseTableRowActions")}>
@@ -525,7 +525,7 @@
           </CollectionCard>
         {/snippet}
         {#snippet footer(group)}
-          <CollectionQuickAdd label={t("notes.databaseBoardAddCard")} disabled={loading || mutating} onsubmit={(title) => createCard(group, title)} />
+          <CollectionQuickAdd label={t("notes.databaseBoardAddCard")} disabled={loading || mutating} onSubmit={(title) => createCard(group, title)} />
         {/snippet}
       </CollectionBoard>
 

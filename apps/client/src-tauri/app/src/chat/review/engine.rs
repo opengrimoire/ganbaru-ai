@@ -120,7 +120,10 @@ async fn authorize_review_request(
     operation: WorkingFolderAuthorizationOperation,
 ) -> ChatResult<(ProjectWorkingFolderId, String, AuthorizedWorkingFolder)> {
     if source_requires_thread(&request.source) {
-        let thread_id = request.thread_id.as_ref().ok_or_else(thread_required)?;
+        let thread_id = request
+            .thread_id
+            .as_ref()
+            .ok_or_else(thread_required_error)?;
         let (working_folder_id, environment_id, authorized, _) =
             crate::chat::execution_environment::authorize_thread_environment(
                 app, pool, thread_id, operation,

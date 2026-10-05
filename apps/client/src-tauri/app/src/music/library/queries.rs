@@ -213,7 +213,7 @@ fn push_item_filters(builder: &mut QueryBuilder<'_, Sqlite>, request: &MusicItem
         }
         builder.push(") ");
     }
-    if let Some(search_query) = super::search::query(&request.search) {
+    if let Some(search_query) = super::search::match_expression(&request.search) {
         builder.push(
             "AND item.id IN (
                 SELECT item_id FROM music_search_fts WHERE music_search_fts MATCH ",

@@ -6,45 +6,45 @@ import type {
   ProjectTag,
 } from "$lib/projects/types";
 
-export type ProjectSettingsDraftError = "name_required" | "name_exists";
+export type CollectionDraftError = "name_required" | "name_exists";
 
-export type ProjectSettingsDraftResult<T> =
+export type CollectionDraftResult<T> =
   | { ok: true; drafts: T[] }
-  | { ok: false; error: ProjectSettingsDraftError };
+  | { ok: false; error: CollectionDraftError };
 
-export interface ProjectSettingsStatusDraftState {
+export interface StatusDraftState {
   nameDrafts: Readonly<Record<string, string>>;
   categoryDrafts: Readonly<Record<string, ProjectStatusCategory>>;
   colorDrafts: Readonly<Record<string, EventColor>>;
   fallbackColor: EventColor;
 }
 
-export interface ProjectSettingsPriorityDraftState {
+export interface PriorityDraftState {
   nameDrafts: Readonly<Record<string, string>>;
   colorDrafts: Readonly<Record<string, EventColor>>;
   fallbackColor: EventColor;
 }
 
-export interface ProjectSettingsTagDraftState {
+export interface TagDraftState {
   nameDrafts: Readonly<Record<string, string>>;
   colorDrafts: Readonly<Record<string, EventColor>>;
   fallbackColor: EventColor;
 }
 
-export interface ProjectSettingsStatusSaveDraft {
+export interface StatusSaveDraft {
   status: ProjectStatus;
   name: string;
   category: ProjectStatusCategory;
   color: EventColor;
 }
 
-export interface ProjectSettingsPrioritySaveDraft {
+export interface PrioritySaveDraft {
   priority: ProjectPriorityConfig;
   name: string;
   color: EventColor;
 }
 
-export interface ProjectSettingsTagSaveDraft {
+export interface TagSaveDraft {
   tag: ProjectTag;
   name: string;
   color: EventColor;
@@ -54,118 +54,118 @@ function normalizedDraftName(value: string): string {
   return value.trim().toLowerCase();
 }
 
-export function projectSettingsStatusNameDraftValue(
+export function draftStatusName(
   status: ProjectStatus,
-  state: ProjectSettingsStatusDraftState,
+  state: StatusDraftState,
 ): string {
   return state.nameDrafts[status.id] ?? status.name;
 }
 
-export function projectSettingsStatusCategoryDraftValue(
+export function draftStatusCategory(
   status: ProjectStatus,
-  state: ProjectSettingsStatusDraftState,
+  state: StatusDraftState,
 ): ProjectStatusCategory {
   return state.categoryDrafts[status.id] ?? status.category;
 }
 
-export function projectSettingsStatusColorDraftValue(
+export function draftStatusColor(
   status: ProjectStatus,
-  state: ProjectSettingsStatusDraftState,
+  state: StatusDraftState,
 ): EventColor {
   return state.colorDrafts[status.id] ?? status.color ?? state.fallbackColor;
 }
 
-export function projectSettingsStatusDraftDirty(
+export function statusDraftDirty(
   status: ProjectStatus,
-  state: ProjectSettingsStatusDraftState,
+  state: StatusDraftState,
 ): boolean {
-  return projectSettingsStatusNameDraftValue(status, state) !== status.name
-    || projectSettingsStatusCategoryDraftValue(status, state) !== status.category
-    || projectSettingsStatusColorDraftValue(status, state) !== status.color;
+  return draftStatusName(status, state) !== status.name
+    || draftStatusCategory(status, state) !== status.category
+    || draftStatusColor(status, state) !== status.color;
 }
 
-export function projectSettingsStatusSaveDrafts(
+export function statusSaveDrafts(
   statuses: readonly ProjectStatus[],
-  state: ProjectSettingsStatusDraftState,
-): ProjectSettingsDraftResult<ProjectSettingsStatusSaveDraft> {
-  const drafts: ProjectSettingsStatusSaveDraft[] = [];
+  state: StatusDraftState,
+): CollectionDraftResult<StatusSaveDraft> {
+  const drafts: StatusSaveDraft[] = [];
   for (const status of statuses) {
-    if (!projectSettingsStatusDraftDirty(status, state)) continue;
-    const name = projectSettingsStatusNameDraftValue(status, state).trim();
+    if (!statusDraftDirty(status, state)) continue;
+    const name = draftStatusName(status, state).trim();
     if (!name) return { ok: false, error: "name_required" };
     drafts.push({
       status,
       name,
-      category: projectSettingsStatusCategoryDraftValue(status, state),
-      color: projectSettingsStatusColorDraftValue(status, state),
+      category: draftStatusCategory(status, state),
+      color: draftStatusColor(status, state),
     });
   }
   return { ok: true, drafts };
 }
 
-export function projectSettingsPriorityNameDraftValue(
+export function draftPriorityName(
   priority: ProjectPriorityConfig,
-  state: ProjectSettingsPriorityDraftState,
+  state: PriorityDraftState,
 ): string {
   return state.nameDrafts[priority.id] ?? priority.name;
 }
 
-export function projectSettingsPriorityColorDraftValue(
+export function draftPriorityColor(
   priority: ProjectPriorityConfig,
-  state: ProjectSettingsPriorityDraftState,
+  state: PriorityDraftState,
 ): EventColor {
   return state.colorDrafts[priority.id] ?? priority.color ?? state.fallbackColor;
 }
 
-export function projectSettingsPriorityDraftDirty(
+export function priorityDraftDirty(
   priority: ProjectPriorityConfig,
-  state: ProjectSettingsPriorityDraftState,
+  state: PriorityDraftState,
 ): boolean {
-  return projectSettingsPriorityNameDraftValue(priority, state) !== priority.name
-    || projectSettingsPriorityColorDraftValue(priority, state) !== priority.color;
+  return draftPriorityName(priority, state) !== priority.name
+    || draftPriorityColor(priority, state) !== priority.color;
 }
 
-export function projectSettingsPrioritySaveDrafts(
+export function prioritySaveDrafts(
   priorities: readonly ProjectPriorityConfig[],
-  state: ProjectSettingsPriorityDraftState,
-): ProjectSettingsDraftResult<ProjectSettingsPrioritySaveDraft> {
-  const drafts: ProjectSettingsPrioritySaveDraft[] = [];
+  state: PriorityDraftState,
+): CollectionDraftResult<PrioritySaveDraft> {
+  const drafts: PrioritySaveDraft[] = [];
   for (const priority of priorities) {
-    if (!projectSettingsPriorityDraftDirty(priority, state)) continue;
-    const name = projectSettingsPriorityNameDraftValue(priority, state).trim();
+    if (!priorityDraftDirty(priority, state)) continue;
+    const name = draftPriorityName(priority, state).trim();
     if (!name) return { ok: false, error: "name_required" };
     drafts.push({
       priority,
       name,
-      color: projectSettingsPriorityColorDraftValue(priority, state),
+      color: draftPriorityColor(priority, state),
     });
   }
   return { ok: true, drafts };
 }
 
-export function projectSettingsTagNameDraftValue(
+export function draftTagName(
   tag: ProjectTag,
-  state: ProjectSettingsTagDraftState,
+  state: TagDraftState,
 ): string {
   return state.nameDrafts[tag.id] ?? tag.name;
 }
 
-export function projectSettingsTagColorDraftValue(
+export function draftTagColor(
   tag: ProjectTag,
-  state: ProjectSettingsTagDraftState,
+  state: TagDraftState,
 ): EventColor {
   return state.colorDrafts[tag.id] ?? tag.color ?? state.fallbackColor;
 }
 
-export function projectSettingsTagDraftDirty(
+export function tagDraftDirty(
   tag: ProjectTag,
-  state: ProjectSettingsTagDraftState,
+  state: TagDraftState,
 ): boolean {
-  return projectSettingsTagNameDraftValue(tag, state) !== tag.name
-    || projectSettingsTagColorDraftValue(tag, state) !== (tag.color ?? state.fallbackColor);
+  return draftTagName(tag, state) !== tag.name
+    || draftTagColor(tag, state) !== (tag.color ?? state.fallbackColor);
 }
 
-export function projectSettingsTagNameExists(input: {
+export function tagNameTaken(input: {
   tags: readonly ProjectTag[];
   name: string;
   ignoredTagId?: string;
@@ -177,23 +177,23 @@ export function projectSettingsTagNameExists(input: {
   );
 }
 
-export function projectSettingsTagSaveDrafts(
+export function tagSaveDrafts(
   tags: readonly ProjectTag[],
-  state: ProjectSettingsTagDraftState,
-): ProjectSettingsDraftResult<ProjectSettingsTagSaveDraft> {
-  const drafts: ProjectSettingsTagSaveDraft[] = [];
+  state: TagDraftState,
+): CollectionDraftResult<TagSaveDraft> {
+  const drafts: TagSaveDraft[] = [];
   const seenNames = new Set<string>();
   for (const tag of tags) {
-    const name = projectSettingsTagNameDraftValue(tag, state).trim();
+    const name = draftTagName(tag, state).trim();
     if (!name) return { ok: false, error: "name_required" };
     const normalizedName = normalizedDraftName(name);
     if (seenNames.has(normalizedName)) return { ok: false, error: "name_exists" };
     seenNames.add(normalizedName);
-    if (!projectSettingsTagDraftDirty(tag, state)) continue;
+    if (!tagDraftDirty(tag, state)) continue;
     drafts.push({
       tag,
       name,
-      color: projectSettingsTagColorDraftValue(tag, state),
+      color: draftTagColor(tag, state),
     });
   }
   return { ok: true, drafts };

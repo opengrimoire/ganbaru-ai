@@ -49,7 +49,7 @@ impl Session {
                     return Ok(expired || reconciled);
                 };
                 if self.state.dismissed_occurrence_id.as_deref() == Some(&commitment.occurrence_id)
-                    || !fresh_observation(activity, now_ms)
+                    || !is_fresh_observation(activity, now_ms)
                 {
                     return Ok(expired || reconciled);
                 }
@@ -121,13 +121,13 @@ impl Session {
                 {
                     return Ok(expired || reconciled);
                 }
-                let failed_at = self
+                let failed_at_ms = self
                     .state
                     .idle_started_at_ms
                     .ok_or_else(|| invalid_state("Idle pause has no accepted start"))?;
-                self.close_segment(tx, failed_at, "interrupted", "focus_failed")
+                self.close_segment(tx, failed_at_ms, "interrupted", "focus_failed")
                     .await?;
-                self.state.focus_failed_at_ms = Some(failed_at);
+                self.state.focus_failed_at_ms = Some(failed_at_ms);
                 self.state.mode = FocusMode::IdleFailed;
                 Ok(true)
             }
@@ -143,11 +143,11 @@ impl Session {
                         if context.platform == FocusPlatform::Android
                             && matches!(observation, FocusObservation::ForegroundChanged { .. })
                         {
-                            let ended_at = segment.planned_end_ms;
-                            self.close_segment(tx, ended_at, "completed", "completed")
+                            let ended_at_ms = segment.planned_end_ms;
+                            self.close_segment(tx, ended_at_ms, "completed", "completed")
                                 .await?;
                             self.state.mode = FocusMode::ReturnWait;
-                            self.state.return_started_at_ms = Some(ended_at);
+                            self.state.return_started_at_ms = Some(ended_at_ms);
                         } else {
                             self.advance(tx, now_ms, false, context).await?;
                         }
@@ -160,7 +160,7 @@ impl Session {
                 if !expired {
                     if let Some(run) = self.run.as_ref().filter(|run| run.ended_at_ms.is_none()) {
                         sqlx::query("UPDATE pomodoro_runs SET last_heartbeat = ? WHERE id = ? AND ended_at IS NULL")
-                            .bind(timestamp(now_ms)?).bind(&run.id).execute(&mut **tx).await
+                            .bind(format_timestamp(now_ms)?).bind(&run.id).execute(&mut **tx).await
                             .map_err(|error| format!("Persist native Focus heartbeat: {error}"))?;
                     }
                 }
@@ -179,7 +179,7 @@ impl Session {
         context: &FocusExecutionContext,
     ) -> Result<bool, FocusExecutionError> {
         let unavailable = activity.idle_ms.is_none_or(|idle| idle < 0)
-            || !fresh_observation(activity, context.now_ms);
+            || !is_fresh_observation(activity, context.now_ms);
         let changed = self.state.activity_source_unavailable != unavailable;
         self.state.activity_source_unavailable = unavailable;
         if unavailable
@@ -192,12 +192,12 @@ impl Session {
         let Some(run) = self.run.as_ref().filter(|run| run.ended_at_ms.is_none()) else {
             return Ok(changed);
         };
-        let threshold = if self.state.idle_timeout_override_set {
+        let timeout_minutes = if self.state.idle_timeout_override_set {
             self.state.idle_timeout_override_minutes
         } else {
             run.configuration.idle_timeout_minutes
         };
-        let Some(threshold) = threshold else {
+        let Some(timeout_minutes) = timeout_minutes else {
             return Ok(changed);
         };
         if self.active_segment()?.phase != FocusPhase::Focus {
@@ -206,10 +206,10 @@ impl Session {
         let Some(idle_ms) = activity.idle_ms else {
             return Ok(changed);
         };
-        if idle_ms < threshold.saturating_mul(60_000) {
+        if idle_ms < timeout_minutes.saturating_mul(60_000) {
             return Ok(changed);
         }
-        let started_at = self
+        let pause_started_at_ms = self
             .pause(
                 tx,
                 activity.observed_at_ms.saturating_sub(idle_ms),
@@ -217,16 +217,16 @@ impl Session {
                 "idle",
             )
             .await?;
-        self.event(
+        self.record_event(
             tx,
             "idle_detected",
             context.now_ms,
             Some("idle"),
-            Some(context.now_ms.saturating_sub(started_at)),
+            Some(context.now_ms.saturating_sub(pause_started_at_ms)),
         )
         .await?;
         self.state.mode = FocusMode::IdlePause;
-        self.state.idle_started_at_ms = Some(started_at);
+        self.state.idle_started_at_ms = Some(pause_started_at_ms);
         self.state.idle_detected_at_ms = Some(context.now_ms);
         self.state.idle_overlay_visible_at_ms = None;
         self.state.paused_prompts_dismissed = false;
@@ -254,7 +254,7 @@ impl Session {
         if self.state.mode != FocusMode::Running {
             return self.expire(tx, now_ms).await;
         }
-        let start = self
+        let pause_started_at_ms = self
             .pause(
                 tx,
                 started_at_ms.min(end_ms),
@@ -262,16 +262,16 @@ impl Session {
                 "suspend",
             )
             .await?;
-        self.event(
+        self.record_event(
             tx,
             "suspend_detected",
-            start,
+            pause_started_at_ms,
             Some("suspend"),
-            Some(returned_at_ms.saturating_sub(start)),
+            Some(returned_at_ms.saturating_sub(pause_started_at_ms)),
         )
         .await?;
         self.state.mode = FocusMode::Suspended;
-        self.state.suspend_started_at_ms = Some(start);
+        self.state.suspend_started_at_ms = Some(pause_started_at_ms);
         self.state.suspend_returned_at_ms = Some(returned_at_ms);
         self.state.paused_prompts_dismissed = false;
         self.expire(tx, now_ms).await?;
@@ -326,7 +326,7 @@ impl Session {
             sqlx::query(
                 "UPDATE pomodoro_runs SET planned_end = ? WHERE id = ? AND ended_at IS NULL",
             )
-            .bind(timestamp(commitment.end_ms)?)
+            .bind(format_timestamp(commitment.end_ms)?)
             .bind(&run.id)
             .execute(&mut **tx)
             .await
@@ -354,7 +354,7 @@ impl Session {
         }
         let segment = self.active_segment()?;
         let run = self.live_run()?;
-        let elapsed = segment_elapsed_ms(segment, context.now_ms)?
+        let elapsed_ms = segment_elapsed_ms(segment, context.now_ms)?
             .saturating_add(inherited_phase_ms(run, segment));
         let position = normalize_position(&commitment.configuration, segment.rhythm_position);
         let prior_mode = self.state.mode;
@@ -367,13 +367,14 @@ impl Session {
             phase: segment.phase,
             position,
             focus_elapsed_ms: if segment.phase == FocusPhase::Focus {
-                elapsed
+                elapsed_ms
             } else {
                 0
             },
-            phase_elapsed_ms: elapsed,
+            phase_elapsed_ms: elapsed_ms,
         };
-        let due = elapsed >= phase_duration_ms(&commitment.configuration, segment.phase, position);
+        let due =
+            elapsed_ms >= phase_duration_ms(&commitment.configuration, segment.phase, position);
         if due && segment.phase == FocusPhase::Focus {
             continuation.phase = break_phase(&commitment.configuration, position);
             continuation.phase_elapsed_ms = 0;
@@ -445,11 +446,11 @@ impl Session {
         {
             return Ok(None);
         }
-        let elapsed =
+        let elapsed_ms =
             segment_elapsed_ms(segment, now_ms)?.saturating_add(inherited_phase_ms(run, segment));
         let position = normalize_position(&commitment.configuration, segment.rhythm_position);
         let due =
-            elapsed >= phase_duration_ms(&commitment.configuration, FocusPhase::Focus, position);
+            elapsed_ms >= phase_duration_ms(&commitment.configuration, FocusPhase::Focus, position);
         Ok(Some(Continuation {
             run_id: Some(run.id.clone()),
             phase: if due {
@@ -458,8 +459,8 @@ impl Session {
                 FocusPhase::Focus
             },
             position,
-            focus_elapsed_ms: elapsed,
-            phase_elapsed_ms: if due { 0 } else { elapsed },
+            focus_elapsed_ms: elapsed_ms,
+            phase_elapsed_ms: if due { 0 } else { elapsed_ms },
         }))
     }
 
@@ -481,7 +482,7 @@ impl Session {
             .fetch_one(&mut **tx)
             .await
             .map_err(|error| format!("Read Focus recovery heartbeat: {error}"))?;
-            let cutoff = milliseconds(&heartbeat)?
+            let cutoff = parse_timestamp_ms(&heartbeat)?
                 .max(run.started_at_ms)
                 .min(context.now_ms)
                 .min(run.planned_end_ms);
@@ -514,18 +515,18 @@ impl Session {
         if self.state.mode == FocusMode::Running {
             let segment = self.active_segment()?;
             if context.now_ms >= segment.planned_end_ms {
-                let ended_at = segment.planned_end_ms;
-                self.close_segment(tx, ended_at, "completed", "completed")
+                let ended_at_ms = segment.planned_end_ms;
+                self.close_segment(tx, ended_at_ms, "completed", "completed")
                     .await?;
                 self.state.mode = FocusMode::ReturnWait;
-                self.state.return_started_at_ms = Some(ended_at);
+                self.state.return_started_at_ms = Some(ended_at_ms);
             }
         }
         Ok(true)
     }
 }
 
-fn fresh_observation(activity: &FocusActivityObservation, now_ms: i64) -> bool {
+fn is_fresh_observation(activity: &FocusActivityObservation, now_ms: i64) -> bool {
     activity.observed_at_ms <= now_ms
         && now_ms.saturating_sub(activity.observed_at_ms) <= ACTIVITY_OBSERVATION_MAX_AGE_MS
         && activity

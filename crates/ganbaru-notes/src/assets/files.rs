@@ -8,8 +8,8 @@ use std::{
 };
 
 use crate::assets::{
-    self, NOTES_ASSET_SOURCE_IMPORTED, NOTES_ASSET_SOURCE_LOCAL_UPLOAD,
-    NOTES_ASSET_STATE_AVAILABLE, NotesManagedAssetWrite,
+    self, ASSET_SOURCE_IMPORTED, ASSET_SOURCE_LOCAL_UPLOAD, ASSET_STATE_AVAILABLE,
+    ManagedAssetWrite,
 };
 
 const NOTES_FILE_MAX_DISPLAY_MEGABYTES: usize = 50;
@@ -195,15 +195,16 @@ fn write_binary_file_atomically(path: &Path, bytes: &[u8]) -> Result<(), String>
         .ok_or_else(|| "notes file target has no file name".to_string())?
         .to_string_lossy()
         .into_owned();
-    let tmp_path = parent.join(format!("{file_name}.tmp"));
+    let temporary_path = parent.join(format!("{file_name}.tmp"));
     {
-        let mut file = fs::File::create(&tmp_path).map_err(|e| format!("write notes file: {e}"))?;
+        let mut file =
+            fs::File::create(&temporary_path).map_err(|e| format!("write notes file: {e}"))?;
         file.write_all(bytes)
             .map_err(|e| format!("write notes file: {e}"))?;
         file.sync_all()
             .map_err(|e| format!("sync notes file: {e}"))?;
     }
-    fs::rename(&tmp_path, path).map_err(|e| format!("save notes file: {e}"))
+    fs::rename(&temporary_path, path).map_err(|e| format!("save notes file: {e}"))
 }
 
 fn hex_hash(bytes: &[u8]) -> String {
@@ -463,7 +464,7 @@ pub async fn copy_local_import_file_for_block(
         &path,
         bytes,
         original_name,
-        NOTES_ASSET_SOURCE_IMPORTED,
+        ASSET_SOURCE_IMPORTED,
     )
     .await
     {
@@ -773,14 +774,14 @@ async fn save_notes_file_bytes(
         .map_err(|e| format!("begin notes file asset record: {e}"))?;
     assets::upsert_managed_asset_tx(
         &mut tx,
-        NotesManagedAssetWrite {
+        ManagedAssetWrite {
             relative_path: &relative_path,
             original_name: original_name.as_deref(),
             content_type,
             byte_size: bytes.len() as i64,
             sha256: &sha256,
             source_type,
-            storage_state: NOTES_ASSET_STATE_AVAILABLE,
+            storage_state: ASSET_STATE_AVAILABLE,
             missing_at: None,
         },
     )
@@ -817,7 +818,7 @@ pub async fn save_selected_file(
         path,
         bytes,
         original_name,
-        NOTES_ASSET_SOURCE_LOCAL_UPLOAD,
+        ASSET_SOURCE_LOCAL_UPLOAD,
     )
     .await
 }
@@ -912,7 +913,7 @@ pub async fn prepare_import_file_reference(
         &path,
         bytes,
         original_name,
-        NOTES_ASSET_SOURCE_IMPORTED,
+        ASSET_SOURCE_IMPORTED,
     )
     .await
     {

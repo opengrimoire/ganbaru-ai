@@ -94,7 +94,7 @@ export function createMusicYouTubeAdapter(
   let hostLoadId: string | null = null;
   let resolvingPlaylist: ResolvingYouTubePlaylist | null = null;
   let playlistTimeoutId: number | null = null;
-  let optimisticPauseUntil = 0;
+  let optimisticPauseUntilMs = 0;
   let lastMetadataSignature = "";
 
   function playlistCollectionId(playlistId: string): string {
@@ -376,11 +376,11 @@ export function createMusicYouTubeAdapter(
         });
       }
     }
-    if (message.status === "playing" && currentTime() < optimisticPauseUntil) return;
+    if (message.status === "playing" && currentTime() < optimisticPauseUntilMs) return;
     if (message.status !== "ready" && message.status !== "loading") {
       context.setPlaybackStarting(false);
     }
-    if (message.status !== "playing") optimisticPauseUntil = 0;
+    if (message.status !== "playing") optimisticPauseUntilMs = 0;
     const status = stableStatusDuringYouTubeBuffering(
       state.snapshot.status,
       message.status,
@@ -397,11 +397,11 @@ export function createMusicYouTubeAdapter(
   }
 
   function beginOptimisticPause(): void {
-    optimisticPauseUntil = currentTime() + OPTIMISTIC_PAUSE_MS;
+    optimisticPauseUntilMs = currentTime() + OPTIMISTIC_PAUSE_MS;
   }
 
   function clearOptimisticPause(): void {
-    optimisticPauseUntil = 0;
+    optimisticPauseUntilMs = 0;
   }
 
   function destroy(): void {
