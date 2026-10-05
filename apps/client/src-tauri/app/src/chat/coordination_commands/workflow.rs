@@ -495,7 +495,7 @@ async fn insert_message_reference(
                 "SELECT count(*)
                  FROM chat_conversation_memberships destination
                  JOIN chat_participants participant ON participant.id = destination.participant_id
-                 LEFT JOIN chat_ai_channel_memberships destination_ai
+                 LEFT JOIN chat_teammate_channel_memberships destination_ai
                    ON destination_ai.conversation_id = destination.conversation_id
                   AND destination_ai.teammate_id = destination.participant_id
                  LEFT JOIN chat_access_profiles destination_profile
@@ -518,7 +518,7 @@ async fn insert_message_reference(
                    AND NOT EXISTS (
                      SELECT 1
                      FROM chat_conversation_memberships source_membership
-                     LEFT JOIN chat_ai_channel_memberships source_ai
+                     LEFT JOIN chat_teammate_channel_memberships source_ai
                        ON source_ai.conversation_id = source_membership.conversation_id
                       AND source_ai.teammate_id = source_membership.participant_id
                      LEFT JOIN chat_access_profiles source_profile
@@ -568,7 +568,7 @@ async fn insert_message_reference(
                  ), 1)
                  FROM chat_conversation_memberships destination
                  JOIN chat_participants participant ON participant.id = destination.participant_id
-                 LEFT JOIN chat_ai_channel_memberships destination_ai
+                 LEFT JOIN chat_teammate_channel_memberships destination_ai
                    ON destination_ai.conversation_id = destination.conversation_id
                   AND destination_ai.teammate_id = destination.participant_id
                  LEFT JOIN chat_access_profiles destination_profile
@@ -580,7 +580,7 @@ async fn insert_message_reference(
                    ON source_membership.participant_id = destination.participant_id
                   AND source_membership.conversation_id = ?
                   AND source_membership.removed_at IS NULL
-                 LEFT JOIN chat_ai_channel_memberships source_ai
+                 LEFT JOIN chat_teammate_channel_memberships source_ai
                    ON source_ai.conversation_id = source_membership.conversation_id
                   AND source_ai.teammate_id = source_membership.participant_id
                  LEFT JOIN chat_access_profiles source_profile
@@ -620,7 +620,7 @@ async fn insert_message_reference(
                               ELSE 1
                             END
                         FROM chat_conversation_memberships membership
-                        JOIN chat_ai_channel_memberships ai_membership
+                        JOIN chat_teammate_channel_memberships ai_membership
                           ON ai_membership.conversation_id = membership.conversation_id
                          AND ai_membership.teammate_id = membership.participant_id
                         JOIN chat_access_profiles profile
@@ -941,8 +941,8 @@ pub(super) async fn require_participating_teammate(
                 profile_revision.default_participate
          FROM chat_conversation_memberships membership
          JOIN chat_participants participant ON participant.id = membership.participant_id
-         JOIN chat_ai_teammates teammate ON teammate.participant_id = membership.participant_id
-         JOIN chat_ai_channel_memberships ai_membership
+         JOIN chat_teammates teammate ON teammate.participant_id = membership.participant_id
+         JOIN chat_teammate_channel_memberships ai_membership
            ON ai_membership.conversation_id = membership.conversation_id
           AND ai_membership.teammate_id = membership.participant_id
          JOIN chat_access_profiles profile ON profile.id = ai_membership.access_profile_id

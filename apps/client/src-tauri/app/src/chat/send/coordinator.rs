@@ -659,7 +659,7 @@ pub(super) async fn load_internal_mcp_scope(
           AND live.teammate_id = assignment.teammate_id
           AND live.working_folder_id = frozen.working_folder_id
           AND live.revoked_at IS NULL
-         JOIN chat_ai_channel_memberships channel_access
+         JOIN chat_teammate_channel_memberships channel_access
            ON channel_access.conversation_id = live.conversation_id
           AND channel_access.teammate_id = live.teammate_id
          WHERE frozen.authorization_revision_id = ?

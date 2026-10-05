@@ -71,7 +71,7 @@ async fn native_music_calendar_never_infers_a_focus_phase_from_calendar_configur
     for id in ["focus", "all-day", "cancelled", "timed"] {
         event(&pool, id, "2026-10-04T10:00:00Z", "2026-10-04T11:00:00Z").await;
     }
-    sqlx::query("INSERT INTO pomodoro_configs(event_id, rhythm_kind, rhythm_source) VALUES ('focus', 'count', 'custom')")
+    sqlx::query("INSERT INTO calendar_event_pomodoro_configs(event_id, rhythm_kind, rhythm_source) VALUES ('focus', 'count', 'custom')")
         .execute(&pool).await.unwrap();
     sqlx::query("UPDATE calendar_events SET all_day = 1 WHERE id = 'all-day'")
         .execute(&pool)

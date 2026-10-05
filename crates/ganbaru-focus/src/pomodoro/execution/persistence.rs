@@ -43,7 +43,7 @@ pub(super) async fn load_state(
     tx: &mut Transaction<'_, Sqlite>,
 ) -> Result<(i64, ExecutionState), FocusExecutionError> {
     let (revision, Json(state)) = sqlx::query_as::<_, (i64, Json<ExecutionState>)>(
-        "SELECT revision, state_json FROM focus_execution_state WHERE singleton = 1",
+        "SELECT revision, state_json FROM pomodoro_execution_state WHERE singleton = 1",
     )
     .fetch_one(&mut **tx)
     .await
@@ -56,7 +56,7 @@ pub(super) async fn load_receipt(
     command: &FocusCommand,
 ) -> Result<Option<FocusExecutionSnapshot>, FocusExecutionError> {
     let receipt = sqlx::query_as::<_, (Json<FocusCommand>, Json<FocusExecutionSnapshot>)>(
-        "SELECT request_json, result_json FROM focus_execution_receipts WHERE command_id = ?",
+        "SELECT request_json, result_json FROM pomodoro_execution_receipts WHERE command_id = ?",
     )
     .bind(&command.command_id)
     .fetch_optional(&mut **tx)
@@ -80,7 +80,7 @@ pub(super) async fn reserve_revision(
         execution_error(FocusErrorCode::InvalidState, "Focus revision is exhausted")
     })?;
     let changed = sqlx::query(
-        "UPDATE focus_execution_state SET revision = ? WHERE singleton = 1 AND revision = ?",
+        "UPDATE pomodoro_execution_state SET revision = ? WHERE singleton = 1 AND revision = ?",
     )
     .bind(next)
     .bind(expected)
@@ -102,7 +102,7 @@ pub(super) async fn save_state(
     revision: i64,
     now_ms: i64,
 ) -> Result<(), FocusExecutionError> {
-    let changed = sqlx::query("UPDATE focus_execution_state SET state_json = ?, updated_at_ms = ? WHERE singleton = 1 AND revision = ?")
+    let changed = sqlx::query("UPDATE pomodoro_execution_state SET state_json = ?, updated_at_ms = ? WHERE singleton = 1 AND revision = ?")
         .bind(Json(state)).bind(now_ms).bind(revision).execute(&mut **tx).await
         .map_err(|error| format!("Persist Focus execution state: {error}"))?;
     if changed.rows_affected() != 1 {
@@ -119,7 +119,7 @@ pub(super) async fn save_receipt(
     command: &FocusCommand,
     snapshot: &FocusExecutionSnapshot,
 ) -> Result<(), FocusExecutionError> {
-    sqlx::query("INSERT INTO focus_execution_receipts (command_id, request_json, result_json, revision, committed_at_ms) VALUES (?, ?, ?, ?, ?)")
+    sqlx::query("INSERT INTO pomodoro_execution_receipts (command_id, request_json, result_json, revision, committed_at_ms) VALUES (?, ?, ?, ?, ?)")
         .bind(&command.command_id).bind(Json(command)).bind(Json(snapshot)).bind(snapshot.revision)
         .bind(snapshot.observed_at_ms).execute(&mut **tx).await
         .map_err(|error| format!("Persist Focus command receipt: {error}"))?;

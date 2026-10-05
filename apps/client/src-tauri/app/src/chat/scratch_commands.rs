@@ -130,7 +130,7 @@ async fn require_current_scratch_authority(
         "SELECT EXISTS(
            SELECT 1
            FROM chat_conversation_memberships membership
-           JOIN chat_ai_channel_memberships access
+           JOIN chat_teammate_channel_memberships access
              ON access.conversation_id = membership.conversation_id
             AND access.teammate_id = membership.participant_id
            JOIN chat_access_profiles profile ON profile.id = access.access_profile_id

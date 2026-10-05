@@ -26,7 +26,7 @@ fn archive_and_restore_preserve_task_links_music_versions_and_independent_import
             .unwrap();
         tx.commit().await.unwrap();
         let archive_component: String = sqlx::query_scalar(
-            "SELECT icalendar_component_id FROM calendar_events_archive WHERE id='source'",
+            "SELECT icalendar_component_id FROM calendar_event_archives WHERE id='source'",
         )
         .fetch_one(&pool)
         .await
@@ -81,7 +81,7 @@ fn archive_and_restore_preserve_task_links_music_versions_and_independent_import
             provenance,
             ("attendee".into(), "alarm".into(), "override".into())
         );
-        let config: i64 = sqlx::query_scalar("SELECT focus_duration_minutes FROM pomodoro_config_sequence_steps WHERE event_id='source'").fetch_one(&pool).await.unwrap();
+        let config: i64 = sqlx::query_scalar("SELECT focus_duration_minutes FROM calendar_event_pomodoro_config_sequence_steps WHERE event_id='source'").fetch_one(&pool).await.unwrap();
         assert_eq!(config, 25);
         let extension: String = sqlx::query_scalar("SELECT property_value FROM calendar_event_override_extended_properties WHERE override_id='override'").fetch_one(&pool).await.unwrap();
         assert_eq!(extension, "override data");
@@ -173,7 +173,7 @@ fn duplicate_archive_identity_never_overwrites_the_earlier_snapshot() {
         );
         tx.rollback().await.unwrap();
         let title: String = sqlx::query_scalar(
-            "SELECT title FROM calendar_events_archive WHERE id='immutable-archive'",
+            "SELECT title FROM calendar_event_archives WHERE id='immutable-archive'",
         )
         .fetch_one(&pool)
         .await
@@ -215,7 +215,7 @@ fn calendar_removal_protects_floating_dates_using_the_native_device_day() {
             .unwrap();
             tx.commit().await.unwrap();
             let count: i64 = sqlx::query_scalar(
-                "SELECT COUNT(*) FROM calendar_events_archive WHERE id='floating-event'",
+                "SELECT COUNT(*) FROM calendar_event_archives WHERE id='floating-event'",
             )
             .fetch_one(&pool)
             .await
@@ -261,7 +261,7 @@ fn removing_the_original_calendar_preserves_archived_import_envelopes_and_compon
             .unwrap();
         tx.commit().await.unwrap();
         let archive: (String, String, String, String) = sqlx::query_as("SELECT archive.calendar_id, object.calendar_id, component.calendar_id, node.text_value
-            FROM calendar_events_archive archive
+            FROM calendar_event_archives archive
             JOIN icalendar_components component ON component.id=archive.icalendar_component_id
             JOIN icalendar_objects object ON object.id=component.object_id
             JOIN icalendar_component_properties property ON property.component_id=component.id
@@ -319,7 +319,7 @@ fn moved_occurrence_archive_uses_its_override_metadata_and_current_focus_alias()
             .await
             .unwrap();
         tx.commit().await.unwrap();
-        let snapshot: (String, String, String, String, String) = sqlx::query_as("SELECT title, description, location, start_time, original_occurrence_id FROM calendar_events_archive WHERE id='event-1::2099-05-20'").fetch_one(&pool).await.unwrap();
+        let snapshot: (String, String, String, String, String) = sqlx::query_as("SELECT title, description, location, start_time, original_occurrence_id FROM calendar_event_archives WHERE id='event-1::2099-05-20'").fetch_one(&pool).await.unwrap();
         assert_eq!(
             snapshot,
             (
@@ -381,7 +381,7 @@ fn an_opaque_archive_of_the_explicit_anchor_restores_only_that_occurrence() {
         .await
         .unwrap();
         tx.commit().await.unwrap();
-        let kind: (String, String) = sqlx::query_as("SELECT original_occurrence_id, recurrence_date FROM calendar_events_archive WHERE id='opaque-archive'").fetch_one(&pool).await.unwrap();
+        let kind: (String, String) = sqlx::query_as("SELECT original_occurrence_id, recurrence_date FROM calendar_event_archives WHERE id='opaque-archive'").fetch_one(&pool).await.unwrap();
         assert_eq!(kind, ("source".into(), "2099-05-09".into()));
         let mut tx = pool.begin().await.unwrap();
         restore_archived_calendar_event_tx(&mut tx, &target("opaque-archive"))
@@ -407,7 +407,7 @@ fn late_archive_write_failure_rolls_back_copied_graph_children_and_live_referenc
         tx.rollback().await.unwrap();
         for (sql, expected) in [
             ("SELECT COUNT(*) FROM calendar_events WHERE id='source'", 1),
-            ("SELECT COUNT(*) FROM calendar_events_archive", 0),
+            ("SELECT COUNT(*) FROM calendar_event_archives", 0),
             ("SELECT COUNT(*) FROM icalendar_objects", 1),
             ("SELECT COUNT(*) FROM calendar_event_archive_alarms", 0),
             (
@@ -453,7 +453,7 @@ fn changed_task_ownership_prevents_restore_and_keeps_the_complete_archive() {
             .unwrap_err();
         assert!(error.contains("task is missing"), "{error}");
         tx.rollback().await.unwrap();
-        let counts: (i64, i64, i64) = sqlx::query_as("SELECT (SELECT COUNT(*) FROM calendar_events WHERE id='source'), (SELECT COUNT(*) FROM calendar_events_archive WHERE id='source'), (SELECT COUNT(*) FROM calendar_event_archive_task_links WHERE archive_event_id='source')").fetch_one(&pool).await.unwrap();
+        let counts: (i64, i64, i64) = sqlx::query_as("SELECT (SELECT COUNT(*) FROM calendar_events WHERE id='source'), (SELECT COUNT(*) FROM calendar_event_archives WHERE id='source'), (SELECT COUNT(*) FROM calendar_event_archive_task_links WHERE archive_event_id='source')").fetch_one(&pool).await.unwrap();
         assert_eq!(counts, (0, 1, 1));
     });
 }

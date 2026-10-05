@@ -58,7 +58,7 @@ fn future_untracked_event_hard_deletes() {
                 .await
                 .unwrap();
         let archive_count: i64 =
-            sqlx::query_scalar("SELECT COUNT(*) FROM calendar_events_archive WHERE id = 'event-1'")
+            sqlx::query_scalar("SELECT COUNT(*) FROM calendar_event_archives WHERE id = 'event-1'")
                 .fetch_one(&pool)
                 .await
                 .unwrap();
@@ -102,7 +102,7 @@ fn past_event_delete_rejects_and_archive_succeeds() {
                 .await
                 .unwrap();
         let archived_title: String =
-            sqlx::query_scalar("SELECT title FROM calendar_events_archive WHERE id = 'event-1'")
+            sqlx::query_scalar("SELECT title FROM calendar_event_archives WHERE id = 'event-1'")
                 .fetch_one(&pool)
                 .await
                 .unwrap();
@@ -138,8 +138,8 @@ fn invalid_config_replacement_preserves_existing_child_rows() {
 
         let saved: (String, i64) = sqlx::query_as(
             "SELECT pc.rhythm_kind, COUNT(pcss.step_index)
-             FROM pomodoro_configs pc
-             JOIN pomodoro_config_sequence_steps pcss ON pcss.event_id = pc.event_id
+             FROM calendar_event_pomodoro_configs pc
+             JOIN calendar_event_pomodoro_config_sequence_steps pcss ON pcss.event_id = pc.event_id
              WHERE pc.event_id = 'event-1'
              GROUP BY pc.rhythm_kind",
         )

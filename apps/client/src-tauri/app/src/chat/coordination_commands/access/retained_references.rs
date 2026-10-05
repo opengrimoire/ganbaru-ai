@@ -164,7 +164,7 @@ pub(super) async fn retained_profile_reference_issues_in_transaction(
 ) -> ChatResult<Vec<ChatAccessValidationIssue>> {
     let teammate_ids = sqlx::query_scalar::<_, String>(
         "SELECT DISTINCT ai.teammate_id
-         FROM chat_ai_channel_memberships ai
+         FROM chat_teammate_channel_memberships ai
          JOIN chat_conversation_memberships membership
            ON membership.conversation_id = ai.conversation_id
           AND membership.participant_id = ai.teammate_id
@@ -210,7 +210,7 @@ async fn read_effective_disclosure_access_in_transaction(
                 ai.history_boundary, ai.history_boundary_inherits_profile,
                 ai.history_from_ordinal, ai.runtime_approval_policy,
                 ai.scratch_runtime_approval_policy
-         FROM chat_ai_channel_memberships ai
+         FROM chat_teammate_channel_memberships ai
          JOIN chat_conversation_memberships membership
            ON membership.conversation_id = ai.conversation_id
           AND membership.participant_id = ai.teammate_id

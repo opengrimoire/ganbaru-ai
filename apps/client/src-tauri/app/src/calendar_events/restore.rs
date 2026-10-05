@@ -15,7 +15,7 @@ pub(super) async fn restore_archived_calendar_event_tx(
 ) -> Result<(), String> {
     let row = sqlx::query(
         "SELECT source_event_id, calendar_id, start_time, original_occurrence_id, recurrence_date
-         FROM calendar_events_archive
+         FROM calendar_event_archives
          WHERE id = ?",
     )
     .bind(&target.id)
@@ -86,7 +86,7 @@ pub(super) async fn remove_restored_archive(
         .await?;
     let objects = serde_json::to_string(&objects.into_iter().map(|row| row.0).collect::<Vec<_>>())
         .map_err(|error| format!("encode restored archive objects: {error}"))?;
-    sqlx::query("DELETE FROM calendar_events_archive WHERE id=?")
+    sqlx::query("DELETE FROM calendar_event_archives WHERE id=?")
         .bind(id)
         .execute(&mut **tx)
         .await
@@ -97,7 +97,7 @@ pub(super) async fn remove_restored_archive(
         AND NOT EXISTS(SELECT 1 FROM calendar_event_alarms owner JOIN icalendar_components component ON component.id=owner.icalendar_component_id WHERE component.object_id=icalendar_objects.id)
         AND NOT EXISTS(SELECT 1 FROM calendar_event_attendees owner JOIN icalendar_components component ON component.id=owner.icalendar_component_id WHERE component.object_id=icalendar_objects.id)
         AND NOT EXISTS(SELECT 1 FROM calendar_event_overrides owner JOIN icalendar_components component ON component.id=owner.icalendar_component_id WHERE component.object_id=icalendar_objects.id)
-        AND NOT EXISTS(SELECT 1 FROM calendar_events_archive owner JOIN icalendar_components component ON component.id=owner.icalendar_component_id WHERE component.object_id=icalendar_objects.id)
+        AND NOT EXISTS(SELECT 1 FROM calendar_event_archives owner JOIN icalendar_components component ON component.id=owner.icalendar_component_id WHERE component.object_id=icalendar_objects.id)
         AND NOT EXISTS(SELECT 1 FROM calendar_event_archive_alarms owner JOIN icalendar_components component ON component.id=owner.icalendar_component_id WHERE component.object_id=icalendar_objects.id)
         AND NOT EXISTS(SELECT 1 FROM calendar_event_archive_attendees owner JOIN icalendar_components component ON component.id=owner.icalendar_component_id WHERE component.object_id=icalendar_objects.id)
         AND NOT EXISTS(SELECT 1 FROM calendar_event_archive_overrides owner JOIN icalendar_components component ON component.id=owner.icalendar_component_id WHERE component.object_id=icalendar_objects.id)")
@@ -151,7 +151,7 @@ pub(super) async fn restore_archived_event_row(
             priority, geo_lat, geo_lng, sequence, guest_can_modify,
             guest_can_invite_others, guest_can_see_other_guests, created_at, updated_at,
             icalendar_component_id, local_rsvp_status, meeting_enabled
-         FROM calendar_events_archive
+         FROM calendar_event_archives
          WHERE id = ?",
     )
     .bind(archive_event_id)
@@ -180,7 +180,7 @@ pub(super) async fn restore_archived_event_children(
         SELECT owner_kind, ?1, phase, behavior, playlist_id, soundscape_id, provenance_kind, provenance_id, updated_at, version, soundscape_behavior FROM calendar_event_archive_music_assignments WHERE archive_event_id=?2")
         .bind(source_event_id).bind(archive_event_id).execute(&mut **tx).await.map_err(|error| format!("restore archived Music assignments: {error}"))?;
     sqlx::query(
-        "INSERT INTO pomodoro_configs
+        "INSERT INTO calendar_event_pomodoro_configs
             (event_id, rhythm_kind, rhythm_source, preset_key, idle_timeout_minutes)
          SELECT ?, rhythm_kind, rhythm_source, preset_key, idle_timeout_minutes
          FROM calendar_event_archive_pomodoro_configs
@@ -193,7 +193,7 @@ pub(super) async fn restore_archived_event_children(
     .map_err(|e| format!("restore archived pomodoro config: {e}"))?;
 
     sqlx::query(
-        "INSERT INTO pomodoro_config_count_rhythms
+        "INSERT INTO calendar_event_pomodoro_config_count_rhythms
             (event_id, focus_duration_minutes, short_break_minutes, long_break_minutes,
              long_break_after_focus_count)
          SELECT ?, focus_duration_minutes, short_break_minutes, long_break_minutes,
@@ -208,7 +208,7 @@ pub(super) async fn restore_archived_event_children(
     .map_err(|e| format!("restore archived count pomodoro rhythm: {e}"))?;
 
     sqlx::query(
-        "INSERT INTO pomodoro_config_sequence_steps
+        "INSERT INTO calendar_event_pomodoro_config_sequence_steps
             (event_id, step_index, focus_duration_minutes, break_phase, break_duration_minutes)
          SELECT ?, step_index, focus_duration_minutes, break_phase, break_duration_minutes
          FROM calendar_event_archive_pomodoro_config_sequence_steps

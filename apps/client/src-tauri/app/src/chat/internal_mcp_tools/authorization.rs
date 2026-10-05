@@ -18,7 +18,7 @@ pub(crate) async fn verify_scope(
             FROM chat_assignment_authorization_revisions authorization
             JOIN chat_work_assignments assignment
               ON assignment.id = authorization.assignment_id
-            JOIN chat_ai_channel_memberships channel_access
+            JOIN chat_teammate_channel_memberships channel_access
               ON channel_access.conversation_id = authorization.destination_conversation_id
              AND channel_access.teammate_id = assignment.teammate_id
             JOIN chat_conversation_memberships membership
@@ -106,7 +106,7 @@ pub(super) async fn verify_channel_source(
              AND authorization.revoked_at IS NULL
             JOIN chat_work_assignments assignment
               ON assignment.id = authorization.assignment_id
-            JOIN chat_ai_channel_memberships channel_access
+            JOIN chat_teammate_channel_memberships channel_access
               ON channel_access.conversation_id = source.conversation_id
              AND channel_access.teammate_id = assignment.teammate_id
             JOIN chat_conversation_memberships membership
@@ -170,7 +170,7 @@ pub(super) async fn verify_channel_source(
                 requester_participant.participant_kind != 'ai_teammate'
                 OR EXISTS (
                   SELECT 1
-                  FROM chat_ai_channel_memberships requester_source_access
+                  FROM chat_teammate_channel_memberships requester_source_access
                   JOIN chat_access_profiles requester_profile
                     ON requester_profile.id = requester_source_access.access_profile_id
                   JOIN chat_access_profile_revisions requester_profile_revision
@@ -211,7 +211,7 @@ pub(super) async fn verify_channel_source(
                     destination_participant.participant_kind != 'ai_teammate'
                     OR EXISTS (
                       SELECT 1
-                      FROM chat_ai_channel_memberships destination_ai_access
+                      FROM chat_teammate_channel_memberships destination_ai_access
                       JOIN chat_access_profiles destination_profile
                         ON destination_profile.id = destination_ai_access.access_profile_id
                       JOIN chat_access_profile_revisions destination_profile_revision
@@ -253,7 +253,7 @@ pub(super) async fn verify_channel_source(
                       destination_participant.participant_kind = 'ai_teammate'
                       AND NOT EXISTS (
                         SELECT 1
-                        FROM chat_ai_channel_memberships source_ai_access
+                        FROM chat_teammate_channel_memberships source_ai_access
                         JOIN chat_access_profiles source_profile
                           ON source_profile.id = source_ai_access.access_profile_id
                         JOIN chat_access_profile_revisions source_profile_revision
@@ -321,10 +321,10 @@ pub(super) async fn verify_folder_source(
               ON membership.conversation_id = authorization.destination_conversation_id
              AND membership.participant_id = assignment.teammate_id
              AND membership.removed_at IS NULL
-            JOIN chat_ai_channel_memberships channel_access
+            JOIN chat_teammate_channel_memberships channel_access
               ON channel_access.conversation_id = membership.conversation_id
              AND channel_access.teammate_id = membership.participant_id
-            JOIN chat_ai_teammate_access_state access_state
+            JOIN chat_teammate_access_state access_state
               ON access_state.teammate_id = membership.participant_id
             JOIN chat_access_profiles profile
               ON profile.id = channel_access.access_profile_id

@@ -163,7 +163,7 @@ impl UndoPreimage {
             .map_err(|error| format!("encode Calendar Undo archives: {error}"))?;
         let missing_archive: bool = sqlx::query_scalar(
             "SELECT EXISTS(SELECT 1 FROM json_each(?1) expected
-            LEFT JOIN calendar_events_archive archive ON archive.id=expected.value
+            LEFT JOIN calendar_event_archives archive ON archive.id=expected.value
             WHERE archive.id IS NULL OR archive.source_event_id IS NOT ?2)",
         )
         .bind(archives)

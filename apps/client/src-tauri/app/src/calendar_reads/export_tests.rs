@@ -60,7 +60,7 @@ fn archive_storage_custody_does_not_publish_its_components_or_method_in_local_ex
         {
             let pool = pool().await;
             sqlx::raw_sql(r#"
-                INSERT INTO calendar_events_archive
+                INSERT INTO calendar_event_archives
                     (id, source_event_id, archived_at, title, start_time, end_time, calendar_id, icalendar_component_id, created_at, updated_at)
                     SELECT id, id, '2026-10-02T10:00:00Z', title, start_time, end_time, calendar_id, icalendar_component_id, created_at, updated_at
                     FROM calendar_events WHERE id = 'event';
@@ -91,7 +91,7 @@ fn archive_storage_custody_does_not_publish_its_components_or_method_in_local_ex
             assert!(!snapshot.metadata.mixed_methods);
             let retained: (String, String, i64) = sqlx::query_as(
                 "SELECT archive.calendar_id, object.calendar_id, (SELECT COUNT(*) FROM icalendar_components WHERE object_id = object.id)
-                 FROM calendar_events_archive archive JOIN icalendar_components component ON component.id = archive.icalendar_component_id
+                 FROM calendar_event_archives archive JOIN icalendar_components component ON component.id = archive.icalendar_component_id
                  JOIN icalendar_objects object ON object.id = component.object_id WHERE archive.id = 'event'"
             ).fetch_one(&pool).await.unwrap();
             assert_eq!(retained, ("export".into(), "local".into(), 7));

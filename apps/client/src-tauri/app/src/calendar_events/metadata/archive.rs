@@ -136,7 +136,7 @@ impl PreparedArchive {
     ) -> Result<(), String> {
         self.metadata.write_preservation(tx).await?;
         let row = &self.metadata.events[0];
-        archive_row!(tx, "calendar_events_archive", {
+        archive_row!(tx, "calendar_event_archives", {
             id: &row.id, source_event_id: &self.source_id, original_occurrence_id: &self.original_id, recurrence_date: &self.recurrence_date, archived_at: archived_at,
             title: &row.title, start_time: &row.start_time, end_time: &row.end_time, timezone: &row.timezone,
             calendar_id: &row.calendar_id, project_id: &row.project_id, color: row.color, description: &row.description,

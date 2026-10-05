@@ -410,15 +410,15 @@ const WINDOW_EVENTS_SQL: &str = r#"
                  'breakPhase', pcss.break_phase,
                  'breakDurationMinutes', pcss.break_duration_minutes
                ) AS step_json
-               FROM pomodoro_config_sequence_steps pcss
+               FROM calendar_event_pomodoro_config_sequence_steps pcss
                WHERE pcss.event_id = ce.id
                ORDER BY pcss.step_index ASC
              )
            ) AS sequence_steps,
            pc.idle_timeout_minutes
     FROM calendar_events ce
-    LEFT JOIN pomodoro_configs pc ON pc.event_id = ce.id
-    LEFT JOIN pomodoro_config_count_rhythms pcc ON pcc.event_id = ce.id
+    LEFT JOIN calendar_event_pomodoro_configs pc ON pc.event_id = ce.id
+    LEFT JOIN calendar_event_pomodoro_config_count_rhythms pcc ON pcc.event_id = ce.id
     WHERE
       (ce.rrule IS NOT NULL AND ce.rrule <> '')
       OR EXISTS (SELECT 1 FROM calendar_event_rdates r WHERE r.event_id = ce.id)
@@ -455,15 +455,15 @@ const NOTIFICATION_SCHEDULER_EVENTS_SQL: &str = r#"
                  'breakPhase', pcss.break_phase,
                  'breakDurationMinutes', pcss.break_duration_minutes
                ) AS step_json
-               FROM pomodoro_config_sequence_steps pcss
+               FROM calendar_event_pomodoro_config_sequence_steps pcss
                WHERE pcss.event_id = ce.id
                ORDER BY pcss.step_index ASC
              )
            ) AS sequence_steps,
            pc.idle_timeout_minutes
     FROM calendar_events ce
-    LEFT JOIN pomodoro_configs pc ON pc.event_id = ce.id
-    LEFT JOIN pomodoro_config_count_rhythms pcc ON pcc.event_id = ce.id
+    LEFT JOIN calendar_event_pomodoro_configs pc ON pc.event_id = ce.id
+    LEFT JOIN calendar_event_pomodoro_config_count_rhythms pcc ON pcc.event_id = ce.id
     WHERE EXISTS (
       SELECT 1 FROM calendar_event_notifications n WHERE n.event_id = ce.id
     ) AND (
@@ -573,7 +573,7 @@ const FULL_EVENT_SELECT_SQL: &str = r#"
                  'breakPhase', pcss.break_phase,
                  'breakDurationMinutes', pcss.break_duration_minutes
                ) AS step_json
-               FROM pomodoro_config_sequence_steps pcss
+               FROM calendar_event_pomodoro_config_sequence_steps pcss
                WHERE pcss.event_id = ce.id
                ORDER BY pcss.step_index ASC
              )
@@ -581,8 +581,8 @@ const FULL_EVENT_SELECT_SQL: &str = r#"
            pc.idle_timeout_minutes
     FROM calendar_events ce
     LEFT JOIN icalendar_components ic ON ic.id = ce.icalendar_component_id
-    LEFT JOIN pomodoro_configs pc ON pc.event_id = ce.id
-    LEFT JOIN pomodoro_config_count_rhythms pcc ON pcc.event_id = ce.id
+    LEFT JOIN calendar_event_pomodoro_configs pc ON pc.event_id = ce.id
+    LEFT JOIN calendar_event_pomodoro_config_count_rhythms pcc ON pcc.event_id = ce.id
 "#;
 
 #[tauri::command]
@@ -923,10 +923,16 @@ mod tests {
             for (table, index) in [
                 (
                     "calendar_event_notifications",
-                    "idx_event_notifications_event",
+                    "idx_calendar_event_notifications_event",
                 ),
-                ("calendar_event_exdates", "idx_event_exdates_event_date"),
-                ("calendar_event_rdates", "idx_event_rdates_event_start"),
+                (
+                    "calendar_event_exdates",
+                    "idx_calendar_event_exdates_event_date",
+                ),
+                (
+                    "calendar_event_rdates",
+                    "idx_calendar_event_rdates_event_start",
+                ),
             ] {
                 let sql = format!(
                     "EXPLAIN QUERY PLAN SELECT event_id FROM {table} WHERE event_id IN ('event-a', 'event-b') ORDER BY event_id, sort_order"

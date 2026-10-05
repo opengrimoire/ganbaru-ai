@@ -203,7 +203,7 @@ pub(super) fn validate_profile_text(value: &str, maximum: usize, field: &str) ->
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
 pub(super) fn map_teammate_write_error(error: sqlx::Error) -> ChatError {
     let detail = error.to_string();
-    if detail.contains("idx_chat_ai_teammate_display_name")
+    if detail.contains("idx_chat_participants_teammate_display_name")
         || detail.contains("chat_participants.display_name")
     {
         ChatError::validation("displayName", "Name already in use")

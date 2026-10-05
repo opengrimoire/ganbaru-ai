@@ -383,11 +383,12 @@ where
     let native_now = super::time::current_utc_iso(&mut tx).await?;
     let now_ms = super::time::calendar_timestamp_millis(&native_now)
         .ok_or("Calendar scope requires a valid native clock")?;
-    let persisted_floor: i64 =
-        sqlx::query_scalar("SELECT updated_at_ms FROM focus_execution_state WHERE singleton = 1")
-            .fetch_one(&mut *tx)
-            .await
-            .map_err(|error| format!("read Calendar execution clock: {error}"))?;
+    let persisted_floor: i64 = sqlx::query_scalar(
+        "SELECT updated_at_ms FROM pomodoro_execution_state WHERE singleton = 1",
+    )
+    .fetch_one(&mut *tx)
+    .await
+    .map_err(|error| format!("read Calendar execution clock: {error}"))?;
     let now_ms = now_ms.max(clock_floor_ms).max(persisted_floor);
     tx.commit()
         .await

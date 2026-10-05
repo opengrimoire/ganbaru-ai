@@ -42,9 +42,9 @@ fn native_window_keeps_civil_gap_and_legacy_home_labels_for_every_consumer() {
         sqlx::raw_sql("INSERT INTO calendar_events(id, title, start_time, end_time, timezone, calendar_id)
             VALUES ('gap', 'Explicit gap', '2024-03-10T02:00:00', '2024-03-10T02:30:00', 'America/New_York', 'native-calendar'),
                    ('civil', 'Legacy civil', '2024-03-10 00:15', '2024-03-10 00:45', 'America/New_York', 'native-calendar');
-            INSERT INTO pomodoro_configs(event_id, rhythm_kind, rhythm_source)
+            INSERT INTO calendar_event_pomodoro_configs(event_id, rhythm_kind, rhythm_source)
                 SELECT id, 'count', 'custom' FROM calendar_events WHERE id IN ('gap', 'civil');
-            INSERT INTO pomodoro_config_count_rhythms(event_id, focus_duration_minutes, short_break_minutes, long_break_minutes, long_break_after_focus_count)
+            INSERT INTO calendar_event_pomodoro_config_count_rhythms(event_id, focus_duration_minutes, short_break_minutes, long_break_minutes, long_break_after_focus_count)
                 SELECT id, 25, 5, 15, 4 FROM calendar_events WHERE id IN ('gap', 'civil');
             INSERT INTO calendar_event_notifications(id, event_id, offset_minutes)
                 VALUES ('gap-notice', 'gap', 10), ('civil-notice', 'civil', 10);")

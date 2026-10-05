@@ -138,7 +138,7 @@ async fn dispatch_claimed_assignment(
           )
          JOIN chat_teammate_policy_revisions policy
            ON policy.id = authorization.teammate_policy_revision_id
-         JOIN chat_ai_teammates teammate ON teammate.participant_id = assignment.teammate_id
+         JOIN chat_teammates teammate ON teammate.participant_id = assignment.teammate_id
          JOIN chat_participants participant ON participant.id = assignment.teammate_id
          JOIN chat_channels channel
            ON channel.conversation_id = authorization.destination_conversation_id
@@ -151,7 +151,7 @@ async fn dispatch_claimed_assignment(
            ON membership.conversation_id = authorization.destination_conversation_id
           AND membership.participant_id = assignment.teammate_id
           AND membership.removed_at IS NULL
-         JOIN chat_ai_channel_memberships channel_access
+         JOIN chat_teammate_channel_memberships channel_access
            ON channel_access.conversation_id = membership.conversation_id
           AND channel_access.teammate_id = membership.participant_id
          JOIN chat_access_profiles profile ON profile.id = channel_access.access_profile_id
@@ -503,7 +503,7 @@ async fn require_live_folder_target(
             AND live.teammate_id = ?
             AND live.working_folder_id = frozen.working_folder_id
             AND live.revoked_at IS NULL
-           JOIN chat_ai_channel_memberships channel_access
+           JOIN chat_teammate_channel_memberships channel_access
              ON channel_access.conversation_id = live.conversation_id
             AND channel_access.teammate_id = live.teammate_id
            JOIN chat_access_profiles profile ON profile.id = channel_access.access_profile_id
@@ -766,7 +766,7 @@ pub(super) async fn deliver_assignment_input(
            ON membership.conversation_id = authorization.destination_conversation_id
           AND membership.participant_id = assignment.teammate_id
           AND membership.removed_at IS NULL
-         JOIN chat_ai_channel_memberships channel_access
+         JOIN chat_teammate_channel_memberships channel_access
            ON channel_access.conversation_id = membership.conversation_id
           AND channel_access.teammate_id = membership.participant_id
          JOIN chat_access_profiles profile ON profile.id = channel_access.access_profile_id

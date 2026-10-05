@@ -93,7 +93,7 @@ fn native_undo_restores_complete_original_rows_and_releases_only_its_archive_cop
             .revision()
             .unwrap();
         assert_eq!(after, before);
-        let remaining: (i64, i64) = sqlx::query_as("SELECT (SELECT COUNT(*) FROM calendar_events_archive), (SELECT COUNT(*) FROM icalendar_objects)")
+        let remaining: (i64, i64) = sqlx::query_as("SELECT (SELECT COUNT(*) FROM calendar_event_archives), (SELECT COUNT(*) FROM icalendar_objects)")
             .fetch_one(&mut *tx).await.unwrap();
         assert_eq!(remaining, (0, 1));
         tx.rollback().await.unwrap();
@@ -120,8 +120,8 @@ fn hard_deleted_future_source_has_only_a_process_local_preimage_and_restores_its
         )
         .await;
         sqlx::raw_sql("UPDATE calendar_events SET title='Ephemeral future title' WHERE id='source';
-            INSERT INTO pomodoro_configs (event_id, rhythm_kind, rhythm_source) VALUES ('source', 'sequence', 'custom');
-            INSERT INTO pomodoro_config_sequence_steps (event_id, step_index, focus_duration_minutes, break_phase, break_duration_minutes)
+            INSERT INTO calendar_event_pomodoro_configs (event_id, rhythm_kind, rhythm_source) VALUES ('source', 'sequence', 'custom');
+            INSERT INTO calendar_event_pomodoro_config_sequence_steps (event_id, step_index, focus_duration_minutes, break_phase, break_duration_minutes)
                 VALUES ('source', 0, 25, 'short_break', 5);
             INSERT INTO music_context_assignments (owner_kind, owner_id, phase, behavior, provenance_kind, updated_at, version)
                 VALUES ('event-snapshot', 'source', 'focus', 'pause-music', 'explicit', 8, 4);")
@@ -137,7 +137,7 @@ fn hard_deleted_future_source_has_only_a_process_local_preimage_and_restores_its
         let remaining: (i64, i64, String) = sqlx::query_as(
             "SELECT
             (SELECT COUNT(*) FROM calendar_events WHERE id='source'),
-            (SELECT COUNT(*) FROM calendar_events_archive),
+            (SELECT COUNT(*) FROM calendar_event_archives),
             (SELECT result_json FROM calendar_edit_receipts WHERE command_id='delete')",
         )
         .fetch_one(&pool)
@@ -351,7 +351,7 @@ fn native_undo_rejects_recreated_sources_and_changed_original_import_graphs() {
                 .unwrap();
             assert_eq!(before, after);
             tx.rollback().await.unwrap();
-            let archives: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM calendar_events_archive")
+            let archives: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM calendar_event_archives")
                 .fetch_one(&pool)
                 .await
                 .unwrap();
@@ -381,7 +381,7 @@ fn late_undo_failure_rolls_back_restored_metadata_references_and_archive_cleanup
         tx.rollback().await.unwrap();
         let remaining: (i64, i64, i64) = sqlx::query_as("SELECT
             (SELECT COUNT(*) FROM calendar_events WHERE id='source'),
-            (SELECT COUNT(*) FROM calendar_events_archive), (SELECT COUNT(*) FROM icalendar_objects)")
+            (SELECT COUNT(*) FROM calendar_event_archives), (SELECT COUNT(*) FROM icalendar_objects)")
             .fetch_one(&pool).await.unwrap();
         assert_eq!(remaining, (0, 1, 2));
         sqlx::query("DROP TRIGGER reject_undo")

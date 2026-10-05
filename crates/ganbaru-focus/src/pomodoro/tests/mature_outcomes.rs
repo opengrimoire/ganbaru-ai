@@ -25,7 +25,7 @@ fn records_matured_day_outcomes_for_run_start_decisions() {
         .await
         .unwrap();
         sqlx::query(
-            "INSERT INTO pomodoro_configs
+            "INSERT INTO calendar_event_pomodoro_configs
                     (event_id, rhythm_kind, rhythm_source, preset_key, idle_timeout_minutes)
                  VALUES ('event-1', 'count', 'preset', 'adaptive', NULL),
                         ('event-2', 'count', 'preset', 'adaptive', NULL)",

@@ -16,7 +16,11 @@ const READ_ONLY_ERROR: &str = "This vault is read-only on this device";
 const MANAGED_WRITE_DRAIN_BUDGET: Duration = Duration::from_secs(10);
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase", tag = "kind")]
+#[serde(
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase",
+    tag = "kind"
+)]
 pub(crate) enum TransferPhase {
     Stable,
     PreparingOutgoing {
@@ -974,6 +978,29 @@ mod tests {
             .initialize_from_path(path.to_path_buf(), device_id.to_string())
             .unwrap();
         manager
+    }
+
+    #[test]
+    fn transfer_phase_serializes_variant_fields_in_camel_case() {
+        let phase = TransferPhase::PreparingOutgoing {
+            transfer_id: "transfer".into(),
+            receiver_device_id: "phone".into(),
+            next_generation: 3,
+        };
+        let json = serde_json::to_value(&phase).unwrap();
+        assert_eq!(
+            json,
+            serde_json::json!({
+                "kind": "preparingOutgoing",
+                "transferId": "transfer",
+                "receiverDeviceId": "phone",
+                "nextGeneration": 3,
+            })
+        );
+        assert_eq!(
+            serde_json::from_value::<TransferPhase>(json).unwrap(),
+            phase
+        );
     }
 
     #[test]

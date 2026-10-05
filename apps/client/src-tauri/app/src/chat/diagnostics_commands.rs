@@ -300,7 +300,7 @@ async fn read_diagnostics(
             COALESCE(SUM(CASE WHEN cleanup_kind = 'checkpoint_ref' AND state = 'failed' THEN 1 ELSE 0 END), 0) AS failed,
             COALESCE(SUM(CASE WHEN cleanup_kind = 'attachment_file' AND state IN ('pending', 'running') THEN 1 ELSE 0 END), 0) AS attachment_pending,
             COALESCE(SUM(CASE WHEN cleanup_kind = 'attachment_file' AND state = 'failed' THEN 1 ELSE 0 END), 0) AS attachment_failed
-         FROM chat_cleanup_queue",
+         FROM chat_cleanup_jobs",
     ).fetch_one(pool).await.map_err(persistence_error)?;
     let (live_provider_processes, active_turns) = runtimes.process_counts()?;
     let mut provider_probe_healthy = 0u64;

@@ -323,7 +323,7 @@ fn adaptive_execution_rejects_fractional_replay_evidence_and_can_retry_after_rep
                 .fetch_one(&pool)
                 .await
                 .unwrap();
-        let receipts: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM focus_execution_receipts")
+        let receipts: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM pomodoro_execution_receipts")
             .fetch_one(&pool)
             .await
             .unwrap();
@@ -367,11 +367,11 @@ fn oversized_adaptive_aggregate_rolls_back_execution_revision_and_receipt_before
                 .fetch_one(&pool)
                 .await
                 .unwrap();
-        let revision: i64 = sqlx::query_scalar("SELECT revision FROM focus_execution_state")
+        let revision: i64 = sqlx::query_scalar("SELECT revision FROM pomodoro_execution_state")
             .fetch_one(&pool)
             .await
             .unwrap();
-        let receipts: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM focus_execution_receipts")
+        let receipts: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM pomodoro_execution_receipts")
             .fetch_one(&pool)
             .await
             .unwrap();
@@ -384,7 +384,7 @@ fn oversized_adaptive_aggregate_rolls_back_execution_revision_and_receipt_before
         .unwrap();
         let result = execute(&pool, &request, &configured).await.unwrap();
         assert_eq!(result.mode, FocusMode::Running);
-        let revision: i64 = sqlx::query_scalar("SELECT revision FROM focus_execution_state")
+        let revision: i64 = sqlx::query_scalar("SELECT revision FROM pomodoro_execution_state")
             .fetch_one(&pool)
             .await
             .unwrap();
@@ -636,7 +636,7 @@ fn adaptive_execution_commits_native_policy_features_plan_and_receipt_together()
             result.run.as_ref().unwrap().configuration.rhythm,
             CountRhythm::BASELINE.into_rhythm()
         );
-        let row: (i64, i64, i64, i64) = sqlx::query_as("SELECT (SELECT COUNT(*) FROM pomodoro_run_adaptive_snapshots), (SELECT COUNT(*) FROM pomodoro_adaptive_decision_values), (SELECT COUNT(*) FROM pomodoro_adaptive_context_snapshot_features), (SELECT COUNT(*) FROM focus_execution_receipts)")
+        let row: (i64, i64, i64, i64) = sqlx::query_as("SELECT (SELECT COUNT(*) FROM pomodoro_run_adaptive_snapshots), (SELECT COUNT(*) FROM pomodoro_adaptive_decision_values), (SELECT COUNT(*) FROM pomodoro_adaptive_context_snapshot_features), (SELECT COUNT(*) FROM pomodoro_execution_receipts)")
             .fetch_one(&pool).await.unwrap();
         assert_eq!(row, (1, 4, 47, 1));
         let count: i64 =
@@ -727,7 +727,7 @@ fn adaptive_snapshot_failure_rolls_back_the_run_plan_and_reserved_revision() {
         .await
         .unwrap_err();
         assert!(error.message.contains("injected adaptive feature failure"));
-        let counts: (i64, i64, i64, i64, i64) = sqlx::query_as("SELECT (SELECT COUNT(*) FROM pomodoro_runs), (SELECT COUNT(*) FROM pomodoro_segments), (SELECT COUNT(*) FROM pomodoro_adaptive_planned_blocks), (SELECT COUNT(*) FROM pomodoro_adaptive_context_snapshots), (SELECT COUNT(*) FROM focus_execution_receipts)").fetch_one(&pool).await.unwrap();
+        let counts: (i64, i64, i64, i64, i64) = sqlx::query_as("SELECT (SELECT COUNT(*) FROM pomodoro_runs), (SELECT COUNT(*) FROM pomodoro_segments), (SELECT COUNT(*) FROM pomodoro_adaptive_planned_blocks), (SELECT COUNT(*) FROM pomodoro_adaptive_context_snapshots), (SELECT COUNT(*) FROM pomodoro_execution_receipts)").fetch_one(&pool).await.unwrap();
         assert_eq!(counts, (0, 0, 0, 0, 0));
         assert_eq!(
             focus_read_execution_snapshot(&pool, START)
@@ -782,7 +782,7 @@ fn adaptive_boundary_failure_preserves_the_previous_phase_rhythm_and_receipt_set
             initial.segment.as_ref().unwrap().id
         );
         assert_eq!(canonical.segment.as_ref().unwrap().status, "active");
-        let counts: (i64, i64, i64) = sqlx::query_as("SELECT (SELECT COUNT(*) FROM pomodoro_segments), (SELECT COUNT(*) FROM pomodoro_adaptive_decisions), (SELECT COUNT(*) FROM focus_execution_receipts)").fetch_one(&pool).await.unwrap();
+        let counts: (i64, i64, i64) = sqlx::query_as("SELECT (SELECT COUNT(*) FROM pomodoro_segments), (SELECT COUNT(*) FROM pomodoro_adaptive_decisions), (SELECT COUNT(*) FROM pomodoro_execution_receipts)").fetch_one(&pool).await.unwrap();
         assert_eq!(counts, (1, 1, 1));
     });
 }

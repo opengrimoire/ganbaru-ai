@@ -62,7 +62,7 @@ fn semantic_deletion_archives_complete_task_referenced_source_and_replays_withou
             .await
             .unwrap();
         tx.commit().await.unwrap();
-        let archive: (String, String, Option<String>) = sqlx::query_as("SELECT id, original_occurrence_id, recurrence_date FROM calendar_events_archive WHERE source_event_id='source'")
+        let archive: (String, String, Option<String>) = sqlx::query_as("SELECT id, original_occurrence_id, recurrence_date FROM calendar_event_archives WHERE source_event_id='source'")
             .fetch_one(&pool).await.unwrap();
         assert_ne!(archive.0, "source");
         assert_eq!(archive.1, "source");
@@ -169,7 +169,7 @@ fn future_wide_deletion_retains_started_prefix_and_exact_future_history_snapshot
         }
         tx.rollback().await.unwrap();
         let archived: (String, String) =
-            sqlx::query_as("SELECT id, recurrence_date FROM calendar_events_archive")
+            sqlx::query_as("SELECT id, recurrence_date FROM calendar_event_archives")
                 .fetch_one(&pool)
                 .await
                 .unwrap();
@@ -203,7 +203,7 @@ fn future_wide_deletion_retains_started_prefix_and_exact_future_history_snapshot
             .is_err()
         );
         tx.rollback().await.unwrap();
-        let archives: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM calendar_events_archive")
+        let archives: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM calendar_event_archives")
             .fetch_one(&pool)
             .await
             .unwrap();
@@ -300,7 +300,7 @@ fn native_stop_archival_and_receipts_roll_back_together_and_retry_the_exact_run(
                 assert_eq!(original.run, before.run);
                 assert_eq!(original.segment, before.segment);
                 let archives: i64 =
-                    sqlx::query_scalar("SELECT COUNT(*) FROM calendar_events_archive")
+                    sqlx::query_scalar("SELECT COUNT(*) FROM calendar_event_archives")
                         .fetch_one(&pool)
                         .await
                         .unwrap();
@@ -328,7 +328,7 @@ fn native_stop_archival_and_receipts_roll_back_together_and_retry_the_exact_run(
                 .unwrap();
                 assert!(projection.0.is_none());
                 let original: String = sqlx::query_scalar(
-                    "SELECT original_occurrence_id FROM calendar_events_archive WHERE id=?",
+                    "SELECT original_occurrence_id FROM calendar_event_archives WHERE id=?",
                 )
                 .bind(projection.1)
                 .fetch_one(&pool)
@@ -370,7 +370,7 @@ fn duplicate_history_and_child_edits_invalidate_deletion_before_writes() {
             false,
         );
         assert!(prepared.err().unwrap().contains("review deletion again"));
-        let counts: (i64, i64) = sqlx::query_as("SELECT (SELECT COUNT(*) FROM calendar_events_archive), (SELECT COUNT(*) FROM calendar_event_exdates)")
+        let counts: (i64, i64) = sqlx::query_as("SELECT (SELECT COUNT(*) FROM calendar_event_archives), (SELECT COUNT(*) FROM calendar_event_exdates)")
             .fetch_one(&mut *tx).await.unwrap();
         assert_eq!(counts, (0, 0));
         tx.rollback().await.unwrap();
@@ -433,7 +433,7 @@ fn floating_deletion_uses_native_device_dates_and_preserves_inclusive_archive_ge
             .await;
             rows.write(&mut tx).await.unwrap();
             tx.commit().await.unwrap();
-            let archive: Option<(String, String, String, String)> = sqlx::query_as("SELECT start_time, end_time, original_occurrence_id, recurrence_date FROM calendar_events_archive")
+            let archive: Option<(String, String, String, String)> = sqlx::query_as("SELECT start_time, end_time, original_occurrence_id, recurrence_date FROM calendar_event_archives")
                 .fetch_optional(&pool).await.unwrap();
             if archived {
                 assert_eq!(
@@ -550,7 +550,7 @@ fn deletion_review_covers_complete_children_and_durable_task_links_without_write
             "UPDATE calendar_event_override_extended_properties SET property_value='changed'",
             "UPDATE icalendar_value_nodes SET text_value='changed' WHERE id='parameter-value'",
             "UPDATE music_context_assignments SET behavior='pause-music'",
-            "UPDATE pomodoro_config_sequence_steps SET focus_duration_minutes=26",
+            "UPDATE calendar_event_pomodoro_config_sequence_steps SET focus_duration_minutes=26",
             "UPDATE project_task_event_links SET link_kind='reference'",
         ] {
             sqlx::query("SAVEPOINT change")

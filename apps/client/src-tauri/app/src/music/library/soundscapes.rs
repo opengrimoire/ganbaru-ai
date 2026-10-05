@@ -251,7 +251,7 @@ pub(crate) async fn remove(
              SET active_soundscape_id = ?,
                  desired_playing = CASE WHEN ? = 0 THEN 0 ELSE desired_playing END,
                  updated_at = updated_at + 1, version = version + 1
-             WHERE singleton_id = 1",
+             WHERE singleton = 1",
         )
         .bind(first_remaining)
         .bind(remaining_count as i64)
@@ -265,7 +265,7 @@ pub(crate) async fn remove(
 pub(crate) async fn state(pool: &SqlitePool) -> MusicLibraryResult<MusicSoundscapeState> {
     let row = sqlx::query_as::<_, (Option<String>, bool, Option<f64>, Option<f64>, bool, f64, i64, i64, bool)>(
         "SELECT active_soundscape_id, multiple_enabled, generated_level, local_level, desired_playing, volume, updated_at, version, automatic_intent
-         FROM music_soundscape_state WHERE singleton_id = 1",
+         FROM music_soundscape_state WHERE singleton = 1",
     )
     .fetch_one(pool)
     .await
@@ -370,7 +370,7 @@ pub(crate) async fn update_state(
         "UPDATE music_soundscape_state
          SET active_soundscape_id = ?, multiple_enabled = ?, generated_level = ?, local_level = ?, desired_playing = ?, volume = ?,
              updated_at = ?, version = version + 1, automatic_intent = 0
-         WHERE singleton_id = 1 AND version = ?",
+         WHERE singleton = 1 AND version = ?",
     )
     .bind(request.active_soundscape_id)
     .bind(request.multiple_enabled)

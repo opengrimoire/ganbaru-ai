@@ -6,9 +6,9 @@ Pomodoro persistence separates planned rhythm, one run's configuration snapshot,
 
 | Group | Tables |
 | --- | --- |
-| Configuration | `pomodoro_configs`, `pomodoro_config_count_rhythms`, `pomodoro_config_sequence_steps` |
+| Configuration | `calendar_event_pomodoro_configs`, `calendar_event_pomodoro_config_count_rhythms`, `calendar_event_pomodoro_config_sequence_steps` |
 | Run history | `pomodoro_runs`, `pomodoro_run_count_rhythms`, `pomodoro_run_sequence_steps`, `pomodoro_segments`, `pomodoro_pauses`, `pomodoro_run_events`, `pomodoro_run_adaptive_snapshots` |
-| Native execution | `focus_execution_state` (one revisioned accepted state), `focus_execution_receipts` (command ID, request, and result) |
+| Native execution | `pomodoro_execution_state` (one revisioned accepted state), `pomodoro_execution_receipts` (command ID, request, and result) |
 | Adaptive | `pomodoro_adaptive_*` policies, bounds, experiments, variants, assignments, outcomes, decisions with values, reasons, and state scores, context snapshots and states, data quality flags, and planned blocks |
 | Calendar archive | `calendar_event_archive_pomodoro_*` copies of Pomodoro configuration kept with archived Calendar events |
 
@@ -42,7 +42,7 @@ Run events are append-only explanations for lifecycle decisions not fully expres
 
 ## Native execution
 
-`focus_execution_state` holds the accepted execution snapshot with a revision. Every command validates the expected revision and stores its receipt in the same transaction as the canonical rows it changes, so a retried command returns the original result. Recovery rules are in [Focus authority](../../algorithms/pomodoro/focus-authority.md#recovery); the heartbeat bounds desktop recovery and is not an activity log. Recovery is idempotent.
+`pomodoro_execution_state` holds the accepted execution snapshot with a revision. Every command validates the expected revision and stores its receipt in the same transaction as the canonical rows it changes, so a retried command returns the original result. Recovery rules are in [Focus authority](../../algorithms/pomodoro/focus-authority.md#recovery); the heartbeat bounds desktop recovery and is not an activity log. Recovery is idempotent.
 
 ## Adaptive data
 

@@ -394,7 +394,7 @@ async fn load_calendar_adaptive_planned_blocks_tx(
                 ce.end_time AS end_time,
                 'live_event' AS source_kind
          FROM calendar_events ce
-         JOIN pomodoro_configs pc ON pc.event_id = ce.id
+         JOIN calendar_event_pomodoro_configs pc ON pc.event_id = ce.id
          WHERE ce.all_day = 0
            AND ce.status != 'cancelled'
            AND substr(ce.start_time, 1, 10) = ?
@@ -404,7 +404,7 @@ async fn load_calendar_adaptive_planned_blocks_tx(
                 cea.start_time AS start_time,
                 cea.end_time AS end_time,
                 'archived_event' AS source_kind
-         FROM calendar_events_archive cea
+         FROM calendar_event_archives cea
          JOIN calendar_event_archive_pomodoro_configs pc
            ON pc.archive_event_id = cea.id
          WHERE cea.all_day = 0

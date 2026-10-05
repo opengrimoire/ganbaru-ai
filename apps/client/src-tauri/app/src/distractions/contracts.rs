@@ -8,7 +8,7 @@ pub struct DistractionsRuntimeState {
     pub(crate) pause_reason: Option<String>,
     pub(crate) phase: String,
     pub(crate) active_run_id: Option<String>,
-    pub(crate) active_block_id: Option<String>,
+    pub(crate) active_occurrence_id: Option<String>,
     pub(crate) remaining_seconds: Option<i64>,
     pub(crate) updated_at: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]

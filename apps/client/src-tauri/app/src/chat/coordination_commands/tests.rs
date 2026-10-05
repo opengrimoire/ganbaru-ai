@@ -45,7 +45,7 @@ async fn seed_unused_teammate(pool: &SqlitePool, teammate_id: &str, policy_id: &
     .await
     .unwrap();
     sqlx::query(
-        "INSERT INTO chat_ai_teammates
+        "INSERT INTO chat_teammates
             (participant_id, role, instructions, latest_policy_revision, created_at, updated_at)
          VALUES (?, 'General support', '', 1, ?, ?)",
     )
@@ -175,7 +175,7 @@ async fn seed_review_assignment_with_stranded_replies(pool: &SqlitePool) {
              'participant:review-agent', 'ai_teammate', 'Review agent',
              '2026-08-04T17:00:00.000Z', '2026-08-04T17:00:00.000Z'
          );
-         INSERT INTO chat_ai_teammates
+         INSERT INTO chat_teammates
              (participant_id, role, instructions, created_at, updated_at)
          VALUES (
              'participant:review-agent', 'Test', 'Test',
@@ -195,7 +195,7 @@ async fn seed_review_assignment_with_stranded_replies(pool: &SqlitePool) {
              'conversation:review', 'participant:review-agent', 'member',
              '2026-08-04T17:00:00.000Z', '2026-08-04T17:00:00.000Z'
          );
-         INSERT INTO chat_ai_channel_memberships
+         INSERT INTO chat_teammate_channel_memberships
              (conversation_id, teammate_id, access_profile_id,
               read_history, read_history_inherits_profile,
               participate, participate_inherits_profile,
@@ -213,7 +213,7 @@ async fn seed_review_assignment_with_stranded_replies(pool: &SqlitePool) {
              'conversation:review', 'participant:review-agent', 'project:review',
              'folder:review', 'execute', 1, 1, '2026-08-04T17:00:00.000Z'
          );
-         UPDATE chat_ai_teammate_access_state
+         UPDATE chat_teammate_access_state
          SET access_revision = 1, updated_at = '2026-08-04T17:00:00.000Z'
          WHERE teammate_id = 'participant:review-agent';
          INSERT INTO chat_conversation_items

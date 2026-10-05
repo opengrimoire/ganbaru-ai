@@ -116,14 +116,14 @@ async fn insert_config(
     tx: &mut Transaction<'_, Sqlite>,
     config: &BenchmarkPomodoroConfigSeed,
 ) -> Result<(), String> {
-    sqlx::query("DELETE FROM pomodoro_configs WHERE event_id = ?")
+    sqlx::query("DELETE FROM calendar_event_pomodoro_configs WHERE event_id = ?")
         .bind(&config.event_id)
         .execute(&mut **tx)
         .await
         .map_err(|e| format!("clear benchmark pomodoro config: {e}"))?;
 
     sqlx::query(
-        "INSERT INTO pomodoro_configs
+        "INSERT INTO calendar_event_pomodoro_configs
             (event_id, rhythm_kind, rhythm_source, preset_key, idle_timeout_minutes)
          VALUES (?, ?, ?, ?, ?)",
     )
@@ -144,7 +144,7 @@ async fn insert_config(
             long_break_after_focus_count,
         } => {
             sqlx::query(
-                "INSERT INTO pomodoro_config_count_rhythms
+                "INSERT INTO calendar_event_pomodoro_config_count_rhythms
                     (event_id, focus_duration_minutes, short_break_minutes, long_break_minutes,
                      long_break_after_focus_count)
                  VALUES (?, ?, ?, ?, ?)",
@@ -161,7 +161,7 @@ async fn insert_config(
         BenchmarkPomodoroRhythm::Sequence { steps } => {
             for (step_index, step) in steps.iter().enumerate() {
                 sqlx::query(
-                    "INSERT INTO pomodoro_config_sequence_steps
+                    "INSERT INTO calendar_event_pomodoro_config_sequence_steps
                         (event_id, step_index, focus_duration_minutes, break_phase, break_duration_minutes)
                      VALUES (?, ?, ?, ?, ?)",
                 )
@@ -192,7 +192,7 @@ async fn insert_segment(
 ) -> Result<(), String> {
     let config = sqlx::query(
         "SELECT rhythm_kind, rhythm_source, preset_key, idle_timeout_minutes
-         FROM pomodoro_configs
+         FROM calendar_event_pomodoro_configs
          WHERE event_id = ?",
     )
     .bind(&segment.event_id)
@@ -254,7 +254,7 @@ async fn insert_segment(
                      long_break_after_focus_count)
                  SELECT ?, focus_duration_minutes, short_break_minutes, long_break_minutes,
                         long_break_after_focus_count
-                 FROM pomodoro_config_count_rhythms
+                 FROM calendar_event_pomodoro_config_count_rhythms
                  WHERE event_id = ?",
             )
             .bind(&segment.run_id)
@@ -268,7 +268,7 @@ async fn insert_segment(
                 "INSERT OR IGNORE INTO pomodoro_run_sequence_steps
                     (run_id, step_index, focus_duration_minutes, break_phase, break_duration_minutes)
                  SELECT ?, step_index, focus_duration_minutes, break_phase, break_duration_minutes
-                 FROM pomodoro_config_sequence_steps
+                 FROM calendar_event_pomodoro_config_sequence_steps
                  WHERE event_id = ?",
             )
             .bind(&segment.run_id)

@@ -401,7 +401,7 @@ async fn require_live_authorization(
            ON membership.conversation_id = authorization.destination_conversation_id
           AND membership.participant_id = assignment.teammate_id
           AND membership.removed_at IS NULL
-         JOIN chat_ai_channel_memberships channel_access
+         JOIN chat_teammate_channel_memberships channel_access
            ON channel_access.conversation_id = membership.conversation_id
           AND channel_access.teammate_id = membership.participant_id
          JOIN chat_access_profiles profile ON profile.id = channel_access.access_profile_id

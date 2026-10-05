@@ -26,7 +26,6 @@ pub struct ChatProviderDeviceState {
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ChatMachinePreferences {
-    pub restore_last_selected_thread: bool,
     pub last_selected_thread_id: Option<ChatThreadId>,
 }
 

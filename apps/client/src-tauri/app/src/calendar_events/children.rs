@@ -80,7 +80,7 @@ pub(super) async fn replace_pomodoro_config(
     config: &CalendarPomodoroConfig,
 ) -> Result<(), String> {
     validate_pomodoro_config(config)?;
-    sqlx::query("DELETE FROM pomodoro_configs WHERE event_id = ?")
+    sqlx::query("DELETE FROM calendar_event_pomodoro_configs WHERE event_id = ?")
         .bind(event_id)
         .execute(&mut **tx)
         .await
@@ -99,7 +99,7 @@ pub(super) async fn insert_pomodoro_config(
         CalendarPomodoroRhythm::Sequence { .. } => "sequence",
     };
     sqlx::query(
-        "INSERT INTO pomodoro_configs
+        "INSERT INTO calendar_event_pomodoro_configs
            (event_id, rhythm_kind, rhythm_source, preset_key, idle_timeout_minutes)
          VALUES (?, ?, ?, ?, ?)",
     )
@@ -120,7 +120,7 @@ pub(super) async fn insert_pomodoro_config(
             long_break_after_focus_count,
         } => {
             sqlx::query(
-                "INSERT INTO pomodoro_config_count_rhythms
+                "INSERT INTO calendar_event_pomodoro_config_count_rhythms
                    (event_id, focus_duration_minutes, short_break_minutes, long_break_minutes,
                     long_break_after_focus_count)
                  VALUES (?, ?, ?, ?, ?)",
@@ -137,7 +137,7 @@ pub(super) async fn insert_pomodoro_config(
         CalendarPomodoroRhythm::Sequence { steps } => {
             for (step_index, step) in steps.iter().enumerate() {
                 sqlx::query(
-                    "INSERT INTO pomodoro_config_sequence_steps
+                    "INSERT INTO calendar_event_pomodoro_config_sequence_steps
                        (event_id, step_index, focus_duration_minutes, break_phase, break_duration_minutes)
                      VALUES (?, ?, ?, ?, ?)",
                 )

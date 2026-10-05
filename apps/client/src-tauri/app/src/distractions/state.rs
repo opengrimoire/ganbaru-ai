@@ -167,7 +167,7 @@ pub(crate) fn committed_focus_state(
         },
         phase: phase.into(),
         active_run_id: effect.run_id.clone(),
-        active_block_id: effect.occurrence_id.clone(),
+        active_occurrence_id: effect.occurrence_id.clone(),
         remaining_seconds: active.then(|| effect.remaining_ms.max(0).saturating_add(999) / 1000),
         updated_at,
         valid_until_ms: Some(valid_until.max(0)),

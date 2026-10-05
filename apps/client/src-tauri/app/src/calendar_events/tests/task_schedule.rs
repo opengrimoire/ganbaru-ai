@@ -80,7 +80,7 @@ fn scheduling_commits_selected_duration_links_dates_history_and_focus_configurat
                 1
             )
         );
-        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM pomodoro_configs WHERE event_id LIKE 'calendar-schedule-%' AND idle_timeout_minutes=5").fetch_one(&pool).await.unwrap();
+        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM calendar_event_pomodoro_configs WHERE event_id LIKE 'calendar-schedule-%' AND idle_timeout_minutes=5").fetch_one(&pool).await.unwrap();
         assert_eq!(count, 2);
         let histories: i64 = sqlx::query_scalar(
             "SELECT COUNT(*) FROM project_task_change_events WHERE task_id IN ('task','task-2')",
@@ -129,7 +129,7 @@ fn scheduling_rolls_back_every_event_task_link_date_history_and_receipt_after_la
                 .contains("injected scheduling failure")
         );
         tx.rollback().await.unwrap();
-        for table in ["calendar_events", "pomodoro_configs"] {
+        for table in ["calendar_events", "calendar_event_pomodoro_configs"] {
             let count: i64 = sqlx::query_scalar(&format!(
                 "SELECT COUNT(*) FROM {table} WHERE {} LIKE 'calendar-schedule-%'",
                 if table == "calendar_events" {
@@ -397,7 +397,7 @@ fn scheduling_snapshots_soundtrack_and_custom_idle_and_rejects_changed_review() 
             ]
         );
         let configs: Vec<(String, i64, i64)> = sqlx::query_as("SELECT c.rhythm_source, c.idle_timeout_minutes, r.focus_duration_minutes
-            FROM pomodoro_configs c JOIN pomodoro_config_count_rhythms r ON r.event_id=c.event_id WHERE c.event_id LIKE 'calendar-schedule-%'")
+            FROM calendar_event_pomodoro_configs c JOIN calendar_event_pomodoro_config_count_rhythms r ON r.event_id=c.event_id WHERE c.event_id LIKE 'calendar-schedule-%'")
             .fetch_all(&pool).await.unwrap();
         assert_eq!(configs, vec![("custom".into(), 10, 35); 2]);
         sqlx::query("UPDATE music_context_assignments SET behavior='pause-music' WHERE owner_kind='project-default'").execute(&pool).await.unwrap();

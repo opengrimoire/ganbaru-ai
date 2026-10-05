@@ -66,7 +66,7 @@ async fn resolve_in_zone(
         .ok_or("Focus day-plan window exceeds its date range")?;
     let window = Window::new(&local_date.to_string(), &next_date.to_string(), device_zone)?;
     let active_occurrence: Option<String> = sqlx::query_scalar(
-        "SELECT COALESCE(r.current_occurrence_id, r.original_event_id) FROM focus_execution_state s JOIN pomodoro_runs r
+        "SELECT COALESCE(r.current_occurrence_id, r.original_event_id) FROM pomodoro_execution_state s JOIN pomodoro_runs r
          ON r.id = json_extract(s.state_json, '$.runId')
          WHERE s.singleton = 1 AND r.ended_at IS NULL",
     )

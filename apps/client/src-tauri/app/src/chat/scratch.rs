@@ -390,7 +390,7 @@ pub(crate) async fn generation_constraints_hold_in_connection(
         "SELECT participant.id, participant.participant_kind
          FROM chat_conversation_memberships membership
          JOIN chat_participants participant ON participant.id = membership.participant_id
-         LEFT JOIN chat_ai_channel_memberships channel_access
+         LEFT JOIN chat_teammate_channel_memberships channel_access
            ON channel_access.conversation_id = membership.conversation_id
           AND channel_access.teammate_id = membership.participant_id
          LEFT JOIN chat_access_profiles profile ON profile.id = channel_access.access_profile_id
@@ -466,7 +466,7 @@ async fn participant_can_read_source(
            SELECT 1
            FROM chat_conversation_memberships membership
            JOIN chat_participants participant ON participant.id = membership.participant_id
-           LEFT JOIN chat_ai_channel_memberships channel_access
+           LEFT JOIN chat_teammate_channel_memberships channel_access
              ON channel_access.conversation_id = membership.conversation_id
             AND channel_access.teammate_id = membership.participant_id
            LEFT JOIN chat_access_profiles profile ON profile.id = channel_access.access_profile_id
@@ -712,7 +712,7 @@ mod tests {
             .await
             .unwrap();
             sqlx::query(
-                "INSERT INTO chat_ai_teammates
+                "INSERT INTO chat_teammates
                     (participant_id, role, created_at, updated_at)
                  VALUES (?, 'Test', ?, ?)",
             )
@@ -730,7 +730,7 @@ mod tests {
              INSERT INTO chat_conversation_memberships
                 (conversation_id, participant_id, membership_role, created_at, updated_at)
              VALUES ('conversation:scratch', '{TEAMMATE}', 'member', '{NOW}', '{NOW}');
-             INSERT INTO chat_ai_channel_memberships
+             INSERT INTO chat_teammate_channel_memberships
                 (conversation_id, teammate_id, access_profile_id,
                  read_history, participate, history_boundary, created_at, updated_at)
              VALUES ('conversation:scratch', '{TEAMMATE}', 'access-profile:conversation-only',
@@ -884,7 +884,7 @@ mod tests {
             .await
             .unwrap();
         sqlx::query(
-            "UPDATE chat_ai_channel_memberships SET read_history = 0 WHERE teammate_id = ?",
+            "UPDATE chat_teammate_channel_memberships SET read_history = 0 WHERE teammate_id = ?",
         )
         .bind(TEAMMATE)
         .execute(&pool)

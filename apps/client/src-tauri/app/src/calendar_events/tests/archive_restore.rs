@@ -27,7 +27,7 @@ fn archived_event_restore_relinks_pomodoro_history() {
                 .await
                 .unwrap();
         let archive_count: i64 =
-            sqlx::query_scalar("SELECT COUNT(*) FROM calendar_events_archive WHERE id = 'event-1'")
+            sqlx::query_scalar("SELECT COUNT(*) FROM calendar_event_archives WHERE id = 'event-1'")
                 .fetch_one(&pool)
                 .await
                 .unwrap();
@@ -58,7 +58,7 @@ fn archived_event_restore_relinks_pomodoro_history() {
                 .await
                 .unwrap();
         let archive_count: i64 =
-            sqlx::query_scalar("SELECT COUNT(*) FROM calendar_events_archive WHERE id = 'event-1'")
+            sqlx::query_scalar("SELECT COUNT(*) FROM calendar_event_archives WHERE id = 'event-1'")
                 .fetch_one(&pool)
                 .await
                 .unwrap();
@@ -114,7 +114,7 @@ fn archived_synthetic_restore_removes_exception_and_relinks_history() {
                 .await
                 .unwrap();
         let archive_count: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM calendar_events_archive WHERE id = 'event-1::2000-05-10'",
+            "SELECT COUNT(*) FROM calendar_event_archives WHERE id = 'event-1::2000-05-10'",
         )
         .fetch_one(&pool)
         .await
@@ -143,7 +143,7 @@ fn archived_synthetic_restore_removes_exception_and_relinks_history() {
         tx.commit().await.unwrap();
 
         let archive_count: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM calendar_events_archive WHERE id = 'event-1::2000-05-10'",
+            "SELECT COUNT(*) FROM calendar_event_archives WHERE id = 'event-1::2000-05-10'",
         )
         .fetch_one(&pool)
         .await

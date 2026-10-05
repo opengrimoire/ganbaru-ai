@@ -5,7 +5,7 @@ fn schema_creates_normalized_calendar_archive_tables() {
     super::block_on(async {
         let pool = migrated_memory_pool().await;
         let archive_tables = [
-            "calendar_events_archive",
+            "calendar_event_archives",
             "calendar_event_archive_pomodoro_configs",
             "calendar_event_archive_pomodoro_config_count_rhythms",
             "calendar_event_archive_pomodoro_config_sequence_steps",
@@ -39,11 +39,11 @@ fn schema_creates_normalized_calendar_archive_tables() {
 fn archive_metadata_keeps_historical_reference_values_and_enforces_constraints() {
     super::block_on(async {
         let pool = migrated_memory_pool().await;
-        sqlx::query("INSERT INTO calendar_events_archive (id, source_event_id, archived_at, title, start_time, end_time, calendar_id, created_at, updated_at)
+        sqlx::query("INSERT INTO calendar_event_archives (id, source_event_id, archived_at, title, start_time, end_time, calendar_id, created_at, updated_at)
             VALUES ('older', 'removed-source', '2026-05-23T11:00:00Z', 'Historical event', '2026-05-23T09:00:00Z', '2026-05-23T10:00:00Z', 'local', '2026-05-23T08:00:00Z', '2026-05-23T08:00:00Z')")
             .execute(&pool).await.unwrap();
         let older: (String, Option<String>, Option<String>) = sqlx::query_as(
-            "SELECT title, original_occurrence_id, recurrence_date FROM calendar_events_archive WHERE id='older'",
+            "SELECT title, original_occurrence_id, recurrence_date FROM calendar_event_archives WHERE id='older'",
         ).fetch_one(&pool).await.unwrap();
         assert_eq!(older, ("Historical event".into(), None, None));
         // Historical identities survive without their former live task/library.
@@ -58,12 +58,12 @@ fn archive_metadata_keeps_historical_reference_values_and_enforces_constraints()
             "UPDATE calendar_event_archive_task_links SET link_kind='unknown'",
             "UPDATE calendar_event_archive_music_assignments SET version=0",
             "UPDATE calendar_event_archive_music_assignments SET phase='short_break'",
-            "UPDATE calendar_events_archive SET recurrence_date='invalid'",
+            "UPDATE calendar_event_archives SET recurrence_date='invalid'",
             "INSERT INTO calendar_event_archive_import_objects VALUES ('older', 'missing-object')",
         ] {
             assert!(sqlx::query(sql).execute(&pool).await.is_err(), "{sql}");
         }
-        sqlx::query("DELETE FROM calendar_events_archive WHERE id='older'")
+        sqlx::query("DELETE FROM calendar_event_archives WHERE id='older'")
             .execute(&pool)
             .await
             .unwrap();

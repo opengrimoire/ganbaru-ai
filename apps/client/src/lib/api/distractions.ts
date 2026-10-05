@@ -8,7 +8,7 @@ export interface DistractionsRuntimeState {
   pauseReason: "manual" | "idle" | "suspend" | null;
   phase: PomodoroPhase | "inactive";
   activeRunId: string | null;
-  activeBlockId: string | null;
+  activeOccurrenceId: string | null;
   remainingSeconds: number | null;
   updatedAt: string;
 }

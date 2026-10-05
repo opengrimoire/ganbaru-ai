@@ -81,7 +81,7 @@ fn scoped_archive_preserves_original_event_id() {
         tx.commit().await.unwrap();
 
         let archived_source: String = sqlx::query_scalar(
-            "SELECT source_event_id FROM calendar_events_archive WHERE id = 'event-1::2000-05-10'",
+            "SELECT source_event_id FROM calendar_event_archives WHERE id = 'event-1::2000-05-10'",
         )
         .fetch_one(&pool)
         .await

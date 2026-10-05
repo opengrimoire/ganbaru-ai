@@ -55,7 +55,7 @@ pub(super) async fn prepare(
         let source: Option<AcceptedSoundscapeSource> = sqlx::query_as(
             "SELECT s.generated_kind, l.absolute_path, st.volume, st.generated_level, st.local_level
              FROM music_soundscapes s
-             JOIN music_soundscape_state st ON st.singleton_id = 1
+             JOIN music_soundscape_state st ON st.singleton = 1
              LEFT JOIN music_soundscape_locations l ON l.soundscape_id = s.id AND l.device_id = ?
              WHERE s.id = ? AND length(CAST(s.id AS BLOB)) <= ?
                AND (l.absolute_path IS NULL OR length(CAST(l.absolute_path AS BLOB)) <= ?)
@@ -112,7 +112,7 @@ pub(super) async fn prepare(
         "UPDATE music_soundscape_state
          SET active_soundscape_id = CASE WHEN ? THEN ? ELSE active_soundscape_id END,
              desired_playing = ?, automatic_intent = 1, version = version + 1, updated_at = MAX(updated_at + 1, ?)
-         WHERE singleton_id = 1 RETURNING version",
+         WHERE singleton = 1 RETURNING version",
     )
     .bind(request.is_some())
     .bind(request.as_ref().map(|request| &request.source_id))
@@ -222,7 +222,7 @@ impl Owner {
                     // A later explicit background-layer choice supersedes the prepared effect.
                     match tauri::async_runtime::block_on(async {
                         sqlx::query_scalar::<_, i64>(
-                            "SELECT version FROM music_soundscape_state WHERE singleton_id = 1",
+                            "SELECT version FROM music_soundscape_state WHERE singleton = 1",
                         )
                         .fetch_optional(&pool)
                         .await
@@ -256,7 +256,7 @@ impl Owner {
         };
         if result.is_err() {
             let _permit = self.write_permit().await?;
-            sqlx::query("UPDATE music_soundscape_state SET desired_playing = 0, version = version + 1, updated_at = MAX(updated_at + 1, ?) WHERE singleton_id = 1 AND version = ?")
+            sqlx::query("UPDATE music_soundscape_state SET desired_playing = 0, version = version + 1, updated_at = MAX(updated_at + 1, ?) WHERE singleton = 1 AND version = ?")
                 .bind(now_ms()).bind(accepted_version).execute(self.pool.as_ref().expect("initialized music pool")).await
                 .map_err(|error| MusicLibraryError::database("revoke failed automatic background sound", error))?;
         }

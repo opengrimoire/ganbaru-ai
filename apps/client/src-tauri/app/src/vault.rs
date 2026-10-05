@@ -1205,7 +1205,6 @@ mod tests {
           },
           "fullAccessTrust": {},
           "preferences": {
-            "restoreLastSelectedThread": false,
             "lastSelectedThreadId": null
           },
           "diagnostics": { "captureEnabled": false, "retentionDays": 7 },

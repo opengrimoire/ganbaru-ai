@@ -111,7 +111,7 @@ impl PreparedSide {
                 .execute(&mut *connection)
                 .await
                 .map_err(|error| format!("clear prepared Calendar rdates: {error}"))?;
-            sqlx::query("DELETE FROM pomodoro_configs WHERE event_id = ?1")
+            sqlx::query("DELETE FROM calendar_event_pomodoro_configs WHERE event_id = ?1")
                 .bind(&event.id)
                 .execute(&mut *connection)
                 .await

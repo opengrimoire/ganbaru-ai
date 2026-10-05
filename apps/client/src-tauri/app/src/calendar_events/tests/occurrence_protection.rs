@@ -69,7 +69,7 @@ fn moved_override_uses_original_identity_and_canonical_archive_geometry() {
             .unwrap();
         tx.commit().await.unwrap();
         let archived: (String, String) = sqlx::query_as(
-            "SELECT start_time, end_time FROM calendar_events_archive WHERE id = 'event-1::2099-05-10'")
+            "SELECT start_time, end_time FROM calendar_event_archives WHERE id = 'event-1::2099-05-10'")
             .fetch_one(&pool).await.unwrap();
         assert_eq!(
             archived,

@@ -60,7 +60,7 @@ fn canonical_music_schema_keeps_device_paths_out_of_logical_roots() {
             "idx_music_playlist_memberships_order",
             "idx_music_snoozes_active_item",
             "idx_music_recent_selections_playlist",
-            "music_library_items_review_deferred_until_idx",
+            "idx_music_library_items_review_deferred_until",
         ] {
             let exists: Option<i64> =
                 sqlx::query_scalar("SELECT 1 FROM sqlite_schema WHERE name = ?")

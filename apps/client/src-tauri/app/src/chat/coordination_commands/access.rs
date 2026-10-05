@@ -267,7 +267,7 @@ pub async fn chat_replace_teammate_access(
         ));
     }
     let updated = sqlx::query(
-        "UPDATE chat_ai_teammate_access_state
+        "UPDATE chat_teammate_access_state
          SET access_revision = access_revision + 1,
              runtime_approval_policy = ?, updated_at = ?
          WHERE teammate_id = ? AND access_revision = ?",
@@ -314,7 +314,7 @@ pub async fn chat_replace_teammate_access(
             ));
         }
         sqlx::query(
-            "UPDATE chat_ai_teammates SET role = ?, instructions = ?, updated_at = ?
+            "UPDATE chat_teammates SET role = ?, instructions = ?, updated_at = ?
              WHERE participant_id = ?",
         )
         .bind(configuration.role)
@@ -326,7 +326,7 @@ pub async fn chat_replace_teammate_access(
         .map_err(persistence_error)?;
         let next_policy_revision: i64 = sqlx::query_scalar(
             "SELECT latest_policy_revision + 1
-             FROM chat_ai_teammates WHERE participant_id = ?",
+             FROM chat_teammates WHERE participant_id = ?",
         )
         .bind(request.teammate_id.as_str())
         .fetch_one(&mut *transaction)
@@ -350,7 +350,7 @@ pub async fn chat_replace_teammate_access(
         .map(|channel| channel.conversation_id.as_str())
         .collect::<BTreeSet<_>>();
     let existing_conversations = sqlx::query_scalar::<_, String>(
-        "SELECT conversation_id FROM chat_ai_channel_memberships
+        "SELECT conversation_id FROM chat_teammate_channel_memberships
          WHERE teammate_id = ?",
     )
     .bind(request.teammate_id.as_str())
@@ -371,7 +371,7 @@ pub async fn chat_replace_teammate_access(
             .await
             .map_err(persistence_error)?;
             sqlx::query(
-                "DELETE FROM chat_ai_channel_memberships
+                "DELETE FROM chat_teammate_channel_memberships
                  WHERE conversation_id = ? AND teammate_id = ?",
             )
             .bind(&conversation_id)
@@ -430,7 +430,7 @@ pub async fn chat_replace_teammate_access(
         let history_boundary_inherits_profile = wire_history_boundary(&channel.history_boundary)
             == wire_history_boundary(&channel.profile_default_history_boundary);
         sqlx::query(
-            "INSERT INTO chat_ai_channel_memberships
+            "INSERT INTO chat_teammate_channel_memberships
                 (conversation_id, teammate_id, access_profile_id,
                  read_history, read_history_inherits_profile,
                  participate, participate_inherits_profile,

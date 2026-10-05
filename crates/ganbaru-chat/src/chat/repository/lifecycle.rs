@@ -94,7 +94,7 @@ pub async fn permanently_delete_thread(
     pool: &SqlitePool,
     thread_id: &ChatThreadId,
     expected_revision: u64,
-    cleanup_not_before: &UtcTimestamp,
+    cleanup_available_at: &UtcTimestamp,
     now: &UtcTimestamp,
 ) -> ChatResult<()> {
     let mut transaction = pool.begin().await.map_err(persistence_error)?;
@@ -134,7 +134,7 @@ pub async fn permanently_delete_thread(
                 repository_identity: Some(&repository_identity),
                 working_folder_id: Some(&working_folder_id),
                 expected_object_id: Some(&object_id),
-                not_before: now,
+                available_at: now,
                 now,
             },
         )
@@ -197,7 +197,7 @@ pub async fn permanently_delete_thread(
                     repository_identity: None,
                     working_folder_id: Some(&working_folder_id),
                     expected_object_id: None,
-                    not_before: cleanup_not_before,
+                    available_at: cleanup_available_at,
                     now,
                 },
             )
@@ -232,7 +232,7 @@ pub async fn permanently_delete_thread(
                     repository_identity: None,
                     working_folder_id: Some(&working_folder_id),
                     expected_object_id: None,
-                    not_before: cleanup_not_before,
+                    available_at: cleanup_available_at,
                     now,
                 },
             )
@@ -245,7 +245,7 @@ pub async fn permanently_delete_thread(
 pub async fn resolve_project_deletion(
     pool: &SqlitePool,
     project_id: &str,
-    cleanup_not_before: &UtcTimestamp,
+    cleanup_available_at: &UtcTimestamp,
     now: &UtcTimestamp,
 ) -> ChatResult<u64> {
     let thread_rows: Vec<(String, i64)> =
@@ -259,7 +259,7 @@ pub async fn resolve_project_deletion(
             pool,
             &ChatThreadId::new(thread_id.clone()).map_err(|_| corrupt_data())?,
             u64::try_from(*revision).map_err(|_| corrupt_data())?,
-            cleanup_not_before,
+            cleanup_available_at,
             now,
         )
         .await?;
@@ -275,7 +275,7 @@ struct CleanupRequest<'a> {
     repository_identity: Option<&'a str>,
     working_folder_id: Option<&'a str>,
     expected_object_id: Option<&'a str>,
-    not_before: &'a UtcTimestamp,
+    available_at: &'a UtcTimestamp,
     now: &'a UtcTimestamp,
 }
 
@@ -284,13 +284,13 @@ async fn enqueue_cleanup(
     request: CleanupRequest<'_>,
 ) -> ChatResult<()> {
     sqlx::query(
-        "INSERT INTO chat_cleanup_queue
+        "INSERT INTO chat_cleanup_jobs
             (id, source_thread_id, cleanup_kind, exact_target, repository_identity,
-             not_before, created_at, updated_at, working_folder_id, expected_object_id)
+             available_at, created_at, updated_at, working_folder_id, expected_object_id)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(cleanup_kind, exact_target) DO UPDATE SET
-            state = CASE WHEN chat_cleanup_queue.state = 'completed' THEN 'completed' ELSE 'pending' END,
-            not_before = MIN(chat_cleanup_queue.not_before, excluded.not_before),
+            state = CASE WHEN chat_cleanup_jobs.state = 'completed' THEN 'completed' ELSE 'pending' END,
+            available_at = MIN(chat_cleanup_jobs.available_at, excluded.available_at),
             updated_at = excluded.updated_at",
     )
     .bind(request.id)
@@ -298,7 +298,7 @@ async fn enqueue_cleanup(
     .bind(request.kind)
     .bind(request.target)
     .bind(request.repository_identity)
-    .bind(request.not_before.as_str())
+    .bind(request.available_at.as_str())
     .bind(request.now.as_str())
     .bind(request.now.as_str())
     .bind(request.working_folder_id)

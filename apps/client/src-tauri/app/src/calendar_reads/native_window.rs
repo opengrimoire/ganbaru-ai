@@ -94,12 +94,12 @@ const EVENTS_SQL: &str = r#"
            (SELECT '[' || group_concat(step_json) || ']' FROM (
              SELECT json_object('focusDurationMinutes', pcss.focus_duration_minutes,
                'breakPhase', pcss.break_phase, 'breakDurationMinutes', pcss.break_duration_minutes) AS step_json
-             FROM pomodoro_config_sequence_steps pcss WHERE pcss.event_id = ce.id ORDER BY pcss.step_index
+             FROM calendar_event_pomodoro_config_sequence_steps pcss WHERE pcss.event_id = ce.id ORDER BY pcss.step_index
            )) AS sequence_steps,
            pc.idle_timeout_minutes
     FROM calendar_events ce
-    LEFT JOIN pomodoro_configs pc ON pc.event_id = ce.id
-    LEFT JOIN pomodoro_config_count_rhythms pcc ON pcc.event_id = ce.id
+    LEFT JOIN calendar_event_pomodoro_configs pc ON pc.event_id = ce.id
+    LEFT JOIN calendar_event_pomodoro_config_count_rhythms pcc ON pcc.event_id = ce.id
     WHERE (json_extract(?1, '$.purpose') <> 'focus' OR pc.event_id IS NOT NULL)
     AND (json_extract(?1, '$.purpose') <> 'music' OR
          (pc.event_id IS NULL AND ce.all_day = 0 AND ce.status <> 'cancelled'))

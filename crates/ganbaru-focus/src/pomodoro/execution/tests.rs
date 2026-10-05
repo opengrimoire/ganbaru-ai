@@ -175,7 +175,7 @@ fn canonical_execution_rejects_missing_accepted_durations() {
                 .await
                 .unwrap_err();
             assert_eq!(error.code, FocusErrorCode::InvalidState);
-            let revision: i64 = sqlx::query_scalar("SELECT revision FROM focus_execution_state")
+            let revision: i64 = sqlx::query_scalar("SELECT revision FROM pomodoro_execution_state")
                 .fetch_one(&pool)
                 .await
                 .unwrap();
@@ -229,7 +229,7 @@ fn receipt_recovery_does_not_require_current_calendar_or_clock_inputs() {
                 .is_none()
         );
         tx.commit().await.unwrap();
-        let revision: i64 = sqlx::query_scalar("SELECT revision FROM focus_execution_state")
+        let revision: i64 = sqlx::query_scalar("SELECT revision FROM pomodoro_execution_state")
             .fetch_one(&pool)
             .await
             .unwrap();
@@ -331,7 +331,7 @@ fn committed_receipt_survives_a_corrupt_current_projection() {
     block_on(async {
         let pool = pool().await;
         let accepted = start(&pool).await;
-        sqlx::query("UPDATE focus_execution_state SET state_json = '{\"mode\":42}'")
+        sqlx::query("UPDATE pomodoro_execution_state SET state_json = '{\"mode\":42}'")
             .execute(&pool)
             .await
             .unwrap();
@@ -355,7 +355,7 @@ fn committed_receipt_survives_a_corrupt_current_projection() {
         tx.commit().await.unwrap();
         assert_eq!(receipt, accepted);
         assert_eq!(
-            sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM focus_execution_receipts")
+            sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM pomodoro_execution_receipts")
                 .fetch_one(&pool)
                 .await
                 .unwrap(),
@@ -389,7 +389,7 @@ fn execution_failure_rolls_back_outgoing_phase_events_revision_and_receipt() {
             .await
             .unwrap();
         assert_eq!(events, 2);
-        let receipts: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM focus_execution_receipts")
+        let receipts: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM pomodoro_execution_receipts")
             .fetch_one(&pool)
             .await
             .unwrap();
@@ -705,7 +705,7 @@ fn execution_idle_visibility_failure_rolls_back_and_retry_keeps_first_accepted_t
             segment_id: idle.segment.as_ref().unwrap().id.clone(),
             detected_at_ms: idle.idle_detected_at_ms.unwrap(),
         };
-        sqlx::raw_sql("CREATE TRIGGER reject_visibility BEFORE UPDATE OF state_json ON focus_execution_state BEGIN SELECT RAISE(ABORT, 'injected visibility failure'); END;")
+        sqlx::raw_sql("CREATE TRIGGER reject_visibility BEFORE UPDATE OF state_json ON pomodoro_execution_state BEGIN SELECT RAISE(ABORT, 'injected visibility failure'); END;")
             .execute(&pool).await.unwrap();
         let mut tx = pool.begin_with("BEGIN IMMEDIATE").await.unwrap();
         assert!(
@@ -739,7 +739,7 @@ fn recovery_does_not_adopt_runs_without_native_execution_state() {
     block_on(async {
         let pool = pool().await;
         start(&pool).await;
-        sqlx::query("UPDATE focus_execution_state SET state_json = ?")
+        sqlx::query("UPDATE pomodoro_execution_state SET state_json = ?")
             .bind(sqlx::types::Json(ExecutionState::default()))
             .execute(&pool)
             .await

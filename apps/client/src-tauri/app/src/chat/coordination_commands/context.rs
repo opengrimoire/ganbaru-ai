@@ -466,10 +466,10 @@ async fn read_assignment_access(
                 channel_access.scratch_runtime_approval_policy,
                 access_state.runtime_approval_policy AS teammate_runtime_approval_policy
          FROM chat_conversation_memberships membership
-         JOIN chat_ai_channel_memberships channel_access
+         JOIN chat_teammate_channel_memberships channel_access
            ON channel_access.conversation_id = membership.conversation_id
           AND channel_access.teammate_id = membership.participant_id
-         JOIN chat_ai_teammate_access_state access_state
+         JOIN chat_teammate_access_state access_state
            ON access_state.teammate_id = membership.participant_id
           AND access_state.access_revision >= 1
          JOIN chat_access_profiles profile
@@ -479,7 +479,7 @@ async fn read_assignment_access(
            ON profile_revision.access_profile_id = profile.id
           AND profile_revision.revision = profile.latest_revision
           AND profile_revision.default_participate = 1
-         JOIN chat_ai_teammates teammate
+         JOIN chat_teammates teammate
            ON teammate.participant_id = membership.participant_id
          JOIN chat_teammate_policy_revisions policy
            ON policy.teammate_id = teammate.participant_id
@@ -1044,7 +1044,7 @@ async fn verify_channel_disclosure(
            JOIN chat_conversation_memberships teammate
              ON teammate.conversation_id = ? AND teammate.participant_id = ?
             AND teammate.removed_at IS NULL
-           JOIN chat_ai_channel_memberships teammate_access
+           JOIN chat_teammate_channel_memberships teammate_access
              ON teammate_access.conversation_id = teammate.conversation_id
             AND teammate_access.teammate_id = teammate.participant_id
            JOIN chat_access_profiles teammate_profile
@@ -1078,7 +1078,7 @@ async fn verify_channel_disclosure(
                requester_participant.participant_kind != 'ai_teammate'
                OR EXISTS (
                  SELECT 1
-                 FROM chat_ai_channel_memberships requester_access
+                 FROM chat_teammate_channel_memberships requester_access
                  JOIN chat_access_profiles requester_profile
                    ON requester_profile.id = requester_access.access_profile_id
                   AND requester_profile.archived_at IS NULL
@@ -1120,7 +1120,7 @@ async fn verify_channel_disclosure(
                    participant.participant_kind != 'ai_teammate'
                    OR EXISTS (
                      SELECT 1
-                     FROM chat_ai_channel_memberships destination_ai
+                     FROM chat_teammate_channel_memberships destination_ai
                      JOIN chat_access_profiles destination_profile
                        ON destination_profile.id = destination_ai.access_profile_id
                       AND destination_profile.archived_at IS NULL
@@ -1162,7 +1162,7 @@ async fn verify_channel_disclosure(
                      participant.participant_kind = 'ai_teammate'
                      AND NOT EXISTS (
                        SELECT 1
-                       FROM chat_ai_channel_memberships source_ai
+                       FROM chat_teammate_channel_memberships source_ai
                        JOIN chat_access_profiles source_profile
                          ON source_profile.id = source_ai.access_profile_id
                         AND source_profile.archived_at IS NULL

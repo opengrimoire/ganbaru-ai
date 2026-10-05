@@ -36,6 +36,8 @@ Calendar, Pomodoro, Notes, Projects, and Chat primarily use normalized text time
 
 SQLite foreign-key enforcement is required on every connection. Constraints and triggers protect invariants that must hold regardless of caller. Application services still validate first so users receive domain-specific errors rather than raw constraint failures.
 
+Foreign keys that must block deleting a referenced row use `ON DELETE NO ACTION`, not `RESTRICT`. SQLite checks `RESTRICT` immediately, so a cascade that removes both rows in one statement could fail depending on table creation order; `NO ACTION` is checked when the statement ends, which keeps deletes independent of table order. The baseline groups tables by domain with parents before children and each table's indexes beside it, and index names follow `idx_<table>_<purpose>`.
+
 ## Canonical, derived, and device-local state
 
 Canonical tables contain user-authored state or durable execution evidence. Search indexes, projections, and summaries may be persisted but remain rebuildable from canonical rows. Derived tables need an invalidation and rebuild path.

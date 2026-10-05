@@ -205,7 +205,7 @@ stored_row!(Rdate, "calendar_event_rdates", "event_id = ?1", (id), {
     sort_order: i64,
 });
 
-stored_row!(FocusConfig, "pomodoro_configs", "event_id = ?1", (event_id), {
+stored_row!(FocusConfig, "calendar_event_pomodoro_configs", "event_id = ?1", (event_id), {
     event_id: String,
     rhythm_kind: String,
     rhythm_source: String,
@@ -213,7 +213,7 @@ stored_row!(FocusConfig, "pomodoro_configs", "event_id = ?1", (event_id), {
     idle_timeout_minutes: Option<i64>,
 });
 
-stored_row!(CountRhythm, "pomodoro_config_count_rhythms", "event_id = ?1", (event_id), {
+stored_row!(CountRhythm, "calendar_event_pomodoro_config_count_rhythms", "event_id = ?1", (event_id), {
     event_id: String,
     focus_duration_minutes: i64,
     short_break_minutes: i64,
@@ -221,7 +221,7 @@ stored_row!(CountRhythm, "pomodoro_config_count_rhythms", "event_id = ?1", (even
     long_break_after_focus_count: i64,
 });
 
-stored_row!(SequenceStep, "pomodoro_config_sequence_steps", "event_id = ?1", (step_index), {
+stored_row!(SequenceStep, "calendar_event_pomodoro_config_sequence_steps", "event_id = ?1", (step_index), {
     event_id: String,
     step_index: i64,
     focus_duration_minutes: i64,

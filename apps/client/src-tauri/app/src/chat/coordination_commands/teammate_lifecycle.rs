@@ -140,7 +140,7 @@ pub(super) async fn delete_unused_teammate(
         .execute(&mut *transaction)
         .await
         .map_err(persistence_error)?;
-    sqlx::query("DELETE FROM chat_ai_teammates WHERE participant_id = ?")
+    sqlx::query("DELETE FROM chat_teammates WHERE participant_id = ?")
         .bind(teammate_id.as_str())
         .execute(&mut *transaction)
         .await

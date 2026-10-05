@@ -98,7 +98,7 @@ async fn read_roster_ai_access(
                 membership.history_from_ordinal,
                 membership.runtime_approval_policy,
                 membership.scratch_runtime_approval_policy
-         FROM chat_ai_channel_memberships membership
+         FROM chat_teammate_channel_memberships membership
          JOIN chat_access_profiles profile ON profile.id = membership.access_profile_id
          JOIN chat_access_profile_revisions profile_revision
            ON profile_revision.access_profile_id = profile.id
@@ -332,7 +332,7 @@ pub(super) async fn read_teammate(
                 (SELECT count(*) FROM chat_conversation_memberships membership
                  WHERE membership.participant_id = teammate.participant_id
                    AND membership.removed_at IS NULL) AS channel_count
-         FROM chat_ai_teammates teammate WHERE participant_id = ?",
+         FROM chat_teammates teammate WHERE participant_id = ?",
     )
     .bind(teammate_id.as_str())
     .fetch_optional(pool)

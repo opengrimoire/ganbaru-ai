@@ -79,8 +79,8 @@ pub(super) async fn seed() -> sqlx::SqlitePool {
         INSERT INTO calendar_event_extended_properties (id, event_id, property_key, property_value) VALUES ('extension', 'source', 'X-EDITABLE', 'value');
         INSERT INTO calendar_event_organizers (event_id, name, email) VALUES ('source', 'Organizer', 'owner@example.test');
         INSERT INTO calendar_event_notifications (id, event_id, offset_minutes) VALUES ('notification', 'source', 12);
-        INSERT INTO pomodoro_configs (event_id, rhythm_kind, rhythm_source) VALUES ('source', 'sequence', 'custom');
-        INSERT INTO pomodoro_config_sequence_steps (event_id, step_index, focus_duration_minutes, break_phase, break_duration_minutes)
+        INSERT INTO calendar_event_pomodoro_configs (event_id, rhythm_kind, rhythm_source) VALUES ('source', 'sequence', 'custom');
+        INSERT INTO calendar_event_pomodoro_config_sequence_steps (event_id, step_index, focus_duration_minutes, break_phase, break_duration_minutes)
             VALUES ('source', 0, 25, 'short_break', 5);
         INSERT INTO music_context_assignments (owner_kind, owner_id, phase, behavior, provenance_kind, updated_at)
             VALUES ('event-snapshot', 'source', 'focus', 'keep-current-music', 'explicit', 1);
@@ -116,7 +116,7 @@ fn review_revision_covers_children_configurations_and_imported_values_without_pa
             "UPDATE calendar_event_alarms SET trigger_value = '-PT11M'",
             "UPDATE calendar_event_attendees SET icalendar_property_index = 4",
             "UPDATE calendar_event_override_extended_properties SET property_value = 'changed'",
-            "UPDATE pomodoro_config_sequence_steps SET focus_duration_minutes = 26",
+            "UPDATE calendar_event_pomodoro_config_sequence_steps SET focus_duration_minutes = 26",
             "UPDATE music_context_assignments SET behavior = 'pause-music'",
             "UPDATE icalendar_value_nodes SET text_value = 'changed' WHERE id = 'parameter-value'",
             "UPDATE icalendar_components SET preservation_status = 'partial' WHERE id = 'event'",

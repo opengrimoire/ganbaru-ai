@@ -439,7 +439,7 @@ impl Owner {
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         {
             let version: i64 = sqlx::query_scalar(
-                "SELECT version FROM music_soundscape_state WHERE singleton_id = 1",
+                "SELECT version FROM music_soundscape_state WHERE singleton = 1",
             )
             .fetch_one(self.pool.as_ref().expect("initialized music pool"))
             .await

@@ -130,7 +130,7 @@ pub async fn chat_preview_access_profile_revision(
     let is_reduction = profile_revision_is_reduction(&current.latest_revision, &request.revision);
     let membership_rows = sqlx::query(
         "SELECT DISTINCT membership.teammate_id, channel.id AS channel_id
-         FROM chat_ai_channel_memberships membership
+         FROM chat_teammate_channel_memberships membership
          JOIN chat_channels channel ON channel.conversation_id = membership.conversation_id
          WHERE membership.access_profile_id = ?
          ORDER BY membership.teammate_id, channel.id",
@@ -321,11 +321,11 @@ async fn apply_profile_reduction(
 ) -> ChatResult<()> {
     let history_boundary = wire_history_boundary(&revision.default_history_boundary);
     sqlx::query(
-        "UPDATE chat_ai_channel_memberships
+        "UPDATE chat_teammate_channel_memberships
          SET history_from_ordinal = (
                SELECT coalesce(max(item.ordinal), 0) + 1
                FROM chat_conversation_items item
-               WHERE item.conversation_id = chat_ai_channel_memberships.conversation_id
+               WHERE item.conversation_id = chat_teammate_channel_memberships.conversation_id
                  AND item.reply_thread_id IS NULL
              ),
              history_boundary = 'from_grant',
@@ -342,10 +342,10 @@ async fn apply_profile_reduction(
     .await
     .map_err(persistence_error)?;
     sqlx::query(
-        "UPDATE chat_ai_teammate_access_state
+        "UPDATE chat_teammate_access_state
          SET access_revision = access_revision + 1, updated_at = ?
          WHERE teammate_id IN (
-           SELECT teammate_id FROM chat_ai_channel_memberships
+           SELECT teammate_id FROM chat_teammate_channel_memberships
            WHERE access_profile_id = ?
          )",
     )
@@ -374,7 +374,7 @@ pub async fn chat_archive_access_profile(
     }
     if request.archived {
         let membership_count: i64 = sqlx::query_scalar(
-            "SELECT count(*) FROM chat_ai_channel_memberships
+            "SELECT count(*) FROM chat_teammate_channel_memberships
              WHERE access_profile_id = ?",
         )
         .bind(request.access_profile_id.as_str())
@@ -529,7 +529,7 @@ async fn revoke_profile_authorizations(
     reason: &str,
 ) -> ChatResult<()> {
     let teammate_ids = sqlx::query_scalar::<_, String>(
-        "SELECT DISTINCT teammate_id FROM chat_ai_channel_memberships
+        "SELECT DISTINCT teammate_id FROM chat_teammate_channel_memberships
          WHERE access_profile_id = ?",
     )
     .bind(access_profile_id.as_str())

@@ -90,7 +90,7 @@ pub async fn chat_list_teammates(
     let pool = chat_pool(app, db_url).await?;
     let rows = sqlx::query(
         "SELECT participant_id
-         FROM chat_ai_teammates teammate
+         FROM chat_teammates teammate
          JOIN chat_participants participant ON participant.id = teammate.participant_id
          WHERE (participant.archived_at IS NOT NULL) = ?
          ORDER BY participant.display_name COLLATE NOCASE, participant.id",
@@ -151,7 +151,7 @@ pub async fn chat_create_teammate(
     .await
     .map_err(map_teammate_write_error)?;
     sqlx::query(
-        "INSERT INTO chat_ai_teammates
+        "INSERT INTO chat_teammates
             (participant_id, role, instructions, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?)",
     )
@@ -234,7 +234,7 @@ pub async fn chat_read_project_primary_working_folder(
 ) -> ChatResult<ChatProjectPrimaryWorkingFolderRead> {
     let row = sqlx::query(
         "SELECT project_id, working_folder_id, revision
-         FROM chat_project_primary_working_folders WHERE project_id = ?",
+         FROM project_primary_working_folders WHERE project_id = ?",
     )
     .bind(&project_id)
     .fetch_optional(&chat_pool(app, db_url).await?)
@@ -270,7 +270,7 @@ pub async fn chat_set_project_primary_working_folder(
     let pool = chat_pool(app.clone(), db_url.clone()).await?;
     let now = now_timestamp()?;
     let updated = sqlx::query(
-        "UPDATE chat_project_primary_working_folders
+        "UPDATE project_primary_working_folders
          SET working_folder_id = ?, revision = revision + 1, updated_at = ?
          WHERE project_id = ? AND revision = ?",
     )

@@ -943,7 +943,7 @@ mod tests {
         for statement in [
             "INSERT INTO calendar_events (id, title, start_time, end_time) VALUES ('handoff-calendar', 'Portable calendar', '2026-09-14T09:00:00Z', '2026-09-14T10:00:00Z')",
             "INSERT INTO calendar_event_alarms (id, event_id, trigger_value) VALUES ('handoff-alarm', 'handoff-calendar', '-PT10M')",
-            "INSERT INTO pomodoro_configs (event_id, rhythm_kind, rhythm_source, preset_key) VALUES ('handoff-calendar', 'count', 'preset', 'balanced')",
+            "INSERT INTO calendar_event_pomodoro_configs (event_id, rhythm_kind, rhythm_source, preset_key) VALUES ('handoff-calendar', 'count', 'preset', 'balanced')",
             "INSERT INTO pomodoro_runs (id, event_id, original_event_id, event_date, planned_start, planned_end, started_at, ended_at, end_reason, rhythm_kind, rhythm_source, preset_key, last_heartbeat) VALUES ('handoff-run', 'handoff-calendar', 'handoff-calendar', '2026-09-14', '2026-09-14T09:00:00Z', '2026-09-14T10:00:00Z', '2026-09-14T09:00:00Z', '2026-09-14T09:45:00Z', 'completed', 'count', 'preset', 'balanced', '2026-09-14T09:45:00Z')",
             "INSERT INTO project_tasks (id, project_id, section_id, status_id, title) VALUES ('handoff-task', 'project-routine-learning', 'section-routine-learning-general', 'status-routine-learning-todo', 'Portable project task')",
             "INSERT INTO notes_pages (id, parent_type, title) VALUES ('handoff-note', 'workspace', 'Portable note')",
@@ -1014,7 +1014,11 @@ mod tests {
         for (table, key, identifier) in [
             ("calendar_events", "id", "handoff-calendar"),
             ("calendar_event_alarms", "id", "handoff-alarm"),
-            ("pomodoro_configs", "event_id", "handoff-calendar"),
+            (
+                "calendar_event_pomodoro_configs",
+                "event_id",
+                "handoff-calendar",
+            ),
             ("pomodoro_runs", "id", "handoff-run"),
             ("project_tasks", "id", "handoff-task"),
             ("notes_pages", "id", "handoff-note"),

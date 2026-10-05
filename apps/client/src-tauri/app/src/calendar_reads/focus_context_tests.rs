@@ -11,8 +11,8 @@ async fn pool() -> sqlx::SqlitePool {
         INSERT INTO calendar_events(id, title, start_time, end_time, timezone, calendar_id, created_at)
         VALUES('long', 'Long', '2024-03-11T09:00:00Z', '2024-03-11T12:00:00Z', 'UTC', 'focus-calendar', '2024-01-01'),
               ('short', 'Short', '2024-03-11T10:00:00Z', '2024-03-11T11:00:00Z', 'UTC', 'focus-calendar', '2024-01-02');
-        INSERT INTO pomodoro_configs(event_id, rhythm_kind, rhythm_source) VALUES('long', 'count', 'custom'), ('short', 'count', 'custom');
-        INSERT INTO pomodoro_config_count_rhythms(event_id, focus_duration_minutes, short_break_minutes, long_break_minutes, long_break_after_focus_count)
+        INSERT INTO calendar_event_pomodoro_configs(event_id, rhythm_kind, rhythm_source) VALUES('long', 'count', 'custom'), ('short', 'count', 'custom');
+        INSERT INTO calendar_event_pomodoro_config_count_rhythms(event_id, focus_duration_minutes, short_break_minutes, long_break_minutes, long_break_after_focus_count)
         VALUES('long', 40, 5, 10, 4), ('short', 40, 5, 10, 4);")
         .execute(&pool).await.unwrap();
     pool
@@ -199,7 +199,7 @@ fn native_focus_canonical_edit_changes_the_fingerprint_and_cancelled_events_are_
             .unwrap()
             .commitment
             .unwrap();
-        sqlx::query("UPDATE pomodoro_config_count_rhythms SET focus_duration_minutes=25 WHERE event_id='short'")
+        sqlx::query("UPDATE calendar_event_pomodoro_config_count_rhythms SET focus_duration_minutes=25 WHERE event_id='short'")
             .execute(&mut *tx).await.unwrap();
         let after = resolve_in_zone(&mut tx, time, Some("short"), &TimeZone::UTC)
             .await

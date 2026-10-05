@@ -364,7 +364,7 @@ fn enable_focus_configuration_start_and_receipts_are_atomic_after_an_earlier_run
     use ganbaru_focus::*;
     tauri::async_runtime::block_on(async {
         let pool = super::metadata::seed().await;
-        sqlx::raw_sql("UPDATE calendar_events SET start_time = '2099-05-10T10:00:00Z', end_time = '2099-05-10T11:00:00Z', rrule = NULL WHERE id = 'source'; DELETE FROM pomodoro_configs WHERE event_id = 'source';").execute(&pool).await.unwrap();
+        sqlx::raw_sql("UPDATE calendar_events SET start_time = '2099-05-10T10:00:00Z', end_time = '2099-05-10T11:00:00Z', rrule = NULL WHERE id = 'source'; DELETE FROM calendar_event_pomodoro_configs WHERE event_id = 'source';").execute(&pool).await.unwrap();
         insert_test_completed_pomodoro_history(&pool, "source", "source", "2099-05-10").await;
         let now = clock("2099-05-10T10:45:00Z");
         let draft = json!({"pomodoroConfig":{"action":"set","value":sequence_pomodoro_config()}});
@@ -428,7 +428,7 @@ fn enable_focus_configuration_start_and_receipts_are_atomic_after_an_earlier_run
                 assert!(result.unwrap_err().message.contains("phase failed"));
                 tx.rollback().await.unwrap();
                 let configs: i64 = sqlx::query_scalar(
-                    "SELECT COUNT(*) FROM pomodoro_configs WHERE event_id = 'source'",
+                    "SELECT COUNT(*) FROM calendar_event_pomodoro_configs WHERE event_id = 'source'",
                 )
                 .fetch_one(&pool)
                 .await
@@ -554,7 +554,7 @@ fn enable_focus_rejects_series_existing_configuration_and_ineligible_geometry() 
         let mut tx = pool.begin().await.unwrap();
         for sql in [
             "SELECT 1",
-            "DELETE FROM pomodoro_configs WHERE event_id = 'source'",
+            "DELETE FROM calendar_event_pomodoro_configs WHERE event_id = 'source'",
         ] {
             sqlx::query(sql).execute(&mut *tx).await.unwrap();
             assert!(
@@ -666,8 +666,12 @@ fn following_save_copies_complete_metadata_and_replays_after_source_changes() {
             ("calendar_event_notifications", "event_id", 1),
             ("calendar_event_organizers", "event_id", 1),
             ("calendar_event_overrides", "parent_event_id", 1),
-            ("pomodoro_configs", "event_id", 1),
-            ("pomodoro_config_sequence_steps", "event_id", 1),
+            ("calendar_event_pomodoro_configs", "event_id", 1),
+            (
+                "calendar_event_pomodoro_config_sequence_steps",
+                "event_id",
+                1,
+            ),
             ("music_context_assignments", "owner_id", 1),
             ("project_task_event_links", "event_id", 1),
         ] {
@@ -909,12 +913,13 @@ fn explicit_clears_do_not_clear_omitted_configuration() {
                 .await
                 .unwrap();
         assert_eq!(count, 0);
-        let rhythm: String =
-            sqlx::query_scalar("SELECT rhythm_kind FROM pomodoro_configs WHERE event_id = ?")
-                .bind(&receipt.edited_id)
-                .fetch_one(&mut *tx)
-                .await
-                .unwrap();
+        let rhythm: String = sqlx::query_scalar(
+            "SELECT rhythm_kind FROM calendar_event_pomodoro_configs WHERE event_id = ?",
+        )
+        .bind(&receipt.edited_id)
+        .fetch_one(&mut *tx)
+        .await
+        .unwrap();
         assert_eq!(rhythm, "sequence");
         let override_extension: String = sqlx::query_scalar("SELECT property_value FROM calendar_event_extended_properties WHERE event_id = ? AND property_key = 'X-EXTRA'").bind(&receipt.edited_id).fetch_one(&mut *tx).await.unwrap();
         assert_eq!(override_extension, "override data");

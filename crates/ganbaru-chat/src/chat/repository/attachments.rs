@@ -243,10 +243,10 @@ pub async fn run_due_attachment_cleanup(
     now: &UtcTimestamp,
 ) -> ChatResult<u64> {
     let rows = sqlx::query(
-        "SELECT id, exact_target FROM chat_cleanup_queue
+        "SELECT id, exact_target FROM chat_cleanup_jobs
          WHERE cleanup_kind = 'attachment_file'
-           AND state IN ('pending', 'failed') AND not_before <= ?
-         ORDER BY not_before, id LIMIT 100",
+           AND state IN ('pending', 'failed') AND available_at <= ?
+         ORDER BY available_at, id LIMIT 100",
     )
     .bind(now.as_str())
     .fetch_all(pool)
@@ -257,7 +257,7 @@ pub async fn run_due_attachment_cleanup(
         let cleanup_id: String = row.try_get("id").map_err(persistence_error)?;
         let relative_path: String = row.try_get("exact_target").map_err(persistence_error)?;
         sqlx::query(
-            "UPDATE chat_cleanup_queue SET state = 'running', attempts = attempts + 1,
+            "UPDATE chat_cleanup_jobs SET state = 'running', attempt_count = attempt_count + 1,
                     updated_at = ? WHERE id = ? AND state IN ('pending', 'failed')",
         )
         .bind(now.as_str())
@@ -290,7 +290,7 @@ pub async fn run_due_attachment_cleanup(
         .map_err(persistence_error)?;
         if still_referenced {
             sqlx::query(
-                "UPDATE chat_cleanup_queue SET state = 'completed', last_error_code = NULL,
+                "UPDATE chat_cleanup_jobs SET state = 'completed', last_error_code = NULL,
                         updated_at = ? WHERE id = ?",
             )
             .bind(now.as_str())
@@ -338,7 +338,7 @@ pub async fn run_due_attachment_cleanup(
                 .await
                 .map_err(persistence_error)?;
                 sqlx::query(
-                    "UPDATE chat_cleanup_queue SET state = 'completed', last_error_code = NULL,
+                    "UPDATE chat_cleanup_jobs SET state = 'completed', last_error_code = NULL,
                             updated_at = ? WHERE id = ?",
                 )
                 .bind(now.as_str())
@@ -351,7 +351,7 @@ pub async fn run_due_attachment_cleanup(
             }
             Err(_) => {
                 sqlx::query(
-                    "UPDATE chat_cleanup_queue SET state = 'failed', last_error_code = 'io',
+                    "UPDATE chat_cleanup_jobs SET state = 'failed', last_error_code = 'io',
                             updated_at = ? WHERE id = ?",
                 )
                 .bind(now.as_str())

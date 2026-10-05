@@ -68,7 +68,7 @@ fn deletion_preview_matches_committed_retained_and_removed_families_with_moved_i
                             .all(|row| row.template_id == "source")
                     );
                     let before: i64 =
-                        sqlx::query_scalar("SELECT COUNT(*) FROM calendar_events_archive")
+                        sqlx::query_scalar("SELECT COUNT(*) FROM calendar_event_archives")
                             .fetch_one(&mut *tx)
                             .await
                             .unwrap();

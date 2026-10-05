@@ -295,7 +295,7 @@ async fn require_edit_folder_grant(
          JOIN chat_conversation_memberships membership
            ON membership.conversation_id = channel.conversation_id
           AND membership.participant_id = ?
-         JOIN chat_ai_channel_memberships access
+         JOIN chat_teammate_channel_memberships access
            ON access.conversation_id = membership.conversation_id
           AND access.teammate_id = membership.participant_id
          JOIN chat_access_profiles profile ON profile.id = access.access_profile_id

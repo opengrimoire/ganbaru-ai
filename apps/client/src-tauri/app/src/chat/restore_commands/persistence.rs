@@ -164,9 +164,9 @@ async fn enqueue_invalidated_checkpoints(
         let reference: String = row.try_get("hidden_ref_name").map_err(persistence_error)?;
         let object_id: String = row.try_get("git_object_id").map_err(persistence_error)?;
         sqlx::query(
-            "INSERT OR IGNORE INTO chat_cleanup_queue
+            "INSERT OR IGNORE INTO chat_cleanup_jobs
                 (id, source_thread_id, cleanup_kind, exact_target, repository_identity,
-                 state, not_before, created_at, updated_at, working_folder_id, expected_object_id)
+                 state, available_at, created_at, updated_at, working_folder_id, expected_object_id)
              VALUES (?, ?, 'checkpoint_ref', ?, ?, 'pending', ?, ?, ?, (
                 SELECT working_folder_id FROM chat_threads WHERE id = ?
              ), ?)",

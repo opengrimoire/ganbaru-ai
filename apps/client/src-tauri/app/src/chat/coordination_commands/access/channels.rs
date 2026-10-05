@@ -24,7 +24,7 @@ pub(super) async fn read_teammate_access(
 ) -> ChatResult<ChatTeammateAccessRead> {
     let state = sqlx::query(
         "SELECT access.access_revision, access.runtime_approval_policy
-         FROM chat_ai_teammate_access_state access
+         FROM chat_teammate_access_state access
          JOIN chat_participants participant ON participant.id = access.teammate_id
          WHERE access.teammate_id = ? AND participant.archived_at IS NULL",
     )
@@ -47,7 +47,7 @@ pub(super) async fn read_teammate_access(
                 ai.history_from_ordinal, ai.runtime_approval_policy,
                 ai.scratch_runtime_approval_policy,
                 membership.revision AS membership_revision, membership.removed_at
-         FROM chat_ai_channel_memberships ai
+         FROM chat_teammate_channel_memberships ai
          JOIN chat_conversation_memberships membership
            ON membership.conversation_id = ai.conversation_id
           AND membership.participant_id = ai.teammate_id
@@ -434,7 +434,7 @@ pub(super) async fn resolve_channel_access(
             ChatHistoryBoundary::Entire => ChatHistoryBoundary::Entire,
             ChatHistoryBoundary::FromGrant { .. } => {
                 let current_lower = sqlx::query_scalar::<_, Option<i64>>(
-                    "SELECT history_from_ordinal FROM chat_ai_channel_memberships
+                    "SELECT history_from_ordinal FROM chat_teammate_channel_memberships
                      WHERE conversation_id = ? AND teammate_id = ?
                        AND history_boundary = 'from_grant'",
                 )
