@@ -1,12 +1,12 @@
 import { invoke } from "@tauri-apps/api/core";
 import { ensureDbUrl } from "$lib/api/db";
-import { invalidateNotesNotificationSchedule } from "$lib/notes/notification-schedule.svelte";
+import { invalidateNotesNotificationSchedule } from "$lib/notes/collaboration/notification-schedule.svelte";
 import {
   mapNotesCommentThreadDto,
   mapNotesLocalUserDto,
   mapNotesMentionNotificationDto,
   mapNotesSuggestionDto,
-} from "$lib/notes/notion-mappers";
+} from "$lib/notes/validation/response-mappers";
 import type {
   NotesCommentCreate,
   NotesCommentThread,

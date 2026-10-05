@@ -10,7 +10,7 @@ use std::{
 };
 use tokio::sync::Mutex;
 
-static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("../../apps/client/src-tauri/migrations");
+static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("./migrations");
 const WRITE_CONTENTION_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// Native access mode applied when opening a vault database pool.

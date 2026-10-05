@@ -6,7 +6,7 @@ use super::{
     generic_denial, internal_error, optional_limit, optional_string, persistence_error,
     required_string, sha256_hex, truncate_utf8,
 };
-use crate::chat::models::ChatResult;
+use ganbaru_chat_contracts::models::ChatResult;
 use serde_json::{Map, Value, json};
 use sqlx::{QueryBuilder, Row, Sqlite};
 

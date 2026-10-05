@@ -43,7 +43,7 @@ fn session(count: usize) -> SessionPolicy {
     session
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 #[test]
 fn native_music_activation_failure_does_not_interrupt_playback_or_automatic_queue_progress() {
     for error in [
@@ -349,9 +349,10 @@ fn native_music_mix_matches_shared_selection_fixtures() {
         draw: f64,
         expected: usize,
     }
-    let fixtures: Vec<Fixture> = serde_json::from_str(include_str!(
-        "../../../../../src/lib/music/music-queue-policy-fixtures.json"
-    ))
+    let fixtures: Vec<Fixture> = serde_json::from_str(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../src/lib/music/music-queue-policy-fixtures.json"
+    )))
     .unwrap();
     for fixture in fixtures {
         let mut state = session(fixture.weights.len());

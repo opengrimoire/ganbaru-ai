@@ -6,16 +6,16 @@
   import Search from "@lucide/svelte/icons/search";
   import VolumeX from "@lucide/svelte/icons/volume-x";
   import { getLocalization } from "$lib/i18n/translator.svelte";
-  import type { MusicPlaylistSummary } from "$lib/music/library-contracts";
-  import { orderMusicPlaylists, systemMusicPlaylistName } from "$lib/music/music-system-playlists";
+  import type { MusicPlaylistSummary } from "$lib/music/library/contracts";
+  import { orderMusicPlaylists, systemMusicPlaylistName } from "$lib/music/playlists/system";
   import { formatNumber } from "$lib/i18n/formatters";
-  import MusicPlaylistIcon from "./builder/MusicPlaylistIcon.svelte";
+  import MusicPlaylistIcon from "$lib/components/music/builder/MusicPlaylistIcon.svelte";
   import { cn } from "$lib/utils";
   import { portal } from "$lib/utils/portal";
   import {
     pickSelectPopoverGeometry,
     type SelectPopoverGeometry,
-  } from "$lib/components/settings/customSelectPosition";
+  } from "$lib/utils/select-popover-position";
 
   let {
     value,

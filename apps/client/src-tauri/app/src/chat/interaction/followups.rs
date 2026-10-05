@@ -5,11 +5,11 @@ use super::support::{
     chat_pool, corrupt_data, json_error, now_timestamp, persistence_error, versioned_row,
 };
 use crate::chat::interaction_commands::{ChatQueuedFollowupRead, SaveQueuedFollowupRequest};
-use crate::chat::models::{
+use ganbaru_chat::repository::attachments;
+use ganbaru_chat_contracts::models::{
     ChatAttachmentId, ChatError, ChatErrorCode, ChatResult, ChatThreadId, InteractionMode,
     ProviderInstanceId, SafetyMode, UtcTimestamp,
 };
-use crate::chat::repository::attachments;
 use sqlx::{Row, SqlitePool};
 
 pub(crate) async fn save_queued_followup(

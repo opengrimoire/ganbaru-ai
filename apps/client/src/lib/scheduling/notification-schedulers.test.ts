@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { CalendarEvent } from "$lib/components/calendar/types";
+import type { CalendarEvent } from "$lib/calendar/types";
 import type { NotesMentionNotification } from "$lib/notes/types";
 import type { SchedulerClock, SchedulerTimeout } from "./lifecycle-scheduler";
 import {

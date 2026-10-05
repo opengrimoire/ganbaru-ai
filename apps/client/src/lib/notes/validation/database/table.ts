@@ -1,12 +1,12 @@
-import type { NotesDataSourceTableView, NotesDatabaseTableSortDirection } from "../../contracts/database";
-import { notesDatabaseParseFilters } from "../../database-filters";
+import type { NotesDataSourceTableView, NotesDatabaseTableSortDirection } from "$lib/notes/contracts/database";
+import { notesDatabaseParseFilters } from "$lib/notes/database/filters";
 import { isNotesTableRowOpenMode } from ".././blocks";
 import { readBoolean, readInteger, readNullableString, readRecord, readString, readStringArray } from ".././readers";
 import { parseNotesPage } from ".././workspace";
 import { parseDataSourceGroupCounts, parseNotesDataSource, parseNotesDatabaseView } from "./base";
 import { parseNotesTablePresentation } from "./table-presentation";
-import { NOTES_DATABASE_MAX_COLLAPSED_ROWS, parseNotesDatabaseRowHierarchy } from "../../database-row-hierarchy";
-import { isNotesUuid } from "../../block-link";
+import { NOTES_DATABASE_MAX_COLLAPSED_ROWS, parseNotesDatabaseRowHierarchy } from "$lib/notes/database/row-hierarchy";
+import { isNotesUuid } from "$lib/notes/links/block-link";
 
 function isNotesTableSortDirection(value: unknown): value is NotesDatabaseTableSortDirection {
   return value === "ascending" || value === "descending";

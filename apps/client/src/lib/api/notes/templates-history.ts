@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { publishNotesDatabaseChange } from "$lib/notes/database-window-sync";
+import { publishNotesDatabaseChange } from "$lib/notes/database/window-sync";
 import { ensureDbUrl } from "$lib/api/db";
 import {
   mapNotesBlockListDto,
@@ -7,7 +7,7 @@ import {
   mapNotesPageHistorySettingsDto,
   mapNotesPageHistorySnapshotDto,
   mapNotesPageTemplateDto,
-} from "$lib/notes/notion-mappers";
+} from "$lib/notes/validation/response-mappers";
 import type {
   NotesLoadedPage,
   NotesPageHistoryCopyBlocksRequest,

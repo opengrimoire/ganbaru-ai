@@ -4,7 +4,7 @@
   import Search from "@lucide/svelte/icons/search";
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import X from "@lucide/svelte/icons/x";
-  import { FALLBACK_COLOR_INDEX } from "$lib/components/calendar/types";
+  import { FALLBACK_COLOR_INDEX } from "$lib/calendar/types";
   import {
     archiveQuickNote,
     createQuickNoteTag,

@@ -1,20 +1,20 @@
 import { Temporal } from "@js-temporal/polyfill";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
-import type { CalendarEvent } from "$lib/components/calendar/types";
-import { loadNativeCalendarWindow, type MappedNativeCalendarWindow } from "./calendar-native-window";
-import { publishCalendarWindowSync } from "./calendar-window-sync";
+import type { CalendarEvent } from "$lib/calendar/types";
+import { loadNativeCalendarWindow, type MappedNativeCalendarWindow } from "$lib/stores/calendar/native-window";
+import { publishCalendarWindowSync } from "$lib/stores/calendar/window-sync";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 vi.mock("$lib/api/db", () => ({ dbUrl: () => "sqlite:calendar", ensureDbUrl: async () => "sqlite:calendar" }));
-vi.mock("./calendar-native-window", async (original) => ({
-  ...await original<typeof import("./calendar-native-window")>(), loadNativeCalendarWindow: vi.fn(),
+vi.mock("$lib/stores/calendar/native-window", async (original) => ({
+  ...await original<typeof import("$lib/stores/calendar/native-window")>(), loadNativeCalendarWindow: vi.fn(),
 }));
-vi.mock("./calendar-window-prefetch", async (original) => ({
-  ...await original<typeof import("./calendar-window-prefetch")>(), adjacentCalendarWindowRequests: () => [],
+vi.mock("$lib/stores/calendar/window-prefetch", async (original) => ({
+  ...await original<typeof import("$lib/stores/calendar/window-prefetch")>(), adjacentCalendarWindowRequests: () => [],
 }));
-vi.mock("./calendar-window-sync", () => ({ initCalendarWindowSync: vi.fn(), publishCalendarWindowSync: vi.fn() }));
-vi.mock("$lib/stores/perflog.svelte", () => ({ mark: vi.fn() }));
+vi.mock("$lib/stores/calendar/window-sync", () => ({ initCalendarWindowSync: vi.fn(), publishCalendarWindowSync: vi.fn() }));
+vi.mock("./perf-log.svelte", () => ({ mark: vi.fn() }));
 vi.mock("$lib/stores/preferences.svelte", () => ({ getPreferences: () => ({ calendarViewMode: "week" }) }));
 
 const start = Temporal.PlainDate.from("2024-03-09");

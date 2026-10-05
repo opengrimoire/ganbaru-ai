@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { PomodoroPhase } from "@ganbaru-ai/shared-types";
+import type { PomodoroPhase } from "$lib/pomodoro/rhythm";
 import type { DistractionsLimitTotal, DistractionsDailyLimitEntryTotal } from "$lib/distractions";
 
 export interface DistractionsRuntimeState {

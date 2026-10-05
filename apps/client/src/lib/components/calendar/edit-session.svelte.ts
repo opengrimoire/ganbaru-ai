@@ -4,14 +4,14 @@ import type {
   PomodoroConfig,
   RecurrenceConfig,
   RecurringScope,
-} from "./types";
-import { recurrenceConfigsEqual } from "./rrule";
-import { parseCalendarDate } from "./utils";
+} from "$lib/calendar/types";
+import { recurrenceConfigsEqual } from "$lib/calendar/rrule";
+import { parseCalendarDate } from "$lib/calendar/utils";
 import {
   DEFAULT_FOCUS_IDLE_PAUSE_ON_EVENT_CREATE,
   DEFAULT_FOCUS_IDLE_THRESHOLD_MINUTES,
   clampFocusIdleThresholdMinutes,
-} from "$lib/stores/preferences";
+} from "$lib/stores/preference-options";
 import {
   clonePomodoroConfig,
   createPresetPomodoroConfig,

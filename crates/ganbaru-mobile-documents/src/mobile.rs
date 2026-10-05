@@ -4,7 +4,7 @@ use tauri::{
     plugin::{PluginApi, PluginHandle},
 };
 
-const PLUGIN_IDENTIFIER: &str = "app.ganbaru.mobile_documents";
+const PLUGIN_IDENTIFIER: &str = "org.opengrimoire.ganbaruai.mobile.documents";
 
 #[derive(Debug)]
 pub struct MobileDocuments<R: Runtime>(PluginHandle<R>);

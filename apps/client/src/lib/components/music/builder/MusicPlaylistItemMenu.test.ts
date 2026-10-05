@@ -2,8 +2,8 @@
 
 import { mount, tick, unmount } from "svelte";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { MusicItemListEntry } from "$lib/music/library-contracts";
-import { musicSnoozeEndsAt } from "$lib/music/music-snooze";
+import type { MusicItemListEntry } from "$lib/music/library/contracts";
+import { musicSnoozeEndsAt } from "$lib/music/session/snooze";
 
 const api = vi.hoisted(() => ({ getMusicInspectorDetail: vi.fn() }));
 

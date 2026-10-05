@@ -1,6 +1,6 @@
 import { mount, tick, unmount } from "svelte";
 import { vi } from "vitest";
-import type { ChatComposerSnapshot } from "$lib/chat/composer-controller";
+import type { ChatComposerSnapshot } from "$lib/chat/composer/controller";
 import type {
   ChatAttachmentRead,
   ChatInteractionStateRead,
@@ -8,7 +8,7 @@ import type {
   ChatThreadShellRead,
 } from "$lib/chat/contracts";
 import { getChat } from "$lib/stores/chat.svelte";
-import ChatComposer from "./ChatComposer.svelte";
+import ChatComposer from "$lib/components/chat/composer/ChatComposer.svelte";
 
 class ResizeObserverMock implements ResizeObserver {
   constructor(_callback: ResizeObserverCallback) {}

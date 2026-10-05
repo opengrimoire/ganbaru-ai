@@ -22,7 +22,7 @@
     ProjectWorkingFolderId,
   } from "$lib/chat/contracts";
   import { chatErrorMessage } from "$lib/chat/error-presentation";
-  import CustomSelect from "$lib/components/settings/CustomSelect.svelte";
+  import Select from "$lib/components/ui/Select.svelte";
   import { formatNumber } from "$lib/i18n/formatters";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
@@ -427,9 +427,9 @@
             <form class="promotion" onsubmit={(event) => { event.preventDefault(); void promote(); }}>
               <header><div><h4>{t("settings.chat.teammates.scratchManager.promoteHeading")}</h4><p>{promotionEntry.relativePath}</p></div><button type="button" aria-label={t("common.close")} onclick={() => { promotionEntry = null; }}><X size={15} /></button></header>
               <div class="promotion-fields">
-                <div class="select-field"><span>{t("settings.chat.teammates.scratchManager.destination")}</span><CustomSelect value={promotionKind} options={[{ value: "workingFolder", label: t("settings.chat.teammates.scratchManager.projectFolder") }, { value: "managedAttachment", label: t("settings.chat.teammates.scratchManager.managedAttachment") }]} onChange={selectPromotionKind} class="w-full" /></div>
+                <div class="select-field"><span>{t("settings.chat.teammates.scratchManager.destination")}</span><Select value={promotionKind} options={[{ value: "workingFolder", label: t("settings.chat.teammates.scratchManager.projectFolder") }, { value: "managedAttachment", label: t("settings.chat.teammates.scratchManager.managedAttachment") }]} onChange={selectPromotionKind} class="w-full" /></div>
                 {#if promotionKind === "workingFolder"}
-                  {#if editableFolders.length === 0}<p class="alert full" role="alert">{t("settings.chat.teammates.scratchManager.chooseFolder")}</p>{:else}<div class="select-field"><span>{t("settings.chat.teammates.scratchManager.chooseFolder")}</span><CustomSelect value={promotionFolderId ?? ""} options={editableFolders.map((folder) => ({ value: folder.workingFolderId, label: folder.displayName }))} onChange={selectPromotionFolder} class="w-full" /></div><label class="full"><span>{t("settings.chat.teammates.scratchManager.targetPath")}</span><input bind:value={promotionTargetPath} maxlength="4096" /></label>{/if}
+                  {#if editableFolders.length === 0}<p class="alert full" role="alert">{t("settings.chat.teammates.scratchManager.chooseFolder")}</p>{:else}<div class="select-field"><span>{t("settings.chat.teammates.scratchManager.chooseFolder")}</span><Select value={promotionFolderId ?? ""} options={editableFolders.map((folder) => ({ value: folder.workingFolderId, label: folder.displayName }))} onChange={selectPromotionFolder} class="w-full" /></div><label class="full"><span>{t("settings.chat.teammates.scratchManager.targetPath")}</span><input bind:value={promotionTargetPath} maxlength="4096" /></label>{/if}
                 {:else}
                   <label class="full"><span>{t("settings.chat.teammates.scratchManager.attachmentName")}</span><input bind:value={promotionDisplayName} maxlength="1000" /></label>
                 {/if}

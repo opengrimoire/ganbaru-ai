@@ -1,30 +1,58 @@
+//! Distraction blocking. Desktop modules enforce browser and app rules from local state files;
+//! Android drives the native blocker. Budget matching and linked-device accounting are shared.
+
+#[cfg(desktop)]
 use crate::vault;
+#[cfg(desktop)]
 use chrono::{DateTime, SecondsFormat, Utc};
+#[cfg(desktop)]
 use serde_json::Value;
+#[cfg(desktop)]
 use sha2::{Digest, Sha256};
+#[cfg(desktop)]
 use std::collections::{HashMap, HashSet};
+#[cfg(desktop)]
 use std::path::{Path, PathBuf};
-#[cfg(target_os = "linux")]
+#[cfg(all(desktop, target_os = "linux"))]
 use std::process::Stdio;
+#[cfg(desktop)]
 use std::sync::atomic::{AtomicU64, Ordering};
+#[cfg(desktop)]
 use tauri::{Manager, Runtime};
 
+#[cfg(any(target_os = "android", all(test, not(target_os = "ios"))))]
+#[cfg_attr(not(target_os = "android"), allow(dead_code))]
+pub(crate) mod android;
+#[cfg(desktop)]
 mod authorization;
+#[cfg(desktop)]
 pub(crate) mod catalog;
+#[cfg(desktop)]
 pub(crate) mod commands;
+#[cfg(desktop)]
 mod contracts;
+#[cfg(desktop)]
 mod foreground;
-pub(crate) use crate::distractions_limits as limits;
+pub(crate) mod limits;
+#[cfg(desktop)]
 pub(crate) mod limits_read;
+pub(crate) mod linked;
+#[cfg(desktop)]
 mod process_control;
+#[cfg(desktop)]
 mod processes;
+#[cfg(desktop)]
 mod rules;
+#[cfg(desktop)]
 pub(crate) mod runtime;
-pub(crate) mod state;
+#[cfg(desktop)]
+pub(crate) mod state_files;
+#[cfg(desktop)]
 pub(crate) mod usage;
 
-#[cfg(any(target_os = "linux", test))]
+#[cfg(all(desktop, any(target_os = "linux", test)))]
 use contracts::{DesktopRuleMatcher, ObservedDesktopProcess};
+#[cfg(desktop)]
 #[allow(unused_imports)]
 pub use contracts::{
     DistractionsCloseDesktopAppRequest, DistractionsDesktopAppCandidate,
@@ -34,15 +62,20 @@ pub use contracts::{
     DistractionsLimitState, DistractionsLimitStateItem, DistractionsRunningDesktopAppMatch,
     DistractionsRuntimeState, DistractionsUsageSampleInput, DistractionsUsageSampleRow,
 };
+#[cfg(desktop)]
 use contracts::{DistractionsExtensionConnectionFile, NormalizedDesktopBlockEvent};
 
+#[cfg(desktop)]
 use authorization::{load_close_authorization, validate_names_authorized};
+#[cfg(desktop)]
 use foreground::{close_current_foreground_desktop_app, foreground_desktop_app_status};
+#[cfg(desktop)]
 use processes::list_blocked_desktop_app_matches;
-#[cfg(target_os = "linux")]
+#[cfg(all(desktop, target_os = "linux"))]
 use processes::{observe_linux_process, read_linux_process_name};
-#[cfg(any(target_os = "linux", test))]
+#[cfg(all(desktop, any(target_os = "linux", test)))]
 use rules::desktop_rule_matchers;
+#[cfg(desktop)]
 use rules::{
     app_name_key, foreground_expectation_matches, foreground_status_from_parts,
     foreground_status_match_names, is_protected_desktop_app_candidate,
@@ -50,56 +83,71 @@ use rules::{
     normalize_process_match_names, unavailable_foreground_desktop_app_status,
     validate_foreground_status_is_closeable,
 };
-pub use state::clear_distractions_enforcement_state;
-use state::{
+#[cfg(desktop)]
+pub use state_files::clear_distractions_enforcement_state;
+#[cfg(desktop)]
+use state_files::{
     block_event_phase_from_runtime, limit_state_path, read_fresh_limit_state,
     read_fresh_runtime_state, state_path,
 };
+#[cfg(desktop)]
 use usage::validate_local_date;
 
-#[cfg(test)]
-use state::{
+#[cfg(all(desktop, test))]
+use state_files::{
     clear_enforcement_state_files, extension_status_from_file_contents, validate_limit_state,
     validate_state, write_text_file_atomically,
 };
 
-#[cfg(test)]
+#[cfg(all(desktop, test))]
 use usage::{
     insert_desktop_block_event, insert_usage_samples, normalize_desktop_block_event,
     normalize_usage_sample,
 };
 
-#[cfg(test)]
+#[cfg(all(desktop, test))]
 use catalog::{parse_desktop_entry, sort_and_deduplicate_candidates};
 
-#[cfg(all(test, target_os = "linux"))]
+#[cfg(all(desktop, test, target_os = "linux"))]
 use catalog::process_name_from_exec;
 
-#[cfg(test)]
+#[cfg(all(desktop, test))]
 use authorization::{configured_close_authorization, read_bounded_authorization_config};
 
-#[cfg(all(test, target_os = "linux"))]
+#[cfg(all(desktop, test, target_os = "linux"))]
 use process_control::{
     DesktopProcessController, DesktopProcessSignal, close_desktop_process_with,
     validate_observed_close_process,
 };
 
+#[cfg(desktop)]
 const STATE_FILE: &str = "distractions-state.json";
+#[cfg(desktop)]
 const EXTENSION_CONNECTION_FILE: &str = "distractions-extension-status.json";
+#[cfg(desktop)]
 const LIMIT_STATE_FILE: &str = "distractions-limit-state.json";
+#[cfg(desktop)]
 const VAULT_CONFIG_FILE: &str = "config.json";
+#[cfg(desktop)]
 const MAX_AUTHORIZATION_CONFIG_BYTES: u64 = 1024 * 1024;
+#[cfg(desktop)]
 const LIMIT_STATE_STALE_SECONDS: i64 = 20;
+#[cfg(desktop)]
 const EXTENSION_CONNECTION_STALE_SECONDS: i64 = 60;
+#[cfg(desktop)]
 const ACTIVE_STATE_STALE_SECONDS: i64 = 45;
+#[cfg(desktop)]
 static DESKTOP_APP_LIST_GENERATION: AtomicU64 = AtomicU64::new(0);
+#[cfg(desktop)]
 const EXTENSION_INSTALL_README_URL: &str =
-    "https://github.com/opengrimoire/ganbaru-ai/blob/dev/extensions/chrome/README.md";
+    "https://github.com/opengrimoire/ganbaru-ai/blob/dev/extensions/chromium/README.md";
 
+#[cfg(desktop)]
 fn now_utc() -> DateTime<Utc> {
     std::time::SystemTime::now().into()
 }
 
+#[cfg(desktop)]
 fn now_epoch_ms() -> i64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -107,5 +155,5 @@ fn now_epoch_ms() -> i64 {
         .unwrap_or(0)
 }
 
-#[cfg(test)]
+#[cfg(all(desktop, test))]
 mod tests;

@@ -1,10 +1,10 @@
 //! Durable cleanup service for exact checkpoint refs.
 
-use super::delete_exact_ref;
-use crate::chat::models::{
+use crate::chat::workspace::WorkingFolderAuthorizationOperation;
+use ganbaru_chat::checkpoints::delete_exact_ref;
+use ganbaru_chat_contracts::models::{
     ChatError, ChatErrorCode, ChatResult, ProjectWorkingFolderId, UtcTimestamp,
 };
-use crate::chat::workspace::WorkingFolderAuthorizationOperation;
 use sqlx::{Row, SqlitePool};
 
 pub(crate) async fn run_checkpoint_cleanup(
@@ -49,7 +49,7 @@ pub(crate) async fn run_checkpoint_cleanup(
             (Some(working_folder_id), Some(repository_identity), Some(expected_object_id)) => {
                 let working_folder_id =
                     ProjectWorkingFolderId::new(working_folder_id).map_err(|_| corrupt_data())?;
-                let authorized = super::super::workspace_commands::authorize_working_folder(
+                let authorized = super::super::workspace::commands::authorize_working_folder(
                     app,
                     pool,
                     &working_folder_id,

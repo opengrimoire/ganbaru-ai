@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createBlockWrite } from "$lib/notes/block-factory";
+import { createBlockWrite } from "$lib/notes/blocks/factory";
 import type { NotesBlock, NotesBlockUpdate, NotesLoadedPage, NotesPage, NotesPageCreate, NotesPageOpenResponse, NotesWorkspaceShell } from "$lib/notes/types";
 
 const rootId = "00000000-0000-4000-8000-000000000001";

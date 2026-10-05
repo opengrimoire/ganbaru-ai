@@ -1,11 +1,11 @@
 //! Shared persistence, authorization, and timestamp helpers for interactions.
 
-use crate::chat::models::{
+use crate::chat::workspace::{AuthorizedWorkingFolder, WorkingFolderAuthorizationOperation};
+use crate::{chat, db};
+use chrono::{SecondsFormat, Utc};
+use ganbaru_chat_contracts::models::{
     ChatError, ChatErrorCode, ChatResult, ProjectWorkingFolderId, UtcTimestamp, VersionedJson,
 };
-use crate::chat::workspace::{AuthorizedWorkingFolder, WorkingFolderAuthorizationOperation};
-use crate::{chat, db_path};
-use chrono::{SecondsFormat, Utc};
 use sqlx::{Row, SqlitePool};
 
 pub(super) async fn require_workspace(
@@ -14,12 +14,12 @@ pub(super) async fn require_workspace(
     working_folder_id: &ProjectWorkingFolderId,
     operation: WorkingFolderAuthorizationOperation,
 ) -> ChatResult<AuthorizedWorkingFolder> {
-    chat::workspace_commands::authorize_working_folder(app, pool, working_folder_id, operation)
+    chat::workspace::commands::authorize_working_folder(app, pool, working_folder_id, operation)
         .await
 }
 
 pub(super) async fn chat_pool(app: tauri::AppHandle, db_url: String) -> ChatResult<SqlitePool> {
-    db_path::connect_sqlite(app, db_url)
+    db::connect_sqlite(app, db_url)
         .await
         .map_err(|_| ChatError::new(ChatErrorCode::Persistence, "open Chat database", true))
 }

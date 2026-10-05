@@ -6,7 +6,7 @@ import {
   mapNotesPageAliasDto,
   mapNotesSearchResultDto,
   mapNotesUnresolvedLinkDto,
-} from "$lib/notes/notion-mappers";
+} from "$lib/notes/validation/response-mappers";
 import type {
   NotesBacklink,
   NotesPageAlias,

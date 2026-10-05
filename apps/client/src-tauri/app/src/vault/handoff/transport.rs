@@ -1,18 +1,18 @@
 //! Pinned client transport and shared resumable archive streaming.
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 mod server;
-#[cfg(all(test, not(any(target_os = "android", target_os = "ios"))))]
+#[cfg(all(test, desktop))]
 use server::serve;
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 pub(crate) use server::serve_with_coordinator;
 
+use super::pairing::{
+    CoordinatorPin, PairingManager, TlsIdentity, certificate_fingerprint, encode_certificate,
+};
 use super::protocol::{
     BundleMetadata, BundlePurpose, ControlMessage, PROTOCOL_VERSION, PairingInvitation,
     TRANSFER_CHUNK_BYTES, read_control, unix_time_ms, write_control,
-};
-use super::state::{
-    CoordinatorPin, PairingManager, TlsIdentity, certificate_fingerprint, encode_certificate,
 };
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
 use rustls::crypto::{WebPkiSupportedAlgorithms, verify_tls12_signature, verify_tls13_signature};
@@ -300,7 +300,7 @@ pub(crate) async fn cancel_prepared_transfer(
 
 pub(crate) async fn acknowledge_activation(
     manager: &PairingManager,
-    pending: &super::state::PendingAcknowledgement,
+    pending: &super::pairing::PendingAcknowledgement,
 ) -> Result<(), String> {
     match authenticated_exchange(
         manager,
@@ -525,7 +525,7 @@ pub(crate) async fn download_bundle(
     download_bundle_inner(manager, metadata, cancellation, None).await
 }
 
-#[cfg(all(test, not(any(target_os = "android", target_os = "ios"))))]
+#[cfg(all(test, desktop))]
 mod tests;
 
 async fn download_bundle_inner(

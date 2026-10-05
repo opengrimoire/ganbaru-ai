@@ -9,7 +9,7 @@ rust-version.workspace = true
 default-run = "ganbaru-ai"
 
 [lib]
-name = "desktop_lib"
+name = "ganbaru_ai_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 doctest = false
 

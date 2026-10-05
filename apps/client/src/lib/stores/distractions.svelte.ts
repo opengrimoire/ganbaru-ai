@@ -25,7 +25,7 @@ import {
   type DistractionsMode,
   type DistractionsUsageLimit,
 } from "$lib/distractions";
-import type { EventColor } from "$lib/components/calendar/types";
+import type { EventColor } from "$lib/calendar/types";
 import { getConfigKey, setConfigKey } from "$lib/vault/config";
 import { publishMobileDistractionsConfig } from "$lib/scheduling/mobile-distractions";
 

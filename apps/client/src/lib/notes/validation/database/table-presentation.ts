@@ -1,5 +1,5 @@
 import type { NotesDatabaseTableCalculation, NotesDatabaseTableColorRule, NotesDatabaseTableColumnPresentation, NotesDatabaseTablePresentation } from "../../contracts/database/table";
-import { notesDatabaseParseFilters } from "../../database-filters";
+import { notesDatabaseParseFilters } from "$lib/notes/database/filters";
 
 const DATE_FORMATS = new Set(["locale", "iso", "relative"]);
 const TIME_FORMATS = new Set(["locale", "12_hour", "24_hour", "hidden"]);

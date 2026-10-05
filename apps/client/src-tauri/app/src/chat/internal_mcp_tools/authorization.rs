@@ -4,12 +4,12 @@ use super::{generic_denial, persistence_error, wire_folder_capability};
 use crate::chat::internal_mcp::{
     InternalMcpChannelSource, InternalMcpFolderSource, InternalMcpRunScope,
 };
-use crate::chat::models::{ChatResult, ChatRuntimeApprovalPolicy};
+use ganbaru_chat_contracts::models::{ChatResult, ChatRuntimeApprovalPolicy};
 use sqlx::SqlitePool;
 
 pub(crate) async fn verify_scope(
     pool: &SqlitePool,
-    thread_id: &crate::chat::models::ChatThreadId,
+    thread_id: &ganbaru_chat_contracts::models::ChatThreadId,
     scope: &InternalMcpRunScope,
 ) -> ChatResult<()> {
     let valid: bool = sqlx::query_scalar(
@@ -78,7 +78,7 @@ pub(crate) async fn verify_scope(
 
 pub(crate) async fn verify_publication_scope(
     pool: &SqlitePool,
-    thread_id: &crate::chat::models::ChatThreadId,
+    thread_id: &ganbaru_chat_contracts::models::ChatThreadId,
     scope: &InternalMcpRunScope,
 ) -> ChatResult<()> {
     verify_scope(pool, thread_id, scope).await?;

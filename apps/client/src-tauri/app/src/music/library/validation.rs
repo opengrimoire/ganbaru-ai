@@ -1,6 +1,7 @@
-use super::error::{MusicLibraryError, MusicLibraryResult};
 use super::models::*;
+use crate::music::error::{MusicLibraryError, MusicLibraryResult};
 use std::collections::HashSet;
+#[cfg(desktop)]
 use std::path::{Component, Path};
 
 pub(crate) const MAX_BULK_MEMBERSHIPS: usize = 500;
@@ -9,6 +10,7 @@ const MAX_ID_BYTES: usize = 200;
 const MAX_NAME_CHARS: usize = 200;
 const MAX_ICON_CHARS: usize = 500;
 const MAX_REASON_CHARS: usize = 500;
+#[cfg(desktop)]
 const MAX_RELATIVE_PATH_BYTES: usize = 4_096;
 pub(crate) const MAX_ITEM_WINDOW: i64 = 200;
 pub(crate) const MAX_SUMMARY_WINDOW: i64 = 500;
@@ -55,6 +57,7 @@ fn validate_name(value: &str) -> MusicLibraryResult<()> {
     validate_optional_text(value, "name", MAX_NAME_CHARS)
 }
 
+#[cfg(desktop)]
 fn validate_relative_path(value: &str) -> MusicLibraryResult<()> {
     if value.trim().is_empty() {
         return Err(MusicLibraryError::validation("relativePath", "is required"));
@@ -118,7 +121,7 @@ pub(crate) fn validate_local_root_create(root: &MusicLocalRootCreate) -> MusicLi
     validate_timestamp(root.created_at_ms, "createdAt")
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 pub(crate) fn validate_item_repair_apply(request: &MusicItemRepairApply) -> MusicLibraryResult<()> {
     validate_id(&request.item_id, "itemId")?;
     validate_id(&request.root_id, "rootId")?;

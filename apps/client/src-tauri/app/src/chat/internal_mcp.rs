@@ -1,9 +1,3 @@
-use super::models::{
-    ChatAgentRunId, ChatAuthorizationRevisionId, ChatConversationId, ChatError, ChatErrorCode,
-    ChatFolderCapability, ChatResult, ChatRuntimeApprovalPolicy, ChatThreadId, ChatTurnId,
-    ChatWorkAssignmentId, ProjectWorkingFolderId,
-};
-use super::repository::resources::{self, ChatResourceKind};
 use axum::Router;
 use axum::body::Body;
 use axum::extract::DefaultBodyLimit;
@@ -11,6 +5,12 @@ use axum::http::{Request, StatusCode, header};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
 use base64::{Engine as _, engine::general_purpose};
+use ganbaru_chat::repository::resources::{self, ChatResourceKind};
+use ganbaru_chat_contracts::models::{
+    ChatAgentRunId, ChatAuthorizationRevisionId, ChatConversationId, ChatError, ChatErrorCode,
+    ChatFolderCapability, ChatResult, ChatRuntimeApprovalPolicy, ChatThreadId, ChatTurnId,
+    ChatWorkAssignmentId, ProjectWorkingFolderId,
+};
 use rmcp::model::{
     CallToolRequestParams, CallToolResponse, CallToolResult, ContentBlock, ListResourcesResult,
     ListToolsResult, PaginatedRequestParams, ReadResourceRequestParams, ReadResourceResponse,

@@ -57,7 +57,7 @@ import {
   type PostChatMessageResult,
 } from "../contracts";
 import { parseModelOptionSelection } from "./provider";
-import { normalizeChatMessageReferences } from "../message-references";
+import { normalizeChatMessageReferences } from "$lib/chat/composer/message-references";
 import {
   readArray,
   readBoolean,

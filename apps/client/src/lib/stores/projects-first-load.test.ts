@@ -2,7 +2,7 @@
 
 import { describe, expect, it, vi } from "vitest";
 import { loadProjectTaskView, updateProjectTask } from "$lib/api/projects";
-import { PROJECT_TASK_FILTER_DEFAULTS } from "$lib/projects/project-list-view";
+import { PROJECT_TASK_FILTER_DEFAULTS } from "$lib/projects/list/view";
 import type {
   ProjectOptionalDataKind,
   ProjectsOptionalData,

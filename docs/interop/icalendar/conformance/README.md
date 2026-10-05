@@ -21,12 +21,12 @@ Audit date: 2026-08-30. Recurrence entries were rechecked against the native rec
 Evidence:
 
 - Parser, serializer, types, and tests: `apps/client/src/lib/calendar/ics/`
-- Rule conversion: `apps/client/src/lib/components/calendar/rrule.ts`
-- Native recurrence engine: `apps/client/src-tauri/app/src/recurrence/`
-- Import and export stores: `apps/client/src/lib/stores/calendar-bulk-import.ts`, `calendar-import-export.ts`, `calendar-export-snapshot.ts`
-- Native import and preservation: `apps/client/src-tauri/app/src/calendar_import.rs`, `calendar_import/`
-- Native export snapshots: `apps/client/src-tauri/app/src/calendar_reads/`
-- Schema: `apps/client/src-tauri/migrations/`
+- Rule conversion: `apps/client/src/lib/calendar/rrule.ts`
+- Native recurrence engine: `apps/client/src-tauri/app/src/calendar/recurrence/`
+- Import and export stores: `apps/client/src/lib/stores/calendar/bulk-import.ts`, `import-export.ts`, `export-snapshot.ts`
+- Native import and preservation: `apps/client/src-tauri/app/src/calendar/import.rs`, `calendar/import/`
+- Native export snapshots: `apps/client/src-tauri/app/src/calendar/reads/`
+- Schema: `crates/ganbaru-db/migrations/`
 - Fixtures: `apps/client/test-fixtures/ics/`
 
 This is a source and test audit, not a claim that every legal RFC 5545 form has a fixture. The storage, import, and export behavior being audited is described in [preservation and export](../preservation-and-export.md).

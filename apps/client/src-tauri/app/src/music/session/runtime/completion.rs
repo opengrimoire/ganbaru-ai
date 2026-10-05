@@ -1,7 +1,7 @@
 //! Temporary completion attenuation belongs to the serialized Music owner, never user settings.
 
 use super::*;
-use crate::notification::{AppSound, AppSoundState};
+use crate::sound_effects::{AppSound, AppSoundState};
 use std::time::Instant;
 
 const COMPLETION_ATTENUATION: f64 = 0.0;

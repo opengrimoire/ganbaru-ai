@@ -649,7 +649,7 @@ fn persist_state(config_dir: &Path, state: &StoredNetworkAccess) -> Result<(), S
     let path = state_path(config_dir);
     let bytes = serde_json::to_vec_pretty(state)
         .map_err(|error| format!("serialize network access state: {error}"))?;
-    super::state::write_private_file_atomically(&path, &bytes)
+    super::pairing::write_private_file_atomically(&path, &bytes)
 }
 
 #[cfg(test)]

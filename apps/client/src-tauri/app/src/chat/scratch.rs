@@ -1,11 +1,13 @@
 //! Device-local private scratch targets for organizational assignments.
 
+pub(crate) mod commands;
+
 use super::device_state::{read_active_device_scope, update_active_device_scope};
-use super::models::{
-    ChatError, ChatErrorCode, ChatResult, ChatThreadId, ProjectWorkingFolderId, RepositoryKind,
-};
 use super::workspace::AuthorizedWorkingFolder;
 use crate::vault;
+use ganbaru_chat_contracts::models::{
+    ChatError, ChatErrorCode, ChatResult, ChatThreadId, ProjectWorkingFolderId, RepositoryKind,
+};
 use sha2::{Digest, Sha256};
 use sqlx::{Row, SqliteConnection, SqlitePool};
 use std::fs;

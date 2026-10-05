@@ -3,10 +3,10 @@
 import { mount, tick, unmount } from "svelte";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { localFileSourceFromPath } from "$lib/music/sources";
-import { emptyMusicSkipBreakdown } from "$lib/music/music-playlist-playback";
+import { emptyMusicSkipBreakdown } from "$lib/music/playlists/playback";
 import { getMusicPlayer } from "$lib/stores/music-player.svelte";
-import { getMusicSourcesController } from "$lib/music/music-sources-controller.svelte";
-import type { NativeMusicCommand, NativeMusicSnapshot } from "$lib/music/native-session";
+import { getMusicSourcesController } from "$lib/music/sources/controller.svelte";
+import type { NativeMusicCommand, NativeMusicSnapshot } from "$lib/music/session/native-session";
 
 const sessionApi = vi.hoisted(() => ({
   command: vi.fn(), start: vi.fn(), subscribe: vi.fn().mockResolvedValue(undefined),

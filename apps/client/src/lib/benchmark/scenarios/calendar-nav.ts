@@ -10,8 +10,8 @@
  * the entire benchmark DB file is deleted on summary close, so
  * per-calendar deletion would be redundant.
  */
-import { getCalendarNavHandle } from "$lib/components/calendar/nav-handle.svelte";
-import { NAV_HOLD_DELAY_MS } from "$lib/components/calendar/held-navigation";
+import { getCalendarNavHandle } from "$lib/calendar/nav-handle.svelte";
+import { NAV_HOLD_DELAY_MS } from "$lib/calendar/held-navigation";
 import {
   DEFAULT_BENCHMARK_DATASET,
   HELD_NAVIGATION_DURATION_MS,

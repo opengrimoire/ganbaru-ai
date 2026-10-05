@@ -8,7 +8,7 @@
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import { getQuickNoteColor } from "$lib/quick-notes/colors";
   import type { QuickNote, QuickNotesCollection, QuickNoteTag } from "$lib/quick-notes/types";
-  import type { Theme } from "$lib/stores/themes";
+  import type { Theme } from "$lib/themes";
   import QuickNoteColorPicker from "./QuickNoteColorPicker.svelte";
   import QuickNoteRichText from "./QuickNoteRichText.svelte";
   import QuickNoteTagPicker from "./QuickNoteTagPicker.svelte";

@@ -491,7 +491,7 @@ impl VaultOwnershipManager {
         })
     }
 
-    #[cfg(any(test, not(any(target_os = "android", target_os = "ios"))))]
+    #[cfg(any(test, desktop))]
     pub(crate) fn accept_incoming_grant(
         &self,
         vault_id: &str,

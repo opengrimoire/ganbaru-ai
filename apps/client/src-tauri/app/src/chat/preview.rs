@@ -1,15 +1,15 @@
 //! Isolated child-webview preview state and bounded browser controls.
 
-use super::models::{
-    ChatError, ChatErrorCode, ChatResult, ChatThreadId, ProjectWorkingFolderId, UtcTimestamp,
-};
-use super::repository::resources::{
-    self, ChatResourceKind, ChatResourceRead, StoreBrowserArtifact,
-};
-use crate::db_path;
+use crate::db;
 use crate::vault;
 use base64::{Engine as _, engine::general_purpose};
 use chrono::{SecondsFormat, Utc};
+use ganbaru_chat::repository::resources::{
+    self, ChatResourceKind, ChatResourceRead, StoreBrowserArtifact,
+};
+use ganbaru_chat_contracts::models::{
+    ChatError, ChatErrorCode, ChatResult, ChatThreadId, ProjectWorkingFolderId, UtcTimestamp,
+};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use sqlx::SqlitePool;
@@ -824,9 +824,9 @@ pub async fn chat_preview_close(
     Ok(())
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 async fn chat_pool(app: &tauri::AppHandle, db_url: String) -> ChatResult<SqlitePool> {
-    db_path::connect_sqlite(app.clone(), db_url)
+    db::connect_sqlite(app.clone(), db_url)
         .await
         .map_err(|_| persistence_error())
 }

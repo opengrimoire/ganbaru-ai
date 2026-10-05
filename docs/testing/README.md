@@ -72,7 +72,7 @@ cargo test -p ganbaru-db --lib -j 1 test_name -- --test-threads=1
 cargo test -p ganbaru-tauri-app --lib -j 1 test_name -- --test-threads=1
 ```
 
-Substitute `ganbaru-chat-contracts`, `ganbaru-chat-providers`, `ganbaru-focus`, or `ganbaru-working-folders` when that crate owns the behavior.
+Substitute `ganbaru-chat-contracts`, `ganbaru-chat-providers`, `ganbaru-pomodoro`, or `ganbaru-working-folders` when that crate owns the behavior.
 
 Use the native messaging binary only for binary-local tests:
 

@@ -5,7 +5,7 @@
   import X from "@lucide/svelte/icons/x";
   import { onDestroy } from "svelte";
   import { openUrl } from "@tauri-apps/plugin-opener";
-  import { getSettingsLauncher } from "$lib/stores/settingsLauncher.svelte";
+  import { getSettingsLauncher } from "$lib/stores/settings-launcher.svelte";
   import { getUpdateManager } from "$lib/stores/updates.svelte";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import { cn } from "$lib/utils";

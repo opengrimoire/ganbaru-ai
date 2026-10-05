@@ -1,7 +1,7 @@
 <script lang="ts">
   import LoaderCircle from "@lucide/svelte/icons/loader-circle";
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
-  import VaultHandoffPanel from "$lib/components/vault/VaultHandoffPanel.svelte";
+  import VaultHandoffPanel from "$lib/components/vault/handoff/VaultHandoffPanel.svelte";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import { flushConfig } from "$lib/vault/config";
   import {

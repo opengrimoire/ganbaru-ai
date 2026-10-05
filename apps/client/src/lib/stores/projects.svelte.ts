@@ -5,23 +5,23 @@ import {
   loadProjectsWorkspace,
   refreshProjectsWorkspace,
 } from "$lib/api/projects";
-import { ProjectTaskDetailCache } from "$lib/projects/task-detail-cache";
-import { ProjectTaskViewRequestGate } from "$lib/projects/task-view-request-gate";
+import { ProjectTaskDetailCache } from "$lib/projects/tasks/detail-cache";
+import { ProjectTaskViewRequestGate } from "$lib/projects/tasks/view-request-gate";
 import {
   mergeProjectOptionalData,
   PROJECT_SCOPED_OPTIONAL_DATA_KINDS,
   projectOptionalDataKey,
   projectViewOptionalDataKinds,
-} from "$lib/projects/project-optional-data";
-import { mergeProjectSnapshot } from "$lib/projects/project-snapshot";
+} from "$lib/projects/snapshot/optional-data";
+import { mergeProjectSnapshot } from "$lib/projects/snapshot/queries";
 import {
   loadSavedActiveProjectId,
   loadSavedProjectViewId,
   saveActiveProjectId,
   saveProjectViewId,
-} from "$lib/projects/project-ui-preferences";
-import { createProjectStoreActions } from "$lib/stores/project-store-actions";
-import { createProjectStoreSelectors } from "$lib/stores/project-store-selectors";
+} from "$lib/projects/ui-preferences";
+import { createProjectStoreActions } from "$lib/stores/projects/actions";
+import { createProjectStoreSelectors } from "$lib/stores/projects/selectors";
 import type {
   Project,
   ProjectChecklistItem,

@@ -20,11 +20,11 @@ import {
   pomodoroBlockedScreenPalette,
   pomodoroBlockedScreenStateFromOverlayKind,
   type PomodoroBlockedScreenState,
-} from "./lib/components/pomodoro/blocked-screen";
+} from "./lib/pomodoro/blocked-screen";
 import { applyPlatformProfileToDocument } from "./lib/platform";
 import { installModalKeyboardRouter } from "./lib/modal-focus";
 import { finishDesktopReadiness } from "./lib/windows/desktop-readiness";
-import { mark as perfMark } from "./lib/stores/perflog.svelte";
+import { mark as perfMark } from "$lib/stores/perf-log.svelte";
 
 applyPlatformProfileToDocument();
 installModalKeyboardRouter();
@@ -136,10 +136,10 @@ const appPromise = (async () => {
 
   async function mountVaultSetupView(initialError: string | null) {
     const handoffOnboardingModulePromise = import(
-      "$lib/components/vault/VaultHandoffOnboardingView.svelte"
+      "$lib/components/vault/handoff/VaultHandoffOnboardingView.svelte"
     );
     void handoffOnboardingModulePromise.catch(() => undefined);
-    const pairingQrModulePromise = import("$lib/components/vault/PairingQrCode.svelte");
+    const pairingQrModulePromise = import("$lib/components/vault/handoff/PairingQrCode.svelte");
     void pairingQrModulePromise.catch(() => undefined);
     const { default: VaultSetupView } = await import(
       "$lib/components/vault/VaultSetupView.svelte"
@@ -183,9 +183,9 @@ const appPromise = (async () => {
       console.warn("Desktop workspace preparation failed:", error);
     });
     const [{ default: VaultHandoffOnboardingView }, handoffApi] = await Promise.all([
-      import("$lib/components/vault/VaultHandoffOnboardingView.svelte"),
+      import("$lib/components/vault/handoff/VaultHandoffOnboardingView.svelte"),
       import("$lib/api/vault-handoff"),
-      import("$lib/components/vault/PairingQrCode.svelte"),
+      import("$lib/components/vault/handoff/PairingQrCode.svelte"),
     ]);
     const initialStatus = await handoffApi.readPairingStatus();
     const initialInvitation = initialStatus.linked

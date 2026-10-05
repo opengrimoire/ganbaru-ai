@@ -4,7 +4,7 @@ use super::support::{
     chat_pool, corrupt_data, json_error, now_timestamp, persistence_error, versioned_row,
 };
 use crate::chat::interaction_commands::ChatUserInputDraftRead;
-use crate::chat::models::{ChatError, ChatResult, UtcTimestamp, VersionedJson};
+use ganbaru_chat_contracts::models::{ChatError, ChatResult, UtcTimestamp, VersionedJson};
 use sqlx::{Row, SqlitePool};
 
 pub(crate) async fn read_user_input_draft(

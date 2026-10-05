@@ -1,11 +1,11 @@
-import { getCalendarNavHandle } from "$lib/components/calendar/nav-handle.svelte";
+import { getCalendarNavHandle } from "$lib/calendar/nav-handle.svelte";
 import {
   clear as clearPerfLog,
   perfLog,
   setTracking,
   snapshot as perfSnapshot,
   type PerfLogEntry,
-} from "$lib/stores/perflog.svelte";
+} from "$lib/stores/perf-log.svelte";
 import {
   DEFAULT_BENCHMARK_DATASET,
   PANEL_ACTION_RUNS,

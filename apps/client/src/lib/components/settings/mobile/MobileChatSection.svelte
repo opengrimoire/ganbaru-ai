@@ -4,7 +4,7 @@
   import { chatErrorMessage } from "$lib/chat/error-presentation";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import { getChat } from "$lib/stores/chat.svelte";
-  import ToggleSetting from "../ToggleSetting.svelte";
+  import SwitchField from "$lib/components/ui/SwitchField.svelte";
 
   const chat = getChat();
   const { t } = getLocalization();
@@ -55,21 +55,21 @@
       </p>
     {:else if behavior}
       <div class="flex flex-col gap-3">
-        <ToggleSetting
+        <SwitchField
           label={t("settings.chat.behavior.restoreThread")}
           description={t("settings.chat.behavior.restoreThreadDescription")}
           checked={behavior.restoreLastSelectedThread}
           disabled={saving}
           onChange={(value) => void update({ restoreLastSelectedThread: value })}
         />
-        <ToggleSetting
+        <SwitchField
           label={t("settings.chat.behavior.reasoning")}
           description={t("settings.chat.behavior.reasoningDescription")}
           checked={behavior.showReasoningSummaries}
           disabled={saving}
           onChange={(value) => void update({ showReasoningSummaries: value })}
         />
-        <ToggleSetting
+        <SwitchField
           label={t("settings.chat.behavior.foldWork")}
           description={t("settings.chat.behavior.foldWorkDescription")}
           checked={behavior.automaticallyFoldSettledWork}

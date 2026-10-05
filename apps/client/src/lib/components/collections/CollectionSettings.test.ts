@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { mount, tick, unmount } from "svelte";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import SettingsFixture from "./CollectionSettings.test.svelte";
+import SettingsFixture from "./CollectionSettingsHarness.test.svelte";
 
 let component: ReturnType<typeof mount> | undefined;
 

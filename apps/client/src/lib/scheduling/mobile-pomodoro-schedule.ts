@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { CalendarEvent } from "$lib/components/calendar/types";
-import { parseCalendarDate } from "$lib/components/calendar/utils";
+import type { CalendarEvent } from "$lib/calendar/types";
+import { parseCalendarDate } from "$lib/calendar/utils";
 import type { Translate } from "$lib/i18n/translator.svelte";
 import { loadNotificationSchedulerEvents } from "./mobile-calendar-notifications";
 

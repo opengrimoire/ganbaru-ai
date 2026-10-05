@@ -6,7 +6,7 @@
 
 Native Rust tests own SQLite atomicity: compound edits roll back after any failed prefix, reject stale or foreign preconditions, reuse retry receipts, and reconstruct correctly after reopening storage. Template, button, and database copies are bounded and keep stable identities on retry.
 
-Frontend tests connect the real action, persistence, tree projection, and undo controllers with delayed storage (for example `apps/client/src/lib/stores/notes-editor-transactions.test.ts`). They cover typing during pending saves, stale receipt replay, queued undo and redo, selections spanning unloaded content, clipboard parsing and serialization, and slash menu behavior.
+Frontend tests connect the real action, persistence, tree projection, and undo controllers with delayed storage (for example `apps/client/src/lib/stores/notes/editor-transactions.test.ts`). They cover typing during pending saves, stale receipt replay, queued undo and redo, selections spanning unloaded content, clipboard parsing and serialization, and slash menu behavior.
 
 These tests do not measure real WebView input, clipboard output, layout, or software keyboards. The cases below cover that gap.
 

@@ -2,12 +2,12 @@
 
 use super::support::{corrupt_data, i64_value, json_error, persistence_error};
 use super::validation::{prompt_preview, prompt_title, wire_interaction, wire_safety};
-use crate::chat::agent_runs::{StartingAgentRun, TurnOrigin};
-use crate::chat::models::*;
-use crate::chat::repository::receipts::{CommandReceiptRead, CommandReceiptState};
-use crate::chat::repository::{attachments, reads};
 use crate::chat::send_commands::{SendChatTurnCommand, SendChatTurnResult, SteerChatTurnCommand};
 use crate::vault;
+use ganbaru_chat::agent_runs::{StartingAgentRun, TurnOrigin};
+use ganbaru_chat::repository::receipts::{CommandReceiptRead, CommandReceiptState};
+use ganbaru_chat::repository::{attachments, reads};
+use ganbaru_chat_contracts::models::*;
 use serde_json::json;
 use sqlx::{Row, SqlitePool};
 
@@ -402,7 +402,7 @@ pub(super) async fn persist_user_turn(context: PersistUserTurnContext<'_>) -> Ch
     .await
     .map_err(persistence_error)?;
     if let Some(binding) = origin.run() {
-        crate::chat::agent_runs::insert_starting_run(
+        ganbaru_chat::agent_runs::insert_starting_run(
             &mut transaction,
             StartingAgentRun {
                 binding,

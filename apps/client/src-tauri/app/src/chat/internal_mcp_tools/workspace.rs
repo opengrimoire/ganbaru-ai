@@ -7,10 +7,10 @@ use super::{
     optional_string, required_string, sha256_hex, truncate_utf8, wire_folder_capability,
 };
 use crate::chat::internal_mcp::{InternalMcpFolderSource, InternalMcpRunScope};
-use crate::chat::models::{
+use crate::chat::workspace::WorkingFolderAuthorizationOperation;
+use ganbaru_chat_contracts::models::{
     ChatError, ChatErrorCode, ChatFolderCapability, ChatResult, ChatRuntimeApprovalPolicy,
 };
-use crate::chat::workspace::WorkingFolderAuthorizationOperation;
 use serde_json::{Map, Value, json};
 use tauri::Manager;
 
@@ -50,7 +50,7 @@ pub(super) async fn search_workspace_paths(
     let root = authorized.canonical_path;
     let query_owned = query.to_string();
     let page = tauri::async_runtime::spawn_blocking(move || {
-        crate::chat::composer::workspace_mentions::search_workspace_paths(
+        ganbaru_chat::composer::workspace_mentions::search_workspace_paths(
             &root,
             &query_owned,
             false,
@@ -92,7 +92,7 @@ pub(super) async fn read_workspace_file(
     let authorized = authorize_folder(context, source, false).await?;
     let relative_path = required_string(arguments, "relativePath", 4096)?.to_string();
     let preview = tauri::async_runtime::spawn_blocking(move || {
-        crate::chat::workspace_files::preview_workspace_file(&authorized, &relative_path)
+        crate::chat::workspace::files::preview_workspace_file(&authorized, &relative_path)
     })
     .await
     .map_err(|_| internal_error("read authorized workspace file"))??;
@@ -132,13 +132,13 @@ pub(super) async fn write_workspace_file(
         Some(required_string(arguments, "expectedRevision", 128)?.to_string())
     };
     let preview = tauri::async_runtime::spawn_blocking(move || match expected_revision {
-        Some(expected_revision) => crate::chat::workspace_files::save_workspace_file(
+        Some(expected_revision) => crate::chat::workspace::files::save_workspace_file(
             &authorized,
             &relative_path,
             &contents,
             &expected_revision,
         ),
-        None => crate::chat::workspace_files::recreate_workspace_file(
+        None => crate::chat::workspace::files::recreate_workspace_file(
             &authorized,
             &relative_path,
             &contents,
@@ -173,7 +173,7 @@ pub(super) async fn patch_workspace_file(
     let preview_authorization = authorized.clone();
     let preview_path = relative_path.clone();
     let preview = tauri::async_runtime::spawn_blocking(move || {
-        crate::chat::workspace_files::preview_workspace_file(&preview_authorization, &preview_path)
+        crate::chat::workspace::files::preview_workspace_file(&preview_authorization, &preview_path)
     })
     .await
     .map_err(|_| internal_error("read authorized workspace file for patching"))??;
@@ -196,7 +196,7 @@ pub(super) async fn patch_workspace_file(
     }
     let invalidation_path = relative_path.clone();
     let saved = tauri::async_runtime::spawn_blocking(move || {
-        crate::chat::workspace_files::save_workspace_file(
+        crate::chat::workspace::files::save_workspace_file(
             &authorized,
             &relative_path,
             &patched,
@@ -230,7 +230,7 @@ pub(super) async fn delete_workspace_file(
     let expected_revision = required_string(arguments, "expectedRevision", 128)?.to_string();
     let invalidation_path = relative_path.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        crate::chat::workspace_files::delete_workspace_file(
+        crate::chat::workspace::files::delete_workspace_file(
             &authorized,
             &relative_path,
             &expected_revision,
@@ -323,7 +323,7 @@ fn invalidate_workspace_path(
 ) {
     context
         .app
-        .state::<crate::chat::workspace_observer::ChatWorkspaceObserverRegistry>()
+        .state::<crate::chat::workspace::observer::ChatWorkspaceObserverRegistry>()
         .invalidate_paths(
             &source.working_folder_id,
             source
@@ -359,7 +359,7 @@ async fn authorize_folder(
     } else {
         WorkingFolderAuthorizationOperation::FileRead
     };
-    let authorized = crate::chat::workspace_commands::authorize_working_folder(
+    let authorized = crate::chat::workspace::commands::authorize_working_folder(
         context.app,
         context.pool,
         &source.working_folder_id,

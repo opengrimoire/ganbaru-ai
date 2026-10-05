@@ -4,13 +4,13 @@ use super::support::{chat_pool, now_timestamp, require_workspace};
 use crate::chat::interaction_commands::{
     ImportChatImageRequest, ImportChatTextSnippetRequest, PickChatImagesRequest,
 };
-use crate::chat::models::{
-    ChatAttachmentId, ChatError, ChatErrorCode, ChatResult, ProjectWorkingFolderId,
-};
-use crate::chat::repository::attachments;
 use crate::chat::workspace::WorkingFolderAuthorizationOperation;
 use crate::vault;
 use base64::{Engine as _, engine::general_purpose};
+use ganbaru_chat::repository::attachments;
+use ganbaru_chat_contracts::models::{
+    ChatAttachmentId, ChatError, ChatErrorCode, ChatResult, ProjectWorkingFolderId,
+};
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 use tauri_plugin_dialog::{DialogExt, FilePath};

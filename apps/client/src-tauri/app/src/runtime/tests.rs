@@ -1,0 +1,96 @@
+const MOBILE_RUNTIME: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/src/runtime/mobile.rs"
+));
+
+#[test]
+fn mobile_runtime_registers_portable_core_commands() {
+    for command in [
+        "vault::vault_use_default_folder",
+        "vault::vault_pick_open",
+        "calendar::reads::calendar_load_window",
+        "calendar::reads::calendar_load_notification_scheduler_window",
+        "projects::workspace::projects_load_workspace",
+        "notes::notes_load_workspace_shell",
+        "pomodoro::native_runtime::focus_snapshot",
+        "pomodoro::native_runtime::focus_command",
+        "pomodoro::native_runtime::focus_notification_copy",
+        "pomodoro::native_runtime::focus_subscribe",
+        "pomodoro::native_runtime::focus_renew_subscription",
+        "pomodoro::native_runtime::focus_unsubscribe",
+        "crate::distractions::android::distractions_mobile_update_copy",
+        "crate::distractions::android::distractions_mobile_load_usage_projection",
+        "music::session::runtime::music_session_subscribe",
+        "music::session::runtime::music_session_read_frame",
+        "music::session::runtime::music_session_acknowledge",
+        "music::session::runtime::music_session_unsubscribe",
+        "quick_notes::quick_notes_list",
+        "themes::theme_load_all",
+        "music::session::runtime::music_session_command",
+        "music::library::commands::music_library_playlist_summaries",
+        "music::root_bindings::music_get_local_root_bindings",
+        "profile_images::profile_image_asset_data_url",
+        "profile_images::profile_image_save_data_url",
+        "projects::icons::project_icon_asset_data_url",
+        "vault::vault_pick_and_read_theme_json",
+        "vault::vault_pick_and_write_theme_json",
+        "vault::backup::vault_backup_to_downloads",
+        "vault::backup::vault_pick_and_restore_backup",
+        "chat::channels::chat_list_navigation_channels",
+        "chat::organization::chat_post_message",
+        "chat::organization::chat_read_channel_page",
+        "chat::organization::chat_read_reply_thread_page",
+        "chat::settings_commands::chat_read_settings",
+    ] {
+        assert!(
+            MOBILE_RUNTIME.contains(command),
+            "missing mobile command {command}"
+        );
+    }
+}
+
+#[test]
+fn mobile_runtime_excludes_desktop_only_commands() {
+    for command in [
+        "chat::send_commands::",
+        "chat::terminal_commands::",
+        "chat::git::",
+        "chat::workspace::commands::",
+        "chat::interaction_commands::",
+        "chat::preview::",
+        "distractions::commands::",
+        "distractions::state_files::",
+        "distractions::usage::",
+        "distractions::limits_read::",
+        "distractions::catalog::",
+        "distractions::android::distractions_mobile_sync_events",
+        "distractions::android::distractions_mobile_list_usage_samples",
+        "notifications::desktop::show_event_notification",
+        "soundscape::",
+        "tray::",
+        "updates::",
+        "benchmark::",
+        "vault::vault_pick_create",
+        "notes::notes_pick_",
+        "notes::working_markdown::",
+        "notes::notes_import_notion_export_folder",
+        "notes::notes_prepare_import_file_reference",
+        "profile_images::profile_image_pick_file",
+        "projects::icons::project_icon_pick_image_file",
+        "projects::icons::project_icon_download_image_url",
+        "projects::icons::project_icon_asset_path",
+        "music::music_pick_soundscape_file",
+        "music::music_reveal_local_file",
+        "music::library::commands::music_library_create_relink_plan",
+        "music::library::commands::music_library_preview_item_repair",
+        "music::library::commands::music_library_soundscapes",
+        "music::library::commands::music_library_soundscape_groups",
+        "music::library::commands::music_library_upsert_soundscape_group",
+        "music::library::commands::music_library_remove_soundscape_group",
+    ] {
+        assert!(
+            !MOBILE_RUNTIME.contains(command),
+            "mobile runtime must exclude {command}"
+        );
+    }
+}

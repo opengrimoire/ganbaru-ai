@@ -133,16 +133,16 @@ From the repo root, build the native messaging host and generate the dev extensi
 pnpm -w run setup:chromium-extension
 ```
 
-Open the browser's extensions page, enable developer mode, load `extensions/chrome` as the normal unpacked extension, copy the extension id, then register the native host:
+Open the browser's extensions page, enable developer mode, load `extensions/chromium` as the normal unpacked extension, copy the extension id, then register the native host:
 
 ```bash
-node apps/client/scripts/install-chrome-native-host.mjs <extension-id> <chrome|chromium|brave|edge> app
+node apps/client/scripts/browser-extension/install-native-host.mjs <extension-id> <chrome|chromium|brave|edge> app
 ```
 
-To test the extension against `pnpm tauri dev` while keeping the normal extension connected, load the generated `extensions/chrome-dev` folder as a second unpacked extension, copy its extension id, then register the dev host:
+To test the extension against `pnpm tauri dev` while keeping the normal extension connected, load the generated `extensions/chromium-dev` folder as a second unpacked extension, copy its extension id, then register the dev host:
 
 ```bash
-node apps/client/scripts/install-chrome-native-host.mjs <dev-extension-id> <chrome|chromium|brave|edge> dev
+node apps/client/scripts/browser-extension/install-native-host.mjs <dev-extension-id> <chrome|chromium|brave|edge> dev
 ```
 
 After first setup, keep `pnpm tauri dev` running, configure Settings > Distractions > Browser in the app, keep Blacklist mode selected, start a Pomodoro focus session, and open a blocked website such as `reddit.com`.

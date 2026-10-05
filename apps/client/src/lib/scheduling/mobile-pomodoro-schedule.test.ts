@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { CalendarEvent } from "$lib/components/calendar/types";
+import type { CalendarEvent } from "$lib/calendar/types";
 import type { Translate } from "$lib/i18n/translator.svelte";
 import { createPresetPomodoroConfig } from "$lib/pomodoro/rhythm";
 import { buildMobileFocusNotificationCopy, buildMobilePomodoroSchedule, reconcileMobilePomodoroSchedule } from "./mobile-pomodoro-schedule";

@@ -2,9 +2,9 @@
   import Check from "@lucide/svelte/icons/check";
   import Search from "@lucide/svelte/icons/search";
   import { getLocalization } from "$lib/i18n/translator.svelte";
-  import { sortReviewPlaylists } from "$lib/music/music-review";
-  import { partitionMusicPlaylists, systemMusicPlaylistName } from "$lib/music/music-system-playlists";
-  import type { MusicPlaylistSummary } from "$lib/music/library-contracts";
+  import { sortReviewPlaylists } from "$lib/music/review";
+  import { partitionMusicPlaylists, systemMusicPlaylistName } from "$lib/music/playlists/system";
+  import type { MusicPlaylistSummary } from "$lib/music/library/contracts";
   import { cn } from "$lib/utils";
   import MusicPlaylistIcon from "./MusicPlaylistIcon.svelte";
 

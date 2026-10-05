@@ -18,17 +18,17 @@
   import { getChat } from "$lib/stores/chat.svelte";
   import { getZoom } from "$lib/stores/zoom.svelte";
   import { getPreferences } from "$lib/stores/preferences.svelte";
-  import { getSettingsLauncher } from "$lib/stores/settingsLauncher.svelte";
+  import { getSettingsLauncher } from "$lib/stores/settings-launcher.svelte";
   import { getUpdateManager } from "$lib/stores/updates.svelte";
-  import { UPDATE_AUTO_CHECK_INTERVAL_MS } from "$lib/stores/updates";
+  import { UPDATE_AUTO_CHECK_INTERVAL_MS } from "$lib/stores/update-policy";
   import { getViewport } from "$lib/stores/viewport.svelte";
   import { getDetachedWindows } from "$lib/stores/detached-windows.svelte";
-  import { parseNotesLinkHash } from "$lib/notes/block-link";
+  import { parseNotesLinkHash } from "$lib/notes/links/block-link";
   import {
     listPendingNotesMentionNotifications,
     markNotesMentionNotificationsDelivered,
   } from "$lib/api/notes";
-  import { getNotesNotificationSchedule } from "$lib/notes/notification-schedule.svelte";
+  import { getNotesNotificationSchedule } from "$lib/notes/collaboration/notification-schedule.svelte";
   import type {
     NotesMentionNotification,
     NotesMentionNotificationKind,
@@ -42,31 +42,31 @@
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { appNavigationShortcut, hasShortcutModifier } from "$lib/keyboard-shortcuts";
-  import TitleBar from "$lib/components/TitleBar.svelte";
-  import { getAppCloseCoordinator } from "$lib/components/title-bar/title-bar-shortcut-controller.svelte";
+  import TitleBar from "$lib/components/title-bar/TitleBar.svelte";
+  import { getAppCloseCoordinator } from "$lib/components/title-bar/shortcut-controller.svelte";
   import WindowResizeHandles from "$lib/components/WindowResizeHandles.svelte";
   import CalendarView from "$lib/components/calendar/CalendarView.svelte";
   import MusicPlaybackHost from "$lib/components/music/MusicPlaybackHost.svelte";
-  import MusicSoundscapeCoordinator from "$lib/components/music/MusicSoundscapeCoordinator.svelte";
+  import MusicSoundscapeCoordinator from "$lib/components/music/soundscape/MusicSoundscapeCoordinator.svelte";
   import NotesView from "$lib/components/notes/NotesView.svelte";
   import ProjectsView from "$lib/components/projects/ProjectsView.svelte";
-  import ProjectDashboardView from "$lib/components/projects/ProjectDashboardView.svelte";
-  import ProjectGanttView from "$lib/components/projects/ProjectGanttView.svelte";
-  import ProjectKanbanView from "$lib/components/projects/ProjectKanbanView.svelte";
-  import ProjectListView from "$lib/components/projects/ProjectListView.svelte";
-  import type { ProjectViewComponents } from "$lib/components/projects/project-view-components";
+  import ProjectDashboardView from "$lib/components/projects/views/ProjectDashboardView.svelte";
+  import ProjectGanttView from "$lib/components/projects/views/ProjectGanttView.svelte";
+  import ProjectKanbanView from "$lib/components/projects/views/ProjectKanbanView.svelte";
+  import ProjectListView from "$lib/components/projects/list/ProjectListView.svelte";
+  import type { ProjectViewComponents } from "$lib/components/projects/view-components";
   import ChatWorkspace from "$lib/components/chat/ChatWorkspace.svelte";
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
   import TooltipHost from "$lib/components/ui/TooltipHost.svelte";
   import UpdateNotificationToast from "$lib/components/updates/UpdateNotificationToast.svelte";
-  import { formatEventNotificationBody } from "$lib/components/calendar/event-notifications";
+  import { formatEventNotificationBody } from "$lib/calendar/event-notifications";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import {
     firstMarkTime,
     mark as perfMark,
     setShellStartupMs,
-  } from "$lib/stores/perflog.svelte";
-  import type { MemoryReport, StartupMemorySnapshot } from "$lib/components/perf/memoryReport";
+  } from "$lib/stores/perf-log.svelte";
+  import type { MemoryReport, StartupMemorySnapshot } from "$lib/diagnostics/memory-report";
   import { shouldUseKeyboardFocusIntent } from "$lib/utils";
   import {
     createLifecycleScheduler,
@@ -76,9 +76,9 @@
     createNotesNotificationScheduler,
   } from "$lib/scheduling/notification-schedulers";
   import { onMount } from "svelte";
-  import { getNotesProjectHistoryScheduler } from "$lib/notes/project-history-scheduler";
+  import { getNotesProjectHistoryScheduler } from "$lib/notes/history/project-history-scheduler";
   import { onActiveVaultIdentityChange } from "$lib/vault/active-vault";
-  import { listenForNotesDatabaseChanges } from "$lib/notes/database-window-sync";
+  import { listenForNotesDatabaseChanges } from "$lib/notes/database/window-sync";
   import type { ProjectChatIntegration } from "$lib/projects/types";
 
   perfMark("boot.script-start");
@@ -153,7 +153,7 @@
   }
 
   let isMaximized = $state(true);
-  type BenchmarkOverlayComponent = typeof import("$lib/components/benchmark/BenchmarkOverlay.svelte").default;
+  type BenchmarkOverlayComponent = typeof import("$lib/components/diagnostics/BenchmarkOverlay.svelte").default;
   type IdleOverlayComponent = typeof import("$lib/components/pomodoro/IdleOverlay.svelte").default;
   let BenchmarkOverlay = $state<BenchmarkOverlayComponent | null>(null);
   let IdleOverlay = $state<IdleOverlayComponent | null>(null);
@@ -162,7 +162,7 @@
   let devtoolsToggleInFlight = false;
   function ensureBenchmarkOverlay(): Promise<void> {
     if (BenchmarkOverlay) return Promise.resolve();
-    loadingBenchmarkOverlay ??= import("$lib/components/benchmark/BenchmarkOverlay.svelte")
+    loadingBenchmarkOverlay ??= import("$lib/components/diagnostics/BenchmarkOverlay.svelte")
       .then((module) => {
         BenchmarkOverlay = module.default;
       })
@@ -205,7 +205,7 @@
         await ensureDbUrl();
         await ensureBenchmarkOverlay();
         await afterAnimationFrames(2);
-        const { getBenchmarkRunner } = await import("$lib/stores/benchmarkRunner.svelte");
+        const { getBenchmarkRunner } = await import("$lib/stores/benchmark-runner.svelte");
         benchmarkClaimedBoot = await getBenchmarkRunner().checkAndResume();
       }
     } catch (e) {

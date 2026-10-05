@@ -2,7 +2,7 @@
 
 use super::context::ContextActivation;
 use super::*;
-use crate::soundscape::{GeneratedNoiseKind, SoundscapeStartRequest};
+use crate::music::soundscape::{GeneratedNoiseKind, SoundscapeStartRequest};
 use std::sync::{Arc, LazyLock, atomic::AtomicBool};
 use std::time::Instant;
 
@@ -34,7 +34,7 @@ pub(super) async fn prepare(
     behavior: &str,
     soundscape_id: Option<&str>,
 ) -> MusicLibraryResult<PreparedSoundscape> {
-    use crate::music_context::MusicSoundscapeBehavior;
+    use crate::music::assignments::MusicSoundscapeBehavior;
     let behavior = MusicSoundscapeBehavior::try_from(behavior)
         .map_err(|error| MusicLibraryError::validation("assignment.soundscapeBehavior", error))?;
     let empty = |missing| PreparedSoundscape {
@@ -137,8 +137,8 @@ impl Owner {
         let app = self.app.clone();
         let worker = tauri::async_runtime::spawn_blocking(move || {
             let _delivery_permit = delivery_permit;
-            crate::soundscape::soundscape_stop(
-                app.state::<crate::soundscape::SoundscapeEngineState>(),
+            crate::music::soundscape::soundscape_stop(
+                app.state::<crate::music::soundscape::SoundscapeEngineState>(),
             )
             .map(|_| ())
             .map_err(|error| {
@@ -192,9 +192,9 @@ impl Owner {
             // Keep both permits through actual engine acknowledgement, even after a timeout.
             let _write_permit = permit;
             let _delivery_permit = delivery_permit;
-            let engine = app.state::<crate::soundscape::SoundscapeEngineState>();
+            let engine = app.state::<crate::music::soundscape::SoundscapeEngineState>();
             let guard_app = app.clone();
-            crate::soundscape::apply_automatic(
+            crate::music::soundscape::apply_automatic(
                 engine,
                 request,
                 Box::new(move || {
@@ -265,5 +265,4 @@ impl Owner {
 }
 
 #[cfg(test)]
-#[path = "context_soundscape_tests.rs"]
 mod tests;

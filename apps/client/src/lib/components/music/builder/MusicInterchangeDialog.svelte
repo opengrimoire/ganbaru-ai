@@ -1,8 +1,8 @@
 <script lang="ts">
   import { getLocalization } from "$lib/i18n/translator.svelte";
-  import type { MusicInterchangeController } from "$lib/music/music-interchange-controller.svelte";
-  import type { MusicPlaylistSummary } from "$lib/music/library-contracts";
-  import { systemMusicPlaylistName } from "$lib/music/music-system-playlists";
+  import type { MusicInterchangeController } from "$lib/music/library/interchange-controller.svelte";
+  import type { MusicPlaylistSummary } from "$lib/music/library/contracts";
+  import { systemMusicPlaylistName } from "$lib/music/playlists/system";
   import MusicBuilderDialog from "./MusicBuilderDialog.svelte";
 
   let { controller, playlists, onClose, onImported }: { controller: MusicInterchangeController; playlists: MusicPlaylistSummary[]; onClose: () => void; onImported: () => void } = $props();

@@ -4,7 +4,7 @@ use tauri::{
     plugin::{PluginApi, PluginHandle},
 };
 
-const PLUGIN_IDENTIFIER: &str = "app.ganbaru.mobile_notifications";
+const PLUGIN_IDENTIFIER: &str = "org.opengrimoire.ganbaruai.mobile.notifications";
 
 #[derive(Debug)]
 pub struct MobileNotifications<R: Runtime>(PluginHandle<R>);

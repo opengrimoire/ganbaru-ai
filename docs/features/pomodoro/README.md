@@ -2,7 +2,7 @@
 
 Pomodoro turns a calendar commitment into an adaptive sequence of focus and recovery phases. It protects attention without rewarding exhaustion or treating one fixed interval as universally correct.
 
-**Status: Partial.** The native owner in `ganbaru-focus` handles admission, execution, recovery, and adaptive decisions on desktop and Android, and Svelte only displays accepted state and sends commands. Physical platform acceptance and linked-device control remain open.
+**Status: Partial.** The native owner in `ganbaru-pomodoro` handles admission, execution, recovery, and adaptive decisions on desktop and Android, and Svelte only displays accepted state and sends commands. Physical platform acceptance and linked-device control remain open.
 
 ## Current scope
 

@@ -1,4 +1,4 @@
-import { PALETTE_SIZE } from "$lib/components/calendar/types";
+import { PALETTE_SIZE } from "$lib/calendar/types";
 import {
   type Theme,
   type ThemeId,
@@ -30,7 +30,7 @@ import {
   DEFAULT_CALENDAR_DEFAULT_CUSTOM,
   deriveCalendarColorDefaultBundle,
   type CalendarColorDefaultMode,
-} from "./themes";
+} from "$lib/themes";
 import {
   canResetTokenToSeed,
   cloneTheme,
@@ -39,7 +39,7 @@ import {
   normalizeDisplayName,
   themeIdCollisionError,
   toUserThemeSnapshot,
-} from "./themeOperations";
+} from "$lib/themes/operations";
 import { getConfigKey, setConfigKey } from "../vault/config";
 import {
   deleteTheme as dbDeleteTheme,
@@ -56,11 +56,11 @@ import {
   createWindowSyncEnvelope,
   isForeignWindowSyncEnvelope,
   isWindowSyncEnvelope,
-} from "$lib/window-sync";
+} from "$lib/windows/sync";
 import {
   emitWindowSync,
   listenWindowSync,
-} from "$lib/window-sync-transport";
+} from "$lib/windows/sync-transport";
 
 const ACTIVE_KEY = "theme.activeId";
 const QUICK_TOGGLE_LIGHT_KEY = "theme.quickToggleLightId";

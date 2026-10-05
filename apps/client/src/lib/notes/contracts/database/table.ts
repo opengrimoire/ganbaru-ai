@@ -1,6 +1,6 @@
 import type { NotesPage } from "../core";
 import type { NotesDataSource, NotesDatabaseView } from "./base";
-import type { NotesDatabaseRowHierarchy } from "../../database-row-hierarchy";
+import type { NotesDatabaseRowHierarchy } from "$lib/notes/database/row-hierarchy";
 
 export type NotesDatabaseTableRowOpenMode = "full_page" | "side_panel";
 

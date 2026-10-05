@@ -2,8 +2,8 @@
 
 import { mount, tick, unmount } from "svelte";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { MusicSourceCollection } from "$lib/music/library-contracts";
-import type { MusicSourcesController } from "$lib/music/music-sources-controller.svelte";
+import type { MusicSourceCollection } from "$lib/music/library/contracts";
+import type { MusicSourcesController } from "$lib/music/sources/controller.svelte";
 import MusicAddSourceDialog from "./MusicAddSourceDialog.svelte";
 import MusicNetworkRefreshDialog from "./MusicNetworkRefreshDialog.svelte";
 import MusicSourceRemovalDialog from "./MusicSourceRemovalDialog.svelte";

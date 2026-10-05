@@ -3,7 +3,7 @@
 import { mount, tick, unmount } from "svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { localFileSourceFromPath } from "$lib/music/sources";
-import { musicSnoozeEndsAt } from "$lib/music/music-snooze";
+import { musicSnoozeEndsAt } from "$lib/music/session/snooze";
 import { getMusicPlayer } from "$lib/stores/music-player.svelte";
 
 const api = vi.hoisted(() => ({

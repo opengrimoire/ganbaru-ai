@@ -4,7 +4,7 @@ use tauri::{
     plugin::{PluginApi, PluginHandle},
 };
 
-const PLUGIN_IDENTIFIER: &str = "app.ganbaru.mobile_media";
+const PLUGIN_IDENTIFIER: &str = "org.opengrimoire.ganbaruai.mobile.media";
 
 #[derive(Debug)]
 pub struct MobileMedia<R: Runtime>(PluginHandle<R>);

@@ -1,6 +1,14 @@
 use super::*;
 use sqlx::SqlitePool;
 
+mod contexts;
+mod interchange;
+mod playback;
+mod query;
+mod relink;
+mod source_lifecycle;
+mod transfer;
+
 pub(super) async fn pool() -> SqlitePool {
     let pool = sqlx::sqlite::SqlitePoolOptions::new()
         .max_connections(1)
@@ -11,7 +19,7 @@ pub(super) async fn pool() -> SqlitePool {
         .execute(&pool)
         .await
         .unwrap();
-    crate::db::run_migrations(&pool).await.unwrap();
+    ganbaru_db::run_migrations(&pool).await.unwrap();
     pool
 }
 
@@ -606,7 +614,7 @@ fn deletion_requires_current_impact_and_repairs_assignments_atomically() {
         .execute(&pool)
         .await
         .unwrap();
-        super::contexts::replace_assignments(
+        crate::music::assignments::replace_assignments(
             &pool,
             MusicContextAssignmentSet {
                 owner_kind: MusicAssignmentOwnerKind::EventOverride,

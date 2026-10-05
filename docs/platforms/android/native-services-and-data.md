@@ -45,7 +45,7 @@ The execution model is owned by [Pomodoro](../../features/pomodoro/README.md) an
 - An explicitly started run owns a special-use foreground service with a silent ongoing progress notification.
 - Native state describes only the currently accepted phase. Its alarm delivers a boundary reminder and ends the projection; it never advances to later phases while the WebView is absent.
 - The Rust Focus owner publishes and revokes phase projections. The WebView cannot publish or cancel them and supplies only localized copy, which is never recovery evidence.
-- Opening the app runs `ganbaru-focus` recovery against committed SQLite state. Notification projections cannot create a run or phases.
+- Opening the app runs `ganbaru-pomodoro` recovery against committed SQLite state. Notification projections cannot create a run or phases.
 - A device-local delivery receipt suppresses repeated alerts. It is presentation state, never execution evidence.
 - Calendar commitment reminders are separate. A due event while the Activity is absent creates no run, focus minutes, or phase-dependent blocking; the user starts it from the explicit **Start scheduled session** action.
 

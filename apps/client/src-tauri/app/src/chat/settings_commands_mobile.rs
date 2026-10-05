@@ -1,15 +1,15 @@
 //! Provider-free Chat settings used by mobile clients.
 
-use super::config::{
+use crate::vault;
+use ganbaru_chat::credentials::CredentialStoreAvailability;
+use ganbaru_chat_contracts::config::{
     ChatBehaviorPreferences, ChatPanelPreferences, ChatVaultConfig, parse_chat_config_branch,
     replace_chat_config_branch,
 };
-use super::models::{
+use ganbaru_chat_contracts::models::{
     ChatResult, ChatThreadId, ProviderFamilyMetadataRead, ProviderInstanceConfig,
     ProviderModelCatalog, ProviderProbeResult,
 };
-use crate::vault;
-use ganbaru_chat::chat::credentials::CredentialStoreAvailability;
 use serde::Serialize;
 use serde_json::Value;
 
@@ -18,7 +18,7 @@ use serde_json::Value;
 pub struct ProviderInstanceRead {
     pub configuration: ProviderInstanceConfig,
     pub last_probe: Option<ProviderProbeResult>,
-    pub last_successful_probe_at: Option<super::models::UtcTimestamp>,
+    pub last_successful_probe_at: Option<ganbaru_chat_contracts::models::UtcTimestamp>,
     pub model_catalog: Option<ProviderModelCatalog>,
 }
 
@@ -32,9 +32,9 @@ pub struct ChatSettingsRead {
     pub last_selected_thread_id: Option<ChatThreadId>,
 }
 
-fn config_error(message: String) -> super::models::ChatError {
-    super::models::ChatError::new(
-        super::models::ChatErrorCode::ConfigurationInvalid,
+fn config_error(message: String) -> ganbaru_chat_contracts::models::ChatError {
+    ganbaru_chat_contracts::models::ChatError::new(
+        ganbaru_chat_contracts::models::ChatErrorCode::ConfigurationInvalid,
         message,
         true,
     )

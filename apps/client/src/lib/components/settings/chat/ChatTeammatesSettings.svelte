@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { createTeammateEditorController } from "$lib/chat/teammate-editor-controller.svelte";
+  import { createTeammateEditorController } from "$lib/chat/teammates/editor-controller.svelte";
   import { onMount, tick, untrack } from "svelte";
   import Archive from "@lucide/svelte/icons/archive";
   import ArchiveRestore from "@lucide/svelte/icons/archive-restore";
@@ -22,8 +22,8 @@
     ChatTeammateChannelAccessInput,
   } from "$lib/chat/contracts";
   import { chatErrorMessage } from "$lib/chat/error-presentation";
-  import { modelCompany } from "$lib/chat/model-company";
-  import { preferredProjectWorkingFolder } from "$lib/chat/working-folder-selection";
+  import { modelCompany } from "$lib/chat/composer/model-company";
+  import { preferredProjectWorkingFolder } from "$lib/chat/workspace/working-folder-selection";
   import {
     applyAccessProfileToScope,
     applyChannelPresetToScope,
@@ -32,23 +32,23 @@
     toggleSelectionGroup,
     type ChatTeammateAccessConfirmationImpact,
     type ChatChannelCapabilityPreset,
-  } from "$lib/chat/teammate-access";
+  } from "$lib/chat/teammates/access";
   import { formatList } from "$lib/i18n/formatters";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import { getChat } from "$lib/stores/chat.svelte";
   import { getProjects } from "$lib/stores/projects.svelte";
   import CalendarScrollbar from "$lib/components/calendar/CalendarScrollbar.svelte";
-  import CustomSelect from "$lib/components/settings/CustomSelect.svelte";
+  import Select from "$lib/components/ui/Select.svelte";
   import SettingsCheckbox from "$lib/components/settings/SettingsCheckbox.svelte";
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
-  import ChatAccessControl from "$lib/components/chat/ChatAccessControl.svelte";
+  import ChatAccessControl from "$lib/components/chat/composer/ChatAccessControl.svelte";
   import ChatControlMenu, {
     type ChatControlIcon,
     type ChatControlOption,
-  } from "$lib/components/chat/ChatControlMenu.svelte";
-  import ChatModelAvatar from "$lib/components/chat/ChatModelAvatar.svelte";
-  import ChatModelControls from "$lib/components/chat/ChatModelControls.svelte";
-  import ChatParticipantAvatar from "$lib/components/chat/ChatParticipantAvatar.svelte";
+  } from "$lib/components/chat/composer/ChatControlMenu.svelte";
+  import ChatModelAvatar from "$lib/components/chat/identity/ChatModelAvatar.svelte";
+  import ChatModelControls from "$lib/components/chat/composer/ChatModelControls.svelte";
+  import ChatParticipantAvatar from "$lib/components/chat/identity/ChatParticipantAvatar.svelte";
   import ChatChannelAccessPicker from "./ChatChannelAccessPicker.svelte";
   import ChatChannelScopeControls from "./ChatChannelScopeControls.svelte";
   type ChatAccessProfilesManagerComponent = typeof import("./ChatAccessProfilesManager.svelte").default;
@@ -665,7 +665,7 @@
   {@const preset = channelCapabilityPreset(channelAccess.capabilities)}
   <div class="access-details">
     {#if channelAccess.capabilities.readHistory}
-      <div class="field history-field"><span>{t("settings.chat.teammates.history")}</span><CustomSelect inline class="w-full" value={channelAccess.historyBoundary.kind} options={historyOptions} ariaLabel={t("settings.chat.teammates.history")} disabled={editor.archivedMode} onChange={(value) => updateAccessChannel(channelAccess.channelId, (channel) => ({ ...channel, historyBoundary: value === "fromGrant" ? { kind: "fromGrant" } : { kind: "entire" } }))} /></div>
+      <div class="field history-field"><span>{t("settings.chat.teammates.history")}</span><Select inline class="w-full" value={channelAccess.historyBoundary.kind} options={historyOptions} ariaLabel={t("settings.chat.teammates.history")} disabled={editor.archivedMode} onChange={(value) => updateAccessChannel(channelAccess.channelId, (channel) => ({ ...channel, historyBoundary: value === "fromGrant" ? { kind: "fromGrant" } : { kind: "entire" } }))} /></div>
     {/if}
     {#if preset === "custom"}
       <fieldset class="capability-switches" disabled={editor.archivedMode}>
@@ -685,8 +685,8 @@
             <span class="folder-name"><strong>{folderRead.workingFolder.displayName}</strong><small data-status={folderRead.bindingStatus}>{t(`settings.chat.teammates.binding.${folderRead.bindingStatus}`)}</small></span>
             <div class="folder-controls">
               {#if grant}
-                <CustomSelect inline class="folder-select" value={grant.capability} options={folderCapabilityOptions(selectedProfile?.latestRevision.maximumFolderCapability ?? "none")} ariaLabel={t("settings.chat.teammates.folderCapabilityFor", folderRead.workingFolder.displayName)} onChange={(value) => setFolderCapability(channelAccess.channelId, folderRead.workingFolder.id, value as ChatFolderCapability)} />
-                {#if advancedChannelIds.has(channelAccess.channelId)}<CustomSelect inline class="approval-select" value={grant.runtimeApprovalOverride ?? "inherit"} options={folderRuntimeOptions} ariaLabel={t("settings.chat.teammates.folderRuntimeApprovalFor", folderRead.workingFolder.displayName)} onChange={(value) => setFolderRuntimeApproval(channelAccess.channelId, folderRead.workingFolder.id, value === "inherit" ? null : value as ChatRuntimeApprovalPolicy)} />{/if}
+                <Select inline class="folder-select" value={grant.capability} options={folderCapabilityOptions(selectedProfile?.latestRevision.maximumFolderCapability ?? "none")} ariaLabel={t("settings.chat.teammates.folderCapabilityFor", folderRead.workingFolder.displayName)} onChange={(value) => setFolderCapability(channelAccess.channelId, folderRead.workingFolder.id, value as ChatFolderCapability)} />
+                {#if advancedChannelIds.has(channelAccess.channelId)}<Select inline class="approval-select" value={grant.runtimeApprovalOverride ?? "inherit"} options={folderRuntimeOptions} ariaLabel={t("settings.chat.teammates.folderRuntimeApprovalFor", folderRead.workingFolder.displayName)} onChange={(value) => setFolderRuntimeApproval(channelAccess.channelId, folderRead.workingFolder.id, value === "inherit" ? null : value as ChatRuntimeApprovalPolicy)} />{/if}
                 <label class="default-target"><input type="radio" name={`default-${channelAccess.channelId}`} checked={grant.isDefault} onchange={() => setDefaultFolder(channelAccess.channelId, folderRead.workingFolder.id)} />{t("settings.chat.teammates.defaultTarget")}</label>
               {/if}
               {#if folderRead.bindingStatus !== "available"}<button type="button" class="link-button" onclick={() => void recoverFolder(folderRead.workingFolder.id, folderRead.bindingStatus, folderRead.workingFolder.kind === "managed")}>{folderRead.workingFolder.kind === "managed" && folderRead.bindingStatus === "missing" ? t("settings.chat.teammates.recreate") : folderRead.bindingStatus === "repository_mismatch" ? t("settings.chat.teammates.relink") : t("settings.chat.teammates.locate")}</button>{/if}
@@ -700,7 +700,7 @@
     {/if}
     {#if channelAccess.folderGrants.length > 0 && advancedChannelIds.has(channelAccess.channelId)}
       <div class="field-grid compact advanced-fields">
-        <div class="field"><span>{t("settings.chat.teammates.channelRuntimeApproval")}</span><CustomSelect inline class="w-full" value={channelAccess.runtimeApprovalOverride ?? "inherit"} options={channelRuntimeOptions} ariaLabel={t("settings.chat.teammates.channelRuntimeApproval")} disabled={editor.archivedMode} onChange={(value) => updateAccessChannel(channelAccess.channelId, (channel) => ({ ...channel, runtimeApprovalOverride: value === "inherit" ? null : value as ChatRuntimeApprovalPolicy }))} /></div>
+        <div class="field"><span>{t("settings.chat.teammates.channelRuntimeApproval")}</span><Select inline class="w-full" value={channelAccess.runtimeApprovalOverride ?? "inherit"} options={channelRuntimeOptions} ariaLabel={t("settings.chat.teammates.channelRuntimeApproval")} disabled={editor.archivedMode} onChange={(value) => updateAccessChannel(channelAccess.channelId, (channel) => ({ ...channel, runtimeApprovalOverride: value === "inherit" ? null : value as ChatRuntimeApprovalPolicy }))} /></div>
       </div>
     {/if}
   </div>

@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
 import { mount, tick, unmount } from "svelte";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { applyBlockUpdate, blockPlainText, createBlockUpdate } from "$lib/notes/block-factory";
-import { notesBlockOutlineFromBlock } from "$lib/notes/block-outline";
-import { createProvisionalNotesPage } from "$lib/notes/page-creation";
-import { parseNotesLinkHash } from "$lib/notes/block-link";
+import { applyBlockUpdate, blockPlainText, createBlockUpdate } from "$lib/notes/blocks/factory";
+import { notesBlockOutlineFromBlock } from "$lib/notes/blocks/outline";
+import { createProvisionalNotesPage } from "$lib/notes/pages/creation";
+import { parseNotesLinkHash } from "$lib/notes/links/block-link";
 import type { NotesBlockHydrationRequest, NotesBlockUpdate, NotesChildPageFromBlockCreate, NotesDataSourceTableView, NotesDatabaseCreateRequest, NotesDatabaseReference, NotesLocalUser, NotesPageCreate, NotesPageOpenResponse, NotesWorkspaceShell, NotesWorkspaceShellRequest } from "$lib/notes/types";
-import type { NotesPageOpenMode } from "$lib/notes/page-open-mode";
+import type { NotesPageOpenMode } from "$lib/notes/pages/open-mode";
 import type { NotesCompoundEdit, NotesCompoundEditResult } from "$lib/api/notes/compound-edits";
 import type { NotesCreatedDatabase } from "$lib/notes/types";
 

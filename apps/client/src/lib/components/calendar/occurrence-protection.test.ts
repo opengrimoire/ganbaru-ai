@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { CalendarEvent } from "./types";
+import type { CalendarEvent } from "$lib/calendar/types";
 import { eventMatchesActiveOccurrence, exactOccurrenceId, rootIdForEvent, sameConcreteOccurrence } from "./occurrence-protection";
 
 /** Native provenance deliberately differs from the moved display date. */

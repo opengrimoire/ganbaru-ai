@@ -9,8 +9,8 @@
   import X from "@lucide/svelte/icons/x";
   import { tick, untrack } from "svelte";
   import { getLocalization } from "$lib/i18n/translator.svelte";
-  import type { MusicItemListEntry } from "$lib/music/library-contracts";
-  import { createMusicReviewTreeViewState, type MusicReviewTreeViewState } from "$lib/music/music-builder-view-state";
+  import type { MusicItemListEntry } from "$lib/music/library/contracts";
+  import { createMusicReviewTreeViewState, type MusicReviewTreeViewState } from "$lib/music/builder/view-state";
   import {
     buildMusicReviewTree,
     flattenMusicReviewTree,
@@ -19,7 +19,7 @@
     musicReviewTreeRevealScrollTop,
     searchMusicReviewTree,
     type MusicReviewTreeNode,
-  } from "$lib/music/music-review-tree";
+  } from "$lib/music/review/tree";
   import { cn } from "$lib/utils";
 
   let {

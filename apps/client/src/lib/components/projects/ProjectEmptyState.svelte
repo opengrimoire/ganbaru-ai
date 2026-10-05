@@ -4,7 +4,7 @@
   import { getProjects } from "$lib/stores/projects.svelte";
   import { cn } from "$lib/utils";
   import ProjectNavigator from "./ProjectNavigator.svelte";
-  import ProjectPickerMobileDialog from "./ProjectPickerMobileDialog.svelte";
+  import ProjectPickerMobileDialog from "$lib/components/projects/pickers/ProjectPickerMobileDialog.svelte";
 
   let {
     selectedProjectId,

@@ -1,4 +1,4 @@
-import type { CalendarEvent } from "./types";
+import type { CalendarEvent } from "$lib/calendar/types";
 
 /** Identity published by the native Focus owner, independent of device-day evidence. */
 export interface ActivePomodoroIdentity {

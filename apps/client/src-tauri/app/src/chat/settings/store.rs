@@ -2,16 +2,16 @@ use super::{
     config_io_error, config_shape_error, device_state_error, mapping::provider_instance_read,
     provider_not_found,
 };
-use crate::chat::config::{
+use crate::chat::credentials::{CredentialStore, PlatformCredentialStore};
+use crate::chat::device_state::read_active_device_scope;
+use crate::chat::settings_commands::{ChatSettingsRead, ChatSettingsState};
+use crate::vault;
+use ganbaru_chat_contracts::config::{
     ChatPortableProviderConfig, ChatVaultConfig, parse_chat_config_branch,
     replace_chat_config_branch,
 };
-use crate::chat::credentials::{CredentialStore, PlatformCredentialStore};
-use crate::chat::device_state::read_active_device_scope;
-use crate::chat::models::{ChatError, ChatErrorCode, ChatResult, ProviderInstanceId};
-use crate::chat::providers::ProviderDriverRegistry;
-use crate::chat::settings_commands::{ChatSettingsRead, ChatSettingsState};
-use crate::vault;
+use ganbaru_chat_contracts::models::{ChatError, ChatErrorCode, ChatResult, ProviderInstanceId};
+use ganbaru_chat_providers::ProviderDriverRegistry;
 use serde_json::Value;
 
 pub(crate) fn read_settings(app: &tauri::AppHandle) -> ChatResult<ChatSettingsRead> {

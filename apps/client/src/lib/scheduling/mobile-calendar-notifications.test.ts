@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { CalendarEvent } from "$lib/components/calendar/types";
+import type { CalendarEvent } from "$lib/calendar/types";
 import type { Translate } from "$lib/i18n/translator.svelte";
 import {
   buildNativeCalendarNotifications,
@@ -7,9 +7,9 @@ import {
   calendarNativeNotificationId,
   loadNotificationSchedulerEvents,
 } from "./mobile-calendar-notifications";
-import { loadNativeCalendarWindow } from "$lib/stores/calendar-native-window";
+import { loadNativeCalendarWindow } from "$lib/stores/calendar/native-window";
 
-vi.mock("$lib/stores/calendar-native-window", () => ({ loadNativeCalendarWindow: vi.fn() }));
+vi.mock("$lib/stores/calendar/native-window", () => ({ loadNativeCalendarWindow: vi.fn() }));
 
 const t = ((key: string) => key) as Translate;
 

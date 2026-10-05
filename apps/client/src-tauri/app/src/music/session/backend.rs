@@ -1,7 +1,7 @@
 //! Platform effects contain playback mechanisms, never queue decisions.
 
 use super::models::*;
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 use tauri::Manager;
 
 #[cfg(target_os = "android")]
@@ -17,7 +17,7 @@ pub(super) use android::{is_active, restart_for_play};
 /// Failed media and uncertain transport have different queue recovery semantics.
 #[derive(Debug)]
 pub(super) enum Failure {
-    #[cfg(any(not(any(target_os = "android", target_os = "ios")), test))]
+    #[cfg(any(desktop, test))]
     Source(String),
     Interrupted(String),
 }
@@ -25,7 +25,7 @@ pub(super) enum Failure {
 impl Failure {
     pub fn is_source_failure(&self) -> bool {
         match self {
-            #[cfg(any(not(any(target_os = "android", target_os = "ios")), test))]
+            #[cfg(any(desktop, test))]
             Self::Source(_) => true,
             Self::Interrupted(_) => false,
         }
@@ -35,7 +35,7 @@ impl Failure {
 impl std::fmt::Display for Failure {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            #[cfg(any(not(any(target_os = "android", target_os = "ios")), test))]
+            #[cfg(any(desktop, test))]
             Self::Source(message) => formatter.write_str(message),
             Self::Interrupted(message) => formatter.write_str(message),
         }
@@ -54,9 +54,9 @@ impl From<&str> for Failure {
     }
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-impl From<crate::media_player::MediaPlayerError> for Failure {
-    fn from(error: crate::media_player::MediaPlayerError) -> Self {
+#[cfg(desktop)]
+impl From<crate::music::player::MediaPlayerError> for Failure {
+    fn from(error: crate::music::player::MediaPlayerError) -> Self {
         if error.is_source_failure() {
             Self::Source(error.message)
         } else {
@@ -84,12 +84,13 @@ pub(super) async fn apply(
         }
         return Ok(());
     }
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(desktop)]
     {
         let app = app.clone();
         tauri::async_runtime::spawn_blocking(move || {
-            crate::media_player::apply_session_effect(
-                app.state::<crate::media_player::MediaPlayerState>().inner(),
+            crate::music::player::apply_session_effect(
+                app.state::<crate::music::player::MediaPlayerState>()
+                    .inner(),
                 &effect,
                 authority,
             )
@@ -128,12 +129,13 @@ async fn stop_native(
     generation: u64,
     #[cfg(not(target_os = "ios"))] authority: std::sync::Arc<dyn Fn() -> bool + Send + Sync>,
 ) -> Result<(), Failure> {
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(desktop)]
     {
         let app = app.clone();
         tauri::async_runtime::spawn_blocking(move || {
-            crate::media_player::apply_session_effect(
-                app.state::<crate::media_player::MediaPlayerState>().inner(),
+            crate::music::player::apply_session_effect(
+                app.state::<crate::music::player::MediaPlayerState>()
+                    .inner(),
                 &SessionEffect::Stop { generation },
                 authority,
             )
@@ -163,12 +165,13 @@ pub(super) async fn observe(
     generation: u64,
     sequence: u64,
 ) -> Result<Option<SessionObservation>, String> {
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(desktop)]
     {
         let app = app.clone();
         let snapshot = tauri::async_runtime::spawn_blocking(move || {
-            crate::media_player::session_snapshot(
-                app.state::<crate::media_player::MediaPlayerState>().inner(),
+            crate::music::player::session_snapshot(
+                app.state::<crate::music::player::MediaPlayerState>()
+                    .inner(),
             )
             .map_err(|error| error.message)
         })
@@ -177,7 +180,7 @@ pub(super) async fn observe(
         let Some(source_identity) = snapshot.source_identity else {
             return Ok(None);
         };
-        use crate::media_player::PlayerStatus;
+        use crate::music::player::PlayerStatus;
         let status = match snapshot.status {
             PlayerStatus::Idle => SessionStatus::Idle,
             PlayerStatus::Ready => SessionStatus::Ready,
@@ -197,21 +200,21 @@ pub(super) async fn observe(
             error: snapshot.error,
         }))
     }
-    #[cfg(any(target_os = "android", target_os = "ios"))]
+    #[cfg(mobile)]
     {
         let _ = (app, session_id, generation, sequence);
         Ok(None)
     }
 }
 
-#[cfg(all(test, not(any(target_os = "android", target_os = "ios"))))]
+#[cfg(all(test, desktop))]
 mod tests {
     use super::*;
 
     #[test]
     fn only_proven_source_failures_allow_failed_track_advancement() {
         for code in ["invalidSource", "decodeFailed"] {
-            let failure = Failure::from(crate::media_player::MediaPlayerError {
+            let failure = Failure::from(crate::music::player::MediaPlayerError {
                 code: code.into(),
                 message: format!("context for {code}"),
             });
@@ -229,7 +232,7 @@ mod tests {
             "noPreparedSource",
             "unknown",
         ] {
-            let failure = Failure::from(crate::media_player::MediaPlayerError {
+            let failure = Failure::from(crate::music::player::MediaPlayerError {
                 code: code.into(),
                 message: format!("context for {code}"),
             });

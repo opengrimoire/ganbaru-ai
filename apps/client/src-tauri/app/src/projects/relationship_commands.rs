@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use crate::db_path::connect_sqlite;
+use crate::db::connect_sqlite;
 use tauri::{AppHandle, Runtime};
 
 use super::history::insert_task_change_event;

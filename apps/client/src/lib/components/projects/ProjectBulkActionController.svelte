@@ -1,10 +1,10 @@
 <script lang="ts">
   import { Temporal } from "@js-temporal/polyfill";
-  import { projectDefaultScheduleStart } from "$lib/projects/project-scheduling";
-  import { getProjectSchedulingController } from "$lib/projects/project-scheduling-controller";
-  import { localTimezone } from "$lib/stores/calendar-event-payloads";
+  import { projectDefaultScheduleStart } from "$lib/projects/scheduling/schedule";
+  import { getProjectSchedulingController } from "$lib/projects/scheduling/controller";
+  import { localTimezone } from "$lib/stores/calendar/event-payloads";
   import { requireActiveVaultIdentity } from "$lib/vault/active-vault";
-  import { PROJECT_MAX_DURATION_MINUTES, projectEffectiveDurationMinutes } from "$lib/projects/project-settings-duration";
+  import { PROJECT_MAX_DURATION_MINUTES, projectEffectiveDurationMinutes } from "$lib/projects/settings/duration";
   import type {
     Project,
     ProjectPriority,

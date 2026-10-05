@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { createRawSnippet, mount, tick, unmount } from "svelte";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import CustomSelect from "$lib/components/settings/CustomSelect.svelte";
-import CollectionMenu from "$lib/components/collections/CollectionMenu.svelte";
+import Select from "$lib/components/ui/Select.svelte";
+import CollectionMenu from "./CollectionMenu.svelte";
 
 let component: ReturnType<typeof mount> | undefined;
 let nested: ReturnType<typeof mount> | undefined;
@@ -144,7 +144,7 @@ describe("Shared collection menus", () => {
     const children = createRawSnippet(() => ({
       render: () => "<div></div>",
       setup: (element) => {
-        nested = mount(CustomSelect, { target: element, props: {
+        nested = mount(Select, { target: element, props: {
           inline: true, value: "todo", ariaLabel: "Status", onChange,
           options: [{ value: "todo", label: "To do" }, { value: "done", label: "Done" }],
         } });

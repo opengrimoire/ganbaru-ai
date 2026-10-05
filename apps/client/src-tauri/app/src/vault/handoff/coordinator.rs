@@ -3,10 +3,10 @@
 mod incoming;
 mod outgoing;
 
+use super::pairing::PairingManager;
 use super::protocol::{
     BundleMetadata, BundlePurpose, DistractionsSampleMessage, HandoffCompatibility,
 };
-use super::state::PairingManager;
 use crate::vault::ownership::VaultOwnershipManager;
 use crate::vault::quiescence::SourceQuiescence;
 use std::collections::BTreeSet;
@@ -379,12 +379,12 @@ impl<R: Runtime> CoordinatorState<R> {
                     "the non-owner cannot publish authoritative Distractions state".to_string(),
                 );
             }
-            let pool = crate::db_path::connect_sqlite(
+            let pool = crate::db::connect_sqlite(
                 self.app.clone(),
                 format!("sqlite:{}", crate::vault::APP_SQLITE_FILE),
             )
             .await?;
-            crate::distractions_linked::drain_local_spool(
+            crate::distractions::linked::drain_local_spool(
                 &self.app,
                 &pool,
                 &vault_id,
@@ -392,9 +392,9 @@ impl<R: Runtime> CoordinatorState<R> {
             )
             .await?;
             let acknowledged_sample_ids =
-                crate::distractions_linked::import_linked_samples(&pool, &samples).await?;
+                crate::distractions::linked::import_linked_samples(&pool, &samples).await?;
             let combined_samples =
-                crate::distractions_linked::aggregate_owner_samples(&pool).await?;
+                crate::distractions::linked::aggregate_owner_samples(&pool).await?;
             return Ok(CoordinatorResponse::DistractionsAcknowledged {
                 acknowledged_sample_ids,
                 peer_samples: Vec::new(),
@@ -405,7 +405,7 @@ impl<R: Runtime> CoordinatorState<R> {
             return Err("Distractions exchange does not match the current vault owner".to_string());
         }
         if !owner_snapshot.is_empty() {
-            crate::distractions_linked::apply_owner_snapshot(
+            crate::distractions::linked::apply_owner_snapshot(
                 &self.app,
                 &vault_id,
                 &status.device_id,
@@ -414,7 +414,7 @@ impl<R: Runtime> CoordinatorState<R> {
             )
             .await?;
         } else {
-            crate::distractions_linked::acknowledge(
+            crate::distractions::linked::acknowledge(
                 &self.app,
                 &vault_id,
                 &status.device_id,
@@ -423,9 +423,9 @@ impl<R: Runtime> CoordinatorState<R> {
             .await?;
         }
         let peer_samples =
-            crate::distractions_linked::pending(&self.app, &vault_id, &status.device_id).await?;
+            crate::distractions::linked::pending(&self.app, &vault_id, &status.device_id).await?;
         let combined_samples = if peer_samples.is_empty() {
-            crate::distractions_linked::accepted(&self.app, &vault_id).await?
+            crate::distractions::linked::accepted(&self.app, &vault_id).await?
         } else {
             Vec::new()
         };
@@ -511,8 +511,8 @@ pub(crate) async fn request(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::vault::handoff::pairing::{StoredOutgoingTransfer, random_token};
     use crate::vault::handoff::protocol::PROTOCOL_VERSION;
-    use crate::vault::handoff::state::{StoredOutgoingTransfer, random_token};
 
     #[test]
     fn owner_reachability_requires_a_recent_poll_from_the_current_owner() {

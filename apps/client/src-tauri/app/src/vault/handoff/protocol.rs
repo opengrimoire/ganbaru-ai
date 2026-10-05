@@ -572,13 +572,13 @@ pub(crate) fn decode_invitation(encoded: &str, now_ms: i64) -> Result<PairingInv
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 pub(crate) struct QrMatrix {
     pub width: usize,
     pub modules: Vec<bool>,
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 pub(crate) fn invitation_qr_matrix(invitation: &PairingInvitation) -> Result<QrMatrix, String> {
     let payload = encode_pairing_qr_payload(invitation)?;
     let code = qrcode::QrCode::with_error_correction_level(&payload, qrcode::EcLevel::M)
@@ -621,7 +621,7 @@ pub(crate) fn decode_pairing_qr_luma(
     decode_pairing_qr_payload(&payload, now_ms)
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 fn encode_pairing_qr_payload(invitation: &PairingInvitation) -> Result<Vec<u8>, String> {
     invitation.validate(unix_time_ms().saturating_sub(1))?;
     let mut payload = Vec::with_capacity(256);
@@ -686,7 +686,7 @@ fn decode_pairing_qr_payload(payload: &[u8], now_ms: i64) -> Result<PairingInvit
     Ok(invitation)
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 fn push_qr_string(payload: &mut Vec<u8>, value: &str) -> Result<(), String> {
     let length =
         u8::try_from(value.len()).map_err(|_| "pairing QR field is too long".to_string())?;
@@ -727,7 +727,7 @@ fn take_qr_bytes<'a>(
     Ok(value)
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 fn decode_qr_digest(value: &str, label: &str) -> Result<[u8; 32], String> {
     validate_sha256(value).map_err(|_| format!("{label} is invalid"))?;
     let mut digest = [0_u8; 32];
@@ -799,7 +799,7 @@ pub(crate) fn test_compatibility() -> HandoffCompatibility {
     }
 }
 
-#[cfg(all(test, not(any(target_os = "android", target_os = "ios"))))]
+#[cfg(all(test, desktop))]
 mod tests {
     use super::*;
 

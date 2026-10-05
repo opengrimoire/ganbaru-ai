@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { ensureDbUrl } from "$lib/api/db";
-import { normalizeEventColor } from "$lib/components/calendar/utils";
+import { normalizeEventColor } from "$lib/calendar/utils";
 import type {
   QuickNote,
   QuickNoteCreate,

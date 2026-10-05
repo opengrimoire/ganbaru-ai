@@ -6,7 +6,7 @@ use sqlx::sqlite::SqliteQueryResult;
 use sqlx::{Row, Sqlite, Transaction};
 use tauri::{AppHandle, Runtime};
 
-use crate::db_path::connect_sqlite;
+use crate::db::connect_sqlite;
 
 const PALETTE_SIZE: usize = 32;
 const MAX_DISPLAY_NAME_LENGTH: usize = 60;

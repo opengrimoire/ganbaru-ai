@@ -1,7 +1,7 @@
 <script lang="ts">
   import X from "@lucide/svelte/icons/x";
   import { onMount, tick } from "svelte";
-  import AboutAcknowledgments from "$lib/components/settings/AboutAcknowledgments.svelte";
+  import AboutAcknowledgments from "$lib/components/settings/sections/AboutAcknowledgments.svelte";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import { activateModalFocus, activateModalKeyboardLayer, trapModalTabKey } from "$lib/modal-focus";
   import { BUILD_PLATFORM_PROFILE, platformHasCapability } from "$lib/platform";

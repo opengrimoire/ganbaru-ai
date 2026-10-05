@@ -1,6 +1,6 @@
 <script lang="ts">
   import { profileImageAssetUrl } from "$lib/api/profile-image";
-  import { profileInitials } from "$lib/profile/profile-identity";
+  import { profileInitials } from "$lib/profile/identity";
 
   let {
     displayName,

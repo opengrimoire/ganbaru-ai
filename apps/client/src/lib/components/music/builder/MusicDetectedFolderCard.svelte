@@ -2,7 +2,7 @@
   import FolderOpen from "@lucide/svelte/icons/folder-open";
   import LoaderCircle from "@lucide/svelte/icons/loader-circle";
   import { getLocalization } from "$lib/i18n/translator.svelte";
-  import type { MusicSourcesController } from "$lib/music/music-sources-controller.svelte";
+  import type { MusicSourcesController } from "$lib/music/sources/controller.svelte";
 
   let { controller, onAdded = () => undefined }: {
     controller: MusicSourcesController;

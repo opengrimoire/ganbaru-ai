@@ -5,7 +5,7 @@
   import { onMount } from "svelte";
   import VaultSetupContent from "$lib/components/vault/VaultSetupContent.svelte";
   import VaultWelcomeContent from "$lib/components/vault/VaultWelcomeContent.svelte";
-  import { onboardingPrimaryAction } from "$lib/components/vault/onboarding-primary-action";
+  import { onboardingPrimaryAction } from "$lib/vault/onboarding-primary-action";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import {
     formatDataFolderError,

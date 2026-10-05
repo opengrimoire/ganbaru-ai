@@ -3,7 +3,7 @@
   import Search from "@lucide/svelte/icons/search";
   import X from "@lucide/svelte/icons/x";
   import { getLocalization } from "$lib/i18n/translator.svelte";
-  import type { MusicSourceBrowserNode } from "$lib/music/music-source-browser";
+  import type { MusicSourceBrowserNode } from "$lib/music/sources/browser";
   import { cn } from "$lib/utils";
 
   let {

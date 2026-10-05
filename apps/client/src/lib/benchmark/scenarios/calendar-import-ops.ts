@@ -2,7 +2,7 @@ import { getCalendars } from "$lib/stores/calendars.svelte";
 import {
   buildBulkImportPayload,
   type CalendarBulkImportResult,
-} from "$lib/stores/calendar-bulk-import";
+} from "$lib/stores/calendar/bulk-import";
 import { generateDenseCalendarEvents } from "../dense";
 import {
   DEFAULT_BENCHMARK_DATASET,

@@ -17,7 +17,7 @@
   import {
     checkerboardBackground,
     checkerboardBackgroundForCells,
-  } from "./colorDisplay";
+  } from "$lib/color/display";
   import {
     type HsvColor,
     clampChannel,
@@ -30,7 +30,7 @@
     normalizeHex,
     rgbToHsv,
     rgbaToHex,
-  } from "./colorMath";
+  } from "$lib/color/math";
 
   let {
     value,

@@ -3,8 +3,8 @@
 import { mount, tick, unmount, type ComponentProps } from "svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ProjectCustomFieldOption, ProjectSavedTaskView } from "$lib/projects/types";
-import type { ProjectToolbarPanel } from "$lib/projects/project-toolbar";
-import { PROJECT_TASK_FILTER_DEFAULTS } from "$lib/projects/project-list-view";
+import type { ProjectToolbarPanel } from "$lib/projects/toolbar";
+import { PROJECT_TASK_FILTER_DEFAULTS } from "$lib/projects/list/view";
 import ProjectToolbarPanels from "./ProjectToolbarPanels.svelte";
 
 const store = vi.hoisted(() => ({ options: [] as ProjectCustomFieldOption[] }));
@@ -16,11 +16,11 @@ vi.mock("$lib/stores/projects.svelte", () => ({
 }));
 
 vi.mock("$lib/stores/theme.svelte", async () => {
-  const { lightTheme } = await import("$lib/stores/themes");
+  const { lightTheme } = await import("$lib/themes");
   return { getTheme: () => ({ current: lightTheme }) };
 });
 
-vi.mock("./ProjectSettingsPanel.svelte", () => ({
+vi.mock("$lib/components/projects/settings/ProjectSettingsPanel.svelte", () => ({
   // The draft editor owns separate behavior; this suite exercises its guarded shell.
   default: (_anchor: HTMLElement, _props: unknown) => undefined,
 }));

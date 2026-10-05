@@ -8,7 +8,7 @@
   import {
     isPointerAimingAtSubmenu,
     type MenuAimPoint,
-  } from "$lib/projects/menu-aim";
+  } from "$lib/utils/menu-aim";
   import {
     projectPickerBridgeFrameStyle,
     projectPickerMenuAimRect,
@@ -17,13 +17,13 @@
     projectPickerSubpanelAimOrigin,
     projectPickerSubpanelGeometry,
     projectPickerSubpanelSide,
-  } from "$lib/projects/project-picker-panels";
-  import { PROJECT_NAVIGATOR_PANEL_WIDTH } from "$lib/projects/project-toolbar";
+  } from "$lib/projects/picker-panels";
+  import { PROJECT_NAVIGATOR_PANEL_WIDTH } from "$lib/projects/toolbar";
   import type { Project, ProjectGroup } from "$lib/projects/types";
   import { getProjects } from "$lib/stores/projects.svelte";
   import { portal } from "$lib/utils/portal";
   import CalendarScrollbar from "$lib/components/calendar/CalendarScrollbar.svelte";
-  import SettingsCheckbox from "../SettingsCheckbox.svelte";
+  import SettingsCheckbox from "$lib/components/settings/SettingsCheckbox.svelte";
 
   type CompactStage = "groups" | "projects" | "channels";
 

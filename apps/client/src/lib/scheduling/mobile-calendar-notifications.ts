@@ -1,13 +1,13 @@
 import { invoke } from "@tauri-apps/api/core";
 import { Temporal } from "@js-temporal/polyfill";
-import type { CalendarEvent } from "$lib/components/calendar/types";
+import type { CalendarEvent } from "$lib/calendar/types";
 import {
   formatEventNotificationBody,
-} from "$lib/components/calendar/event-notifications";
-import { parseCalendarDate } from "$lib/components/calendar/utils";
+} from "$lib/calendar/event-notifications";
+import { parseCalendarDate } from "$lib/calendar/utils";
 import type { Translate } from "$lib/i18n/translator.svelte";
-import { localTimezone } from "$lib/stores/calendar-event-payloads";
-import { loadNativeCalendarWindow } from "$lib/stores/calendar-native-window";
+import { localTimezone } from "$lib/stores/calendar/event-payloads";
+import { loadNativeCalendarWindow } from "$lib/stores/calendar/native-window";
 
 const CALENDAR_NOTIFICATION_ID_NAMESPACE = "calendar-notification";
 const CALENDAR_NOTIFICATION_ID_START = 1_000_000_000;

@@ -14,7 +14,7 @@ async fn migrated_pool() -> SqlitePool {
         .execute(&pool)
         .await
         .unwrap();
-    crate::db::run_migrations(&pool).await.unwrap();
+    ganbaru_db::run_migrations(&pool).await.unwrap();
     pool
 }
 

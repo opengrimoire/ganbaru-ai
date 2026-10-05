@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
-import { applyNotesProjectHistoryMutationDeadline } from "$lib/notes/project-history-scheduler";
+import { applyNotesProjectHistoryMutationDeadline } from "$lib/notes/history/project-history-scheduler";
 import { invokeNotesMutation } from "./mutation";
-import { publishNotesDatabaseChange } from "$lib/notes/database-window-sync";
+import { publishNotesDatabaseChange } from "$lib/notes/database/window-sync";
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
-vi.mock("$lib/notes/database-window-sync", () => ({ publishNotesDatabaseChange: vi.fn() }));
-vi.mock("$lib/notes/project-history-scheduler", () => ({
+vi.mock("$lib/notes/database/window-sync", () => ({ publishNotesDatabaseChange: vi.fn() }));
+vi.mock("$lib/notes/history/project-history-scheduler", () => ({
   applyNotesProjectHistoryMutationDeadline: vi.fn(),
 }));
 

@@ -3,7 +3,7 @@
 use super::history::{current_timestamp, insert_task_change_event_owned};
 use super::models::{ProjectTaskChangeEventRow, ProjectTaskRow, ProjectsMutationRows};
 use super::{dependency_cascade_graph as graph, dependency_cascade_plan as plan};
-use crate::db_path::connect_sqlite;
+use crate::db::connect_sqlite;
 use serde::{Deserialize, Serialize};
 use sqlx::{Sqlite, SqlitePool, Transaction};
 use tauri::{AppHandle, Runtime};

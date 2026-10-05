@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { getCurrentWindow } from "@tauri-apps/api/window";
-  import { elapsedSecondsSince } from "./blocked-screen";
+  import { elapsedSecondsSince } from "$lib/pomodoro/blocked-screen";
   import PomodoroBlockedScreen from "./PomodoroBlockedScreen.svelte";
 
   let {

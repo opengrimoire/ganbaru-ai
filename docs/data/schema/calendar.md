@@ -1,6 +1,6 @@
 # Calendar schema
 
-The calendar domain preserves editable local events, imported source fidelity, recurrence identity, notification state, project scheduling links, and Pomodoro history without making any UI projection authoritative. Exact tables live in `apps/client/src-tauri/migrations/`.
+The calendar domain preserves editable local events, imported source fidelity, recurrence identity, notification state, project scheduling links, and Pomodoro history without making any UI projection authoritative. Exact tables live in `crates/ganbaru-db/migrations/`.
 
 ## Calendars and events
 

@@ -8,8 +8,7 @@ use super::{
 use chrono::{DateTime, SecondsFormat, Utc};
 use sqlx::Row;
 
-static APP_MIGRATOR: sqlx::migrate::Migrator =
-    sqlx::migrate!("../../apps/client/src-tauri/migrations");
+static APP_MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("../ganbaru-db/migrations");
 
 fn config() -> DistractionsConfig {
     DistractionsConfig {

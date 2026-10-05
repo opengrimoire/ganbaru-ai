@@ -2,7 +2,7 @@
   import { untrack, type Snippet } from "svelte";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import type { NotesDatabaseViewKind, NotesPage } from "$lib/notes/types";
-  import type { NotesPageOpenMode } from "$lib/notes/page-open-mode";
+  import type { NotesPageOpenMode } from "$lib/notes/pages/open-mode";
 
   let {
     kind = "page",

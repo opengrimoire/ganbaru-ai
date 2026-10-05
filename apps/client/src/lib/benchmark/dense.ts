@@ -14,7 +14,7 @@ import {
   type BenchmarkDatasetProfile,
   type BenchmarkEventDraft,
 } from "./types";
-import { PALETTE_SIZE } from "$lib/components/calendar/types";
+import { PALETTE_SIZE } from "$lib/calendar/types";
 
 const MS_PER_DAY = 86_400_000;
 const HOURS_PER_DAY = 24;

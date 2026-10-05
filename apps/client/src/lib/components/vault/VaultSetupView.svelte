@@ -10,7 +10,7 @@
   import { invoke } from "@tauri-apps/api/core";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import WindowResizeHandles from "$lib/components/WindowResizeHandles.svelte";
-  import { isCloseWindowShortcut } from "$lib/components/titlebar-shortcuts";
+  import { isCloseWindowShortcut } from "$lib/windows/title-bar-shortcuts";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import {
     clearPreVaultLanguagePreference,
@@ -29,7 +29,7 @@
   } from "$lib/vault/state";
   import VaultSetupContent from "./VaultSetupContent.svelte";
   import VaultWelcomeContent from "./VaultWelcomeContent.svelte";
-  import { onboardingPrimaryAction } from "./onboarding-primary-action";
+  import { onboardingPrimaryAction } from "$lib/vault/onboarding-primary-action";
 
   let {
     initialError = null,

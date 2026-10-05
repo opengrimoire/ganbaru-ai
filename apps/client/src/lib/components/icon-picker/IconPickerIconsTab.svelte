@@ -5,20 +5,20 @@
   import Search from "@lucide/svelte/icons/search";
   import Shapes from "@lucide/svelte/icons/shapes";
   import Shuffle from "@lucide/svelte/icons/shuffle";
-  import type { EventColor } from "$lib/components/calendar/types";
+  import type { EventColor } from "$lib/calendar/types";
   import type {
     ProjectIconPickerGroupVirtualWindow,
     ProjectIconPickerLucideCategoryOption,
     ProjectIconPickerColor,
-  } from "$lib/projects/project-icon-picker";
+  } from "$lib/projects/icons/picker";
   import type {
     ProjectLucideCategory,
     ProjectLucideIconEntry,
     ProjectLucideIconNode,
-  } from "$lib/projects/project-lucide-catalog.generated";
+  } from "$lib/projects/icons/lucide-catalog.generated";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import { cn } from "$lib/utils";
-  import LucideNodeIcon from "$lib/components/projects/LucideNodeIcon.svelte";
+  import LucideNodeIcon from "./LucideNodeIcon.svelte";
   import ProjectIcon from "$lib/components/projects/ProjectIcon.svelte";
 
   let {

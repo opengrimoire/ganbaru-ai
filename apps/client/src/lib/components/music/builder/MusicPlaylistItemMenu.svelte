@@ -12,10 +12,10 @@
   import type { Component } from "svelte";
   import { getMusicInspectorDetail } from "$lib/api/music-library";
   import { getLocalization } from "$lib/i18n/translator.svelte";
-  import type { MusicItemListEntry, MusicSnooze, MusicWeight } from "$lib/music/library-contracts";
-  import { formatMusicDuration } from "$lib/music/music-builder-presentation";
-  import { projectMusicItemMenuLayout } from "$lib/music/music-item-menu-layout";
-  import { musicSnoozePreset, type MusicSnoozePreset } from "$lib/music/music-snooze";
+  import type { MusicItemListEntry, MusicSnooze, MusicWeight } from "$lib/music/library/contracts";
+  import { formatMusicDuration } from "$lib/music/builder/presentation";
+  import { projectMusicItemMenuLayout } from "$lib/music/builder/item-menu-layout";
+  import { musicSnoozePreset, type MusicSnoozePreset } from "$lib/music/session/snooze";
   import { portal } from "$lib/utils/portal";
 
   type Subpanel = "details" | "snooze" | "weight";

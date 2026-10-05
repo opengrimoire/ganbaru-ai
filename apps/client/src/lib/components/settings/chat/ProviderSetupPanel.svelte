@@ -22,8 +22,8 @@
   import { formatNumber } from "$lib/i18n/formatters";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import { getChat } from "$lib/stores/chat.svelte";
-  import type { ChatProviderSetupTarget } from "../types";
-  import ToggleSetting from "../ToggleSetting.svelte";
+  import type { ChatProviderSetupTarget } from "$lib/settings/types";
+  import SwitchField from "$lib/components/ui/SwitchField.svelte";
 
   let {
     target,
@@ -548,7 +548,7 @@
                   />
                 </div>
               </div>
-              <ToggleSetting
+              <SwitchField
                 label={t("settings.chat.setup.allowCustomModels")}
                 checked={providerConfigBoolean("allowCustomModels")}
                 onChange={(checked) => setProviderConfigBoolean("allowCustomModels", checked)}
@@ -597,7 +597,7 @@
                     {#if fieldError("providerConfig.serverUrl")}<small>{fieldError("providerConfig.serverUrl")}</small>{/if}
                   </div>
                 </div>
-                <ToggleSetting
+                <SwitchField
                   label={t("settings.chat.setup.confirmExternalWorkspaceAccess")}
                   checked={providerConfigBoolean("confirmExternalWorkspaceAccess")}
                   onChange={(checked) => setProviderConfigBoolean("confirmExternalWorkspaceAccess", checked)}
@@ -608,7 +608,7 @@
                 {#if openCodeUsesInsecureExternalHttp()}
                   <div class="security-warning">
                     <p>{t("settings.chat.setup.insecureExternalHttpWarning")}</p>
-                    <ToggleSetting
+                    <SwitchField
                       label={t("settings.chat.setup.allowInsecureExternalHttp")}
                       checked={providerConfigBoolean("allowInsecureExternalHttp")}
                       onChange={(checked) => setProviderConfigBoolean("allowInsecureExternalHttp", checked)}

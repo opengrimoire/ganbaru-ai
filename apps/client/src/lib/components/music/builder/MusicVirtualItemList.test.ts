@@ -2,7 +2,7 @@
 
 import { mount, tick, unmount } from "svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { MusicItemListEntry } from "$lib/music/library-contracts";
+import type { MusicItemListEntry } from "$lib/music/library/contracts";
 import MusicVirtualItemList from "./MusicVirtualItemList.svelte";
 
 const item: MusicItemListEntry = {

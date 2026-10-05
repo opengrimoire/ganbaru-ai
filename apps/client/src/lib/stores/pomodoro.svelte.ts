@@ -2,7 +2,7 @@ import { NativeFocusClient, reportIdleOverlayVisible, type FocusControlScope } f
 import { BUILD_PLATFORM_PROFILE } from "$lib/platform";
 import { focusDisplayElapsedSeconds, focusDisplayRemainingSeconds, focusNeedsVisualClock, focusSegmentForRail, type FocusIntent, type FocusProjection } from "$lib/pomodoro/native-focus";
 import { DEFAULT_POMODORO_CONFIG, rhythmPositionCount, type PomodoroConfig } from "$lib/pomodoro/rhythm";
-import type { PersistedSegment } from "$lib/components/calendar/types";
+import type { PersistedSegment } from "$lib/calendar/types";
 
 const VISUAL_INTERVAL_MS = 180;
 const MAX_PRESENTATION_SEGMENTS = 128;

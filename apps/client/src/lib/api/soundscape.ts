@@ -15,7 +15,7 @@ import {
   type MusicSoundscapeState,
   type MusicSoundscapeStateWrite,
   type MusicSoundscapeWrite,
-} from "$lib/music/soundscape-contracts";
+} from "$lib/music/soundscape/contracts";
 
 export const getDeviceId = (): Promise<string> => invoke<string>("vault_device_id");
 export const getMusicSoundscapes = async (deviceId: string): Promise<MusicSoundscapeDefinition[]> => parseMusicSoundscapes(await invoke<unknown>("music_library_soundscapes", { dbUrl: dbUrl(), deviceId }));

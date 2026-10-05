@@ -13,10 +13,10 @@
     IconPickerAsset,
     IconPickerTriggerContext,
     IconPickerUploadAdapter,
-  } from "$lib/components/icon-picker/types";
-  import type { EventColor } from "$lib/components/calendar/types";
-  import { getEventColor } from "$lib/components/calendar/utils";
-  import { contrastRatio } from "$lib/components/ui/colorMath";
+  } from "./types";
+  import type { EventColor } from "$lib/calendar/types";
+  import { getEventColor } from "$lib/calendar/utils";
+  import { contrastRatio } from "$lib/color/math";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import {
     inspectManagedImageFile,
@@ -31,7 +31,7 @@
   import {
     PROJECT_EMOJI_ENTRIES,
     type ProjectEmojiCategoryId,
-  } from "$lib/projects/project-emoji-catalog";
+  } from "$lib/projects/icons/emoji-catalog.generated";
   import {
     cleanupProjectIconRecentValues,
     filterProjectEmojiEntries,
@@ -63,22 +63,22 @@
     type ProjectIconPickerColor,
     type ProjectIconPickerPointPlacement,
     type ProjectIconPickerRect,
-  } from "$lib/projects/project-icon-picker";
+  } from "$lib/projects/icons/picker";
   import {
     parseProjectIcon,
     projectIconDisplayLabel,
     serializeProjectIcon,
     type ProjectIconValue,
-  } from "$lib/projects/project-icons";
+  } from "$lib/projects/icons/values";
   import type {
     ProjectLucideCategory,
     ProjectLucideIconEntry,
     ProjectLucideIconNode,
-  } from "$lib/projects/project-lucide-catalog.generated";
+  } from "$lib/projects/icons/lucide-catalog.generated";
   import { getMobileBackStack } from "$lib/stores/mobile-back-stack.svelte";
   import { getProjects } from "$lib/stores/projects.svelte";
   import { getTheme } from "$lib/stores/theme.svelte";
-  import { resolveAppTokens, resolveCalendarTokens } from "$lib/stores/themes";
+  import { resolveAppTokens, resolveCalendarTokens } from "$lib/themes";
   import { cn } from "$lib/utils";
   import { portal } from "$lib/utils/portal";
   import {
@@ -574,7 +574,7 @@
     if (lucideLoaded || lucideLoading) return;
     lucideLoading = true;
     try {
-      const catalog = await import("$lib/projects/project-lucide-catalog.generated");
+      const catalog = await import("$lib/projects/icons/lucide-catalog.generated");
       lucideCategories = catalog.PROJECT_LUCIDE_CATEGORIES;
       lucideIcons = catalog.PROJECT_LUCIDE_ICONS;
       lucideLoaded = true;

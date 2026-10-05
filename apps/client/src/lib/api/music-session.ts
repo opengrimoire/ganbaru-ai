@@ -1,5 +1,5 @@
 import { invoke, type Channel } from "@tauri-apps/api/core";
-import { parseNativeMusicSnapshot, type NativeMusicCommand, type NativeMusicObservation, type NativeMusicStart } from "$lib/music/native-session";
+import { parseNativeMusicSnapshot, type NativeMusicCommand, type NativeMusicObservation, type NativeMusicStart } from "$lib/music/session/native-session";
 
 /** Reads the one active native session, restoring only this device's portable checkpoint. */
 export async function musicSessionSnapshot() { return parseNativeMusicSnapshot(await invoke<unknown>("music_session_snapshot")); }

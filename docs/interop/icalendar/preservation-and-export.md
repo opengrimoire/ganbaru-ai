@@ -2,7 +2,7 @@
 
 Status: Implemented for import, relational preservation, `VEVENT` projection, and merged export. Edit-risk status transitions, export warnings, and orphan cleanup are Planned.
 
-This document owns the two-layer storage model, the import and export flow, the edit merge policy, deletion behavior, and the resource limits. Source of truth for exact schema is `apps/client/src-tauri/migrations/`; the parser and serializer live in `apps/client/src/lib/calendar/ics/`; native import, export snapshots, and preservation copying live in `apps/client/src-tauri/app/src/calendar_import*`, `calendar_reads/`, and `calendar_events/metadata/`.
+This document owns the two-layer storage model, the import and export flow, the edit merge policy, deletion behavior, and the resource limits. Source of truth for exact schema is `crates/ganbaru-db/migrations/`; the parser and serializer live in `apps/client/src/lib/calendar/ics/`; native import, export snapshots, and preservation copying live in `apps/client/src-tauri/app/src/calendar/import*`, `calendar/reads/`, and `calendar/events/metadata/`.
 
 ## Storage model
 

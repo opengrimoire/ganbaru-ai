@@ -4,7 +4,7 @@ Adaptive Pomodoro is a local, explicit opt-in policy that adjusts bounded rhythm
 
 The policy is deterministic from persisted inputs, versioned, auditable, reversible, and applied only at run or phase boundaries.
 
-**Status: Implemented.** `ganbaru-focus` owns state scoring, the base policy, seven experiment lanes, bounded replay approval, snapshots, and transactional run and phase decisions. Physical platform acceptance remains open.
+**Status: Implemented.** `ganbaru-pomodoro` owns state scoring, the base policy, seven experiment lanes, bounded replay approval, snapshots, and transactional run and phase decisions. Physical platform acceptance remains open.
 
 ## Objective
 

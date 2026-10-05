@@ -41,7 +41,7 @@ fn split_interval(
         if result.len() >= 3 {
             return Err("desktop usage interval crosses too many local dates".into());
         }
-        let local = crate::recurrence::time::instant_to_local(cursor, zone)?;
+        let local = crate::civil_time::instant_to_local(cursor, zone)?;
         let next_date = local
             .date()
             .succ_opt()
@@ -49,7 +49,7 @@ fn split_interval(
         let midnight = next_date
             .and_hms_opt(0, 0, 0)
             .ok_or("desktop usage midnight is invalid")?;
-        let boundary = crate::recurrence::time::explicit_instant(midnight, zone)?.min(end);
+        let boundary = crate::civil_time::explicit_instant(midnight, zone)?.min(end);
         if boundary <= cursor {
             return Err("desktop usage midnight did not advance".into());
         }
@@ -142,7 +142,7 @@ impl Accounting {
             .iter()
             .map(|source| source.key.as_str())
             .collect::<HashSet<_>>();
-        let date = crate::recurrence::time::instant_to_local(next.wall_ms, &next.zone)?
+        let date = crate::civil_time::instant_to_local(next.wall_ms, &next.zone)?
             .date()
             .format("%Y-%m-%d")
             .to_string();
@@ -160,7 +160,7 @@ mod tests {
         Observation {
             wall_ms: wall.parse::<jiff::Timestamp>().unwrap().as_millisecond(),
             monotonic,
-            zone: crate::recurrence::time::zone(zone).unwrap(),
+            zone: crate::civil_time::zone(zone).unwrap(),
             sources: vec![UsageSource {
                 key: "game".into(),
                 label: "Game".into(),

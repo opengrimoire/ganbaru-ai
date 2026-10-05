@@ -1,5 +1,5 @@
-use super::error::{MusicLibraryError, MusicLibraryResult};
 use super::models::*;
+use crate::music::error::{MusicLibraryError, MusicLibraryResult};
 
 fn parse_enum<T>(value: &str, field: &str) -> MusicLibraryResult<T>
 where

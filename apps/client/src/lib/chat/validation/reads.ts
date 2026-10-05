@@ -11,7 +11,7 @@ import {
   type ProviderHistoryItem,
   type TurnDispatchReceipt,
 } from "../contracts";
-import { normalizeChangedFileSummaries } from "../changed-files";
+import { normalizeChangedFileSummaries } from "$lib/chat/review/changed-files";
 import { parseChangedFile, parseThreadUsage } from "./events";
 import { parseModelOptionSelection } from "./provider";
 import {

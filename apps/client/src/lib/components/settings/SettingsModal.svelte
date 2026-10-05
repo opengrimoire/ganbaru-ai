@@ -5,8 +5,8 @@
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import SettingsIcon from "@lucide/svelte/icons/settings";
   import X from "@lucide/svelte/icons/x";
-  import CalendarScrollbar from "../calendar/CalendarScrollbar.svelte";
-  import { getThemeEditor } from "$lib/stores/themeEditor.svelte";
+  import CalendarScrollbar from "$lib/components/calendar/CalendarScrollbar.svelte";
+  import { getThemeEditor } from "$lib/stores/theme-editor.svelte";
   import { getViewport } from "$lib/stores/viewport.svelte";
   import { hasOnlyShortcutModifier } from "$lib/keyboard-shortcuts";
   import { getLocalization } from "$lib/i18n/translator.svelte";
@@ -22,12 +22,12 @@
     loadSettingsDetail,
     retrySettingsDetail,
     type LoadedSettingsDetail,
-  } from "$lib/components/settings/settings-detail-registry";
+  } from "$lib/components/settings/detail-registry";
   import {
     loadMobileThemeEditor,
     retryMobileThemeEditor,
-  } from "$lib/components/settings/mobile-theme-editor-loader";
-  import type { MobileThemeEditorComponent } from "$lib/components/settings/mobile-theme-editor-loader-contract";
+  } from "$lib/components/themes/editor/mobile-editor-loader";
+  import type { MobileThemeEditorComponent } from "$lib/components/themes/editor/mobile-editor-loader-contracts";
   import type {
     DistractionsLimitEditorTarget,
     DistractionsSettingsTab,
@@ -36,8 +36,8 @@
     ChatSettingsSubsection,
     SectionId,
     SettingsDetailKind,
-  } from "./types";
-  import { settingsSectionsForShell } from "./settings-sections";
+  } from "$lib/settings/types";
+  import { settingsSectionsForShell } from "./section-catalog";
   import SettingsSectionRenderer from "$lib/components/settings/SettingsSectionRenderer.svelte";
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
 

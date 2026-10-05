@@ -11,9 +11,9 @@ import type {
 	EventVisibility,
 	GeoCoordinates,
 	GuestPermissions,
-} from "$lib/components/calendar/types";
-import { recurrenceToRrule, rruleToRecurrence } from "$lib/components/calendar/rrule";
-import { utcIsoToWallClock, wallClockToUtcIso } from "$lib/components/calendar/utils";
+} from "$lib/calendar/types";
+import { recurrenceToRrule, rruleToRecurrence } from "$lib/calendar/rrule";
+import { utcIsoToWallClock, wallClockToUtcIso } from "$lib/calendar/utils";
 import type {
 	IcsParseResult,
 	IcsPreservedComponent,

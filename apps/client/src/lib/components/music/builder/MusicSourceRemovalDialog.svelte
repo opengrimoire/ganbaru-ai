@@ -1,7 +1,7 @@
 <script lang="ts">
   import { getLocalization } from "$lib/i18n/translator.svelte";
-  import type { MusicSourceCollection } from "$lib/music/library-contracts";
-  import type { MusicSourcesController } from "$lib/music/music-sources-controller.svelte";
+  import type { MusicSourceCollection } from "$lib/music/library/contracts";
+  import type { MusicSourcesController } from "$lib/music/sources/controller.svelte";
   import MusicBuilderDialog from "./MusicBuilderDialog.svelte";
 
   let { controller, collection, onClose, onRemoved }: { controller: MusicSourcesController; collection: MusicSourceCollection; onClose: () => void; onRemoved: () => void } = $props();

@@ -1,7 +1,9 @@
 //! Runtime-only pseudoterminal sessions with bounded replay.
 
-use super::models::{ChatError, ChatErrorCode, ChatResult, ChatThreadId, ProjectWorkingFolderId};
 use base64::{Engine as _, engine::general_purpose};
+use ganbaru_chat_contracts::models::{
+    ChatError, ChatErrorCode, ChatResult, ChatThreadId, ProjectWorkingFolderId,
+};
 use portable_pty::{ChildKiller, CommandBuilder, MasterPty, PtySize, native_pty_system};
 use serde::Serialize;
 use std::collections::{HashMap, VecDeque};

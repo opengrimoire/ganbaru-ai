@@ -9,7 +9,7 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 /// Activation failures remain visible without pausing unrelated accepted playback.
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 #[derive(Clone, Debug)]
 pub(super) enum ContextFailure {
     Calendar(String),
@@ -50,7 +50,7 @@ pub(super) struct SessionPolicy {
     pub browser_host: bool,
     pub issue: Option<SessionIssue>,
     pub error: Option<String>,
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(desktop)]
     pub context_error: Option<ContextFailure>,
     pub history: Vec<usize>,
     pub recent: Vec<String>,
@@ -71,7 +71,7 @@ pub(super) struct SessionPolicy {
 
 impl SessionPolicy {
     fn project_error(&self) -> Option<String> {
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        #[cfg(desktop)]
         if self.error.is_none()
             && let Some(error) = &self.context_error
         {
@@ -110,7 +110,7 @@ impl SessionPolicy {
             browser_host: false,
             issue: None,
             error: None,
-            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            #[cfg(desktop)]
             context_error: None,
             history: Vec::new(),
             recent: Vec::new(),

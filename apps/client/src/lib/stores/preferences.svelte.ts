@@ -48,14 +48,14 @@ import {
   normalizeProfileDisplayName,
   normalizeProfileFullName,
   resolveFontFamilyStack,
-} from "./preferences";
+} from "./preference-options";
 import { getConfigKey, setConfigKey } from "../vault/config";
 import { getLocalization } from "$lib/i18n/translator.svelte";
 import {
   DEFAULT_NOTES_PAGE_OPEN_MODE,
   isNotesPageOpenMode,
   type NotesPageOpenMode,
-} from "$lib/notes/page-open-mode";
+} from "$lib/notes/pages/open-mode";
 
 const PROFILE_DISPLAY_NAME_CONFIG_KEY = "profile.displayName";
 const PROFILE_FULL_NAME_CONFIG_KEY = "profile.fullName";

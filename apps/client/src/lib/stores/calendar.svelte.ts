@@ -3,43 +3,43 @@ import { Temporal } from "@js-temporal/polyfill";
 import { dbUrl } from "$lib/api/db";
 import type {
   Calendar, CalendarEvent, CalendarViewMode,
-} from "$lib/components/calendar/types";
-import { computeViewWindow } from "$lib/components/calendar/utils";
+} from "$lib/calendar/types";
+import { computeViewWindow } from "$lib/calendar/utils";
 import {
   localTimezone,
-} from "./calendar-event-payloads";
+} from "$lib/stores/calendar/event-payloads";
 import {
   loadNativeCalendarWindow,
   nativeCalendarEventsInWindow,
   type CalendarExpansionDiagnostic,
-} from "./calendar-native-window";
-import { adjacentCalendarWindowRequests, calendarWindowCovers } from "./calendar-window-prefetch";
+} from "$lib/stores/calendar/native-window";
+import { adjacentCalendarWindowRequests, calendarWindowCovers } from "$lib/stores/calendar/window-prefetch";
 import {
   BoundedWindowCache,
   LatestWindowLoadCoordinator,
   type WindowLoadEvent,
   type WindowLoadOutcome,
-} from "./window-load-coordinator";
+} from "$lib/stores/calendar/window-load-coordinator";
 import type { IcsImportSummary } from "$lib/calendar/ics/types";
-import { mark as perfMark } from "$lib/stores/perflog.svelte";
+import { mark as perfMark } from "./perf-log.svelte";
 import { getPreferences } from "$lib/stores/preferences.svelte";
 import {
   initCalendarWindowSync,
   publishCalendarWindowSync,
-} from "./calendar-window-sync";
+} from "$lib/stores/calendar/window-sync";
 import {
   bulkImportCalendarEvents,
   exportCalendarAsIcs as exportCalendarIcs,
   type CalendarBulkImportOptions,
-} from "./calendar-import-export";
+} from "$lib/stores/calendar/import-export";
 import {
   clearPanelEventCache,
   loadFullEvent,
   loadPanelEvent,
   prefetchPanelEvent,
-} from "./calendar-event-loaders";
-import { calendarWindowIncludesGlobalCount } from "./calendar-window-count";
-import { loadPomodoroSchedulerEventsFromDb } from "./calendar-pomodoro-window";
+} from "$lib/stores/calendar/event-loaders";
+import { calendarWindowIncludesGlobalCount } from "$lib/stores/calendar/window-count";
+import { loadPomodoroSchedulerEventsFromDb } from "$lib/stores/calendar/pomodoro-window";
 
 /** DB-backed template events for the current render window plus recurring templates. */
 let rawBlocks = $state<CalendarEvent[]>([]);

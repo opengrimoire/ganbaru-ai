@@ -11,10 +11,10 @@
     getMusicPlaylistPlaybackEntries,
   } from "$lib/api/music-library";
   import { getLocalization } from "$lib/i18n/translator.svelte";
-  import type { MusicPlaylistSummary } from "$lib/music/library-contracts";
-  import { projectMusicPlaylistPlayback } from "$lib/music/music-playlist-playback";
-  import { getMusicPlaylistSummaryCache } from "$lib/music/music-playlist-summary-cache.svelte";
-  import { orderMusicPlaylists, systemMusicPlaylistName } from "$lib/music/music-system-playlists";
+  import type { MusicPlaylistSummary } from "$lib/music/library/contracts";
+  import { projectMusicPlaylistPlayback } from "$lib/music/playlists/playback";
+  import { getMusicPlaylistSummaryCache } from "$lib/music/playlists/summary-cache.svelte";
+  import { orderMusicPlaylists, systemMusicPlaylistName } from "$lib/music/playlists/system";
   import { getMusicPlayer } from "$lib/stores/music-player.svelte";
   import { requireActiveVaultIdentity } from "$lib/vault/active-vault";
   import { cn } from "$lib/utils";
@@ -22,7 +22,7 @@
   import {
     pickSelectPopoverGeometry,
     type SelectPopoverGeometry,
-  } from "$lib/components/settings/customSelectPosition";
+  } from "$lib/utils/select-popover-position";
   import MusicPlaylistIcon from "$lib/components/music/builder/MusicPlaylistIcon.svelte";
 
   const PLAYLIST_POPOVER_WIDTH_PX = 248;

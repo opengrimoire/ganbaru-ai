@@ -1,7 +1,7 @@
 import type { NotesIconColor } from "../contracts/assets";
 import { NOTES_LOCAL_OBJECT_MENTION_TYPES } from "../contracts/core";
 import type { NotesColor, NotesLocalObjectMentionType } from "../contracts/core";
-import type { NotesDatabaseViewType } from "../contracts/database";
+import type { NotesDatabaseViewType } from "$lib/notes/contracts/database";
 import { isNotesIconColor } from "./assets";
 import { isNotesColor } from "./blocks";
 import { isNotesDatabaseViewType } from "./database";

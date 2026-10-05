@@ -1,7 +1,7 @@
-import { isNotesCatalogRegisteredBlockType } from "../block-catalog";
+import { isNotesCatalogRegisteredBlockType } from "$lib/notes/blocks/catalog";
 import { NOTES_BUTTON_INSERT_POSITIONS, NOTES_COLORS } from "../contracts/core";
 import type { NotesBlock, NotesBlockType, NotesButtonAction, NotesButtonBlockPayload, NotesButtonInsertPosition, NotesCalloutBlockPayload, NotesCodeBlockPayload, NotesColor, NotesColumnBlockPayload, NotesEquationBlockPayload, NotesParent, NotesSyncedBlockPayload, NotesTabBlockPayload, NotesTableBlockPayload, NotesTableOfContentsBlockPayload, NotesTableRowBlockPayload, NotesTextBlockPayload, NotesTodoBlockPayload, NotesToggleBlockPayload, NotesUnsupportedBlockPayload } from "../contracts/core";
-import type { NotesDatabaseBoardRowOpenMode, NotesDatabaseCalendarRowOpenMode, NotesDatabaseGalleryCardSize, NotesDatabaseGalleryRowOpenMode, NotesDatabaseListRowOpenMode, NotesDatabaseTableRowOpenMode, NotesDatabaseTimelineRowOpenMode } from "../contracts/database";
+import type { NotesDatabaseBoardRowOpenMode, NotesDatabaseCalendarRowOpenMode, NotesDatabaseGalleryCardSize, NotesDatabaseGalleryRowOpenMode, NotesDatabaseListRowOpenMode, NotesDatabaseTableRowOpenMode, NotesDatabaseTimelineRowOpenMode } from "$lib/notes/contracts/database";
 import type { NotesPaginatedBlockList } from "../contracts/workspace";
 import { parseBookmarkPayload, parseEmbedPayload, parseLinkPreviewPayload, parseMediaPayload, parseNullableNotesIcon } from "./assets";
 import { parseChildDatabasePayload } from "./database";

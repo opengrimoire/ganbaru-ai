@@ -13,7 +13,7 @@
     parseFocusBreakEndEscPresses,
     type FocusBreakEndEscPresses,
     type FocusBreakExtensionLimit,
-  } from "$lib/stores/preferences";
+  } from "$lib/stores/preference-options";
   import {
     POMODORO_OVERLAY_BLOCKER_ACTION_EVENT,
     isBlockedScreenAcknowledgementState,
@@ -21,13 +21,13 @@
     parsePomodoroOverlayBlockerAction,
     parsePomodoroBlockedScreenState,
     remainingSecondsUntil,
-  } from "./blocked-screen";
+  } from "$lib/pomodoro/blocked-screen";
   import PomodoroBlockedScreen from "./PomodoroBlockedScreen.svelte";
   import type {
     PomodoroOverlayBlockerAction,
     PomodoroBlockedScreenState,
     PomodoroCompletionScreenState,
-  } from "./blocked-screen";
+  } from "$lib/pomodoro/blocked-screen";
 
   const pomodoro = getPomodoro();
   const controlParams = new URLSearchParams(window.location.search);

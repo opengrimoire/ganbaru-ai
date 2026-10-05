@@ -1,14 +1,14 @@
 /**
  * Memory + boot-mark sampling for the benchmark harness.
  *
- * Wraps `get_memory_report` (Tauri command in `lib.rs`) and the
+ * Wraps `get_memory_report` (Tauri command in `src-tauri/app/src/benchmark/memory.rs`) and the
  * `lib/stores/perflog.svelte.ts` ring buffer. Scenarios never call this
  * directly: the runner orchestrates the post-state memory observation
  * schedule after `runWorkload`.
  */
 import { invoke } from "@tauri-apps/api/core";
-import { perfLog, snapshot as perfSnapshot, type PerfLogEntry } from "$lib/stores/perflog.svelte";
-import { categorizeMemoryProcessName } from "$lib/components/perf/memoryReport";
+import { perfLog, snapshot as perfSnapshot, type PerfLogEntry } from "$lib/stores/perf-log.svelte";
+import { categorizeMemoryProcessName } from "$lib/diagnostics/memory-report";
 import type { BootTimings, SampleLabel, SamplePoint } from "./types";
 import {
   MEMORY_OBSERVATION_INTERVAL_MS,

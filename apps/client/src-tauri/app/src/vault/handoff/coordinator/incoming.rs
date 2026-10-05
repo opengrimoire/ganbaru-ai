@@ -1,8 +1,8 @@
 //! Coordinator staging and activation of snapshots returned by the current owner.
 
 use super::{CoordinatorResponse, CoordinatorState};
+use crate::vault::handoff::pairing::{PendingAcknowledgement, StoredIncomingTransfer};
 use crate::vault::handoff::protocol::{BundleMetadata, BundlePurpose};
-use crate::vault::handoff::state::{PendingAcknowledgement, StoredIncomingTransfer};
 use crate::vault::handoff::{current_compatibility, protocol};
 use crate::vault::ownership::VaultOwnershipManager;
 use tauri::{Manager, Runtime};

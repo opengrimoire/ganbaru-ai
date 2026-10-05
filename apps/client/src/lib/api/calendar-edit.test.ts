@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { invoke } from "@tauri-apps/api/core";
-import type { DbCalendarEvent } from "$lib/stores/map-row";
+import type { DbCalendarEvent } from "$lib/calendar/db-rows";
 import {
   CalendarCommitFailure, commitCalendarEdit, parseCalendarCommitReceipt, parseCalendarEditPreview, previewCalendarEdit,
   type CalendarPreviewRequest,

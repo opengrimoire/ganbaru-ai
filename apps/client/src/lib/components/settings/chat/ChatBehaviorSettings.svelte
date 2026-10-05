@@ -6,8 +6,8 @@
   import { formatNumber } from "$lib/i18n/formatters";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import { getChat } from "$lib/stores/chat.svelte";
-  import CustomSelect from "../CustomSelect.svelte";
-  import ToggleSetting from "../ToggleSetting.svelte";
+  import Select from "$lib/components/ui/Select.svelte";
+  import SwitchField from "$lib/components/ui/SwitchField.svelte";
 
   const localization = getLocalization();
   const { t } = localization;
@@ -134,7 +134,7 @@
   {#if status}<p role="status" class="text-sm text-action-confirm">{status}</p>{/if}
   {#if behavior}
     <div class="flex flex-col gap-3">
-      <CustomSelect
+      <Select
         label={t("settings.chat.behavior.sendKey")}
         description={t("settings.chat.behavior.sendKeyDescription")}
         value={behavior.sendKey}
@@ -142,15 +142,15 @@
         onChange={(value) => void update({ sendKey: value === "mod_enter" ? "mod_enter" : "enter" })}
         disabled={saving}
       />
-      <CustomSelect label={t("settings.chat.behavior.terminalScrollback")} description={t("settings.chat.behavior.terminalScrollbackDescription")} value={String(behavior.terminalScrollbackLines)} options={scrollbackOptions} onChange={(value) => void update({ terminalScrollbackLines: Number(value) })} disabled={saving} />
-      <CustomSelect label={t("settings.chat.behavior.idleTimeout")} description={t("settings.chat.behavior.idleTimeoutDescription")} value={String(behavior.idleSessionTimeoutSeconds)} options={idleTimeoutOptions} onChange={(value) => void update({ idleSessionTimeoutSeconds: Number(value) })} disabled={saving} />
+      <Select label={t("settings.chat.behavior.terminalScrollback")} description={t("settings.chat.behavior.terminalScrollbackDescription")} value={String(behavior.terminalScrollbackLines)} options={scrollbackOptions} onChange={(value) => void update({ terminalScrollbackLines: Number(value) })} disabled={saving} />
+      <Select label={t("settings.chat.behavior.idleTimeout")} description={t("settings.chat.behavior.idleTimeoutDescription")} value={String(behavior.idleSessionTimeoutSeconds)} options={idleTimeoutOptions} onChange={(value) => void update({ idleSessionTimeoutSeconds: Number(value) })} disabled={saving} />
     </div>
     <div class="h-px shrink-0 scale-y-50 bg-border" aria-hidden="true"></div>
     <div class="flex flex-col gap-3">
-      <ToggleSetting label={t("settings.chat.behavior.restoreThread")} description={t("settings.chat.behavior.restoreThreadDescription")} checked={behavior.restoreLastSelectedThread} disabled={saving} onChange={(value) => void update({ restoreLastSelectedThread: value })} />
-      <ToggleSetting label={t("settings.chat.behavior.reasoning")} description={t("settings.chat.behavior.reasoningDescription")} checked={behavior.showReasoningSummaries} disabled={saving} onChange={(value) => void update({ showReasoningSummaries: value })} />
-      <ToggleSetting label={t("settings.chat.behavior.foldWork")} description={t("settings.chat.behavior.foldWorkDescription")} checked={behavior.automaticallyFoldSettledWork} disabled={saving} onChange={(value) => void update({ automaticallyFoldSettledWork: value })} />
-      <ToggleSetting label={t("settings.chat.behavior.confirmPaste")} description={t("settings.chat.behavior.confirmPasteDescription")} checked={behavior.confirmMultilineTerminalPaste} disabled={saving} onChange={(value) => void update({ confirmMultilineTerminalPaste: value })} />
+      <SwitchField label={t("settings.chat.behavior.restoreThread")} description={t("settings.chat.behavior.restoreThreadDescription")} checked={behavior.restoreLastSelectedThread} disabled={saving} onChange={(value) => void update({ restoreLastSelectedThread: value })} />
+      <SwitchField label={t("settings.chat.behavior.reasoning")} description={t("settings.chat.behavior.reasoningDescription")} checked={behavior.showReasoningSummaries} disabled={saving} onChange={(value) => void update({ showReasoningSummaries: value })} />
+      <SwitchField label={t("settings.chat.behavior.foldWork")} description={t("settings.chat.behavior.foldWorkDescription")} checked={behavior.automaticallyFoldSettledWork} disabled={saving} onChange={(value) => void update({ automaticallyFoldSettledWork: value })} />
+      <SwitchField label={t("settings.chat.behavior.confirmPaste")} description={t("settings.chat.behavior.confirmPasteDescription")} checked={behavior.confirmMultilineTerminalPaste} disabled={saving} onChange={(value) => void update({ confirmMultilineTerminalPaste: value })} />
     </div>
   {/if}
   {#if diagnostics}
@@ -177,8 +177,8 @@
     </div>
 
     <div class="space-y-3 border-t border-border pt-4">
-      <ToggleSetting label={t("settings.chat.behavior.captureDiagnostics")} checked={diagnostics.preferences.captureEnabled} disabled={saving} onChange={(captureEnabled) => void run(() => updateDiagnosticPreferences({ captureEnabled }))} />
-      <CustomSelect label={t("settings.chat.behavior.retentionDays")} value={String(diagnostics.preferences.retentionDays)} options={retentionOptions} onChange={(value) => void run(() => updateDiagnosticPreferences({ retentionDays: Number(value) }))} disabled={saving} />
+      <SwitchField label={t("settings.chat.behavior.captureDiagnostics")} checked={diagnostics.preferences.captureEnabled} disabled={saving} onChange={(captureEnabled) => void run(() => updateDiagnosticPreferences({ captureEnabled }))} />
+      <Select label={t("settings.chat.behavior.retentionDays")} value={String(diagnostics.preferences.retentionDays)} options={retentionOptions} onChange={(value) => void run(() => updateDiagnosticPreferences({ retentionDays: Number(value) }))} disabled={saving} />
       <p class="text-xs text-muted-foreground">{t("settings.chat.behavior.captureFields", diagnostics.capturedFields.map(diagnosticFieldLabel).join(", "))}</p>
       <p class="text-xs text-muted-foreground">{t("settings.chat.behavior.excludeFields", diagnostics.excludedFields.map(diagnosticFieldLabel).join(", "))}</p>
       <p class="text-xs text-muted-foreground">{t("settings.chat.behavior.diagnosticStorage", diagnosticStorageLabel(diagnostics.storageLocation))}</p>

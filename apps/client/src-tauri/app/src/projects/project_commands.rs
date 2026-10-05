@@ -1,4 +1,4 @@
-use crate::db_path::connect_sqlite;
+use crate::db::connect_sqlite;
 use crate::vault;
 use sqlx::SqlitePool;
 use std::fs;
@@ -233,9 +233,9 @@ pub(crate) async fn update_project_in_pool(
         project.music_assignments,
         project.music_assignments_updated_at,
     ) {
-        crate::music_context::replace_assignments_in_transaction(
+        crate::music::assignments::replace_assignments_in_transaction(
             &mut transaction,
-            crate::music_context::MusicAssignmentOwnerKind::ProjectDefault,
+            crate::music::assignments::MusicAssignmentOwnerKind::ProjectDefault,
             &project.id,
             assignments,
             updated_at,

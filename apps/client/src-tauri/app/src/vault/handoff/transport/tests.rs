@@ -1,6 +1,6 @@
 use super::*;
+use crate::vault::handoff::pairing::random_token;
 use crate::vault::handoff::protocol::{DeviceKind, MAX_ARCHIVE_BYTES, PROTOCOL_VERSION};
-use crate::vault::handoff::state::random_token;
 use std::fs;
 use tokio::net::TcpListener;
 
@@ -223,7 +223,7 @@ async fn revoked_phone_clears_its_stale_link_after_authenticated_reconnect() {
 #[tokio::test]
 async fn authenticated_control_flow_prepares_commits_and_acknowledges() {
     use super::super::coordinator::{CoordinatorOperation, CoordinatorResponse};
-    use super::super::state::PendingAcknowledgement;
+    use super::super::pairing::PendingAcknowledgement;
 
     let (pair, mut requests) = LocalPair::start_with_coordinator().await;
     pair.enroll().await;
@@ -385,7 +385,7 @@ async fn authenticated_distractions_exchange_returns_acknowledged_and_combined_s
 #[tokio::test]
 async fn android_upload_resumes_from_durable_desktop_staging() {
     use super::super::coordinator::{CoordinatorOperation, CoordinatorResponse};
-    use super::super::state::StoredOutgoingTransfer;
+    use super::super::pairing::StoredOutgoingTransfer;
 
     let (pair, mut requests) = LocalPair::start_with_coordinator().await;
     pair.enroll().await;

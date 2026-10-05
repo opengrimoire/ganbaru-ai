@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { mount, tick, unmount } from "svelte";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import Board from "./CollectionBoard.test.svelte";
+import Board from "./CollectionBoardHarness.test.svelte";
 
 let component: ReturnType<typeof mount> | undefined;
 afterEach(async () => {

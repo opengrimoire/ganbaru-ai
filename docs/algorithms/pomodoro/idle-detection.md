@@ -6,7 +6,7 @@ The overlay and user choices are defined in [Idle and suspend](../../features/po
 
 ## Platform sources
 
-The native adapter (`notification/idle.rs`) returns elapsed idle milliseconds when the platform source succeeds, an explicit unavailable value when it fails, and a best-effort webcam-in-use signal.
+The native adapter (`pomodoro/idle.rs`) returns elapsed idle milliseconds when the platform source succeeds, an explicit unavailable value when it fails, and a best-effort webcam-in-use signal.
 
 | Platform | Idle source | Webcam signal |
 | --- | --- | --- |

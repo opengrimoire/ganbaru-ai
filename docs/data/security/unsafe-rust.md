@@ -61,7 +61,7 @@ Each entry names the owning modules, why the boundary exists, its key safety inv
 
 ### Descriptor-relative Unix filesystem operations
 
-**Owned modules:** `crates/ganbaru-chat/src/chat/workspace_files/platform/unix.rs` and `apps/client/src-tauri/app/src/chat/execution_environment.rs`.
+**Owned modules:** `crates/ganbaru-chat/src/workspace/files/platform/unix.rs` and `apps/client/src-tauri/app/src/chat/execution_environment.rs`.
 
 **Contract:** These modules use POSIX [`openat`](https://pubs.opengroup.org/onlinepubs/9799919799/functions/open.html), directory-stream, metadata, unlink, and rename families to keep authorization relative to already-open directory descriptors, plus Linux, Android, and Apple atomic no-replace and exchange extensions. Android invokes the `renameat2` system call directly because the bionic symbol is newer than the minimum API level; an unsupported kernel makes the mutation fail closed, never fall back to a weaker path sequence. Stable `std` lacks descriptor-relative traversal, no-follow inspection, and atomic replacement, and path prechecks would reintroduce symlink and rename races.
 
@@ -75,7 +75,7 @@ Each entry names the owning modules, why the boundary exists, its key safety inv
 
 ### Windows filesystem identity and atomic replacement
 
-**Owned modules:** `crates/ganbaru-chat/src/chat/workspace.rs`, `crates/ganbaru-chat/src/chat/workspace_files/platform/windows.rs`, and `apps/client/src-tauri/app/src/chat/execution_environment.rs`.
+**Owned modules:** `crates/ganbaru-chat/src/workspace.rs`, `crates/ganbaru-chat/src/workspace/files/platform/windows.rs`, and `apps/client/src-tauri/app/src/chat/execution_environment.rs`.
 
 **Contract:** [`GetFileInformationByHandle`](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-getfileinformationbyhandle) provides directory identity, [`GetFileInformationByHandleEx`](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-getfileinformationbyhandleex) full file identity, [`ReplaceFileW`](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-replacefilew) atomic replacement, and [`MoveFileExW`](https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-movefileexw) without replacement flags fail-closed moves. Backup and recovery names use [`BCryptGenRandom`](https://learn.microsoft.com/en-us/windows/win32/api/bcrypt/nf-bcrypt-bcryptgenrandom). Safe by-handle metadata is still [unstable](https://github.com/rust-lang/rust/issues/63010) and no safe operation preserves the replacement contract.
 
@@ -89,7 +89,7 @@ Each entry names the owning modules, why the boundary exists, its key safety inv
 
 ### Provider process trees and native process probes
 
-**Owned modules:** `crates/ganbaru-chat-providers/src/chat/process.rs`, `crates/ganbaru-chat-providers/src/chat/providers/opencode/tests.rs`, `apps/client/src-tauri/app/src/chat/tests/process.rs`, and `apps/client/src-tauri/app/src/chat/tests/process_windows.rs`.
+**Owned modules:** `crates/ganbaru-chat-providers/src/process.rs`, `crates/ganbaru-chat-providers/src/opencode/tests.rs`, `apps/client/src-tauri/app/src/chat/tests/process.rs`, and `apps/client/src-tauri/app/src/chat/tests/process_windows.rs`.
 
 **Contract:** Unix providers are stopped with POSIX [`kill`](https://pubs.opengroup.org/onlinepubs/9799919799/functions/kill.html) on a negative process-group ID. Windows providers use [job objects](https://learn.microsoft.com/en-us/windows/win32/procthread/job-objects), suspended creation, and Tool Help thread enumeration. Test probes use native liveness checks to verify descendants, not only the leader. Unix process-group methods are [unstable](https://github.com/rust-lang/rust/issues/141975), and stable Windows `Child` does not expose the [main-thread handle](https://github.com/rust-lang/rust/issues/96723).
 
@@ -101,7 +101,7 @@ Each entry names the owning modules, why the boundary exists, its key safety inv
 
 ### Windows desktop integration
 
-**Owned modules:** `apps/client/src-tauri/app/src/desktop_runtime.rs`, `apps/client/src-tauri/app/src/distractions/foreground/windows.rs`, `apps/client/src-tauri/app/src/media_controls/windows.rs`, `apps/client/src-tauri/app/src/notification/idle.rs`, and the Windows portion of `apps/client/src-tauri/app/src/pomodoro_enforcement.rs`.
+**Owned modules:** `apps/client/src-tauri/app/src/benchmark/memory.rs`, `apps/client/src-tauri/app/src/distractions/foreground/windows.rs`, `apps/client/src-tauri/app/src/music/media_controls/windows.rs`, `apps/client/src-tauri/app/src/pomodoro/idle.rs`, and the Windows portion of `apps/client/src-tauri/app/src/pomodoro/overlay/enforcement.rs`.
 
 **Contract:** Win32 process enumeration and memory queries, foreground window and process inspection, close messages, low-level keyboard hooks, execution-state and idle APIs, and system media transport controls interop. Primary contracts include [Tool Help snapshots](https://learn.microsoft.com/en-us/windows/win32/api/tlhelp32/nf-tlhelp32-createtoolhelp32snapshot), [`LowLevelKeyboardProc`](https://learn.microsoft.com/en-us/windows/win32/winmsg/lowlevelkeyboardproc), [`SetWindowsHookExW`](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-setwindowshookexw), [`GetLastInputInfo`](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getlastinputinfo), and [SMTC `GetForWindow`](https://learn.microsoft.com/en-us/windows/win32/api/systemmediatransportcontrolsinterop/nf-systemmediatransportcontrolsinterop-isystemmediatransportcontrolsinterop-getforwindow). Tauri and stable Rust do not expose these capabilities with the same semantics.
 
@@ -113,7 +113,7 @@ Each entry names the owning modules, why the boundary exists, its key safety inv
 
 ### Native webview and window bridges
 
-**Owned modules:** `apps/client/src-tauri/app/src/chat/preview/capture.rs` and the macOS window portion of `apps/client/src-tauri/app/src/pomodoro_enforcement.rs`.
+**Owned modules:** `apps/client/src-tauri/app/src/chat/preview/capture.rs` and the macOS window portion of `apps/client/src-tauri/app/src/pomodoro/overlay/enforcement.rs`.
 
 **Contract:** Tauri's [`with_webview`](https://docs.rs/tauri/latest/tauri/webview/struct.Webview.html#method.with_webview) supplies a platform handle on the main thread, but WebView2 [`CapturePreview`](https://learn.microsoft.com/en-us/microsoft-edge/webview2/reference/win32/icorewebview2?view=webview2-1.0.1462.37) and WebKit [`takeSnapshot`](https://developer.apple.com/documentation/webkit/wkwebview/takesnapshot%28with%3Acompletionhandler%3A%29) cross COM or Objective-C interfaces. Linux capture uses WebKitGTK's safe method, but its completion closure still runs through a foreign non-unwind trampoline and follows the same containment policy. Tauri and Wry have no safe portable capture API or typed native-window operation for these uses.
 
@@ -125,7 +125,7 @@ Each entry names the owning modules, why the boundary exists, its key safety inv
 
 ### macOS IOKit power assertions
 
-**Owned module:** The macOS power portion of `apps/client/src-tauri/app/src/pomodoro_enforcement.rs`.
+**Owned module:** The macOS power portion of `apps/client/src-tauri/app/src/pomodoro/overlay/enforcement.rs`.
 
 **Contract:** Pomodoro display and system wake locks use [`IOPMAssertionCreateWithName`](https://developer.apple.com/documentation/iokit/1557134-iopmassertioncreatewithname) and its release API. Stable Rust and Tauri provide no equivalent assertion ownership.
 

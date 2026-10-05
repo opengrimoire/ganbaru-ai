@@ -3,8 +3,8 @@
   import {
     channelCapabilityPreset,
     type ChatChannelCapabilityPreset,
-  } from "$lib/chat/teammate-access";
-  import ChatControlMenu, { type ChatControlOption } from "$lib/components/chat/ChatControlMenu.svelte";
+  } from "$lib/chat/teammates/access";
+  import ChatControlMenu, { type ChatControlOption } from "$lib/components/chat/composer/ChatControlMenu.svelte";
   import { getLocalization } from "$lib/i18n/translator.svelte";
 
   type SelectablePreset = Exclude<ChatChannelCapabilityPreset, "custom">;

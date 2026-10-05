@@ -1,5 +1,5 @@
 import rawDistractionsCategoryDefinitions from "./categories.json";
-import { PALETTE_SIZE, type EventColor } from "$lib/components/calendar/types";
+import { PALETTE_SIZE, type EventColor } from "$lib/calendar/types";
 
 export type DistractionsMode = "blacklist" | "whitelist";
 

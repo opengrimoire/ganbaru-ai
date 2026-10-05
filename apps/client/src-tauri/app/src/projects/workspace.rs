@@ -1,4 +1,4 @@
-use crate::db_path::connect_sqlite;
+use crate::db::connect_sqlite;
 use tauri::{AppHandle, Runtime};
 
 use super::models::*;

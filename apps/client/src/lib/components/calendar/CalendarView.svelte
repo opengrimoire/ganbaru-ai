@@ -1,91 +1,91 @@
 <script lang="ts">
   import type {
     CalendarEvent, CalendarViewMode, EventSurfaceStatus, RecurringScope,
-  } from "./types";
+  } from "$lib/calendar/types";
   import {
     computeViewWindow, formatDatePart,
     getWeekDays, getWorkCycleDays,
     getLocalTimezone,
-  } from "./utils";
+  } from "$lib/calendar/utils";
   import { getCalendar } from "$lib/stores/calendar.svelte";
   import { getCalendars } from "$lib/stores/calendars.svelte";
   import { getProjects } from "$lib/stores/projects.svelte";
-  import { calendarIdentityEmail } from "$lib/calendar/calendar-display";
+  import { calendarIdentityEmail } from "$lib/calendar/display";
   import { getPomodoro } from "$lib/stores/pomodoro.svelte";
   import { getTheme } from "$lib/stores/theme.svelte";
-  import { getCalendarZoom } from "$lib/stores/calendarZoom.svelte";
+  import { getCalendarZoom } from "$lib/stores/calendar-zoom.svelte";
   import { getPreferences } from "$lib/stores/preferences.svelte";
   import { getMobileBackStack } from "$lib/stores/mobile-back-stack.svelte";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import { onDestroy, onMount, tick, untrack } from "svelte";
-  import { getNativeCalendarEditController } from "./native-edit-controller.svelte";
-  import type { CalendarEditDraft } from "./native-edit-controller.svelte";
+  import { getNativeCalendarEditController } from "$lib/components/calendar/view/native-edit-controller.svelte";
+  import type { CalendarEditDraft } from "$lib/components/calendar/view/native-edit-controller.svelte";
   import type { CalendarDeleteOutcome } from "$lib/api/calendar-edit";
   import { activeVaultIdentity } from "$lib/vault/active-vault";
   import Plus from "@lucide/svelte/icons/plus";
   import CalendarHeader from "./CalendarHeader.svelte";
-  import WeekView from "./WeekView.svelte";
-  import DayView from "./DayView.svelte";
-  import MonthView from "./MonthView.svelte";
+  import WeekView from "$lib/components/calendar/grid/WeekView.svelte";
+  import DayView from "$lib/components/calendar/grid/DayView.svelte";
+  import MonthView from "$lib/components/calendar/grid/MonthView.svelte";
   import ActionToast from "$lib/components/ui/ActionToast.svelte";
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
   import { createEditSession } from "./edit-session.svelte";
   import type { EditSessionState, PanelAnchor } from "./edit-session.svelte";
-  import { mark as perfMark } from "$lib/stores/perflog.svelte";
+  import { mark as perfMark } from "$lib/stores/perf-log.svelte";
   import { hasOnlyShortcutModifier } from "$lib/keyboard-shortcuts";
-  import { getCalendarNavHandle } from "./nav-handle.svelte";
+  import { getCalendarNavHandle } from "$lib/calendar/nav-handle.svelte";
   import { PENDING_CREATE_ID } from "./display-events";
   import {
     activePomodoroSaveWouldStopSession,
     endActiveEventWouldStopProductivity,
     isActiveTimedCalendarEvent,
-  } from "./active-event-end";
+  } from "$lib/components/calendar/view/active-event-end";
   import { getCalendarEventEditLock } from "./event-edit-permissions";
   import {
     DEFAULT_DAY_HEADER_RETURN_MODE,
     type DayHeaderReturnMode,
-  } from "./view-navigation";
-  import { createCalendarViewToastController } from "./calendar-view-toasts.svelte";
-  import { createCalendarViewModelBuilder, calendarViewModelDays } from "./calendar-view-model";
-  import { createCalendarViewConfirmationController } from "./calendar-view-confirmation.svelte";
+  } from "$lib/components/calendar/view/view-navigation";
+  import { createCalendarViewToastController } from "$lib/components/calendar/view/toasts.svelte";
+  import { createCalendarViewModelBuilder, calendarViewModelDays } from "$lib/components/calendar/view/model";
+  import { createCalendarViewConfirmationController } from "$lib/components/calendar/view/confirmation.svelte";
   import {
     createCalendarOutsideCloseAction,
     panelAnchorFromRect,
     panelAnchorFromRenderedEvent as panelAnchorFromRenderedEventElement,
-  } from "./calendar-view-panel-dom";
-  import { createPersistedPomodoroSegmentsController } from "./calendar-view-persisted-segments.svelte";
-  import { createCalendarViewTargetController } from "./calendar-view-target.svelte";
+  } from "$lib/components/calendar/view/panel-dom";
+  import { createPersistedPomodoroSegmentsController } from "$lib/components/calendar/view/persisted-segments.svelte";
+  import { createCalendarViewTargetController } from "$lib/components/calendar/view/target.svelte";
   import {
     CalendarViewPanelLifecycle,
-  } from "./calendar-view-panel-lifecycle.svelte";
+  } from "$lib/components/calendar/view/panel-lifecycle.svelte";
   import {
     projectCalendarPanel,
     resolvePersistedCalendarPanelEvent,
     snapshotCalendarPanel,
     type PanelEditProjection,
     type PanelRenderState,
-  } from "./calendar-view-panel-projection";
-  import { CalendarViewDragController } from "./calendar-view-drag-controller";
+  } from "$lib/components/calendar/view/panel-projection";
+  import { CalendarDragCommitController } from "$lib/components/calendar/view/drag-commit-controller";
   import {
     CalendarViewCommitService,
-  } from "./calendar-view-commit-service";
-  import type { PanelSaveData } from "./event-panel-payloads";
-  import { CalendarViewDeleteController } from "./calendar-view-delete-controller";
-  import { CalendarViewNavigationController } from "./calendar-view-navigation-controller";
-  import { CalendarViewViewportController } from "./calendar-view-viewport-controller.svelte";
-  import { CalendarViewSaveController } from "./calendar-view-save-controller.svelte";
+  } from "$lib/components/calendar/view/commit-service";
+  import type { PanelSaveData } from "$lib/components/calendar/event-panel/payloads";
+  import { CalendarViewDeleteController } from "$lib/components/calendar/view/delete-controller";
+  import { CalendarViewNavigationController } from "$lib/components/calendar/view/navigation-controller";
+  import { CalendarViewViewportController } from "$lib/components/calendar/view/viewport-controller.svelte";
+  import { CalendarViewSaveController } from "$lib/components/calendar/view/save-controller.svelte";
   import {
     buildCalendarSaveFreeze,
     projectCalendarDisplay,
     projectCalendarSurfaceStatuses,
     visibleCalendarEvents,
-  } from "./calendar-view-display-projection";
+  } from "$lib/components/calendar/view/display-projection";
   import {
     calendarSwipeAxis,
     calendarSwipeDirection,
     calendarSwipeNavigation,
     type CalendarSwipeAxis,
-  } from "./calendar-mobile-gestures";
+  } from "./mobile-gestures";
 
   const calendarStore = getCalendar();
   const calendarsStore = getCalendars();
@@ -116,7 +116,7 @@
   const CREATE_CLOSE_GUARD_MS = 500;
 
   const panelLifecycle = new CalendarViewPanelLifecycle({
-    importPanel: () => import("./EventPanel.svelte"),
+    importPanel: () => import("$lib/components/calendar/event-panel/EventPanel.svelte"),
     mark: perfMark,
     afterRender: (callback) => { void tick().then(callback); },
     afterPaint: (callback) => { requestAnimationFrame(callback); },
@@ -379,7 +379,7 @@
     suppressEditingGlow ? undefined : (editingId ?? panelLifecycle.pendingEditEventId),
   );
 
-  const dragController = new CalendarViewDragController({
+  const dragController = new CalendarDragCommitController({
     session,
     isCommitHidden: () => panelCommitHidden || saveController.saving || directEditor.committing,
     editingId: () => editingId,

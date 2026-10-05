@@ -72,7 +72,7 @@ function gitOutput(args: string[]): string | undefined {
 
 function chunkNameForModule(id: string): string | undefined {
   const moduleId = id.replaceAll("\\", "/");
-  if (moduleId.endsWith("/src/lib/chat/code-editor-runtime.ts")) return "chat-editor-runtime";
+  if (moduleId.endsWith("/src/lib/chat/workspace/code-editor-runtime.ts")) return "chat-editor-runtime";
   if (!moduleId.includes("node_modules")) return undefined;
 
   const reviewCatalogChunk = reviewCatalogChunkName(moduleId);
@@ -295,41 +295,41 @@ export default defineConfig({
           ? "src/lib/components/settings/SettingsSectionRenderer.mobile.svelte"
           : "src/lib/components/settings/SettingsSectionRenderer.svelte",
       ),
-      "$lib/components/settings/settings-detail-registry": path.resolve(
+      "$lib/components/settings/detail-registry": path.resolve(
         configDir,
         mobileBuild
-          ? "src/lib/components/settings/settings-detail-registry.mobile.ts"
-          : "src/lib/components/settings/settings-detail-registry.ts",
+          ? "src/lib/components/settings/detail-registry.mobile.ts"
+          : "src/lib/components/settings/detail-registry.ts",
       ),
-      "$lib/components/settings/distractions-desktop-selector": path.resolve(
+      "$lib/components/settings/distractions/DistractionsAppSelector.svelte": path.resolve(
         configDir,
         mobileBuild
-          ? "src/lib/components/settings/mobile/MobileNoopDistractionsDesktopSelector.svelte"
-          : "src/lib/components/settings/DistractionsAppSelector.svelte",
+          ? "src/lib/components/settings/distractions/DistractionsAppSelector.mobile.svelte"
+          : "src/lib/components/settings/distractions/DistractionsAppSelector.svelte",
       ),
-      "$lib/components/settings/distractions-browser-connection": path.resolve(
+      "$lib/components/settings/distractions/DistractionsBrowserConnectionStatus.svelte": path.resolve(
         configDir,
         mobileBuild
-          ? "src/lib/components/settings/mobile/MobileNoopDistractionsBrowserConnection.svelte"
-          : "src/lib/components/settings/DistractionsBrowserConnectionStatus.svelte",
+          ? "src/lib/components/settings/distractions/DistractionsBrowserConnectionStatus.mobile.svelte"
+          : "src/lib/components/settings/distractions/DistractionsBrowserConnectionStatus.svelte",
       ),
-      "$lib/components/settings/mobile-theme-editor-loader": path.resolve(
+      "$lib/components/themes/editor/mobile-editor-loader": path.resolve(
         configDir,
         mobileBuild
-          ? "src/lib/components/settings/mobile-theme-editor-loader.mobile.ts"
-          : "src/lib/components/settings/mobile-theme-editor-loader.ts",
+          ? "src/lib/components/themes/editor/mobile-editor-loader.mobile.ts"
+          : "src/lib/components/themes/editor/mobile-editor-loader.ts",
       ),
-      "$lib/chat/local-execution-ui": path.resolve(
+      "$lib/chat/workspace/local-execution-ui": path.resolve(
         configDir,
         mobileBuild
-          ? "src/lib/chat/local-execution-ui.mobile.ts"
-          : "src/lib/chat/local-execution-ui.ts",
+          ? "src/lib/chat/workspace/local-execution-ui.mobile.ts"
+          : "src/lib/chat/workspace/local-execution-ui.ts",
       ),
-      "$lib/chat/review-diff-loader": path.resolve(
+      "$lib/chat/review/diff-loader": path.resolve(
         configDir,
         mobileBuild
-          ? "src/lib/chat/review-diff-loader.mobile.ts"
-          : "src/lib/chat/review-diff-loader.ts",
+          ? "src/lib/chat/review/diff-loader.mobile.ts"
+          : "src/lib/chat/review/diff-loader.ts",
       ),
       "$lib/api/db": path.resolve(
         configDir,
@@ -349,17 +349,17 @@ export default defineConfig({
           ? "src/lib/music/platform-paths.mobile.ts"
           : "src/lib/music/platform-paths.ts",
       ),
-      "$lib/music/music-platform-controls": path.resolve(
+      "$lib/music/session/platform-controls": path.resolve(
         configDir,
         mobileBuild
-          ? "src/lib/music/music-platform-controls.mobile.ts"
-          : "src/lib/music/music-platform-controls.ts",
+          ? "src/lib/music/session/platform-controls.mobile.ts"
+          : "src/lib/music/session/platform-controls.ts",
       ),
-      "$lib/window-sync-transport": path.resolve(
+      "$lib/windows/sync-transport": path.resolve(
         configDir,
         mobileBuild
-          ? "src/lib/window-sync-transport.mobile.ts"
-          : "src/lib/window-sync-transport.ts",
+          ? "src/lib/windows/sync-transport.mobile.ts"
+          : "src/lib/windows/sync-transport.ts",
       ),
       "$lib/stores/zoom.svelte": path.resolve(
         configDir,
@@ -367,57 +367,53 @@ export default defineConfig({
           ? "src/lib/stores/zoom.mobile.svelte.ts"
           : "src/lib/stores/zoom.svelte.ts",
       ),
-      "$lib/stores/distractions-usage.svelte": path.resolve(
-        configDir,
-        "src/lib/stores/distractions-usage.svelte.ts",
-      ),
       "$lib/stores/mobile-back-stack.svelte": path.resolve(
         configDir,
         androidBuild
           ? "src/lib/stores/mobile-back-stack.svelte.ts"
           : "src/lib/stores/mobile-back-stack.desktop.ts",
       ),
-      "$lib/components/projects/project-component-registry": path.resolve(
+      "$lib/components/projects/component-registry": path.resolve(
         configDir,
         mobileBuild
-          ? "src/lib/components/projects/project-component-registry.mobile.ts"
-          : "src/lib/components/projects/project-component-registry.ts",
+          ? "src/lib/components/projects/component-registry.mobile.ts"
+          : "src/lib/components/projects/component-registry.ts",
       ),
-      "$lib/components/notes/notes-working-markdown-platform": path.resolve(
+      "$lib/components/notes/working-markdown/platform": path.resolve(
         configDir,
         mobileBuild
-          ? "src/lib/components/notes/notes-working-markdown-platform.mobile.ts"
-          : "src/lib/components/notes/notes-working-markdown-platform.ts",
+          ? "src/lib/components/notes/working-markdown/platform.mobile.ts"
+          : "src/lib/components/notes/working-markdown/platform.ts",
       ),
-      "$lib/components/notes/notes-editor-platform-importers": path.resolve(
+      "$lib/components/notes/editor-platform-importers": path.resolve(
         configDir,
         mobileBuild
-          ? "src/lib/components/notes/notes-editor-platform-importers.mobile.ts"
-          : "src/lib/components/notes/notes-editor-platform-importers.ts",
+          ? "src/lib/components/notes/editor-platform-importers.mobile.ts"
+          : "src/lib/components/notes/editor-platform-importers.ts",
       ),
-      "$lib/components/notes/notes-project-platform-importers": path.resolve(
+      "$lib/components/notes/project-platform-importers": path.resolve(
         configDir,
         mobileBuild
-          ? "src/lib/components/notes/notes-project-platform-importers.mobile.ts"
-          : "src/lib/components/notes/notes-project-platform-importers.ts",
+          ? "src/lib/components/notes/project-platform-importers.mobile.ts"
+          : "src/lib/components/notes/project-platform-importers.ts",
       ),
       "$lib/components/music/MusicSoundtrackAssignmentEditor.svelte": path.resolve(
         configDir,
         mobileBuild
-          ? "src/lib/components/mobile/MobileNoopMusicAssignmentEditor.svelte"
+          ? "src/lib/components/music/MusicSoundtrackAssignmentEditor.mobile.svelte"
           : "src/lib/components/music/MusicSoundtrackAssignmentEditor.svelte",
       ),
-      "$lib/components/music/MusicSoundscapeControl.svelte": path.resolve(
+      "$lib/components/music/soundscape/MusicSoundscapeControl.svelte": path.resolve(
         configDir,
         mobileBuild
-          ? "src/lib/components/mobile/MobileNoopMusicSoundscapeControl.svelte"
-          : "src/lib/components/music/MusicSoundscapeControl.svelte",
+          ? "src/lib/components/music/soundscape/MusicSoundscapeControl.mobile.svelte"
+          : "src/lib/components/music/soundscape/MusicSoundscapeControl.svelte",
       ),
-      "$lib/components/music/MusicSoundscapeBuilder.svelte": path.resolve(
+      "$lib/components/music/soundscape/MusicSoundscapeBuilder.svelte": path.resolve(
         configDir,
         mobileBuild
-          ? "src/lib/components/mobile/MobileNoopMusicSoundscapeBuilder.svelte"
-          : "src/lib/components/music/MusicSoundscapeBuilder.svelte",
+          ? "src/lib/components/music/soundscape/MusicSoundscapeBuilder.mobile.svelte"
+          : "src/lib/components/music/soundscape/MusicSoundscapeBuilder.svelte",
       ),
       "$lib/stores/soundscape.svelte": path.resolve(
         configDir,
@@ -425,40 +421,40 @@ export default defineConfig({
           ? "src/lib/stores/soundscape.mobile.svelte.ts"
           : "src/lib/stores/soundscape.svelte.ts",
       ),
-      "$lib/stores/music-external-controls": path.resolve(
+      "$lib/stores/music-player/external-controls": path.resolve(
         configDir,
         mobileBuild
-          ? "src/lib/stores/music-external-controls.mobile.ts"
-          : "src/lib/stores/music-external-controls.ts",
+          ? "src/lib/stores/music-player/external-controls.mobile.ts"
+          : "src/lib/stores/music-player/external-controls.ts",
       ),
       "$lib/components/music/builder/MusicItemRepairDialog.svelte": path.resolve(
         configDir,
         mobileBuild
-          ? "src/lib/components/mobile/MobileNoopMusicItemRepairDialog.svelte"
+          ? "src/lib/components/music/builder/MusicItemRepairDialog.mobile.svelte"
           : "src/lib/components/music/builder/MusicItemRepairDialog.svelte",
       ),
       "$lib/components/music/builder/MusicRelinkWizard.svelte": path.resolve(
         configDir,
         mobileBuild
-          ? "src/lib/components/mobile/MobileNoopMusicRelinkWizard.svelte"
+          ? "src/lib/components/music/builder/MusicRelinkWizard.mobile.svelte"
           : "src/lib/components/music/builder/MusicRelinkWizard.svelte",
       ),
-      "$lib/components/projects/ProjectSettingsWorkingFoldersSection.svelte": path.resolve(
+      "$lib/components/projects/settings/ProjectSettingsWorkingFoldersSection.svelte": path.resolve(
         configDir,
         mobileBuild
-          ? "src/lib/components/mobile/MobileNoopProjectWorkingFoldersSection.svelte"
-          : "src/lib/components/projects/ProjectSettingsWorkingFoldersSection.svelte",
+          ? "src/lib/components/projects/settings/ProjectSettingsWorkingFoldersSection.mobile.svelte"
+          : "src/lib/components/projects/settings/ProjectSettingsWorkingFoldersSection.svelte",
       ),
-      "$lib/components/notes/NotesWorkingMarkdownEditor.svelte": path.resolve(
+      "$lib/components/notes/working-markdown/NotesWorkingMarkdownEditor.svelte": path.resolve(
         configDir,
         mobileBuild
-          ? "src/lib/components/mobile/MobileNoopNotesWorkingMarkdownEditor.svelte"
-          : "src/lib/components/notes/NotesWorkingMarkdownEditor.svelte",
+          ? "src/lib/components/notes/working-markdown/NotesWorkingMarkdownEditor.mobile.svelte"
+          : "src/lib/components/notes/working-markdown/NotesWorkingMarkdownEditor.svelte",
       ),
       "$lib/components/notes/NotesProjectSettingsPanel.svelte": path.resolve(
         configDir,
         mobileBuild
-          ? "src/lib/components/mobile/MobileNoopNotesProjectSettingsPanel.svelte"
+          ? "src/lib/components/notes/NotesProjectSettingsPanel.mobile.svelte"
           : "src/lib/components/notes/NotesProjectSettingsPanel.svelte",
       ),
       $lib: path.resolve("./src/lib"),

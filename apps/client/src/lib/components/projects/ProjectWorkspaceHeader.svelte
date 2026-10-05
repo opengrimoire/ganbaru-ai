@@ -16,12 +16,12 @@
   import {
     projectLifecycleBadgeClass,
     projectLifecycleLabel,
-  } from "$lib/projects/project-display";
+  } from "$lib/projects/display";
   import {
     projectNavigatorPanelGeometry,
     type ProjectToolbarPanel,
     type ProjectNavigatorPanelMode,
-  } from "$lib/projects/project-toolbar";
+  } from "$lib/projects/toolbar";
   import {
     PROJECT_VIEW_IDS,
     type Project,
@@ -34,9 +34,9 @@
   import { getViewport } from "$lib/stores/viewport.svelte";
   import { cn } from "$lib/utils";
   import ProjectIcon from "./ProjectIcon.svelte";
-  import WorkspaceBreadcrumbTerminalIcon from "$lib/components/WorkspaceBreadcrumbTerminalIcon.svelte";
+  import WorkspaceBreadcrumbTerminalIcon from "$lib/components/ui/WorkspaceBreadcrumbTerminalIcon.svelte";
   import ProjectNavigator from "./ProjectNavigator.svelte";
-  import ProjectPickerMobileDialog from "./ProjectPickerMobileDialog.svelte";
+  import ProjectPickerMobileDialog from "$lib/components/projects/pickers/ProjectPickerMobileDialog.svelte";
 
   let {
     selectedProject,

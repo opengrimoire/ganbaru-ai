@@ -1,4 +1,4 @@
-use crate::chat::models::{ChatError, ChatErrorCode, ChatResult};
+use ganbaru_chat_contracts::models::{ChatError, ChatErrorCode, ChatResult};
 use std::path::PathBuf;
 use tauri_plugin_dialog::{DialogExt, FilePath};
 

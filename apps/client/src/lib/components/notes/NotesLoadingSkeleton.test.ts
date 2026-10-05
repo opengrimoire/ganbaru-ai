@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { mount, tick, unmount } from "svelte";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import NotesLoadingSkeletonHarness from "./NotesLoadingSkeletonHarness.svelte";
+import NotesLoadingSkeletonHarness from "./NotesLoadingSkeletonHarness.test.svelte";
 
 let component: ReturnType<typeof mount> | undefined;
 

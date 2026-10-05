@@ -273,3 +273,6 @@ pub(super) async fn commit_in_transaction(
     }
     Ok(true)
 }
+
+#[cfg(test)]
+mod tests;

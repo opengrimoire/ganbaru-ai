@@ -1,10 +1,10 @@
-import type { CalendarEvent } from "$lib/components/calendar/types";
-import { parseCalendarDate } from "$lib/components/calendar/utils";
+import type { CalendarEvent } from "$lib/calendar/types";
+import { parseCalendarDate } from "$lib/calendar/utils";
 import {
   notesMentionNotificationDueAtMs,
   notesMentionNotificationIsDue,
   type NotesMentionNotificationPreferenceSnapshot,
-} from "$lib/notes/mention-notifications";
+} from "$lib/notes/collaboration/mention-notifications";
 import type { NotesMentionNotification } from "$lib/notes/types";
 import {
   createLifecycleScheduler,

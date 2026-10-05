@@ -4,7 +4,7 @@ import {
   invalidateAssetUrlKind,
   invalidateNotesAssetUrls,
 } from "$lib/api/asset-url-cache";
-import { invalidateNotesNotificationSchedule } from "$lib/notes/notification-schedule.svelte";
+import { invalidateNotesNotificationSchedule } from "$lib/notes/collaboration/notification-schedule.svelte";
 import {
   mapNotesBlockDto,
   mapNotesBlockListDto,
@@ -13,7 +13,7 @@ import {
   mapNotesBlockFrontierDto,
   mapNotesBlockOutlineDto,
   mapNotesPageDto,
-} from "$lib/notes/notion-mappers";
+} from "$lib/notes/validation/response-mappers";
 import type {
   NotesAppendBlockChildrenRequest,
   NotesBlock,

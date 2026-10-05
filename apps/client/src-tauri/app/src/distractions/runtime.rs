@@ -218,7 +218,7 @@ pub(super) fn publish<R: Runtime, T>(
 
 fn invalidate<R: Runtime>(app: &tauri::AppHandle<R>, stop: bool) -> Result<u64, String> {
     let Some(runtime) = app.try_state::<RuntimeState>() else {
-        state::clear_enforcement_state_files(&state_path(app)?, &limit_state_path(app)?)?;
+        state_files::clear_enforcement_state_files(&state_path(app)?, &limit_state_path(app)?)?;
         return Ok(0);
     };
     let mut frame = runtime
@@ -233,7 +233,7 @@ fn invalidate<R: Runtime>(app: &tauri::AppHandle<R>, stop: bool) -> Result<u64, 
         .control
         .generation
         .store(frame.generation, Ordering::Release);
-    state::clear_enforcement_state_files(&state_path(app)?, &limit_state_path(app)?)?;
+    state_files::clear_enforcement_state_files(&state_path(app)?, &limit_state_path(app)?)?;
     if let Ok(mut foreground) = runtime.foreground.lock() {
         *foreground = (
             Instant::now(),
@@ -295,7 +295,7 @@ pub(crate) fn resume_after_vault_handoff<R: Runtime>(
         .control
         .generation
         .store(frame.generation, Ordering::Release);
-    state::clear_enforcement_state_files(&state_path(app)?, &limit_state_path(app)?)?;
+    state_files::clear_enforcement_state_files(&state_path(app)?, &limit_state_path(app)?)?;
     runtime.control.wake.notify_one();
     Ok(())
 }
@@ -365,7 +365,7 @@ struct Owner {
 impl Owner {
     async fn flush_pending(&mut self) -> Result<(), String> {
         if let Some(pending) = &self.pending {
-            crate::distractions_linked::enqueue_native_samples(
+            crate::distractions::linked::enqueue_native_samples(
                 &self.app,
                 &pending.vault_id,
                 &pending.device_id,
@@ -443,7 +443,7 @@ impl Owner {
                 wall_ms,
                 monotonic,
                 sources,
-                zone: crate::recurrence::time::system_zone()?,
+                zone: crate::civil_time::system_zone()?,
             };
             let context = Context {
                 generation,
@@ -470,7 +470,7 @@ impl Owner {
             return Ok(());
         };
         if self.session.is_none() {
-            self.session = Some(crate::distractions_linked::new_accounting_session()?);
+            self.session = Some(crate::distractions::linked::new_accounting_session()?);
         }
         let binding = (
             generation,
@@ -635,7 +635,7 @@ impl Owner {
                     .state::<vault::ownership::VaultOwnershipManager>()
                     .acquire_managed_write(&context.vault_id)?;
                 context.validate_binding(&self.app)?;
-                let pool = crate::db_path::connect_sqlite(
+                let pool = crate::db::connect_sqlite(
                     self.app.clone(),
                     format!("sqlite:{}", vault::APP_SQLITE_FILE),
                 )
@@ -676,14 +676,14 @@ impl Owner {
         }
         self.notifications.push(Instant::now());
         if let Some(limit) = limit {
-            crate::notification::commands::show_distractions_desktop_limit_notification(
+            crate::notifications::desktop::show_distractions_desktop_limit_notification(
                 self.app.clone(),
                 label,
                 limit,
                 self.app.state(),
             );
         } else {
-            crate::notification::commands::show_distractions_desktop_block_notification(
+            crate::notifications::desktop::show_distractions_desktop_block_notification(
                 self.app.clone(),
                 label,
                 self.app.state(),

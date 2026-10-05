@@ -1,11 +1,11 @@
 use serde::{Deserialize, Serialize};
 
 #[cfg(test)]
-pub use crate::music_context::{
+pub use crate::music::assignments::{
     MusicActivityPhase, MusicAssignmentBehavior, MusicAssignmentProvenanceKind,
     MusicContextAssignmentDraft, MusicSoundscapeBehavior,
 };
-pub use crate::music_context::{
+pub use crate::music::assignments::{
     MusicAssignmentOwnerKind, MusicContextAssignment, MusicContextAssignmentSet,
 };
 
@@ -91,14 +91,14 @@ string_enum!(MusicSourceHealth {
     Issues => "issues",
     Disabled => "disabled",
 });
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 string_enum!(MusicRelinkPlanState {
     Planning => "planning",
     Ready => "ready",
     Applied => "applied",
     Cancelled => "cancelled",
 });
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 string_enum!(MusicRelinkMatchKind {
     Exact => "exact",
     Likely => "likely",
@@ -106,7 +106,7 @@ string_enum!(MusicRelinkMatchKind {
     Missing => "missing",
     New => "new",
 });
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 string_enum!(MusicRepairMatchStrength {
     Exact => "exact",
     Likely => "likely",
@@ -133,19 +133,19 @@ string_enum!(MusicIntendedUse {
     Relaxation => "relaxation",
     Energizing => "energizing",
 });
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 string_enum!(MusicSoundscapeSourceKind {
     GeneratedNoise => "generated-noise",
     LocalLoop => "local-loop",
     BundledLoop => "bundled-loop",
 });
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 string_enum!(MusicGeneratedNoiseKind {
     White => "white",
     Pink => "pink",
     Brown => "brown",
 });
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 string_enum!(MusicSoundscapeAvailability {
     Available => "available",
     Missing => "missing",
@@ -440,7 +440,7 @@ pub struct MusicLocalRootCreate {
     pub created_at_ms: i64,
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MusicItemRepairPreview {
@@ -458,7 +458,7 @@ pub struct MusicItemRepairPreview {
     pub reasons: Vec<String>,
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MusicItemRepairApply {
@@ -649,7 +649,7 @@ pub struct MusicRecentSelection {
     pub selected_at_ms: i64,
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MusicSoundscapeDefinition {
@@ -667,7 +667,7 @@ pub struct MusicSoundscapeDefinition {
     pub version: i64,
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MusicSoundscapeWrite {
@@ -684,7 +684,7 @@ pub struct MusicSoundscapeWrite {
     pub updated_at_ms: i64,
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MusicSoundscapeGroup {
@@ -696,7 +696,7 @@ pub struct MusicSoundscapeGroup {
     pub version: i64,
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MusicSoundscapeGroupWrite {
@@ -707,7 +707,7 @@ pub struct MusicSoundscapeGroupWrite {
     pub updated_at_ms: i64,
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MusicSoundscapeState {
@@ -724,7 +724,7 @@ pub struct MusicSoundscapeState {
     pub version: i64,
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MusicSoundscapeStateWrite {
@@ -1016,7 +1016,7 @@ pub struct MusicIssue {
     pub created_at_ms: i64,
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MusicRelinkPlanRequest {
@@ -1026,7 +1026,7 @@ pub struct MusicRelinkPlanRequest {
     pub created_at_ms: i64,
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MusicRelinkPlanSummary {
@@ -1042,7 +1042,7 @@ pub struct MusicRelinkPlanSummary {
     pub updated_at_ms: i64,
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MusicRelinkPlanEntry {
@@ -1057,7 +1057,7 @@ pub struct MusicRelinkPlanEntry {
     pub resolved_at_ms: Option<i64>,
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MusicRelinkPlanWindow {
@@ -1067,7 +1067,7 @@ pub struct MusicRelinkPlanWindow {
     pub limit: i64,
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MusicRelinkDecision {
@@ -1075,7 +1075,7 @@ pub struct MusicRelinkDecision {
     pub item_id: String,
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MusicRelinkApplyRequest {

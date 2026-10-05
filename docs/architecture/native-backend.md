@@ -6,14 +6,14 @@ Rust owns operations that require durable storage, native authority, bounded fil
 
 `apps/client/src-tauri/` is the Tauri package. Its desktop `main.rs` and mobile `lib.rs` delegate to the ordinary Rust library in `apps/client/src-tauri/app/` (`ganbaru-tauri-app`).
 
-The application library has separate desktop and mobile composition roots (`desktop_runtime.rs` and `mobile_runtime.rs`). Target-scoped dependencies keep desktop-only services out of mobile builds. Tauri commands are adapters: they validate transport values, resolve managed state, enforce vault or platform authority, and call focused services.
+The application library has separate desktop and mobile composition roots (`runtime/desktop.rs` and `runtime/mobile.rs`). Target-scoped dependencies keep desktop-only services out of mobile builds. Tauri commands are adapters: they validate transport values, resolve managed state, enforce vault or platform authority, and call focused services.
 
 ## Domain crates
 
 The Cargo workspace extracts domains that benefit from Tauri-free contracts and tests:
 
 - `ganbaru-db` owns the SQLite pool registry, connection configuration, embedded migrations, and schema tests.
-- `ganbaru-focus` owns focus persistence, history, validation, recovery, local activity admission, transactional execution, and adaptive run and phase decisions.
+- `ganbaru-pomodoro` owns focus persistence, history, validation, recovery, local activity admission, transactional execution, and adaptive run and phase decisions.
 - `ganbaru-notes` owns the Notes graph, persistence, transfers, history, assets, and bounded file operations.
 - `ganbaru-chat-contracts` defines provider-neutral identifiers, commands, events, read models, and errors.
 - `ganbaru-chat-providers` owns provider processes, transports, normalization, cancellation, and registry behavior.
@@ -26,7 +26,7 @@ Code stays in the application crate when it is only composition or Tauri adaptat
 
 ## SQLite
 
-The active vault SQLite database is the source of truth for structured data. SQLx embeds timestamped migrations from `apps/client/src-tauri/migrations/`.
+The active vault SQLite database is the source of truth for structured data. SQLx embeds timestamped migrations from `crates/ganbaru-db/migrations/`.
 
 The pool registry serializes opening, migration, and closing, so concurrent startup commands share one initialized pool instead of racing to open competing pools. Each pool keeps one SQLite connection with WAL and full synchronization.
 
@@ -51,7 +51,7 @@ Worker code must not hold a SQLite transaction or a shared mutex while awaiting 
 Several runtime domains have exactly one native owner per vault. The WebView presents state and sends semantic commands; it never holds execution authority. This keeps behavior correct when a window is closed, reloaded, or throttled, and lets vault changes revoke stale work through one ownership generation.
 
 - **Calendar:** Rust expands recurrence in each event's home zone (using Jiff for timezone facts) and serves bounded windows to the UI, the Pomodoro scheduler, and Android reminders. Edits, creation, Project scheduling, deletion, and Undo go through a semantic native boundary. Preview prepares the same rows as Save, and Save commits Calendar writes with Focus reconciliation and a retry receipt in one transaction. See [recurrence editing](../features/calendar/recurrence-editing.md) and [deletion and Undo](../features/calendar/deletion-and-undo.md).
-- **Focus:** the `ganbaru-focus` native owner accepts semantic commands, commits transitions, and publishes snapshots. Recovery uses only committed canonical execution state. Overlays, warnings, sounds, Android notifications, and blocking phases follow accepted state, never a frontend timer. See [Pomodoro](../features/pomodoro/README.md).
+- **Focus:** the `ganbaru-pomodoro` native owner accepts semantic commands, commits transitions, and publishes snapshots. Recovery uses only committed canonical execution state. Overlays, warnings, sounds, Android notifications, and blocking phases follow accepted state, never a frontend timer. See [Pomodoro](../features/pomodoro/README.md).
 - **Music:** one native owner serializes queue intent and playback effects. Automatic background intent cannot authorize playback after restart without fresh admission, and native audio does not depend on the WebView presentation stream. See [Music playback](../features/music/playback.md).
 - **Distraction blocker (desktop):** one native owner observes usage, persists interval evidence to a device-local spool before deriving budgets, and makes block and close decisions only from a fresh snapshot of persisted configuration for the current local date. The UI reads a projection and cannot submit usage or request closes. See [Distraction blocker](../features/distractions/README.md).
 - **Distraction blocker (Android):** the Guardian service keeps its own operating-system observation and enforcement. A serialized Rust publisher synchronizes its usage journal, derives budgets, and publishes rules; presentation can only supply localized copy. Guardian keeps the last accepted rules when the application process is absent.

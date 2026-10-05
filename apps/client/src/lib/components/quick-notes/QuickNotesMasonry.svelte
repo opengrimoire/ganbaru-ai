@@ -8,7 +8,7 @@
     moveQuickNoteId,
     type MasonryPosition,
   } from "$lib/quick-notes/masonry";
-  import type { Theme } from "$lib/stores/themes";
+  import type { Theme } from "$lib/themes";
   import QuickNoteCard from "./QuickNoteCard.svelte";
 
   let {

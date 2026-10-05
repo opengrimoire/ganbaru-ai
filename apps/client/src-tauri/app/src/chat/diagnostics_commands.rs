@@ -5,13 +5,13 @@ use super::device_state::{
     ChatDiagnosticPreferences, MAX_DIAGNOSTIC_RETENTION_DAYS, read_active_device_scope,
     update_active_device_scope,
 };
-use super::models::{
-    ChatError, ChatErrorCode, ChatResult, ChatThreadId, ProbeState, VersionedJson,
-};
-use super::repository::rebuild::rebuild_thread_projections;
-use super::runtime::ChatRuntimeRegistry;
 use super::terminal::ChatTerminalRegistry;
 use chrono::{SecondsFormat, Utc};
+use ganbaru_chat::repository::rebuild::rebuild_thread_projections;
+use ganbaru_chat::runtime::ChatRuntimeRegistry;
+use ganbaru_chat_contracts::models::{
+    ChatError, ChatErrorCode, ChatResult, ChatThreadId, ProbeState, VersionedJson,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sqlx::{Row, SqlitePool};
@@ -151,7 +151,7 @@ pub async fn chat_export_redacted_diagnostics(
 pub async fn chat_stop_all_processes(
     app: tauri::AppHandle,
     runtimes: tauri::State<'_, ChatRuntimeRegistry>,
-    mutations: tauri::State<'_, super::workspace_mutation::ChatWorkspaceMutationRegistry>,
+    mutations: tauri::State<'_, super::workspace::mutation::ChatWorkspaceMutationRegistry>,
     terminals: tauri::State<'_, ChatTerminalRegistry>,
     internal_mcp: tauri::State<'_, super::internal_mcp::InternalMcpRegistry>,
     request: ChatMaintenanceConfirmation,
@@ -211,8 +211,8 @@ pub async fn chat_rebuild_projections(
 
 pub fn attach_opt_in_diagnostic<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
-    event: &mut super::events::CanonicalRuntimeEvent,
-) -> ChatResult<Option<super::models::UtcTimestamp>> {
+    event: &mut ganbaru_chat_contracts::events::CanonicalRuntimeEvent,
+) -> ChatResult<Option<ganbaru_chat_contracts::models::UtcTimestamp>> {
     let preferences = read_active_device_scope(app)
         .map_err(device_state_error)?
         .diagnostics;
@@ -250,9 +250,11 @@ pub fn attach_opt_in_diagnostic<R: tauri::Runtime>(
         .ok_or_else(|| {
             ChatError::new(ChatErrorCode::Internal, "create diagnostic expiry", false)
         })?;
-    super::models::UtcTimestamp::new(expires.to_rfc3339_opts(SecondsFormat::Millis, true))
-        .map(Some)
-        .map_err(identifier_error)
+    ganbaru_chat_contracts::models::UtcTimestamp::new(
+        expires.to_rfc3339_opts(SecondsFormat::Millis, true),
+    )
+    .map(Some)
+    .map_err(identifier_error)
 }
 
 async fn read_diagnostics(
@@ -471,7 +473,7 @@ fn count(value: i64) -> ChatResult<u64> {
 }
 
 async fn connect_pool(app: tauri::AppHandle, db_url: String) -> ChatResult<SqlitePool> {
-    crate::db_path::connect_sqlite(app, db_url)
+    crate::db::connect_sqlite(app, db_url)
         .await
         .map_err(persistence_error)
 }

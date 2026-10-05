@@ -1,6 +1,6 @@
 //! Android presentation receives only canonical accepted phases and localized copy.
 
-use ganbaru_focus::{
+use ganbaru_pomodoro::{
     FocusExecutionError, FocusExecutionSnapshot, FocusMode, FocusPhase, FocusRunSnapshot,
     FocusSegmentSnapshot,
 };
@@ -43,7 +43,7 @@ impl FocusNotificationCopy {
         ] {
             if value.trim().is_empty() || value.encode_utf16().count() > MAX_TEXT_UTF16_UNITS {
                 return Err(super::error(
-                    ganbaru_focus::FocusErrorCode::InvalidIntent,
+                    ganbaru_pomodoro::FocusErrorCode::InvalidIntent,
                     "Focus notification text must contain 1 to 160 UTF-16 units",
                 ));
             }
@@ -485,5 +485,4 @@ impl AndroidPresentation {
 }
 
 #[cfg(test)]
-#[path = "mobile_tests.rs"]
 mod tests;

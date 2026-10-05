@@ -8,7 +8,7 @@ use super::{database_path, vault_info_from_path};
 #[cfg(target_os = "android")]
 use super::{default_data_folder_path, ensure_vault_skeleton, path_to_string};
 #[cfg(target_os = "android")]
-use crate::db_path;
+use crate::db;
 #[cfg(target_os = "android")]
 use chrono::{SecondsFormat, Utc};
 #[cfg(target_os = "android")]
@@ -32,7 +32,7 @@ const BACKUP_MAX_BYTES: u64 = 100 * 1024 * 1024 * 1024;
 const BACKUP_MAX_DEPTH: usize = 64;
 const COPY_BUFFER_BYTES: usize = 64 * 1024;
 
-#[cfg(any(test, target_os = "android", target_os = "ios"))]
+#[cfg(any(test, mobile))]
 #[derive(Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct VaultBackupOutcome {
@@ -78,7 +78,7 @@ async fn create_database_snapshot<R: Runtime>(
     app: &tauri::AppHandle<R>,
     destination: &Path,
 ) -> Result<(), String> {
-    let pool = db_path::connect_sqlite(app.clone(), format!("sqlite:{APP_SQLITE_FILE}")).await?;
+    let pool = db::connect_sqlite(app.clone(), format!("sqlite:{APP_SQLITE_FILE}")).await?;
     vacuum_database(&pool, destination).await
 }
 
@@ -449,7 +449,7 @@ pub(crate) fn android_handoff_staging_path(
     Ok(parent.join(format!(".ganbaru-ai.handoff-{transfer_id}.staging")))
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 pub(crate) fn active_handoff_staging_path<R: Runtime>(
     app: &tauri::AppHandle<R>,
     transfer_id: &str,
@@ -481,7 +481,7 @@ pub(crate) async fn activate_android_handoff(
     .await
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 pub(crate) async fn activate_active_handoff<R: Runtime>(
     app: &tauri::AppHandle<R>,
     staging: &Path,
@@ -527,7 +527,7 @@ async fn activate_handoff_at_path<R: Runtime>(
     let target = target.to_path_buf();
     let expected_vault_id = expected_vault_id.to_owned();
     tauri::async_runtime::spawn_blocking(move || {
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        #[cfg(desktop)]
         if super::active_vault_path(&activation_app)? != target {
             return Err("active vault changed while preparing handoff activation".to_string());
         }
@@ -551,7 +551,7 @@ async fn activate_handoff_at_path<R: Runtime>(
 }
 
 fn preserved_handoff_path(parent: &Path, target: &Path, transfer_id: &str) -> PathBuf {
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(desktop)]
     {
         let folder_name = target
             .file_name()
@@ -560,7 +560,7 @@ fn preserved_handoff_path(parent: &Path, target: &Path, transfer_id: &str) -> Pa
             .unwrap_or("Ganbaru AI");
         parent.join(format!("{folder_name} before linking {transfer_id}"))
     }
-    #[cfg(any(target_os = "android", target_os = "ios"))]
+    #[cfg(mobile)]
     {
         let _ = target;
         parent.join(format!(".ganbaru-ai.handoff-previous-{transfer_id}"))
@@ -789,7 +789,7 @@ mod tests {
         assert!(safe_archive_path(Path::new(".")).is_err());
     }
 
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(desktop)]
     #[test]
     fn first_link_preserves_desktop_data_in_a_visible_sibling_folder() {
         let parent = Path::new("/documents");

@@ -2,12 +2,12 @@
 
 use super::followups::read_queued_followup;
 use super::support::{chat_pool, corrupt_data, json_error, persistence_error, versioned_row};
-use crate::chat::events::{
+use crate::chat::interaction_commands::{ChatInteractionStateRead, ChatPendingRequestRead};
+use ganbaru_chat::runtime::ChatRuntimeRegistry;
+use ganbaru_chat_contracts::events::{
     AccountStatusEvent, CanonicalEvent, RateLimitStatusEvent, ThreadUsageUpdatedEvent,
 };
-use crate::chat::interaction_commands::{ChatInteractionStateRead, ChatPendingRequestRead};
-use crate::chat::models::{ChatResult, ChatThreadId, UtcTimestamp};
-use crate::chat::runtime::ChatRuntimeRegistry;
+use ganbaru_chat_contracts::models::{ChatResult, ChatThreadId, UtcTimestamp};
 use sqlx::{Row, SqlitePool};
 use tauri::Manager;
 

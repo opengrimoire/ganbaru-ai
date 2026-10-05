@@ -4,15 +4,15 @@
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import { onDestroy, onMount, tick, untrack } from "svelte";
   import { getLocalization } from "$lib/i18n/translator.svelte";
-  import type { MusicPlaylistSummary } from "$lib/music/library-contracts";
+  import type { MusicPlaylistSummary } from "$lib/music/library/contracts";
   import {
     moveMusicPlaylistOrder,
     musicPlaylistGridInsertion,
     musicPlaylistGridLayout,
     MUSIC_PLAYLIST_GRID_CARD_HEIGHT,
     type MusicPlaylistGridPosition,
-  } from "$lib/music/music-playlist-order";
-  import { isSystemMusicPlaylistId, orderMusicPlaylists, systemMusicPlaylistName } from "$lib/music/music-system-playlists";
+  } from "$lib/music/playlists/order";
+  import { isSystemMusicPlaylistId, orderMusicPlaylists, systemMusicPlaylistName } from "$lib/music/playlists/system";
   import MusicPlaylistIcon from "./MusicPlaylistIcon.svelte";
 
   let {

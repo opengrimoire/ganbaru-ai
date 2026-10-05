@@ -1,6 +1,6 @@
 use super::provider_not_found;
-use crate::chat::config::{ChatVaultConfig, RememberedComposerSelection};
-use crate::chat::models::{ChatResult, ProjectWorkingFolderId, ProviderInstanceId};
+use ganbaru_chat_contracts::config::{ChatVaultConfig, RememberedComposerSelection};
+use ganbaru_chat_contracts::models::{ChatResult, ProjectWorkingFolderId, ProviderInstanceId};
 
 pub(crate) fn set_working_folder_provider_preference(
     config: &mut ChatVaultConfig,

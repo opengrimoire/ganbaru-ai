@@ -1,7 +1,7 @@
 /**
  * SQLite bridge for user themes.
  *
- * Built-in light and dark themes stay code-pinned (in `stores/themes.ts`)
+ * Built-in light and dark themes stay code-pinned (in `themes/definitions.ts`)
  * and are never inserted here; the `themes.id` CHECK constraint blocks the
  * shadow at the SQL level too.
  *
@@ -21,7 +21,7 @@
  */
 
 import { invoke } from "@tauri-apps/api/core";
-import { THEME_TOKEN_ROW_ORDER } from "$lib/stores/themes";
+import { THEME_TOKEN_ROW_ORDER } from "$lib/themes";
 import { ensureDbUrl } from "$lib/api/db";
 
 export type TokenKind = "source" | "app" | "calendar";

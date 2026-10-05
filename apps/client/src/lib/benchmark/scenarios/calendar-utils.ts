@@ -2,13 +2,13 @@ import { invoke } from "@tauri-apps/api/core";
 import { dbUrl } from "$lib/api/db";
 import { getCalendar } from "$lib/stores/calendar.svelte";
 import { getCalendars } from "$lib/stores/calendars.svelte";
-import type { CalendarEvent } from "$lib/components/calendar/types";
-import type { CalendarViewMode } from "$lib/components/calendar/types";
-import { computeViewWindow } from "$lib/components/calendar/utils";
+import type { CalendarEvent } from "$lib/calendar/types";
+import type { CalendarViewMode } from "$lib/calendar/types";
+import { computeViewWindow } from "$lib/calendar/utils";
 import {
   buildBulkImportPayload,
   type CalendarBulkImportResult,
-} from "$lib/stores/calendar-bulk-import";
+} from "$lib/stores/calendar/bulk-import";
 import { countDenseCalendarEvents, generateDenseCalendarEvents } from "../dense";
 import {
   buildDensePomodoroHistoryPayload,

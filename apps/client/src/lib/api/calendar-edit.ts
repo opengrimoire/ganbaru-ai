@@ -1,12 +1,12 @@
 import { invoke } from "@tauri-apps/api/core";
 import { ensureDbUrl } from "$lib/api/db";
-import type { RecurringScope } from "$lib/components/calendar/types";
-import type { CalendarEventUpdatePayload, CalendarUpdateField } from "$lib/stores/calendar-event-payloads";
+import type { RecurringScope } from "$lib/calendar/types";
+import type { CalendarEventUpdatePayload, CalendarUpdateField } from "$lib/stores/calendar/event-payloads";
 import {
   mapNativeCalendarWindow,
   type MappedNativeCalendarWindow,
   type NativeCalendarWindowRequest,
-} from "$lib/stores/calendar-native-window";
+} from "$lib/stores/calendar/native-window";
 
 type DerivedField = "startTime" | "endTime" | "timezone" | "allDay" | "rrule"
   | "repeatUntil" | "exceptions" | "rdate" | "sourceUid" | "sequence";

@@ -1,5 +1,5 @@
 use super::*;
-use crate::db::run_migrations;
+use ganbaru_db::run_migrations;
 use sqlx::sqlite::SqlitePoolOptions;
 
 async fn pool() -> SqlitePool {

@@ -1,8 +1,5 @@
 //! Narrow provider and Chat preference commands for the existing Settings UI.
 
-use super::config::{
-    ChatBehaviorPreferences, ChatPanelPreferences, ChatVaultConfig, RememberedComposerSelection,
-};
 use super::credentials::{
     CredentialStore, CredentialStoreAvailability, PlatformCredentialStore, SecretValue,
     materialize_provider_environment,
@@ -10,14 +7,6 @@ use super::credentials::{
 #[cfg(test)]
 use super::device_state::ChatProviderDeviceState;
 use super::device_state::{read_active_device_scope, update_active_device_scope};
-#[cfg(test)]
-use super::models::ProviderFamilyId;
-use super::models::{
-    ChatErrorCode, ChatResult, ChatThreadId, CredentialReferenceId, ModelId, ProbeState,
-    ProjectWorkingFolderId, ProviderFamilyMetadataRead, ProviderInstanceConfig, ProviderInstanceId,
-    ProviderModelCatalog, ProviderProbeResult,
-};
-use super::providers::{ProviderDriverFactory, ProviderDriverRegistry};
 pub(crate) use super::settings::read_provider;
 use super::settings::{
     apply_provider_probe, config_io_error, credential_error, device_configuration,
@@ -35,6 +24,17 @@ use super::settings::{
     provider_family_is_discoverable, should_discover_default_provider,
 };
 use crate::vault;
+use ganbaru_chat_contracts::config::{
+    ChatBehaviorPreferences, ChatPanelPreferences, ChatVaultConfig, RememberedComposerSelection,
+};
+#[cfg(test)]
+use ganbaru_chat_contracts::models::ProviderFamilyId;
+use ganbaru_chat_contracts::models::{
+    ChatErrorCode, ChatResult, ChatThreadId, CredentialReferenceId, ModelId, ProbeState,
+    ProjectWorkingFolderId, ProviderFamilyMetadataRead, ProviderInstanceConfig, ProviderInstanceId,
+    ProviderModelCatalog, ProviderProbeResult,
+};
+use ganbaru_chat_providers::{ProviderDriverFactory, ProviderDriverRegistry};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 use std::sync::Mutex;
@@ -57,7 +57,7 @@ pub struct SaveProviderInstanceRequest {
 pub struct ProviderInstanceRead {
     pub configuration: ProviderInstanceConfig,
     pub last_probe: Option<ProviderProbeResult>,
-    pub last_successful_probe_at: Option<super::models::UtcTimestamp>,
+    pub last_successful_probe_at: Option<ganbaru_chat_contracts::models::UtcTimestamp>,
     pub model_catalog: Option<ProviderModelCatalog>,
 }
 
@@ -597,7 +597,7 @@ mod tests {
             "version": "2.1.218",
             "accountLabel": null,
             "capabilities": { "entries": [] },
-            "authoritySupport": crate::chat::models::ProviderAuthoritySupport::default(),
+            "authoritySupport": ganbaru_chat_contracts::models::ProviderAuthoritySupport::default(),
             "checkedAt": "2026-07-23T03:18:50.240Z",
             "detail": null
         }))
@@ -627,7 +627,7 @@ mod tests {
             "version": "1.0.0",
             "accountLabel": null,
             "capabilities": { "entries": [] },
-            "authoritySupport": crate::chat::models::ProviderAuthoritySupport::default(),
+            "authoritySupport": ganbaru_chat_contracts::models::ProviderAuthoritySupport::default(),
             "checkedAt": "2026-07-23T03:18:50.240Z",
             "detail": null
         }))

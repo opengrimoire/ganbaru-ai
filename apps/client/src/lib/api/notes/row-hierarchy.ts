@@ -1,5 +1,5 @@
 import { ensureDbUrl } from "$lib/api/db";
-import { mapNotesLoadedPageDto } from "$lib/notes/notion-mappers";
+import { mapNotesLoadedPageDto } from "$lib/notes/validation/response-mappers";
 import type { NotesDataSourceRowPageCreateRequest, NotesLoadedPage } from "$lib/notes/types";
 import { invokeNotesMutation } from "./mutation";
 

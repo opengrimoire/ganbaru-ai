@@ -1,6 +1,6 @@
-use crate::db_path::connect_sqlite;
-use ganbaru_notes::notes::data_source_row_hierarchy::{self, NoteDataSourceRowParentUpdate};
-use ganbaru_notes::notes::models::{NoteDataSourceRowPageCreate, NoteLoadedPage};
+use crate::db::connect_sqlite;
+use ganbaru_notes::data_sources::row_hierarchy::{self, NoteDataSourceRowParentUpdate};
+use ganbaru_notes::models::{NoteDataSourceRowPageCreate, NoteLoadedPage};
 use tauri::{AppHandle, Runtime};
 
 /// Create a sub-item without changing its canonical data-source ownership.
@@ -13,13 +13,8 @@ pub async fn notes_create_data_source_subitem<R: Runtime>(
     request: NoteDataSourceRowPageCreate,
 ) -> Result<super::project_history::NotesMutationResultDto<NoteLoadedPage>, String> {
     let pool = connect_sqlite(app, db_url).await?;
-    let value = data_source_row_hierarchy::create_subitem(
-        &pool,
-        &data_source_id,
-        &parent_row_page_id,
-        request,
-    )
-    .await?;
+    let value =
+        row_hierarchy::create_subitem(&pool, &data_source_id, &parent_row_page_id, request).await?;
     super::project_history::mutation_result(&pool, value).await
 }
 
@@ -33,6 +28,6 @@ pub async fn notes_update_data_source_row_parent<R: Runtime>(
     update: NoteDataSourceRowParentUpdate,
 ) -> Result<super::project_history::NotesMutationResultDto<()>, String> {
     let pool = connect_sqlite(app, db_url).await?;
-    data_source_row_hierarchy::set_row_parent(&pool, &data_source_id, &row_page_id, update).await?;
+    row_hierarchy::set_row_parent(&pool, &data_source_id, &row_page_id, update).await?;
     super::project_history::mutation_result(&pool, ()).await
 }

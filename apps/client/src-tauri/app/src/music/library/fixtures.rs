@@ -666,7 +666,7 @@ mod tests {
             .execute(&pool)
             .await
             .unwrap();
-        crate::db::run_migrations(&pool).await.unwrap();
+        ganbaru_db::run_migrations(&pool).await.unwrap();
         pool
     }
 

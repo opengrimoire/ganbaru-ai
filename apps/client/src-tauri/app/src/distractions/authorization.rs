@@ -176,7 +176,7 @@ pub(super) fn configured_close_authorization(
                         && limit.exhausted
                         && limit.used_seconds >= limit.limit_seconds
                         && minutes.is_some_and(|minutes| minutes * 60 == limit.limit_seconds)
-                        && state::validate_limit_state(state).is_ok()
+                        && state_files::validate_limit_state(state).is_ok()
                 })
             }) {
                 return Err("usage limit is not currently exhausted".to_string());
@@ -233,7 +233,9 @@ pub(super) fn load_close_authorization<R: Runtime>(
     )
     .then(|| {
         crate::pomodoro::native_runtime::current_effect(app, checked_at.timestamp_millis())?
-            .map(|effect| state::committed_focus_state(&effect, checked_at.timestamp_millis()))
+            .map(|effect| {
+                state_files::committed_focus_state(&effect, checked_at.timestamp_millis())
+            })
             .transpose()
     })
     .transpose()?
@@ -251,9 +253,9 @@ pub(super) fn load_close_authorization<R: Runtime>(
     })
     .flatten();
     if let Some(state) = &limit_state {
-        let zone = crate::recurrence::time::system_zone()?;
+        let zone = crate::civil_time::system_zone()?;
         let current_date =
-            crate::recurrence::time::instant_to_local(checked_at.timestamp_millis(), &zone)?
+            crate::civil_time::instant_to_local(checked_at.timestamp_millis(), &zone)?
                 .date()
                 .format("%Y-%m-%d")
                 .to_string();

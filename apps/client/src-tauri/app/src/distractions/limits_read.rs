@@ -1,7 +1,7 @@
 //! Canonical budget reads and native publication for desktop and browser enforcement.
 
 use super::{limits::*, *};
-pub(crate) use crate::distractions_limits_store::read_source_days;
+pub(crate) use crate::distractions::limits::store::read_source_days;
 use serde::Serialize;
 use std::sync::LazyLock;
 
@@ -52,10 +52,10 @@ pub(super) async fn derive_usage_projection<R: Runtime>(
         tauri::async_runtime::spawn_blocking(move || {
             let root = config_at(&path)?;
             let config = parse_config(&root)?;
-            let zone = crate::recurrence::time::system_zone()?;
+            let zone = crate::civil_time::system_zone()?;
             let checked_at = now_utc();
             let local_date =
-                crate::recurrence::time::instant_to_local(checked_at.timestamp_millis(), &zone)?
+                crate::civil_time::instant_to_local(checked_at.timestamp_millis(), &zone)?
                     .date()
                     .format("%Y-%m-%d")
                     .to_string();
@@ -80,12 +80,10 @@ pub(super) async fn derive_usage_projection<R: Runtime>(
         {
             return Err("native usage vault changed before its read".into());
         }
-        let pool = crate::db_path::connect_sqlite(
-            app.clone(),
-            format!("sqlite:{}", vault::APP_SQLITE_FILE),
-        )
-        .await?;
-        crate::distractions_linked::drain_local_spool(&app, &pool, &vault_id, &status.device_id)
+        let pool =
+            crate::db::connect_sqlite(app.clone(), format!("sqlite:{}", vault::APP_SQLITE_FILE))
+                .await?;
+        crate::distractions::linked::drain_local_spool(&app, &pool, &vault_id, &status.device_id)
             .await?;
         let mut tx = pool
             .begin()
@@ -97,7 +95,7 @@ pub(super) async fn derive_usage_projection<R: Runtime>(
             .map_err(|error| format!("finish native usage snapshot: {error}"))?;
         sources
     } else {
-        crate::distractions_linked::accounting_source_days(
+        crate::distractions::linked::accounting_source_days(
             &app,
             &vault_id,
             &status.device_id,
@@ -119,9 +117,9 @@ pub(super) async fn derive_usage_projection<R: Runtime>(
         {
             return Err("native usage context changed during the read".into());
         }
-        let current_date = crate::recurrence::time::instant_to_local(
+        let current_date = crate::civil_time::instant_to_local(
             now_epoch_ms(),
-            &crate::recurrence::time::system_zone()?,
+            &crate::civil_time::system_zone()?,
         )?
         .date()
         .format("%Y-%m-%d")
@@ -163,11 +161,11 @@ pub(super) async fn derive_usage_projection<R: Runtime>(
                 })
                 .collect(),
         };
-        state::validate_limit_state(&state)?;
+        state_files::validate_limit_state(&state)?;
         let json = serde_json::to_string(&state).map_err(|error| error.to_string())?;
         let foreground_status = runtime::foreground_projection(&publication_app);
         runtime::publish(&publication_app, publication_token, || {
-            state::write_text_file_atomically(&limit_state_path(&publication_app)?, &json)?;
+            state_files::write_text_file_atomically(&limit_state_path(&publication_app)?, &json)?;
             Ok(UsageProjection {
                 vault_id,
                 local_date,

@@ -19,6 +19,17 @@ The frontend uses four broad layers under `apps/client/src/lib/`:
 - `api/` contains typed wrappers around Tauri commands and asset URL handling.
 - `stores/` contains stateful Svelte rune controllers for runtime domains that need a shared lifecycle.
 
+Naming and placement rules keep the tree predictable:
+
+- Layer-first at the top of `lib/`, domain-first inside each layer (for example `chat/review/`, `notes/blocks/`, `api/notes/`).
+- Non-component modules use kebab-case. Only files that use runes take the `.svelte.ts` suffix.
+- A large store keeps its entry file at the `stores/` root (`stores/notes.svelte.ts`) and its private modules in a same-named subfolder (`stores/notes/`).
+- A folder barrel is `folder/index.ts`. File names do not repeat their folder name.
+- Imports use `./` within the same folder and `$lib/` otherwise. Modules swapped by platform aliases keep the `$lib/` form.
+- Platform variants are `name.mobile.ts` beside `name.ts`, or `Name.mobile.svelte` beside `Name.svelte`, selected by alias keys in `vite.config.ts`.
+- Components are PascalCase and grouped by feature under `components/`, with subfolders that mirror the matching `lib/` domain folders where one exists. Shared primitives live in `components/ui/`. Logic that is not tied to one feature surface lives in `lib/`, not `components/`.
+- Svelte test harnesses are `*Harness.test.svelte` and stubs are `*Stub.test.svelte`. Component tests use `Subject.aspect.test.ts` when one subject has several test files.
+
 Components do not duplicate command contracts or parse unknown backend values ad hoc. Untrusted or versioned responses pass through bounded validation before entering typed state.
 
 `components/collections/` owns the presentation and interactions shared by Notes databases and Projects collections. It accepts typed callbacks and snippets and imports no Notes or Projects store or API, so each domain keeps its own data loading, validation, and writes. See [shared collection behavior](../features/collections.md).
@@ -40,7 +51,7 @@ The Notes workspace can show a main pane and a preview pane. Each pane has its o
 
 ## UI foundations
 
-Generated shadcn-svelte primitives live under `components/ui/`. Product components compose them rather than modifying generated primitives without a clear shared reason. Tailwind CSS provides layout utilities, while semantic CSS variables provide theme colors.
+Handwritten shared primitives (dialogs, selects, switches, pickers, tooltips, toasts) live under `components/ui/`. Product components compose them rather than restyling one-off copies. Tailwind CSS provides layout utilities, while semantic CSS variables provide theme colors.
 
 Themes are data-driven and validated before application. Feature code consumes semantic tokens, not palette values. See [Themes](../features/themes/README.md).
 

@@ -12,7 +12,7 @@ The screen blocks ordinary window switching and accidental dismissal where suppo
 
 The primary display uses a Svelte overlay so countdown, localization, controls, and accessibility share the application component system. Secondary displays receive quiet blocker surfaces; clicking them returns attention to the primary overlay.
 
-A scoped Rust guard (`pomodoro_enforcement.rs`) owns topmost placement, monitor reconciliation, power assertions, supported app-switch shortcut suppression, and cleanup, with platform-specific adapters. Display changes reconcile coverage without duplicating controls. Cleanup is idempotent after partial setup, display changes, or exit. Overlays open and close only in response to committed native state; hiding a window never advances the timer.
+A scoped Rust guard (`pomodoro/overlay/enforcement.rs`) owns topmost placement, monitor reconciliation, power assertions, supported app-switch shortcut suppression, and cleanup, with platform-specific adapters. Display changes reconcile coverage without duplicating controls. Cleanup is idempotent after partial setup, display changes, or exit. Overlays open and close only in response to committed native state; hiding a window never advances the timer.
 
 ## Deadline
 

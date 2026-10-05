@@ -9,7 +9,7 @@
  * `benchmark.sqlite` so the user's real DB and Ganbaru AI folder are never
  * touched. The rationale lives in `docs/performance/harness.md`.
  */
-import type { CalendarEvent } from "$lib/components/calendar/types";
+import type { CalendarEvent } from "$lib/calendar/types";
 
 /** Fixed duration for the real held-arrow navigation benchmark action. */
 export const HELD_NAVIGATION_DURATION_MS = 3000;

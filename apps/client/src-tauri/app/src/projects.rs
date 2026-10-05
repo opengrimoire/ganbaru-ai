@@ -4,6 +4,7 @@ mod dependency_cascade_graph;
 mod dependency_cascade_plan;
 pub(crate) mod emojis;
 mod history;
+pub(crate) mod icons;
 mod models;
 mod mutations;
 pub(crate) mod preferences;
@@ -18,7 +19,7 @@ pub(crate) mod task_commands;
 mod task_views;
 mod templates;
 pub(crate) mod validation;
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 pub(crate) mod working_folders;
 pub(crate) mod workspace;
 

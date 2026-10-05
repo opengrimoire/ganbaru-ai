@@ -317,7 +317,7 @@ pub(crate) async fn update_state(
             "must be positive",
         ));
     }
-    if request.active_ids.len() > crate::soundscape::MAX_SOUNDSCAPE_LAYERS {
+    if request.active_ids.len() > crate::music::soundscape::MAX_SOUNDSCAPE_LAYERS {
         return Err(MusicLibraryError::validation(
             "activeIds",
             "cannot play more than 16 background sounds",

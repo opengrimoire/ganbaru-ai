@@ -1804,17 +1804,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ganbaru-focus"
-version = "0.1.5"
-dependencies = [
- "chrono",
- "ganbaru-db",
- "serde",
- "sqlx",
- "tokio",
-]
-
-[[package]]
 name = "ganbaru-mobile-distractions"
 version = "0.1.0"
 dependencies = [
@@ -1883,6 +1872,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "ganbaru-pomodoro"
+version = "0.1.5"
+dependencies = [
+ "chrono",
+ "ganbaru-db",
+ "serde",
+ "sqlx",
+ "tokio",
+]
+
+[[package]]
 name = "ganbaru-tauri-app"
 version = "0.1.5"
 dependencies = [
@@ -1897,12 +1897,12 @@ dependencies = [
  "ganbaru-chat-contracts",
  "ganbaru-chat-providers",
  "ganbaru-db",
- "ganbaru-focus",
  "ganbaru-mobile-distractions",
  "ganbaru-mobile-documents",
  "ganbaru-mobile-media",
  "ganbaru-mobile-notifications",
  "ganbaru-notes",
+ "ganbaru-pomodoro",
  "ganbaru-working-folders",
  "gtk",
  "jiff",

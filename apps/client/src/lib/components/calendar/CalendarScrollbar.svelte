@@ -1,10 +1,10 @@
 <script lang="ts">
-  import { getCalendarZoom } from "$lib/stores/calendarZoom.svelte";
+  import { getCalendarZoom } from "$lib/stores/calendar-zoom.svelte";
   import {
     CALENDAR_FORWARDED_WHEEL_EVENT,
     getSmoothScrollDelta,
     type CalendarForwardedWheelDetail,
-  } from "./timeline-scroll";
+  } from "$lib/calendar/timeline-scroll";
 
   let {
     scrollContainer,

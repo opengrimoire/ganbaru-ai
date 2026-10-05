@@ -1,4 +1,4 @@
-import type { EventColor } from "$lib/components/calendar/types";
+import type { EventColor } from "$lib/calendar/types";
 
 export const QUICK_NOTE_TITLE_MAX_CHARS = 200;
 export const QUICK_NOTE_BODY_MAX_CHARS = 65_536;

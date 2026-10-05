@@ -2,7 +2,7 @@
 import { mount, tick, unmount } from "svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { COLLECTION_SAVE_FEEDBACK_DELAY_MS } from "./CollectionSaveIndicator.svelte";
-import SaveIndicator from "./CollectionSaveIndicator.test.svelte";
+import SaveIndicator from "./CollectionSaveIndicatorHarness.test.svelte";
 
 let component: ReturnType<typeof mount> | undefined;
 beforeEach(() => { vi.useFakeTimers(); });

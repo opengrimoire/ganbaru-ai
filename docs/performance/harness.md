@@ -147,7 +147,7 @@ Each scenario has dependency-light metadata in `registry.ts` and one executable 
 - Every day has `stackCount` one-hour timed events at each hour from `00:00` through `23:00`, plus three all-day events.
 - Timed events use the adaptive Pomodoro preset (40-minute focus, 5-minute short break, 10-minute long break).
 - Detail profile `d1` gives timed and all-day events realistic metadata, including descriptions, alarms, locations, categories, organizers, attendees, and extended properties. Colors cycle through every palette slot.
-- Timed events before the anchor day receive completed Pomodoro runs and segments, seeded natively by `benchmark_seed.rs`.
+- Timed events before the anchor day receive completed Pomodoro runs and segments, seeded natively by `benchmark/seed.rs`.
 - Source UIDs do not include the year radius, so seeding the 10-year dataset after the 1-year dataset adds only the outer years.
 
 Week-view scenarios load the visible Monday to Sunday week plus one day on each side, matching the calendar store's real render window. With `s1-d1` that is 216 timed and 27 all-day rows. After dense rows are recorded, any generator change requires a new dense dataset version and a fresh row series.
@@ -172,13 +172,13 @@ Diagnostics such as move counts, skipped ticks, raw averages, and smaller import
 - `apps/client/src/lib/benchmark/runner.ts`: pass orchestration, persisted state, and restart wiring.
 - `apps/client/src/lib/benchmark/sampler.ts`: memory sampling and boot timing capture.
 - `apps/client/src/lib/benchmark/output.ts`: canonical Markdown formatter.
-- `apps/client/src/lib/stores/benchmarkRunner.svelte.ts`: UI-facing runner state and suite continuation.
-- `apps/client/src/lib/components/benchmark/BenchmarkOverlay.svelte`: confirmation, running, summary, and error overlays.
-- `apps/client/src/lib/components/perf/PerformancePopover.svelte`: benchmark buttons.
-- `apps/client/src/lib/components/calendar/nav-handle.svelte.ts`: headless calendar driver for scenarios.
+- `apps/client/src/lib/stores/benchmark-runner.svelte.ts`: UI-facing runner state and suite continuation.
+- `apps/client/src/lib/components/diagnostics/BenchmarkOverlay.svelte`: confirmation, running, summary, and error overlays.
+- `apps/client/src/lib/components/diagnostics/PerformancePopover.svelte`: benchmark buttons.
+- `apps/client/src/lib/calendar/nav-handle.svelte.ts`: headless calendar driver for scenarios.
 - `apps/client/src/lib/api/db.ts`: benchmark database selection through `vaultMode`.
-- `apps/client/src-tauri/app/src/desktop_runtime.rs`: benchmark state commands, database prepare and teardown, restart, startup timing, and memory report.
-- `apps/client/src-tauri/app/src/benchmark_seed.rs`: native Pomodoro history seeding and a dense Music library fixture command that no registered scenario uses yet.
+- `apps/client/src-tauri/app/src/benchmark.rs` and `benchmark/memory.rs`: benchmark state commands, database prepare and teardown, and memory report. Restart and startup timing stay in `runtime/desktop.rs`.
+- `apps/client/src-tauri/app/src/benchmark/seed.rs`: native Pomodoro history seeding and a dense Music library fixture command that no registered scenario uses yet.
 
 ## Constraints
 

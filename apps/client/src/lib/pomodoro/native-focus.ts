@@ -1,5 +1,5 @@
 import { isValidPomodoroConfig, type PomodoroConfig } from "./rhythm";
-import type { PauseReason, PersistedSegment, SegmentPhase } from "$lib/components/calendar/types";
+import type { PauseReason, PersistedSegment, SegmentPhase } from "$lib/calendar/types";
 
 export type FocusMode = "stopped" | "running" | "manual_pause" | "idle_pause" | "idle_failed" | "suspended" | "return_wait" | "expired";
 export type FocusIntent =

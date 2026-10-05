@@ -10,7 +10,7 @@
   import Dice5 from "@lucide/svelte/icons/dice-5";
   import Shuffle from "@lucide/svelte/icons/shuffle";
   import ListOrdered from "@lucide/svelte/icons/list-ordered";
-  import CustomSelect from "$lib/components/settings/CustomSelect.svelte";
+  import Select from "$lib/components/ui/Select.svelte";
   import {
     bulkEditMusicMemberships,
     bulkSnoozeMusicItems,
@@ -20,13 +20,13 @@
     removeMusicSnooze,
   } from "$lib/api/music-library";
   import { getLocalization } from "$lib/i18n/translator.svelte";
-  import type { MusicMembershipMatrixEntry, MusicPlaylistSummary, MusicSnooze, MusicWeight } from "$lib/music/library-contracts";
-  import { notifyMusicLibraryChanged } from "$lib/music/music-library-events";
-  import { musicSnoozeEndsAt, musicSnoozePreset, type MusicSnoozePreset } from "$lib/music/music-snooze";
-  import { MUSIC_WEIGHT_ORDER, musicMembershipsForScope, musicSnoozesForScope, musicWeightForScope } from "$lib/music/music-track-preferences";
-  import { MUSIC_MIX_WEIGHT_VALUES } from "$lib/music/music-playlist-playback";
-  import { pickMusicFrequencyTooltipPosition, type MusicFrequencyTooltipPosition } from "$lib/music/music-frequency-tooltip-position";
-  import { systemMusicPlaylistName } from "$lib/music/music-system-playlists";
+  import type { MusicMembershipMatrixEntry, MusicPlaylistSummary, MusicSnooze, MusicWeight } from "$lib/music/library/contracts";
+  import { notifyMusicLibraryChanged } from "$lib/music/library/events";
+  import { musicSnoozeEndsAt, musicSnoozePreset, type MusicSnoozePreset } from "$lib/music/session/snooze";
+  import { MUSIC_WEIGHT_ORDER, musicMembershipsForScope, musicSnoozesForScope, musicWeightForScope } from "$lib/music/library/track-preferences";
+  import { MUSIC_MIX_WEIGHT_VALUES } from "$lib/music/playlists/playback";
+  import { pickMusicFrequencyTooltipPosition, type MusicFrequencyTooltipPosition } from "$lib/music/library/frequency-tooltip-position";
+  import { systemMusicPlaylistName } from "$lib/music/playlists/system";
   import { getMusicPlayer } from "$lib/stores/music-player.svelte";
   import { portal } from "$lib/utils/portal";
 
@@ -301,7 +301,7 @@
         {#if error}<p class="mb-2 text-xs text-destructive" role="alert">{error}</p>{/if}
         <div class="flex items-center justify-between gap-3">
           <span class="shrink-0 text-xs font-semibold">{t("music.preferences.applyTo")}</span>
-          <CustomSelect
+          <Select
             value={scopePlaylistId ?? ""}
             options={scopeOptions}
             onChange={(value) => scopePlaylistId = value || null}

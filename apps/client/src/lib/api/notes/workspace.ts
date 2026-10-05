@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { ensureDbUrl } from "$lib/api/db";
-import { mapNotesFolderDto } from "$lib/notes/notion-mappers";
+import { mapNotesFolderDto } from "$lib/notes/validation/response-mappers";
 import type {
   NotesFolder,
   NotesFolderCreate,

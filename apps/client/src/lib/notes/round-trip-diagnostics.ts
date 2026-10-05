@@ -2,7 +2,7 @@ import {
   buildNotesBlockLink,
   buildNotesPageLink,
   isNotesUuid,
-} from "$lib/notes/block-link";
+} from "$lib/notes/links/block-link";
 
 export type NotesRoundTripDiagnosticSeverity = "info" | "warning" | "error";
 

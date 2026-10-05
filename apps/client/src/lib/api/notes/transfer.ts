@@ -7,7 +7,7 @@ import {
   mapNotesJsonGraphExportSaveDto,
   mapNotesNotionApiImportDto,
   mapNotesNotionExportImportDto,
-} from "$lib/notes/notion-mappers";
+} from "$lib/notes/validation/response-mappers";
 import type {
   NotesHtmlArchiveSaveResult,
   NotesHtmlExportRequest,

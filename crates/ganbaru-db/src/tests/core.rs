@@ -2,8 +2,10 @@ use super::helpers::{insert_event, insert_open_run, migrated_memory_pool};
 use crate::run_migrations;
 use sqlx::Row;
 
-const BASELINE_SCHEMA: &str =
-    include_str!("../../../../apps/client/src-tauri/migrations/20261004220000_baseline_schema.sql");
+const BASELINE_SCHEMA: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/migrations/20261004220000_baseline_schema.sql"
+));
 /// Count the embedded forward migrations so fresh-install checks follow the actual registry.
 fn expected_migration_count() -> i64 {
     i64::try_from(

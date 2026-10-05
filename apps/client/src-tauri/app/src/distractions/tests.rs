@@ -19,9 +19,9 @@ fn state(phase: &str) -> DistractionsRuntimeState {
     }
 }
 
-mod catalog_tests;
-mod close_authorization_tests;
-mod contract_tests;
-mod rules_tests;
-mod state_tests;
-mod usage_tests;
+mod catalog;
+mod close_authorization;
+mod contract;
+mod rules;
+mod state_files;
+mod usage;

@@ -1,5 +1,5 @@
-import { parentIdForBlock, type NotesTreeState } from "./block-tree";
-import { collectLoadedBlockSubtreeIds } from "./block-duplicate";
+import { parentIdForBlock, type NotesTreeState } from "$lib/notes/blocks/tree";
+import { collectLoadedBlockSubtreeIds } from "$lib/notes/blocks/duplicate";
 import type {
   NotesAppendBlockChildrenRequest,
   NotesBlock,

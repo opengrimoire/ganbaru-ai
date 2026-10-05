@@ -37,7 +37,7 @@ First-use contracts are deterministic structural budgets, not elapsed-time bench
 
 The budgets live in code, not in this document:
 
-- `apps/client/scripts/first-use-bundle-baseline.json` owns route module ceilings and the no-vault startup boundary.
+- `apps/client/scripts/bundle-contracts/baselines/first-use.json` owns route module ceilings and the no-vault startup boundary.
 - `apps/client/src-tauri/app/src/first_use_contracts.rs` owns backend call, statement, and payload limits.
 - Bundle contract scripts own route closures, required resident modules, and forbidden platform imports.
 

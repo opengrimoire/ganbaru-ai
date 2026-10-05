@@ -15,14 +15,14 @@
   import type {
     ProjectEmojiCategoryId,
     ProjectEmojiEntry,
-  } from "$lib/projects/project-emoji-catalog";
+  } from "$lib/projects/icons/emoji-catalog.generated";
   import {
     PROJECT_ICON_PICKER_SKIN_TONE_OPTIONS,
     applyProjectEmojiSkinTone,
     type ProjectEmojiSkinTone,
     type ProjectIconPickerVisibleEmojiCategory,
-  } from "$lib/projects/project-icon-picker";
-  import type { ProjectIconValue } from "$lib/projects/project-icons";
+  } from "$lib/projects/icons/picker";
+  import type { ProjectIconValue } from "$lib/projects/icons/values";
   import type { ProjectCustomEmoji } from "$lib/projects/types";
   import { cn } from "$lib/utils";
   import ProjectIcon from "$lib/components/projects/ProjectIcon.svelte";

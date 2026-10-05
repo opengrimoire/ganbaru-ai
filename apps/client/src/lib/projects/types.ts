@@ -1,18 +1,18 @@
-import type { EventColor } from "$lib/components/calendar/types";
+import type { EventColor } from "$lib/calendar/types";
 import type {
   ProjectDefaultIdleSettingsSource,
   ProjectDefaultPomodoroMode,
-} from "$lib/projects/project-default-pomodoro";
+} from "./default-pomodoro";
 import type { PomodoroPresetKey } from "$lib/pomodoro/rhythm";
 import {
   DEFAULT_FOCUS_IDLE_PAUSE_ON_EVENT_CREATE,
   DEFAULT_FOCUS_IDLE_THRESHOLD_MINUTES,
   type FocusIdleThresholdMinutes,
-} from "$lib/stores/preferences";
-import type { MusicContextAssignmentDraft } from "$lib/music/music-context-assignment";
-import type { ProjectDefaultEventTimeMode } from "$lib/projects/project-settings-duration";
-import type { NotesPageOpenMode } from "$lib/notes/page-open-mode";
-import type { NotesHistoryRetentionDays } from "$lib/notes/history-retention";
+} from "$lib/stores/preference-options";
+import type { MusicContextAssignmentDraft } from "$lib/music/context-assignment";
+import type { ProjectDefaultEventTimeMode } from "$lib/projects/settings/duration";
+import type { NotesPageOpenMode } from "$lib/notes/pages/open-mode";
+import type { NotesHistoryRetentionDays } from "$lib/notes/history/retention";
 
 export const PROJECT_VIEW_IDS = ["dashboard", "list", "kanban", "calendar", "gantt"] as const;
 export type ProjectViewId = (typeof PROJECT_VIEW_IDS)[number];

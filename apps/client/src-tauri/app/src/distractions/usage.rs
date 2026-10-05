@@ -2,7 +2,7 @@ use super::*;
 use sqlx::SqlitePool;
 
 pub(super) fn normalize_usage_host(input: &str) -> Option<String> {
-    crate::distractions_limits::normalize_usage_host(input)
+    crate::distractions::limits::normalize_usage_host(input)
 }
 
 fn normalize_usage_source_key(source_type: &str, source_key: &str) -> Option<String> {
@@ -43,7 +43,7 @@ pub(super) fn normalize_desktop_block_event(
 }
 
 pub(super) fn validate_local_date(value: &str) -> bool {
-    crate::distractions_limits::validate_local_date(value)
+    crate::distractions::limits::validate_local_date(value)
 }
 
 pub(super) fn normalize_usage_sample(

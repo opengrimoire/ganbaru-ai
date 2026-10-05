@@ -1,8 +1,8 @@
 <script lang="ts">
   import LoaderCircle from "@lucide/svelte/icons/loader-circle";
   import { getLocalization } from "$lib/i18n/translator.svelte";
-  import type { MusicSourceCollection } from "$lib/music/library-contracts";
-  import type { MusicSourcesController } from "$lib/music/music-sources-controller.svelte";
+  import type { MusicSourceCollection } from "$lib/music/library/contracts";
+  import type { MusicSourcesController } from "$lib/music/sources/controller.svelte";
   import MusicBuilderDialog from "./MusicBuilderDialog.svelte";
 
   let { controller, collection, onClose, onApplied }: { controller: MusicSourcesController; collection: MusicSourceCollection; onClose: () => void; onApplied: () => void } = $props();

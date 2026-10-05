@@ -1,5 +1,5 @@
 import type { NotesPage } from "./types";
-import type { NotesPageOpenMode } from "./page-open-mode";
+import type { NotesPageOpenMode } from "$lib/notes/pages/open-mode";
 
 export const NOTES_PAGE_PROJECT_ID_PROPERTY = "__ganbaru_project_id";
 

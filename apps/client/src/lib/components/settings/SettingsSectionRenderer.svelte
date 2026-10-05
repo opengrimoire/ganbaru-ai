@@ -1,24 +1,24 @@
 <script lang="ts">
   import type { Component } from "svelte";
   import { getLocalization } from "$lib/i18n/translator.svelte";
-  import AppearanceSection from "./AppearanceSection.svelte";
-  import ProfileSection from "./ProfileSection.svelte";
-  import CalendarsSection from "./CalendarsSection.svelte";
-  import ProjectsSection from "./ProjectsSection.svelte";
-  import NotesSection from "./NotesSection.svelte";
-  import ChatSection from "./ChatSection.svelte";
-  import FocusSection from "./FocusSection.svelte";
-  import MusicSection from "./MusicSection.svelte";
-  import DistractionsSection from "./DistractionsSection.svelte";
-  import UpdatesSection from "./UpdatesSection.svelte";
-  import ShortcutsSection from "./ShortcutsSection.svelte";
-  import AboutSection from "./AboutSection.svelte";
+  import AppearanceSection from "$lib/components/settings/sections/AppearanceSection.svelte";
+  import ProfileSection from "$lib/components/settings/sections/ProfileSection.svelte";
+  import CalendarsSection from "$lib/components/settings/sections/CalendarsSection.svelte";
+  import ProjectsSection from "$lib/components/settings/sections/ProjectsSection.svelte";
+  import NotesSection from "$lib/components/settings/sections/NotesSection.svelte";
+  import ChatSection from "$lib/components/settings/sections/ChatSection.svelte";
+  import FocusSection from "$lib/components/settings/sections/FocusSection.svelte";
+  import MusicSection from "$lib/components/settings/sections/MusicSection.svelte";
+  import DistractionsSection from "$lib/components/settings/distractions/DistractionsSection.svelte";
+  import UpdatesSection from "$lib/components/settings/sections/UpdatesSection.svelte";
+  import ShortcutsSection from "$lib/components/settings/sections/ShortcutsSection.svelte";
+  import AboutSection from "$lib/components/settings/sections/AboutSection.svelte";
   import {
     getPreloadedDataSection,
     preloadDataSection,
-  } from "./settings-sections";
-  import type { SectionId } from "./types";
-  import type { SettingsSectionRendererProps } from "./settings-section-renderer-contract";
+  } from "./section-catalog";
+  import type { SectionId } from "$lib/settings/types";
+  import type { SettingsSectionRendererProps } from "./section-renderer-contracts";
 
   let {
     activeSection,

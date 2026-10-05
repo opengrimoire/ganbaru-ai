@@ -1,7 +1,7 @@
 //! Closed-world organizational host tools for provider assignments.
 
 use super::internal_mcp::{InternalMcpRunScope, generate_opaque_handle};
-use super::models::{ChatError, ChatErrorCode, ChatFolderCapability, ChatResult};
+use ganbaru_chat_contracts::models::{ChatError, ChatErrorCode, ChatFolderCapability, ChatResult};
 use rmcp::model::{Tool, ToolAnnotations};
 use serde_json::{Map, Value, json};
 use sha2::{Digest, Sha256};
@@ -57,7 +57,7 @@ enum OpaqueCursor {
 pub(crate) struct HostToolContext<'a> {
     pub app: &'a tauri::AppHandle,
     pub pool: &'a SqlitePool,
-    pub thread_id: &'a super::models::ChatThreadId,
+    pub thread_id: &'a ganbaru_chat_contracts::models::ChatThreadId,
     pub scope: &'a InternalMcpRunScope,
     pub runtime: &'a InternalMcpToolRuntime,
 }

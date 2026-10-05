@@ -2,7 +2,7 @@ import { ensureDbUrl } from "$lib/api/db";
 import { getProjects } from "$lib/stores/projects.svelte";
 import { getNotes } from "$lib/stores/notes.svelte";
 import { getChat } from "$lib/stores/chat.svelte";
-import { mark as perfMark } from "$lib/stores/perflog.svelte";
+import { mark as perfMark } from "$lib/stores/perf-log.svelte";
 
 let preparation: Promise<void> | null = null;
 

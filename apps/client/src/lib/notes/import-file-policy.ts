@@ -1,4 +1,4 @@
-import type { NotesMediaBlockType } from "./media";
+import type { NotesMediaBlockType } from "$lib/notes/block-types/media";
 
 export const NOTES_IMPORT_FILE_CONTEXTS = [
   "notion_export",

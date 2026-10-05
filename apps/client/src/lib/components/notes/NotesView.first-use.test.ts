@@ -33,8 +33,8 @@ const backend = vi.hoisted(() => {
   };
 });
 
-vi.mock("./notes-component-registry", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("./notes-component-registry")>();
+vi.mock("./component-registry", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./component-registry")>();
   return {
     ...actual,
     loadNotesSurface: (kind: string) => {
@@ -87,8 +87,8 @@ vi.mock("$lib/api/projects", async (importOriginal) => {
   };
 });
 
-vi.mock("$lib/api/notes-project-history", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("$lib/api/notes-project-history")>();
+vi.mock("$lib/api/notes/project-history", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("$lib/api/notes/project-history")>();
   return {
     ...actual,
     flushDueNotesProjectHistory: () => {

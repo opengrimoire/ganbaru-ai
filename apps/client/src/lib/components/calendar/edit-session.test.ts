@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import type { CalendarEvent } from "./types";
+import type { CalendarEvent } from "$lib/calendar/types";
 import {
   buildCreatePanelInitialChanges,
   buildEditPanelInitialChanges,

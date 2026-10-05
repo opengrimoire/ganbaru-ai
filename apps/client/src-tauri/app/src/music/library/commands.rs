@@ -1,5 +1,5 @@
 use super::*;
-use crate::db_path::connect_sqlite;
+use crate::db::connect_sqlite;
 
 fn connection_error(error: String) -> MusicLibraryError {
     MusicLibraryError::runtime("open music library", error)
@@ -16,7 +16,7 @@ pub async fn music_library_start_local_refresh(
         .map_err(connection_error)?;
     #[cfg(target_os = "android")]
     return super::mobile_refresh::start(&app, &pool, request).await;
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(desktop)]
     {
         let progress = super::local_refresh::prepare(&pool, &request).await?;
         let refresh_pool = pool.clone();
@@ -41,7 +41,7 @@ pub async fn music_library_refresh_progress(
         .map_err(connection_error)?;
     #[cfg(target_os = "android")]
     return super::mobile_refresh::progress(&pool, &job_id).await;
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(desktop)]
     super::local_refresh::progress(&pool, &job_id).await
 }
 
@@ -57,7 +57,7 @@ pub async fn music_library_cancel_refresh(
         .map_err(connection_error)?;
     #[cfg(target_os = "android")]
     return super::mobile_refresh::cancel(&pool, &job_id, cancelled_at).await;
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(desktop)]
     super::local_refresh::cancel(&pool, &job_id, cancelled_at).await
 }
 
@@ -109,7 +109,7 @@ pub async fn music_library_report_youtube_source_failure(
     super::youtube::report_source_failure(&pool, request).await
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 #[tauri::command]
 pub async fn music_library_create_relink_plan(
     app: tauri::AppHandle,
@@ -122,7 +122,7 @@ pub async fn music_library_create_relink_plan(
     super::relink::create_plan(&pool, request).await
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 #[tauri::command]
 pub async fn music_library_relink_plan_entries(
     app: tauri::AppHandle,
@@ -137,7 +137,7 @@ pub async fn music_library_relink_plan_entries(
     super::relink::plan_entries(&pool, &plan_id, offset, limit).await
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 #[tauri::command]
 pub async fn music_library_apply_relink_plan(
     app: tauri::AppHandle,
@@ -150,7 +150,7 @@ pub async fn music_library_apply_relink_plan(
     super::relink::apply_plan(&pool, request).await
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 #[tauri::command]
 pub async fn music_library_cancel_relink_plan(
     app: tauri::AppHandle,
@@ -367,7 +367,7 @@ pub async fn music_library_context_assignments(
     let pool = connect_sqlite(app, db_url)
         .await
         .map_err(connection_error)?;
-    super::contexts::assignments(&pool, owner_kind, &owner_id).await
+    crate::music::assignments::assignments(&pool, owner_kind, &owner_id).await
 }
 
 #[tauri::command]
@@ -631,7 +631,7 @@ pub async fn music_library_create_local_root(
     super::writes::create_local_root(&pool, request).await
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 #[tauri::command]
 pub async fn music_library_preview_item_repair(
     app: tauri::AppHandle,
@@ -645,7 +645,7 @@ pub async fn music_library_preview_item_repair(
     super::item_repair::preview(&pool, &item_id, &file_path).await
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 #[tauri::command]
 pub async fn music_library_apply_item_repair(
     app: tauri::AppHandle,
@@ -658,7 +658,7 @@ pub async fn music_library_apply_item_repair(
     super::item_repair::apply(&pool, request).await
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 #[tauri::command]
 pub async fn music_library_undo_item_repair(
     app: tauri::AppHandle,
@@ -709,7 +709,7 @@ pub async fn music_library_upsert_source_collection(
     super::writes::upsert_source_collection(&pool, request).await
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 #[tauri::command]
 pub async fn music_library_soundscapes(
     app: tauri::AppHandle,
@@ -722,7 +722,7 @@ pub async fn music_library_soundscapes(
     super::soundscapes::definitions(&pool, &device_id).await
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 #[tauri::command]
 pub async fn music_library_soundscape_groups(
     app: tauri::AppHandle,
@@ -734,7 +734,7 @@ pub async fn music_library_soundscape_groups(
     super::soundscape_groups::groups(&pool).await
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 #[tauri::command]
 pub async fn music_library_upsert_soundscape_group(
     app: tauri::AppHandle,
@@ -747,7 +747,7 @@ pub async fn music_library_upsert_soundscape_group(
     super::soundscape_groups::upsert(&pool, request).await
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 #[tauri::command]
 pub async fn music_library_remove_soundscape_group(
     app: tauri::AppHandle,
@@ -761,7 +761,7 @@ pub async fn music_library_remove_soundscape_group(
     super::soundscape_groups::remove(&pool, &group_id, expected_version).await
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 #[tauri::command]
 pub async fn music_library_upsert_soundscape(
     app: tauri::AppHandle,
@@ -774,7 +774,7 @@ pub async fn music_library_upsert_soundscape(
     super::soundscapes::upsert(&pool, request).await
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 #[tauri::command]
 pub async fn music_library_remove_soundscape(
     app: tauri::AppHandle,
@@ -788,7 +788,7 @@ pub async fn music_library_remove_soundscape(
     super::soundscapes::remove(&pool, &soundscape_id, expected_version).await
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 #[tauri::command]
 pub async fn music_library_soundscape_state(
     app: tauri::AppHandle,
@@ -800,7 +800,7 @@ pub async fn music_library_soundscape_state(
     super::soundscapes::state(&pool).await
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 #[tauri::command]
 pub async fn music_library_update_soundscape_state(
     app: tauri::AppHandle,

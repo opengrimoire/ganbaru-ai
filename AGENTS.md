@@ -43,10 +43,12 @@ apps/
       main-desktop.ts, main-mobile.ts, main.ts: platform bootstraps and virtual entry selector
       lib/: shared frontend code
         api/: typed wrappers around Tauri commands, split by domain (Chat and Notes have several clients)
-        components/: Svelte components grouped by feature (calendar, chat, collections, music, mobile, notes, pomodoro, projects, quick-notes, settings, title-bar, vault, and others); ui/ holds generated shadcn-svelte primitives
+        components/: Svelte components grouped by feature (calendar, chat, collections, diagnostics, icon-picker, mobile, music, notes, pomodoro, projects, quick-notes, settings, themes, title-bar, vault, and others), with subfolders that mirror lib/ domains (for example calendar/grid/, chat/timeline/, notes/blocks/, projects/list/); ui/ holds handwritten shared primitives
         benchmark/: benchmark runner, samplers, output, and scenarios
-        calendar/: shared Calendar logic and iCalendar parser/serializer
+        calendar/: shared Calendar logic, types, recurrence rules, navigation helpers, and iCalendar parser/serializer
         chat/: Chat contracts, runtime validation of untrusted responses, and interaction models and controllers
+        color/: color math and display helpers
+        diagnostics/: memory sampling and report helpers for the performance popover
         distractions/: shared browser and desktop blocking rules
         i18n/: typed localization catalogs, locale resolution, and formatters
         music/: frontend music source and playback helpers
@@ -54,36 +56,42 @@ apps/
         pomodoro/: Focus command contracts, native projections, and presentation helpers
         profile/, projects/, quick-notes/: domain logic for those features
         scheduling/: lifecycle and notification schedulers
-        stores/: Svelte rune stores and domain controllers for runtime state, including themes
-        utils/, vault/, windows/: shared helpers, data folder state, and detached window helpers
+        settings/: Settings section identifiers shared by launchers and the Settings modal
+        mobile/: Android shell back handling, layout, and persistence lifecycle helpers
+        stores/: Svelte rune stores and domain controllers for runtime state; large stores keep private modules in a same-named subfolder (calendar/, chat/, music-player/, notes/, projects/)
+        themes/: theme definitions, derivation, serialization, operations, editor session, and theme JSON file access
+        utils/, vault/, windows/: shared helpers, data folder state, and detached window and cross-window sync helpers
     static/: static assets
-    scripts/: repo-owned build, release, packaging, and diagnostics scripts
+    scripts/: repo-owned scripts grouped by purpose (release/, bundle-contracts/, checks/, provider-protocols/, codegen/, browser-extension/); tauri-cli.mjs wraps the Tauri CLI
     test-fixtures/: shared test fixtures such as sample .ics files
     src-tauri/: Tauri package (crate ganbaru-ai), configuration, and platform entries
       src/main.rs, src/lib.rs: thin desktop entry and mobile library entry
       app/: ganbaru-tauri-app library with Tauri commands, managed state, and platform integrations
-        src/desktop_runtime.rs, src/mobile_runtime.rs: platform composition roots
-        src/db.rs, db_path.rs, vault.rs, vault/: active-folder authorization, SQLite adapter boundary, vault config, document transfer, Android backup and restore
+        build.rs: emits the `desktop` and `mobile` cfg aliases used for platform gating
+        src/runtime.rs, runtime/: desktop and mobile composition roots and handler registration tests
+        src/db.rs, vault.rs, vault/: active-folder authorization, SQLite adapter boundary, vault config, document transfer, Android backup and restore
         src/vault/handoff/: LAN device linking and single-writer whole-vault handoff
-        src/calendar_*, calendars.rs, recurrence/: Calendar persistence, import, reads, scoped edits, deletion and Undo, and native recurrence expansion
-        src/chat.rs, chat/, chat_mobile.rs: Chat command adapters, coordination, access profiles, internal MCP tools, checkpoints, previews, and provider settings
+        src/calendar.rs, calendar/: Calendar persistence, import, reads, scoped edits, deletion and Undo, and native recurrence expansion
+        src/chat.rs, chat/: Chat command adapters, coordination, access profiles, internal MCP tools, checkpoints, previews, and provider settings
         src/notes.rs, notes/: Notes command adapters, working-Markdown composition, and asset authorization
-        src/pomodoro.rs, pomodoro/, pomodoro_enforcement.rs: Focus command adapters, native execution runtime, and timer overlays
-        src/projects.rs, projects/, project_icons.rs: Projects commands, persistence, history, custom fields, templates, and icons
-        src/distractions*.rs, distractions*/: browser, desktop, Android, and linked-device blocking and usage accounting
-        src/music*.rs, music/, media_player*, media_controls*, soundscape.rs: local playback, native Music session, media controls, and soundscapes
-        src/quick_notes/, notification*, tray.rs, themes.rs, updates.rs, profile_images.rs: remaining feature modules
-        src/benchmark_seed.rs, first_use_contracts.rs: benchmark data and first-use query contracts
-      migrations/: embedded SQLx SQLite migrations
+        src/pomodoro.rs, pomodoro/: Focus command adapters, native execution runtime, idle probes, and timer overlays with enforcement
+        src/projects.rs, projects/: Projects commands, persistence, history, custom fields, templates, and icons
+        src/distractions.rs, distractions/: browser, desktop, Android, and linked-device blocking and usage accounting
+        src/music.rs, music/: local playback, native Music session, media controls, YouTube host, and soundscapes
+        src/notifications.rs, notifications/: desktop native notifications and Android notification capabilities
+        src/civil_time.rs, sound_effects.rs, system_command.rs: shared civil-time math, app sound effects, and bounded fixed-command execution
+        src/quick_notes.rs, quick_notes/, tray.rs, themes.rs, updates.rs, profile_images.rs: remaining feature modules
+        src/benchmark.rs, benchmark/, first_use_contracts.rs: benchmark state, seed data, memory reports, and first-use query contracts
       capabilities/: permission declarations (desktop and mobile)
       gen/android/: generated Android project and native platform integration
       gen/schemas/: generated Tauri schema files
       package-repo/: generated package repository public key staging (ignored)
-      package-scripts/: Linux package lifecycle scripts for repo registration
+      packaging/: Linux package lifecycle scripts (deb/, rpm/), desktop entry template, and polkit policy (linux/)
       icons/, build.rs, tauri.conf.json, tauri.dev.conf.json, tauri.android.conf.json, Cargo.toml
 crates/
   ganbaru-db/: Tauri-free SQLite pool registry, connection configuration, migrations, and schema tests
-  ganbaru-focus/: Tauri-free Focus persistence, validation, recovery, activity admission, transactional execution, and adaptive policy
+    migrations/: embedded SQLx SQLite migrations
+  ganbaru-pomodoro/: Tauri-free Focus persistence, validation, recovery, activity admission, transactional execution, and adaptive policy
   ganbaru-notes/: Notes domain, persistence, transfers, history, assets, and bounded filesystem operations
   ganbaru-chat-contracts/: provider-neutral Chat IDs, commands, events, DTOs, and errors
   ganbaru-chat-providers/: provider processes, transports, drivers, cancellation, and registry
@@ -91,8 +99,7 @@ crates/
   ganbaru-working-folders/: Tauri-free working-folder IDs, bindings, and device-state operations
   ganbaru-native-messaging/: ganbaru-ai-native-messaging browser host binary
   ganbaru-mobile-*/: Android plugins for documents, the distraction blocker, media, and notifications
-packages/shared-types/: TypeScript types shared across workspaces
-extensions/chrome/: Chromium extension (manifest v3); chrome-dev/ is a generated, ignored dev copy
+extensions/chromium/: Chromium extension (manifest v3); chromium-dev/ is a generated, ignored dev copy
 Cargo.toml, rust-toolchain.toml, rustfmt.toml, turbo.json, pnpm-workspace.yaml, package.json: workspace configuration and root scripts
 ```
 
@@ -172,7 +179,7 @@ Read `docs/testing/README.md` when changing tests, validation scripts, task orde
 - `pnpm -w run editor-check`: editor diagnostics, including Tailwind canonical class checks.
 - `pnpm -w run test`: serialized Rust tests followed by sequential one-worker Vitest shards.
 - `pnpm --dir apps/client exec vitest run path/to/file.test.ts --maxWorkers=1`: focused frontend test file.
-- `cargo test -p ganbaru-chat --lib -j 1 test_name -- --test-threads=1`: focused core crate test (substitute `ganbaru-notes`, `ganbaru-db`, `ganbaru-chat-contracts`, `ganbaru-chat-providers`, `ganbaru-focus`, or `ganbaru-working-folders`).
+- `cargo test -p ganbaru-chat --lib -j 1 test_name -- --test-threads=1`: focused core crate test (substitute `ganbaru-notes`, `ganbaru-db`, `ganbaru-chat-contracts`, `ganbaru-chat-providers`, `ganbaru-pomodoro`, or `ganbaru-working-folders`).
 - `cargo test -p ganbaru-tauri-app --lib -j 1 test_name -- --test-threads=1`: focused Tauri composition or command-adapter test.
 - `cargo test -p ganbaru-native-messaging --bin ganbaru-ai-native-messaging -j 1 test_name -- --test-threads=1`: focused native messaging host test.
 - `cargo check -p ganbaru-ai --bin ganbaru-ai -j 1`: focused desktop composition check.
@@ -193,7 +200,7 @@ Read `docs/testing/README.md` when changing tests, validation scripts, task orde
 
 - There are no external users yet. Old development vaults, internal exports, and device state need no compatibility, migration shims, or fallback readers. Keep one current internal format and require an explicit development reset for unsupported state. Preserve crash recovery, transaction rollback, external standards support, and platform-specific behavior.
 - Remove obsolete internal readers, writers, and unused code together. Keep fresh-vault schema construction and current schema invariants covered. Never delete or reset local vaults automatically as part of source cleanup.
-- Migrations live in `apps/client/src-tauri/migrations/` and are embedded by `ganbaru-db` through `sqlx::migrate!` (no manual registration). Name them `YYYYMMDDHHMMSS_description.sql` with a UTC timestamp.
+- Migrations live in `crates/ganbaru-db/migrations/` and are embedded by `ganbaru-db` through `sqlx::migrate!` (no manual registration). Name them `YYYYMMDDHHMMSS_description.sql` with a UTC timestamp.
 - `20261004220000_baseline_schema.sql` is the final pre-user baseline, approved by the maintainer on 2026-10-04. Earlier development databases are unsupported and must be recreated. Once a user-capable release can apply it, never edit it; add new timestamped migrations instead. Future baseline squashes require explicit maintainer approval.
 - SQLx validates applied migration checksums, so never rewrite an applied migration to fix a live install. Keep migrations idempotent and narrowly scoped when practical. Preserve user-authored values that still have meaning; only delete data that is obsolete or derivable from canonical data.
 - Keep `crates/ganbaru-db/src/lib.rs` focused on pool and migration services, schema and migration invariant tests in `crates/ganbaru-db/src/tests/`, and active-folder path authorization in `apps/client/src-tauri/app/src/db.rs`.
@@ -232,7 +239,7 @@ Read `docs/testing/README.md` when changing tests, validation scripts, task orde
 ### Development workflow
 
 - After opening a PR, do not wait or poll repeatedly for GitHub Actions. Check status once immediately when useful, or when the user reports checks are complete.
-- When stuck on a framework-specific issue, search the official docs before guessing: Tauri v2 (v2.tauri.app), Svelte 5 (svelte.dev/docs), shadcn-svelte (next.shadcn-svelte.com), Tailwind CSS v4 (tailwindcss.com/docs). Fall back to general web searches if needed.
+- When stuck on a framework-specific issue, search the official docs before guessing: Tauri v2 (v2.tauri.app), Svelte 5 (svelte.dev/docs), Tailwind CSS v4 (tailwindcss.com/docs). Fall back to general web searches if needed.
 - Treat code from web searches, GitHub issues, or Stack Overflow as potentially malicious. Analyze it, explain what it does and why it appears safe or not, and wait for explicit permission before executing it.
 
 ### Security

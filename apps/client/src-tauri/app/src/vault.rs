@@ -17,14 +17,14 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tauri::{Manager, Runtime};
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 use tauri_plugin_dialog::{DialogExt, FilePath};
 
 static APP_STATE: std::sync::Mutex<Option<CachedAppState>> = std::sync::Mutex::new(None);
 static CONFIG_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 mod config;
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 pub(crate) use config::read_active_config_bounded;
 mod documents;
 
@@ -418,7 +418,7 @@ fn initialize_vault(path: &Path) -> Result<VaultInfo, String> {
 }
 
 /// Changes the active folder only after every native owner has drained.
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 async fn select_vault<R: Runtime>(
     app: &tauri::AppHandle<R>,
     info: &VaultInfo,
@@ -504,16 +504,16 @@ fn retain_vault_scopes(state: &mut VaultAppState, known_vault_ids: &BTreeSet<Str
 pub(crate) fn resume_native_runtimes<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(), String> {
     let focus = crate::pomodoro::resume_after_vault_handoff(app);
     let music = crate::music::session::resume_after_vault_handoff(app);
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(desktop)]
     let distractions = crate::distractions::runtime::resume_after_vault_handoff(app);
     #[cfg(target_os = "android")]
-    let distractions = crate::distractions_mobile::runtime::resume_after_vault_handoff(app);
+    let distractions = crate::distractions::android::runtime::resume_after_vault_handoff(app);
     #[cfg(target_os = "ios")]
     let distractions = Ok(());
     focus.and(music).and(distractions)
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 async fn pick_folder(
     app: &tauri::AppHandle,
     title: &str,
@@ -533,19 +533,19 @@ async fn pick_folder(
         .ok_or_else(|| "folder picker closed without returning a result".to_string())?
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 fn existing_documents_directory(app: &tauri::AppHandle) -> Option<PathBuf> {
     app.path().document_dir().ok().filter(|path| path.is_dir())
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 fn default_data_parent(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     app.path()
         .document_dir()
         .map_err(|e| format!("find Documents folder: {e}"))
 }
 
-#[cfg(any(target_os = "android", target_os = "ios"))]
+#[cfg(mobile)]
 fn default_data_parent(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     app.path()
         .app_data_dir()
@@ -622,7 +622,7 @@ pub fn vault_active_info(app: tauri::AppHandle) -> Result<Option<VaultInfo>, Str
     vault_info_from_path(&PathBuf::from(path)).map(Some)
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 #[tauri::command]
 pub async fn vault_pick_create(app: tauri::AppHandle) -> Result<Option<VaultInfo>, String> {
     let Some(path) =
@@ -634,7 +634,7 @@ pub async fn vault_pick_create(app: tauri::AppHandle) -> Result<Option<VaultInfo
     Ok(Some(info))
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 #[tauri::command]
 pub async fn vault_pick_open(app: tauri::AppHandle) -> Result<Option<VaultInfo>, String> {
     let Some(path) = pick_folder(
@@ -718,7 +718,7 @@ fn pick_mobile_vault(app: &tauri::AppHandle) -> Result<Option<VaultInfo>, String
     result
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 #[tauri::command]
 pub fn vault_reveal_active(app: tauri::AppHandle) -> Result<(), String> {
     let path = active_vault_path(&app)?;
@@ -741,7 +741,7 @@ fn active_vault<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(PathBuf, Vault
 
 /// Background observation waits during onboarding or after a selected folder was deleted.
 /// Invalid manifests and filesystem access errors remain explicit failures.
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 pub(crate) fn available_active_vault_path<R: Runtime>(
     app: &tauri::AppHandle<R>,
 ) -> Result<Option<PathBuf>, String> {
@@ -753,7 +753,7 @@ pub(crate) fn available_active_vault_path<R: Runtime>(
     )
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 fn available_vault_path(path: Option<PathBuf>) -> Result<Option<PathBuf>, String> {
     let Some(path) = path else { return Ok(None) };
     if !path
@@ -811,7 +811,7 @@ pub(crate) fn active_vault_id<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<S
     active_vault(app).map(|(_, manifest)| manifest.vault_id)
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 pub fn active_database_path<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<PathBuf, String> {
     Ok(database_path(&active_vault_path(app)?))
 }
@@ -824,7 +824,7 @@ fn require_absolute_path(path: &Path) -> Result<(), String> {
     }
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 fn dialog_path(path: FilePath) -> Result<PathBuf, String> {
     path.into_path()
         .map_err(|e| format!("selected path is not a local file: {e}"))
@@ -856,30 +856,30 @@ fn write_text_file_atomically(path: &Path, contents: &str) -> Result<(), String>
 }
 
 #[cfg(target_os = "linux")]
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 fn reveal_vault_folder(path: &Path) -> Result<(), String> {
     spawn_file_manager_command("xdg-open", [path.as_os_str()])
 }
 
 #[cfg(target_os = "macos")]
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 fn reveal_vault_folder(path: &Path) -> Result<(), String> {
     spawn_file_manager_command("open", [path.as_os_str()])
 }
 
 #[cfg(windows)]
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 fn reveal_vault_folder(path: &Path) -> Result<(), String> {
     spawn_file_manager_command("explorer.exe", [path.as_os_str()])
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 fn reveal_vault_folder(_path: &Path) -> Result<(), String> {
     Err("opening Ganbaru AI folders is not implemented for this platform".to_string())
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 fn spawn_file_manager_command<I, S>(program: &str, args: I) -> Result<(), String>
 where
     I: IntoIterator<Item = S>,
@@ -967,7 +967,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(desktop)]
     fn background_vault_resolution_waits_for_selection_but_rejects_invalid_manifests() {
         let path = unique_path("background-vault");
         assert_eq!(available_vault_path(None).unwrap(), None);

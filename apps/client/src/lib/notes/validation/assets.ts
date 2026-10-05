@@ -1,11 +1,11 @@
 import { NOTES_COVER_DESIGNS, NOTES_ICON_COLORS } from "../contracts/assets";
 import type { NotesCalloutIcon, NotesFileObject, NotesIconColor, NotesMediaBlockPayload, NotesPageCover } from "../contracts/assets";
 import type { NotesBookmarkBlockPayload, NotesEmbedBlockPayload, NotesLinkPreviewBlockPayload, NotesPageIcon } from "../contracts/core";
-import type { NotesDatabaseGalleryCoverSource } from "../contracts/database";
-import { externalMediaUrlIsSupported } from "../media";
-import type { NotesMediaBlockType } from "../media";
-import { createNotesDesignCover, isNotesPageCoverAssetPath, isSupportedExternalPageCoverUrl } from "../page-cover";
-import { isNotesPageIconAssetPath, isProjectIconAssetPath, isSupportedExternalPageIconUrl } from "../page-icon";
+import type { NotesDatabaseGalleryCoverSource } from "$lib/notes/contracts/database";
+import { externalMediaUrlIsSupported } from "$lib/notes/block-types/media";
+import type { NotesMediaBlockType } from "$lib/notes/block-types/media";
+import { createNotesDesignCover, isNotesPageCoverAssetPath, isSupportedExternalPageCoverUrl } from "$lib/notes/pages/cover";
+import { isNotesPageIconAssetPath, isProjectIconAssetPath, isSupportedExternalPageIconUrl } from "$lib/notes/pages/icon";
 import { UUID_PATTERN, containsControlCharacters, readDisplayString, readInteger, readNotesIconColor, readOptionalDisplayString, readRecord, readString } from "./readers";
 import { parseNotesRichTextArray } from "./rich-text";
 

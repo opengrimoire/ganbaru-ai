@@ -2,12 +2,12 @@
   import { onMount } from "svelte";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import IconPicker from "$lib/components/icon-picker/IconPicker.svelte";
-  import CustomSelect from "$lib/components/settings/CustomSelect.svelte";
+  import Select from "$lib/components/ui/Select.svelte";
   import MusicPlaylistIcon from "./MusicPlaylistIcon.svelte";
   import MusicBuilderDialog from "./MusicBuilderDialog.svelte";
-  import type { MusicPlaylistController, MusicPlaylistDraft } from "$lib/music/music-playlist-controller.svelte";
-  import type { MusicIntendedUse, MusicPlaybackMode, MusicRepeatMode } from "$lib/music/library-contracts";
-  import { isSystemMusicPlaylistId, systemMusicPlaylistName } from "$lib/music/music-system-playlists";
+  import type { MusicPlaylistController, MusicPlaylistDraft } from "$lib/music/playlists/controller.svelte";
+  import type { MusicIntendedUse, MusicPlaybackMode, MusicRepeatMode } from "$lib/music/library/contracts";
+  import { isSystemMusicPlaylistId, systemMusicPlaylistName } from "$lib/music/playlists/system";
 
   let {
     controller,
@@ -23,7 +23,7 @@
     onClose: () => void;
     onSaved: (playlistId: string) => void;
     onDeleted?: (replacementPlaylistId: string | null) => void;
-    playlists?: import("$lib/music/library-contracts").MusicPlaylistSummary[];
+    playlists?: import("$lib/music/library/contracts").MusicPlaylistSummary[];
     activeInPlayer?: boolean;
   } = $props();
 
@@ -165,8 +165,8 @@
         {#if mode !== "duplicate"}
           <fieldset class="mt-4"><legend class="text-xs font-medium">{t("music.builder.intendedUses")}</legend><div class="mt-2 flex flex-wrap gap-x-4 gap-y-2">{#each useOptions as use}<label class="flex items-center gap-2 text-xs"><input type="checkbox" checked={intendedUses.includes(use)} onchange={() => toggleUse(use)} class="accent-primary" />{useLabel(use)}</label>{/each}</div></fieldset>
           <div class={playbackMode === "mix" ? "mt-3" : "mt-3 grid grid-cols-2 gap-3"}>
-            <CustomSelect value={playbackMode} options={[{ value: "in-order", label: t("music.playbackMode.in-order") }, { value: "shuffle", label: t("music.playbackMode.shuffle") }, { value: "mix", label: t("music.playbackMode.mix") }]} onChange={setPlaybackMode} label={t("music.playbackMode.label")} />
-            {#if playbackMode !== "mix"}<CustomSelect value={repeatMode} options={[{ value: "off", label: t("music.builder.repeatOff") }, { value: "all", label: t("music.builder.repeatAll") }, { value: "one", label: t("music.builder.repeatOne") }]} onChange={setRepeatMode} label={t("music.builder.repeatDefault")} />{/if}
+            <Select value={playbackMode} options={[{ value: "in-order", label: t("music.playbackMode.in-order") }, { value: "shuffle", label: t("music.playbackMode.shuffle") }, { value: "mix", label: t("music.playbackMode.mix") }]} onChange={setPlaybackMode} label={t("music.playbackMode.label")} />
+            {#if playbackMode !== "mix"}<Select value={repeatMode} options={[{ value: "off", label: t("music.builder.repeatOff") }, { value: "all", label: t("music.builder.repeatAll") }, { value: "one", label: t("music.builder.repeatOne") }]} onChange={setRepeatMode} label={t("music.builder.repeatDefault")} />{/if}
           </div>
         {/if}
       {/if}

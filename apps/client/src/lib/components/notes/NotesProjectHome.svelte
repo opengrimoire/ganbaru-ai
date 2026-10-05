@@ -1,5 +1,5 @@
 <script lang="ts">
-  import ExplorerSearch from "$lib/components/ExplorerSearch.svelte";
+  import SearchField from "$lib/components/ui/SearchField.svelte";
   import { onMount, tick } from "svelte";
   import ArrowUpNarrowWide from "@lucide/svelte/icons/arrow-up-narrow-wide";
   import Check from "@lucide/svelte/icons/check";
@@ -16,7 +16,7 @@
     buildWorkingMarkdownTreeItems,
     listNotesWorkingMarkdown,
     NotesWorkingMarkdownTree,
-  } from "$lib/components/notes/notes-working-markdown-platform";
+  } from "$lib/components/notes/working-markdown/platform";
   import {
     beginLazyComponentLoad,
     rejectLazyComponentLoad,
@@ -30,15 +30,15 @@
     notesPageFolderMoveTargets,
     type NotesNavigationSortOrder,
     type NotesNavigationTreeItem,
-  } from "$lib/notes/navigation-tree";
+  } from "$lib/notes/navigation/tree";
   import {
     canDropNotesNavigationItem,
     type NotesNavigationDragItem,
     type NotesNavigationDropTarget,
-  } from "$lib/notes/navigation-drag";
-  import { notesPageMoveTargets } from "$lib/notes/page-move";
-  import { notesPageContainingFolderId } from "$lib/notes/hierarchy-navigation";
-  import { notesPageTitle } from "$lib/notes/page-title";
+  } from "$lib/notes/navigation/drag";
+  import { notesPageMoveTargets } from "$lib/notes/pages/move";
+  import { notesPageContainingFolderId } from "$lib/notes/navigation/hierarchy-menu";
+  import { notesPageTitle } from "$lib/notes/pages/title";
   import { notesPagesForProject } from "$lib/notes/project-membership";
   import type {
     NotesFolder,
@@ -47,13 +47,13 @@
     NotesWorkingMarkdownTreeRead,
   } from "$lib/notes/types";
   import { getNotes } from "$lib/stores/notes.svelte";
-  import NotesFolderRow from "./NotesFolderRow.svelte";
-  import NotesPageRow from "./NotesPageRow.svelte";
+  import NotesFolderRow from "$lib/components/notes/navigation/NotesFolderRow.svelte";
+  import NotesPageRow from "$lib/components/notes/navigation/NotesPageRow.svelte";
   import {
     loadNotesOptionalComponent,
     retryNotesOptionalComponent,
     type LoadedNotesOptionalComponent,
-  } from "./notes-component-registry";
+  } from "./component-registry";
 
   let {
     mobileLayout = false,
@@ -1108,7 +1108,7 @@
   </div>
 
   {#if searchOpen}
-    <ExplorerSearch bind:value={search} label={t("notes.searchLabel")} placeholder={t("notes.searchPlaceholder")} clearLabel={t("notes.clearSearch")} onClose={toggleSearch} />
+    <SearchField bind:value={search} label={t("notes.searchLabel")} placeholder={t("notes.searchPlaceholder")} clearLabel={t("notes.clearSearch")} onClose={toggleSearch} />
   {/if}
 
   {#if folderActionError}

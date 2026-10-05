@@ -3,9 +3,11 @@
 use chrono::{Datelike, Duration, NaiveDate};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-#[cfg(any(not(any(target_os = "android", target_os = "ios")), test))]
+#[cfg(any(desktop, test))]
 use sha2::{Digest, Sha256};
 use std::collections::HashSet;
+
+pub(crate) mod store;
 
 pub(super) const MAX_LIMITS: usize = 256;
 const MAX_ENTRIES: usize = 2_000;
@@ -162,7 +164,7 @@ pub(super) fn parse_config(root: &Value) -> Result<LimitsConfig, String> {
 }
 
 /// Fingerprint the persisted limit branch so edits revoke previously derived exhaustion.
-#[cfg(any(not(any(target_os = "android", target_os = "ios")), test))]
+#[cfg(any(desktop, test))]
 pub(super) fn configuration_digest(root: &Value) -> Result<String, String> {
     let bytes = serde_json::to_vec(root.pointer("/distractions/limits").unwrap_or(&Value::Null))
         .map_err(|error| format!("encode usage limit configuration: {error}"))?;
@@ -324,5 +326,4 @@ pub(super) fn totals(
 }
 
 #[cfg(test)]
-#[path = "limits_tests.rs"]
 mod tests;

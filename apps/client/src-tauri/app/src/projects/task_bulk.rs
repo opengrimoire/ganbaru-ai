@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::{Sqlite, SqlitePool, Transaction};
 use tauri::{AppHandle, Runtime};
 
-use crate::db_path::connect_sqlite;
+use crate::db::connect_sqlite;
 
 use super::history::{current_timestamp, insert_task_change_event_owned, status_is_terminal};
 use super::models::{ProjectTaskChangeEventRow, ProjectTaskRow, ProjectsMutationRows};

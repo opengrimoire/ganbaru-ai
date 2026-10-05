@@ -4,11 +4,11 @@ use super::{
     CHUNK_TIMEOUT, MEMBERSHIP_REVOKED_CODE, TLS_HANDSHAKE_TIMEOUT, prepare_partial, stream_file,
     timeout_control,
 };
+use crate::vault::handoff::pairing::{Enrollment, PairingManager};
 use crate::vault::handoff::protocol::{
     BundleMetadata, BundlePurpose, ControlMessage, PROTOCOL_VERSION, TRANSFER_CHUNK_BYTES,
     read_control, unix_time_ms, write_control,
 };
-use crate::vault::handoff::state::{Enrollment, PairingManager};
 use crate::vault::handoff::{coordinator, protocol, suggested_device_label};
 use rustls::RootCertStore;
 use std::fs;

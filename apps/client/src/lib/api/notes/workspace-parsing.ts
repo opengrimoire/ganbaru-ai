@@ -1,8 +1,8 @@
-import { createRichText } from "$lib/notes/block-factory";
+import { createRichText } from "$lib/notes/blocks/factory";
 import { NOTES_PAGE_PROJECT_ID_PROPERTY } from "$lib/notes/project-membership";
-import { mapNotesPageDto } from "$lib/notes/notion-mappers";
+import { mapNotesPageDto } from "$lib/notes/validation/response-mappers";
 import type { NotesNavigationDatabase, NotesPage } from "$lib/notes/types";
-import { isNotesUuid } from "$lib/notes/block-link";
+import { isNotesUuid } from "$lib/notes/links/block-link";
 
 /** Require an object payload from a Notes workspace or summary command. */
 export function notesWorkspaceShellRecord(value: unknown): Record<string, unknown> {

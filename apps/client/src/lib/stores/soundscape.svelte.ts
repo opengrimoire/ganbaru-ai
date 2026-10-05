@@ -24,10 +24,10 @@ import type {
   MusicSoundscapeSnapshot,
   MusicSoundscapeState,
   MusicSoundscapeWrite,
-} from "$lib/music/soundscape-contracts";
-import { MAX_SOUNDSCAPE_LAYERS } from "$lib/music/soundscape-contracts";
-import { INITIAL_SOUNDSCAPE_VOLUME } from "$lib/music/soundscape-defaults";
-import { soundSelectionAction } from "$lib/music/soundscape-selection";
+} from "$lib/music/soundscape/contracts";
+import { MAX_SOUNDSCAPE_LAYERS } from "$lib/music/soundscape/contracts";
+import { INITIAL_SOUNDSCAPE_VOLUME } from "$lib/music/soundscape/defaults";
+import { soundSelectionAction } from "$lib/music/soundscape/selection";
 
 class SoundscapeStore {
   definitions = $state<MusicSoundscapeDefinition[]>([]);

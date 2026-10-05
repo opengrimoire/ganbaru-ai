@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { dbUrl, ensureDbUrl } from "$lib/api/db";
-import type { Calendar } from "$lib/components/calendar/types";
+import type { Calendar } from "$lib/calendar/types";
 
 interface DbCalendar {
   id: string;

@@ -19,7 +19,7 @@ Rationale: without these rules, a phone alarm or a desktop that was off at event
 
 ## Native owner
 
-`ganbaru-focus` owns admission, transitions, pauses, recovery, history, and adaptive boundary decisions. The Tauri app runs one serialized native owner per active vault (`pomodoro/native_runtime`). Svelte never runs execution timers or writes runs, segments, pauses, or adaptive rows; it sends semantic commands and paints accepted snapshots. Android lifecycle observations come from Kotlin without needing a WebView.
+`ganbaru-pomodoro` owns admission, transitions, pauses, recovery, history, and adaptive boundary decisions. The Tauri app runs one serialized native owner per active vault (`pomodoro/native_runtime`). Svelte never runs execution timers or writes runs, segments, pauses, or adaptive rows; it sends semantic commands and paints accepted snapshots. Android lifecycle observations come from Kotlin without needing a WebView.
 
 - Every command carries an ID. An accepted command stores an immutable receipt in the same transaction as its effects, so retries return the committed result instead of executing again. A later stopped run cannot be replaced by an earlier receipt.
 - User actions are bound to the revision shown when the user clicked. Stale revisions are rejected; they never postpone execution deadlines.

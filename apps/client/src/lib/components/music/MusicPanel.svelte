@@ -11,22 +11,22 @@
   import Volume2 from "@lucide/svelte/icons/volume-2";
   import VolumeX from "@lucide/svelte/icons/volume-x";
   import CalendarScrollbar from "$lib/components/calendar/CalendarScrollbar.svelte";
-  import MusicPlaylistLauncher from "$lib/components/music/MusicPlaylistLauncher.svelte";
-  import MusicCurrentItemMenu from "$lib/components/music/MusicCurrentItemMenu.svelte";
-  import MusicTrackPreferences from "$lib/components/music/MusicTrackPreferences.svelte";
-  import MusicSnoozeButton from "$lib/components/music/MusicSnoozeButton.svelte";
-  import MusicPlaybackModeControl from "$lib/components/music/MusicPlaybackModeControl.svelte";
-  import MusicSoundscapeControl from "$lib/components/music/MusicSoundscapeControl.svelte";
+  import MusicPlaylistLauncher from "./MusicPlaylistLauncher.svelte";
+  import MusicCurrentItemMenu from "./MusicCurrentItemMenu.svelte";
+  import MusicTrackPreferences from "./MusicTrackPreferences.svelte";
+  import MusicSnoozeButton from "./MusicSnoozeButton.svelte";
+  import MusicPlaybackModeControl from "./MusicPlaybackModeControl.svelte";
+  import MusicSoundscapeControl from "$lib/components/music/soundscape/MusicSoundscapeControl.svelte";
   import MusicPreparationActivity from "$lib/components/music/builder/MusicPreparationActivity.svelte";
   import { revealLocalFile } from "$lib/api/music";
   import { getMusicInspectorDetail, removeMusicSnooze } from "$lib/api/music-library";
-  import { notifyMusicLibraryChanged } from "$lib/music/music-library-events";
+  import { notifyMusicLibraryChanged } from "$lib/music/library/events";
   import { formatPlaybackTime } from "$lib/music/playback";
   import { fittedSidePlaylistPanelHeight } from "$lib/music/panel-layout";
   import {
     MUSIC_PLAYLIST_ROW_HEIGHT_PX,
     musicPlaylistWindow,
-  } from "$lib/music/playlist-window";
+  } from "$lib/music/playlists/window";
   import { getMusicPlayer } from "$lib/stores/music-player.svelte";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import { BUILD_PLATFORM_PROFILE, platformHasCapability } from "$lib/platform";
@@ -36,8 +36,8 @@
     musicBuilderLoader,
     type MusicBuilderComponent,
     type MusicBuilderInitialAction,
-  } from "$lib/music/music-builder-loader";
-  import { getMusicSourcesController } from "$lib/music/music-sources-controller.svelte";
+  } from "$lib/music/builder/loader";
+  import { getMusicSourcesController } from "$lib/music/sources/controller.svelte";
 
   let {
     onclose,

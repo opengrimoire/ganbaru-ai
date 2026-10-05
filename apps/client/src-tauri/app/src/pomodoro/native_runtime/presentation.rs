@@ -1,15 +1,15 @@
 //! Desktop surfaces follow accepted native state, independently of WebView execution.
 
 #[cfg(test)]
-#[path = "presentation_tests.rs"]
 mod tests;
 
 use chrono::{DateTime, Datelike, NaiveDate, Weekday};
-use ganbaru_focus::{FocusExecutionError, FocusExecutionSnapshot, FocusMode, FocusPhase};
+use ganbaru_pomodoro::{FocusExecutionError, FocusExecutionSnapshot, FocusMode, FocusPhase};
 use sqlx::SqlitePool;
 use tauri::Manager;
 
-use crate::notification::{AppSound, AppSoundState, PomodoroOverlayState};
+use crate::pomodoro::overlay::PomodoroOverlayState;
+use crate::sound_effects::{AppSound, AppSoundState};
 
 const MAX_PREFERENCES_BYTES: usize = 4 * 1024 * 1024;
 const IDLE_ALERT_INTERVAL_MS: i64 = 10_000;
@@ -41,7 +41,7 @@ impl DesktopNotificationCopy {
         ] {
             if text.trim().is_empty() || text.encode_utf16().count() > MAX_NOTIFICATION_TEXT_UNITS {
                 return Err(super::error(
-                    ganbaru_focus::FocusErrorCode::InvalidIntent,
+                    ganbaru_pomodoro::FocusErrorCode::InvalidIntent,
                     "Focus notification text must contain 1 to 160 UTF-16 units",
                 ));
             }
@@ -399,13 +399,13 @@ impl DesktopPresentation {
                     DesktopAlert::Ending {
                         remaining_ms,
                         allow_extension,
-                    } => crate::notification::commands::NativeFocusAlert::Ending {
+                    } => crate::notifications::desktop::NativeFocusAlert::Ending {
                         title: copy.ending_warning_title,
                         extend_label: allow_extension.then_some(copy.extend_focus_label),
                         remaining_ms,
                     },
                     DesktopAlert::Paused => {
-                        crate::notification::commands::NativeFocusAlert::Paused {
+                        crate::notifications::desktop::NativeFocusAlert::Paused {
                             title: copy.paused_reminder_title,
                             body: copy.paused_reminder_body,
                             resume_label: copy.resume_focus_label,
@@ -413,18 +413,18 @@ impl DesktopPresentation {
                         }
                     }
                 };
-                crate::notification::commands::show_native_focus_alert(
+                crate::notifications::desktop::show_native_focus_alert(
                     app.clone(),
                     context,
                     alert,
                 )?;
             }
             match surface {
-                Some(Surface::Close) => crate::notification::close_pomodoro_overlay(
+                Some(Surface::Close) => crate::pomodoro::overlay::close_pomodoro_overlay(
                     app.clone(),
                     app.state::<PomodoroOverlayState>(),
                 ),
-                Some(Surface::Break(deadline)) => crate::notification::show_break_overlay(
+                Some(Surface::Break(deadline)) => crate::pomodoro::overlay::show_break_overlay(
                     app.clone(),
                     deadline.max(0) as u64,
                     preferences.esc_presses,
@@ -432,11 +432,11 @@ impl DesktopPresentation {
                     scope,
                 )?,
                 Some(Surface::Idle(seconds)) => {
-                    crate::notification::show_idle_overlay(app.clone(), seconds, scope)?;
+                    crate::pomodoro::overlay::show_idle_overlay(app.clone(), seconds, scope)?;
                 }
                 Some(Surface::IdleFailed) => {
-                    crate::notification::show_idle_overlay(app.clone(), 0, scope)?;
-                    crate::notification::set_pomodoro_overlay_state(
+                    crate::pomodoro::overlay::show_idle_overlay(app.clone(), 0, scope)?;
+                    crate::pomodoro::overlay::set_pomodoro_overlay_state(
                         app.clone(),
                         app.state::<PomodoroOverlayState>(),
                         "idle_failed".into(),
@@ -444,14 +444,14 @@ impl DesktopPresentation {
                     )?;
                 }
                 Some(Surface::ReturnWait) => {
-                    crate::notification::show_break_overlay(
+                    crate::pomodoro::overlay::show_break_overlay(
                         app.clone(),
                         now.max(0) as u64,
                         preferences.esc_presses,
                         preferences.extension_limit,
                         scope,
                     )?;
-                    crate::notification::set_pomodoro_overlay_state(
+                    crate::pomodoro::overlay::set_pomodoro_overlay_state(
                         app.clone(),
                         app.state::<PomodoroOverlayState>(),
                         "break_finished".into(),
@@ -461,7 +461,7 @@ impl DesktopPresentation {
                 Some(Surface::Completion) => {
                     let kind =
                         completion.ok_or("Native Focus completion classification is missing")?;
-                    crate::notification::show_pomodoro_completion_overlay(
+                    crate::pomodoro::overlay::show_pomodoro_completion_overlay(
                         app.clone(),
                         kind.into(),
                         scope,
@@ -502,7 +502,7 @@ impl DesktopPresentation {
     pub async fn revoke(&mut self, app: &tauri::AppHandle) -> Result<(), FocusExecutionError> {
         let app = app.clone();
         tauri::async_runtime::spawn_blocking(move || {
-            crate::notification::close_pomodoro_overlay(
+            crate::pomodoro::overlay::close_pomodoro_overlay(
                 app.clone(),
                 app.state::<PomodoroOverlayState>(),
             );
@@ -544,7 +544,7 @@ fn classify_completion(
     event_date: &str,
     occurrence_id: &str,
     ended_at_ms: i64,
-    blocks: &[crate::calendar_reads::focus_context::FocusPlannedBlock],
+    blocks: &[crate::calendar::reads::focus_context::FocusPlannedBlock],
 ) -> Result<&'static str, FocusExecutionError> {
     let later = blocks
         .iter()

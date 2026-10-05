@@ -1,6 +1,6 @@
 <script lang="ts">
   import ImageIcon from "@lucide/svelte/icons/image";
-  import type { IconPickerAsset } from "$lib/components/icon-picker/types";
+  import type { IconPickerAsset } from "./types";
   import { getLocalization } from "$lib/i18n/translator.svelte";
 
   type ActionResult = void | Promise<void>;

@@ -3,7 +3,7 @@ use sqlx::FromRow;
 use tauri::{AppHandle, Runtime};
 
 use super::validate_id;
-use crate::db_path::connect_sqlite;
+use crate::db::connect_sqlite;
 
 const MAX_TAGS: usize = 9;
 const MAX_TAG_NAME_CHARS: usize = 40;

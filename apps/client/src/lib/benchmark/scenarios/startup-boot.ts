@@ -1,4 +1,4 @@
-import { getCalendarNavHandle } from "$lib/components/calendar/nav-handle.svelte";
+import { getCalendarNavHandle } from "$lib/calendar/nav-handle.svelte";
 import {
   CORE_BENCHMARK_DATASETS,
   DEFAULT_BENCHMARK_DATASET,

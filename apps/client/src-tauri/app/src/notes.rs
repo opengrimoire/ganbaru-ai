@@ -1,35 +1,28 @@
-use crate::db_path::connect_sqlite;
+use crate::db::connect_sqlite;
 use tauri::{AppHandle, Runtime};
 
-mod agent_bridge_export;
-mod data_source_csv_export;
 mod data_source_row_hierarchy;
 mod database_management;
+#[cfg(desktop)]
+mod export_dialogs;
 pub(crate) mod external_links;
 mod file_assets;
-mod html_export;
-mod json_graph_export;
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-mod notion_export_import;
 mod page_cover_assets;
 mod page_icon_assets;
 pub(crate) mod project_history;
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 pub mod working_markdown;
 
-use ganbaru_notes::notes::{
-    backlinks, comments, data_source_board, data_source_buttons, data_source_calendar,
-    data_source_csv_import, data_source_gallery, data_source_list, data_source_rows,
-    data_source_schema, data_source_table, data_source_templates, data_source_timeline,
-    database_view_management, databases, folders, history, html_import, links, local_user,
-    mention_notifications, notion_api_import, reads, search, suggestions, templates, undo_state,
-    workspace_shell, writes,
+use ganbaru_notes::{
+    comments, data_sources, databases, folders, links, local_user, mention_notifications,
+    page_history, reads, search, suggestions, templates, transfers, undo_state, workspace_shell,
+    writes,
 };
 
 pub use data_source_row_hierarchy::*;
 pub use database_management::*;
 pub use file_assets::*;
-pub use ganbaru_notes::notes::models::*;
+pub use ganbaru_notes::models::*;
 pub use page_cover_assets::*;
 pub use page_icon_assets::*;
 #[allow(unused_imports)]
@@ -141,7 +134,7 @@ pub async fn notes_list_backlinks<R: Runtime>(
     page_id: String,
 ) -> Result<Vec<NoteBacklinkDto>, String> {
     let pool = connect_sqlite(app, db_url).await?;
-    backlinks::list_backlinks(&pool, &page_id).await
+    links::backlinks::list_backlinks(&pool, &page_id).await
 }
 
 #[tauri::command]
@@ -248,7 +241,7 @@ pub async fn notes_import_html_page<R: Runtime>(
     request: NoteHtmlImportRequest,
 ) -> Result<project_history::NotesMutationResultDto<NoteHtmlImportDto>, String> {
     let pool = connect_sqlite(app, db_url).await?;
-    let value = html_import::import_page(&pool, request).await?;
+    let value = transfers::html_import::import_page(&pool, request).await?;
     project_history::mutation_result(&pool, value).await
 }
 
@@ -259,23 +252,24 @@ pub async fn notes_import_notion_api<R: Runtime>(
     request: NoteNotionApiImportRequest,
 ) -> Result<project_history::NotesMutationResultDto<NoteNotionApiImportDto>, String> {
     let pool = connect_sqlite(app, db_url).await?;
-    let value = notion_api_import::import_from_api(&pool, request).await?;
+    let value = transfers::notion_api_import::import_from_api(&pool, request).await?;
     project_history::mutation_result(&pool, value).await
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 #[tauri::command]
 pub async fn notes_import_notion_export_folder<R: Runtime>(
     app: AppHandle<R>,
     db_url: String,
     request: NoteNotionExportImportRequest,
 ) -> Result<project_history::NotesMutationResultDto<NoteNotionExportImportDto>, String> {
-    let pool = connect_sqlite(app.clone(), db_url.clone()).await?;
-    let value = notion_export_import::import_folder(&app, &db_url, &pool, request).await?;
+    let pool = connect_sqlite(app.clone(), db_url).await?;
+    let vault_root = crate::vault::active_writable_vault_path(&app)?;
+    let value = transfers::notion_export_import::import_folder(&pool, &vault_root, request).await?;
     project_history::mutation_result(&pool, value).await
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 #[tauri::command]
 pub async fn notes_pick_and_write_html_archive<R: Runtime>(
     app: AppHandle<R>,
@@ -283,10 +277,10 @@ pub async fn notes_pick_and_write_html_archive<R: Runtime>(
     request: NoteHtmlExportRequest,
 ) -> Result<NoteHtmlArchiveSaveDto, String> {
     let pool = connect_sqlite(app.clone(), db_url).await?;
-    html_export::pick_and_write_archive(&app, &pool, request).await
+    export_dialogs::pick_and_write_archive(&app, &pool, request).await
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 #[tauri::command]
 pub async fn notes_pick_and_write_json_graph<R: Runtime>(
     app: AppHandle<R>,
@@ -294,10 +288,10 @@ pub async fn notes_pick_and_write_json_graph<R: Runtime>(
     request: NoteJsonGraphExportRequest,
 ) -> Result<NoteJsonGraphExportSaveDto, String> {
     let pool = connect_sqlite(app.clone(), db_url).await?;
-    json_graph_export::pick_and_write_graph(&app, &pool, request).await
+    export_dialogs::pick_and_write_graph(&app, &pool, request).await
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 #[tauri::command]
 pub async fn notes_pick_and_write_agent_bridge<R: Runtime>(
     app: AppHandle<R>,
@@ -305,7 +299,7 @@ pub async fn notes_pick_and_write_agent_bridge<R: Runtime>(
     request: NoteAgentBridgeExportRequest,
 ) -> Result<NoteAgentBridgeExportSaveDto, String> {
     let pool = connect_sqlite(app.clone(), db_url).await?;
-    agent_bridge_export::pick_and_write_bridge(&app, &pool, request).await
+    export_dialogs::pick_and_write_bridge(&app, &pool, request).await
 }
 
 #[tauri::command]
@@ -395,7 +389,7 @@ pub async fn notes_get_page_history_settings<R: Runtime>(
     db_url: String,
 ) -> Result<NotePageHistorySettingsDto, String> {
     let pool = connect_sqlite(app, db_url).await?;
-    history::get_page_history_settings(&pool).await
+    page_history::get_page_history_settings(&pool).await
 }
 
 #[cfg(test)]
@@ -426,7 +420,7 @@ pub async fn notes_update_page_history_settings<R: Runtime>(
     update: NotePageHistorySettingsUpdate,
 ) -> Result<NotePageHistorySettingsDto, String> {
     let pool = connect_sqlite(app, db_url).await?;
-    history::update_page_history_settings(&pool, update).await
+    page_history::update_page_history_settings(&pool, update).await
 }
 
 #[tauri::command]
@@ -436,7 +430,7 @@ pub async fn notes_list_page_history_snapshots<R: Runtime>(
     page_id: String,
 ) -> Result<Vec<NotePageHistorySnapshotDto>, String> {
     let pool = connect_sqlite(app, db_url).await?;
-    history::list_page_history_snapshots(&pool, &page_id).await
+    page_history::list_page_history_snapshots(&pool, &page_id).await
 }
 
 #[tauri::command]
@@ -447,7 +441,7 @@ pub async fn notes_load_page_history_snapshot<R: Runtime>(
     snapshot_id: String,
 ) -> Result<NoteLoadedPage, String> {
     let pool = connect_sqlite(app, db_url).await?;
-    history::load_page_history_snapshot(&pool, &page_id, &snapshot_id).await
+    page_history::load_page_history_snapshot(&pool, &page_id, &snapshot_id).await
 }
 
 #[tauri::command]
@@ -459,7 +453,7 @@ pub async fn notes_restore_page_history_snapshot<R: Runtime>(
 ) -> Result<project_history::NotesMutationResultDto<NoteLoadedPage>, String> {
     let pool = connect_sqlite(app, db_url).await?;
     project_history::ensure_page_baseline_for_mutation(&pool, &page_id).await?;
-    let value = history::restore_page_history_snapshot(&pool, &page_id, &snapshot_id).await?;
+    let value = page_history::restore_page_history_snapshot(&pool, &page_id, &snapshot_id).await?;
     project_history::mutation_result(&pool, value).await
 }
 
@@ -473,7 +467,8 @@ pub async fn notes_copy_page_history_blocks<R: Runtime>(
 ) -> Result<project_history::NotesMutationResultDto<NotePaginatedBlockList>, String> {
     let pool = connect_sqlite(app, db_url).await?;
     project_history::ensure_page_baseline_for_mutation(&pool, &page_id).await?;
-    let value = history::copy_page_history_blocks(&pool, &page_id, &snapshot_id, request).await?;
+    let value =
+        page_history::copy_page_history_blocks(&pool, &page_id, &snapshot_id, request).await?;
     project_history::mutation_result(&pool, value).await
 }
 
@@ -700,7 +695,7 @@ pub async fn notes_list_database_views<R: Runtime>(
     database_id: String,
 ) -> Result<Vec<NoteDatabaseViewDto>, String> {
     let pool = connect_sqlite(app, db_url).await?;
-    database_view_management::list_database_views(&pool, &database_id).await
+    databases::view_management::list_database_views(&pool, &database_id).await
 }
 
 #[tauri::command]
@@ -710,7 +705,7 @@ pub async fn notes_duplicate_database_view<R: Runtime>(
     request: NoteDatabaseViewDuplicate,
 ) -> Result<project_history::NotesMutationResultDto<NoteDatabaseViewDto>, String> {
     let pool = connect_sqlite(app, db_url).await?;
-    let value = database_view_management::duplicate_database_view(&pool, request).await?;
+    let value = databases::view_management::duplicate_database_view(&pool, request).await?;
     project_history::mutation_result(&pool, value).await
 }
 
@@ -724,7 +719,7 @@ pub async fn notes_rename_database_view<R: Runtime>(
 ) -> Result<project_history::NotesMutationResultDto<NoteDatabaseViewDto>, String> {
     let pool = connect_sqlite(app, db_url).await?;
     let value =
-        database_view_management::rename_database_view(&pool, &database_id, &view_id, update)
+        databases::view_management::rename_database_view(&pool, &database_id, &view_id, update)
             .await?;
     project_history::mutation_result(&pool, value).await
 }
@@ -738,7 +733,7 @@ pub async fn notes_delete_database_view<R: Runtime>(
 ) -> Result<project_history::NotesMutationResultDto<String>, String> {
     let pool = connect_sqlite(app, db_url).await?;
     let value =
-        database_view_management::delete_database_view(&pool, &database_id, &view_id).await?;
+        databases::view_management::delete_database_view(&pool, &database_id, &view_id).await?;
     project_history::mutation_result(&pool, value).await
 }
 
@@ -748,7 +743,7 @@ pub async fn notes_list_data_sources<R: Runtime>(
     db_url: String,
 ) -> Result<Vec<NoteDataSourceDto>, String> {
     let pool = connect_sqlite(app, db_url).await?;
-    data_source_schema::list_data_sources(&pool).await
+    data_sources::schema::list_data_sources(&pool).await
 }
 
 #[tauri::command]
@@ -760,7 +755,7 @@ pub async fn notes_get_data_source_schema<R: Runtime>(
     view_id: Option<String>,
 ) -> Result<NoteDataSourceSchemaDto, String> {
     let pool = connect_sqlite(app, db_url).await?;
-    data_source_schema::get_data_source_schema(
+    data_sources::schema::get_data_source_schema(
         &pool,
         &data_source_id,
         database_id.as_deref(),
@@ -779,7 +774,7 @@ pub async fn notes_update_data_source_schema<R: Runtime>(
     update: NoteDataSourceSchemaUpdate,
 ) -> Result<project_history::NotesMutationResultDto<NoteDataSourceSchemaDto>, String> {
     let pool = connect_sqlite(app, db_url).await?;
-    let value = data_source_schema::update_data_source_schema(
+    let value = data_sources::schema::update_data_source_schema(
         &pool,
         &data_source_id,
         database_id.as_deref(),
@@ -797,7 +792,7 @@ pub async fn notes_list_data_source_row_pages<R: Runtime>(
     data_source_id: String,
 ) -> Result<Vec<NotePageDto>, String> {
     let pool = connect_sqlite(app, db_url).await?;
-    data_source_rows::list_data_source_row_pages(&pool, &data_source_id).await
+    data_sources::rows::list_data_source_row_pages(&pool, &data_source_id).await
 }
 
 #[tauri::command]
@@ -809,7 +804,7 @@ pub async fn notes_create_data_source_row_page<R: Runtime>(
 ) -> Result<project_history::NotesMutationResultDto<NoteLoadedPage>, String> {
     let pool = connect_sqlite(app, db_url).await?;
     let value =
-        data_source_rows::create_data_source_row_page(&pool, &data_source_id, request).await?;
+        data_sources::rows::create_data_source_row_page(&pool, &data_source_id, request).await?;
     project_history::mutation_result(&pool, value).await
 }
 
@@ -821,11 +816,11 @@ pub async fn notes_import_data_source_csv<R: Runtime>(
     request: NoteDataSourceCsvImportRequest,
 ) -> Result<project_history::NotesMutationResultDto<NoteDataSourceCsvImportDto>, String> {
     let pool = connect_sqlite(app, db_url).await?;
-    let value = data_source_csv_import::import_csv(&pool, &data_source_id, request).await?;
+    let value = data_sources::csv_import::import_csv(&pool, &data_source_id, request).await?;
     project_history::mutation_result(&pool, value).await
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 #[tauri::command]
 pub async fn notes_pick_and_write_data_source_csv<R: Runtime>(
     app: AppHandle<R>,
@@ -834,7 +829,7 @@ pub async fn notes_pick_and_write_data_source_csv<R: Runtime>(
     request: NoteDataSourceCsvExportRequest,
 ) -> Result<NoteDataSourceCsvExportSaveDto, String> {
     let pool = connect_sqlite(app.clone(), db_url).await?;
-    data_source_csv_export::pick_and_write_csv(&app, &pool, &data_source_id, request).await
+    export_dialogs::pick_and_write_csv(&app, &pool, &data_source_id, request).await
 }
 
 #[tauri::command]
@@ -844,7 +839,7 @@ pub async fn notes_list_data_source_templates<R: Runtime>(
     data_source_id: String,
 ) -> Result<Vec<NoteDataSourceTemplateDto>, String> {
     let pool = connect_sqlite(app, db_url).await?;
-    data_source_templates::list_data_source_templates(&pool, &data_source_id).await
+    data_sources::templates::list_data_source_templates(&pool, &data_source_id).await
 }
 
 #[tauri::command]
@@ -855,7 +850,7 @@ pub async fn notes_create_data_source_template_from_row<R: Runtime>(
     request: NoteDataSourceTemplateCreateFromRow,
 ) -> Result<project_history::NotesMutationResultDto<NoteDataSourceTemplateDto>, String> {
     let pool = connect_sqlite(app, db_url).await?;
-    let value = data_source_templates::create_data_source_template_from_row(
+    let value = data_sources::templates::create_data_source_template_from_row(
         &pool,
         &data_source_id,
         request,
@@ -873,7 +868,7 @@ pub async fn notes_apply_data_source_template<R: Runtime>(
     request: NoteDataSourceTemplateApply,
 ) -> Result<project_history::NotesMutationResultDto<NoteLoadedPage>, String> {
     let pool = connect_sqlite(app, db_url).await?;
-    let value = data_source_templates::apply_data_source_template(
+    let value = data_sources::templates::apply_data_source_template(
         &pool,
         &data_source_id,
         &template_id,
@@ -892,7 +887,7 @@ pub async fn notes_delete_data_source_template<R: Runtime>(
 ) -> Result<project_history::NotesMutationResultDto<String>, String> {
     let pool = connect_sqlite(app, db_url).await?;
     let value =
-        data_source_templates::delete_data_source_template(&pool, &data_source_id, &template_id)
+        data_sources::templates::delete_data_source_template(&pool, &data_source_id, &template_id)
             .await?;
     project_history::mutation_result(&pool, value).await
 }
@@ -907,7 +902,7 @@ pub async fn notes_get_data_source_table_view<R: Runtime>(
     window: Option<NoteDataSourceViewWindowRequest>,
 ) -> Result<NoteDataSourceTableViewDto, String> {
     let pool = connect_sqlite(app, db_url).await?;
-    data_source_table::get_data_source_table_view_window(
+    data_sources::layouts::table::get_data_source_table_view_window(
         &pool,
         &data_source_id,
         database_id.as_deref(),
@@ -927,7 +922,7 @@ pub async fn notes_update_data_source_table_view<R: Runtime>(
     update: NoteDataSourceTableViewUpdate,
 ) -> Result<project_history::NotesMutationResultDto<NoteDataSourceTableViewDto>, String> {
     let pool = connect_sqlite(app, db_url).await?;
-    let value = data_source_table::update_data_source_table_view(
+    let value = data_sources::layouts::table::update_data_source_table_view(
         &pool,
         &data_source_id,
         database_id.as_deref(),
@@ -947,7 +942,7 @@ pub async fn notes_update_data_source_row_property<R: Runtime>(
     update: NoteDataSourceRowPropertyUpdate,
 ) -> Result<project_history::NotesMutationResultDto<NotePageDto>, String> {
     let pool = connect_sqlite(app, db_url).await?;
-    let value = data_source_table::update_data_source_row_property(
+    let value = data_sources::layouts::table::update_data_source_row_property(
         &pool,
         &data_source_id,
         &page_id,
@@ -967,7 +962,7 @@ pub async fn notes_click_data_source_button<R: Runtime>(
 ) -> Result<project_history::NotesMutationResultDto<NotePageDto>, String> {
     let pool = connect_sqlite(app, db_url).await?;
     let value =
-        data_source_buttons::click_data_source_button(&pool, &data_source_id, &page_id, request)
+        data_sources::buttons::click_data_source_button(&pool, &data_source_id, &page_id, request)
             .await?;
     project_history::mutation_result(&pool, value).await
 }
@@ -982,7 +977,7 @@ pub async fn notes_get_data_source_board_view<R: Runtime>(
     window: Option<NoteDataSourceViewWindowRequest>,
 ) -> Result<NoteDataSourceBoardViewDto, String> {
     let pool = connect_sqlite(app, db_url).await?;
-    data_source_board::get_data_source_board_view_window(
+    data_sources::layouts::board::get_data_source_board_view_window(
         &pool,
         &data_source_id,
         database_id.as_deref(),
@@ -1002,7 +997,7 @@ pub async fn notes_update_data_source_board_view<R: Runtime>(
     update: NoteDataSourceBoardViewUpdate,
 ) -> Result<project_history::NotesMutationResultDto<NoteDataSourceBoardViewDto>, String> {
     let pool = connect_sqlite(app, db_url).await?;
-    let value = data_source_board::update_data_source_board_view(
+    let value = data_sources::layouts::board::update_data_source_board_view(
         &pool,
         &data_source_id,
         database_id.as_deref(),
@@ -1023,7 +1018,7 @@ pub async fn notes_move_data_source_board_row<R: Runtime>(
     request: NoteDataSourceBoardRowMove,
 ) -> Result<project_history::NotesMutationResultDto<NoteDataSourceBoardViewDto>, String> {
     let pool = connect_sqlite(app, db_url).await?;
-    let value = data_source_board::move_data_source_board_row(
+    let value = data_sources::layouts::board::move_data_source_board_row(
         &pool,
         &data_source_id,
         database_id.as_deref(),
@@ -1044,7 +1039,7 @@ pub async fn notes_get_data_source_gallery_view<R: Runtime>(
     window: Option<NoteDataSourceViewWindowRequest>,
 ) -> Result<NoteDataSourceGalleryViewDto, String> {
     let pool = connect_sqlite(app, db_url).await?;
-    data_source_gallery::get_data_source_gallery_view_window(
+    data_sources::layouts::gallery::get_data_source_gallery_view_window(
         &pool,
         &data_source_id,
         database_id.as_deref(),
@@ -1064,7 +1059,7 @@ pub async fn notes_update_data_source_gallery_view<R: Runtime>(
     update: NoteDataSourceGalleryViewUpdate,
 ) -> Result<project_history::NotesMutationResultDto<NoteDataSourceGalleryViewDto>, String> {
     let pool = connect_sqlite(app, db_url).await?;
-    let value = data_source_gallery::update_data_source_gallery_view(
+    let value = data_sources::layouts::gallery::update_data_source_gallery_view(
         &pool,
         &data_source_id,
         database_id.as_deref(),
@@ -1085,7 +1080,7 @@ pub async fn notes_get_data_source_list_view<R: Runtime>(
     window: Option<NoteDataSourceViewWindowRequest>,
 ) -> Result<NoteDataSourceListViewDto, String> {
     let pool = connect_sqlite(app, db_url).await?;
-    data_source_list::get_data_source_list_view_window(
+    data_sources::layouts::list::get_data_source_list_view_window(
         &pool,
         &data_source_id,
         database_id.as_deref(),
@@ -1105,7 +1100,7 @@ pub async fn notes_update_data_source_list_view<R: Runtime>(
     update: NoteDataSourceListViewUpdate,
 ) -> Result<project_history::NotesMutationResultDto<NoteDataSourceListViewDto>, String> {
     let pool = connect_sqlite(app, db_url).await?;
-    let value = data_source_list::update_data_source_list_view(
+    let value = data_sources::layouts::list::update_data_source_list_view(
         &pool,
         &data_source_id,
         database_id.as_deref(),
@@ -1126,7 +1121,7 @@ pub async fn notes_get_data_source_calendar_view<R: Runtime>(
     window: Option<NoteDataSourceViewWindowRequest>,
 ) -> Result<NoteDataSourceCalendarViewDto, String> {
     let pool = connect_sqlite(app, db_url).await?;
-    data_source_calendar::get_data_source_calendar_view_window(
+    data_sources::layouts::calendar::get_data_source_calendar_view_window(
         &pool,
         &data_source_id,
         database_id.as_deref(),
@@ -1146,7 +1141,7 @@ pub async fn notes_update_data_source_calendar_view<R: Runtime>(
     update: NoteDataSourceCalendarViewUpdate,
 ) -> Result<project_history::NotesMutationResultDto<NoteDataSourceCalendarViewDto>, String> {
     let pool = connect_sqlite(app, db_url).await?;
-    let value = data_source_calendar::update_data_source_calendar_view(
+    let value = data_sources::layouts::calendar::update_data_source_calendar_view(
         &pool,
         &data_source_id,
         database_id.as_deref(),
@@ -1167,7 +1162,7 @@ pub async fn notes_get_data_source_timeline_view<R: Runtime>(
     window: Option<NoteDataSourceViewWindowRequest>,
 ) -> Result<NoteDataSourceTimelineViewDto, String> {
     let pool = connect_sqlite(app, db_url).await?;
-    data_source_timeline::get_data_source_timeline_view_window(
+    data_sources::layouts::timeline::get_data_source_timeline_view_window(
         &pool,
         &data_source_id,
         database_id.as_deref(),
@@ -1187,7 +1182,7 @@ pub async fn notes_update_data_source_timeline_view<R: Runtime>(
     update: NoteDataSourceTimelineViewUpdate,
 ) -> Result<project_history::NotesMutationResultDto<NoteDataSourceTimelineViewDto>, String> {
     let pool = connect_sqlite(app, db_url).await?;
-    let value = data_source_timeline::update_data_source_timeline_view(
+    let value = data_sources::layouts::timeline::update_data_source_timeline_view(
         &pool,
         &data_source_id,
         database_id.as_deref(),

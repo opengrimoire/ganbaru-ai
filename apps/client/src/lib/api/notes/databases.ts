@@ -16,7 +16,7 @@ import {
   mapNotesDataSourceTimelineViewDto,
   mapNotesLoadedPageDto,
   mapNotesPageDto,
-} from "$lib/notes/notion-mappers";
+} from "$lib/notes/validation/response-mappers";
 import type {
   NotesCreatedDatabase,
   NotesDatabaseCreateRequest,
@@ -59,7 +59,7 @@ import type {
   NotesPage,
 } from "$lib/notes/types";
 import { invokeNotesMutation } from "./mutation";
-import { isNotesUuid } from "$lib/notes/block-link";
+import { isNotesUuid } from "$lib/notes/links/block-link";
 import type { NotesDatabaseReference } from "$lib/notes/types";
 
 /** Read a database reference's destination and ownership without fetching its rows. */

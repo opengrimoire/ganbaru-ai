@@ -17,12 +17,12 @@
     updateQuickNote,
     QuickNoteWriteError,
   } from "$lib/api/quick-notes";
-  import { FALLBACK_COLOR_INDEX } from "$lib/components/calendar/types";
+  import { FALLBACK_COLOR_INDEX } from "$lib/calendar/types";
   import {
     notesPlainTextFromEditableRoot,
     notesTextSelectionFromEditableRoot,
     restoreNotesEditableSelection,
-  } from "$lib/notes/editor-selection";
+  } from "$lib/notes/editor/selection";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import { getQuickNoteColor } from "$lib/quick-notes/colors";
   import { registerQuickNotesFlusher } from "$lib/quick-notes/persistence";
@@ -58,7 +58,7 @@
   } from "$lib/quick-notes/types";
   import { publishQuickNotesChanged } from "$lib/quick-notes/window-sync";
   import { getMobileBackStack } from "$lib/stores/mobile-back-stack.svelte";
-  import type { Theme } from "$lib/stores/themes";
+  import type { Theme } from "$lib/themes";
   import QuickNoteColorPicker from "./QuickNoteColorPicker.svelte";
   import QuickNoteRichText from "./QuickNoteRichText.svelte";
   import QuickNoteTagPicker from "./QuickNoteTagPicker.svelte";

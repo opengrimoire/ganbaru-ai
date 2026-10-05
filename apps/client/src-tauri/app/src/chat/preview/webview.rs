@@ -82,7 +82,7 @@ pub(super) fn persist_runtime_tab(manager: &ChatPreviewManager, pool: &SqlitePoo
     });
 }
 
-#[cfg(any(target_os = "android", target_os = "ios"))]
+#[cfg(mobile)]
 pub(super) async fn create_child_preview(
     _app: &tauri::AppHandle,
     _pool: &SqlitePool,

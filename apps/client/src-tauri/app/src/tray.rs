@@ -529,9 +529,9 @@ pub fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
                     dispatch_focus_control(
                         app,
                         if state.is_running {
-                            ganbaru_focus::FocusIntent::Pause
+                            ganbaru_pomodoro::FocusIntent::Pause
                         } else {
-                            ganbaru_focus::FocusIntent::Resume
+                            ganbaru_pomodoro::FocusIntent::Resume
                         },
                         state.native_context,
                     );
@@ -540,14 +540,14 @@ pub fn setup_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
             "skip" => {
                 dispatch_focus_control(
                     app,
-                    ganbaru_focus::FocusIntent::Advance,
+                    ganbaru_pomodoro::FocusIntent::Advance,
                     TRAY_STATE.lock().unwrap().pomodoro.native_context.clone(),
                 );
             }
             "add_focus_time" => {
                 dispatch_focus_control(
                     app,
-                    ganbaru_focus::FocusIntent::ExtendFocus { seconds: 180 },
+                    ganbaru_pomodoro::FocusIntent::ExtendFocus { seconds: 180 },
                     TRAY_STATE.lock().unwrap().pomodoro.native_context.clone(),
                 );
             }
@@ -624,7 +624,7 @@ async fn update_tray(
 
 fn dispatch_focus_control(
     app: &AppHandle,
-    intent: ganbaru_focus::FocusIntent,
+    intent: ganbaru_pomodoro::FocusIntent,
     context: Option<crate::pomodoro::FocusNativeContext>,
 ) {
     let Some(context) = context else {
@@ -639,10 +639,10 @@ fn dispatch_focus_control(
 pub(crate) async fn reconcile_committed_focus(
     app: &AppHandle,
     generation: u64,
-    snapshot: &ganbaru_focus::FocusExecutionSnapshot,
+    snapshot: &ganbaru_pomodoro::FocusExecutionSnapshot,
     now_ms: i64,
 ) -> Result<(), String> {
-    use ganbaru_focus::{FocusMode, FocusPhase};
+    use ganbaru_pomodoro::{FocusMode, FocusPhase};
     let context = crate::pomodoro::capture_native_context(app)?;
     if !context.matches_snapshot(generation, snapshot) {
         return Err("Native Focus tray snapshot was superseded".to_owned());

@@ -4,9 +4,9 @@
     projectStatusBadgeClass,
     projectStatusBadgeDotStyle,
     projectStatusBadgeStyle,
-  } from "$lib/projects/project-display";
+  } from "$lib/projects/display";
   import type { ProjectStatus } from "$lib/projects/types";
-  import type { Theme } from "$lib/stores/themes";
+  import type { Theme } from "$lib/themes";
   import { cn } from "$lib/utils";
 
   let {

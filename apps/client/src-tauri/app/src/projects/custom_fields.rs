@@ -14,7 +14,7 @@ use super::validation::{
     validate_custom_field_option_update, validate_custom_field_update,
     validate_custom_field_value_update, validate_date,
 };
-use crate::db_path::connect_sqlite;
+use crate::db::connect_sqlite;
 use std::collections::HashSet;
 use tauri::{AppHandle, Runtime};
 

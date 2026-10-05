@@ -1,10 +1,10 @@
 <script lang="ts">
-  import type { CalendarViewMode } from "./types";
+  import type { CalendarViewMode } from "$lib/calendar/types";
   import {
     formatDatePart,
     formatMonthYear,
     isToday,
-  } from "./utils";
+  } from "$lib/calendar/utils";
   import { getCalendars } from "$lib/stores/calendars.svelte";
   import { getMobileBackStack } from "$lib/stores/mobile-back-stack.svelte";
   import { onMount, tick } from "svelte";
@@ -15,14 +15,14 @@
   import Check from "@lucide/svelte/icons/check";
   import Settings from "@lucide/svelte/icons/settings";
   import Layers from "@lucide/svelte/icons/layers";
-  import { getSettingsLauncher } from "$lib/stores/settingsLauncher.svelte";
-  import { getCalendarZoom } from "$lib/stores/calendarZoom.svelte";
-  import { calendarDisplayName } from "$lib/calendar/calendar-display";
+  import { getSettingsLauncher } from "$lib/stores/settings-launcher.svelte";
+  import { getCalendarZoom } from "$lib/stores/calendar-zoom.svelte";
+  import { calendarDisplayName } from "$lib/calendar/display";
   import { formatList } from "$lib/i18n/formatters";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import Minus from "@lucide/svelte/icons/minus";
   import Plus from "@lucide/svelte/icons/plus";
-  import MiniDatePicker from "./MiniDatePicker.svelte";
+  import MiniDatePicker from "$lib/components/ui/MiniDatePicker.svelte";
 
   const calendarsStore = getCalendars();
   const settingsLauncher = getSettingsLauncher();

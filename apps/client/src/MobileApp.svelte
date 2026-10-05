@@ -9,17 +9,17 @@
   import {
     MobileBackListenerController,
     resolveMobileBackAction,
-  } from "$lib/mobile-back";
+  } from "$lib/mobile/back";
   import {
     mobileNavigationPresentation,
     mobileTopBarPanelGeometry,
-  } from "$lib/mobile-layout";
+  } from "$lib/mobile/layout";
   import {
     classifyLoadFailure,
     recoverLoadFailure,
     type LoadFailure,
   } from "$lib/module-load-recovery";
-  import { MobilePersistenceLifecycleController } from "$lib/mobile-persistence-lifecycle";
+  import { MobilePersistenceLifecycleController } from "$lib/mobile/persistence-lifecycle";
   import type { View } from "$lib/navigation";
   import { BUILD_PLATFORM_PROFILE, platformHasCapability } from "$lib/platform";
   import { flushQuickNoteEditors } from "$lib/quick-notes/persistence";
@@ -29,8 +29,8 @@
   import { getPomodoro } from "$lib/stores/pomodoro.svelte";
   import { getMobileBackStack } from "$lib/stores/mobile-back-stack.svelte";
   import { getViewport } from "$lib/stores/viewport.svelte";
-  import { getSettingsLauncher } from "$lib/stores/settingsLauncher.svelte";
-  import { mark as perfMark } from "$lib/stores/perflog.svelte";
+  import { getSettingsLauncher } from "$lib/stores/settings-launcher.svelte";
+  import { mark as perfMark } from "$lib/stores/perf-log.svelte";
   import { getZoom } from "$lib/stores/zoom.svelte";
   import { flushConfig } from "$lib/vault/config";
 
@@ -49,8 +49,8 @@
   type MusicComponent = typeof import("$lib/components/music/MusicPanel.svelte").default;
   type MusicPlaybackHostComponent = typeof import("$lib/components/music/MusicPlaybackHost.svelte").default;
   type PomodoroMenuComponent = typeof import("$lib/components/pomodoro/PomodoroMenuContent.svelte").default;
-  type LinkedDeviceControlComponent = typeof import("$lib/components/vault/LinkedDeviceControl.svelte").default;
-  type ProjectViewComponents = import("$lib/components/projects/project-view-components").ProjectViewComponents;
+  type LinkedDeviceControlComponent = typeof import("$lib/components/vault/handoff/LinkedDeviceControl.svelte").default;
+  type ProjectViewComponents = import("$lib/components/projects/view-components").ProjectViewComponents;
   type NotesStore = ReturnType<typeof import("$lib/stores/notes.svelte").getNotes>;
   type DeferredSurface = Exclude<View, "calendar"> | "settings" | "quickNotes" | "music";
   interface CalendarNotificationScheduler {
@@ -278,7 +278,7 @@
     const [calendarModule, pomodoroMenuModule, linkedDeviceControlModule] = await Promise.all([
       import("$lib/components/calendar/CalendarView.svelte"),
       import("$lib/components/pomodoro/PomodoroMenuContent.svelte"),
-      import("$lib/components/vault/LinkedDeviceControl.svelte"),
+      import("$lib/components/vault/handoff/LinkedDeviceControl.svelte"),
     ]);
     if (mobileAppDisposed) return;
     CalendarSurface = calendarModule.default;
@@ -313,10 +313,10 @@
       ] = await Promise.all([
         import("$lib/stores/projects.svelte"),
         import("$lib/components/projects/ProjectsView.svelte"),
-        import("$lib/components/projects/ProjectListView.svelte"),
-        import("$lib/components/projects/ProjectDashboardView.svelte"),
-        import("$lib/components/projects/ProjectKanbanView.svelte"),
-        import("$lib/components/projects/ProjectGanttView.svelte"),
+        import("$lib/components/projects/list/ProjectListView.svelte"),
+        import("$lib/components/projects/views/ProjectDashboardView.svelte"),
+        import("$lib/components/projects/views/ProjectKanbanView.svelte"),
+        import("$lib/components/projects/views/ProjectGanttView.svelte"),
         import("$lib/components/calendar/CalendarView.svelte"),
       ]);
       if (mobileAppDisposed) return;
@@ -381,7 +381,7 @@
     const [panelModule, playbackHostModule, preloadModule] = await Promise.all([
       import("$lib/components/music/MusicPanel.svelte"),
       import("$lib/components/music/MusicPlaybackHost.svelte"),
-      import("$lib/music/music-first-use-preload"),
+      import("$lib/music/first-use-preload"),
     ]);
     if (mobileAppDisposed) return;
     MusicSurface = panelModule.default;

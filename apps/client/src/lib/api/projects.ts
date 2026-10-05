@@ -1,22 +1,22 @@
 import { invoke } from "@tauri-apps/api/core";
 import { ensureDbUrl } from "$lib/api/db";
-import { normalizeEventColor } from "$lib/components/calendar/utils";
-import { FALLBACK_COLOR_INDEX } from "$lib/components/calendar/types";
-import { localTimezone } from "$lib/stores/calendar-event-payloads";
-import { toCalendarDate } from "$lib/stores/map-row";
+import { normalizeEventColor } from "$lib/calendar/utils";
+import { FALLBACK_COLOR_INDEX } from "$lib/calendar/types";
+import { localTimezone } from "$lib/stores/calendar/event-payloads";
+import { toCalendarDate } from "$lib/calendar/db-rows";
 import {
   isNotesPageOpenMode,
   type NotesPageOpenMode,
-} from "$lib/notes/page-open-mode";
+} from "$lib/notes/pages/open-mode";
 import {
   isNotesHistoryRetentionDays,
   type NotesHistoryRetentionDays,
-} from "$lib/notes/history-retention";
+} from "$lib/notes/history/retention";
 import {
   DEFAULT_FOCUS_IDLE_THRESHOLD_MINUTES,
   FOCUS_IDLE_THRESHOLD_MINUTES_OPTIONS,
   type FocusIdleThresholdMinutes,
-} from "$lib/stores/preferences";
+} from "$lib/stores/preference-options";
 import type {
   Project,
   ProjectChecklistItem,
@@ -80,7 +80,7 @@ import { PROJECT_CUSTOM_FIELD_TYPES } from "$lib/projects/types";
 import {
   systemProjectGroupName,
   systemProjectName,
-} from "$lib/projects/project-system-defaults";
+} from "$lib/projects/system-defaults";
 
 interface ProjectGroupRow {
   id: string;

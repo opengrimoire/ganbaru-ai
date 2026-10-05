@@ -51,7 +51,7 @@ pub(crate) struct ScheduleSnapshot {
     pub(crate) project_id: String,
     pub(crate) defaults: ScheduleDefaults,
     pub(crate) tasks: Vec<ScheduleTask>,
-    pub(crate) music: Vec<crate::music_context::MusicContextAssignmentDraft>,
+    pub(crate) music: Vec<crate::music::assignments::MusicContextAssignmentDraft>,
 }
 
 /// Bound canonical selection reads independently of the Calendar command adapter.

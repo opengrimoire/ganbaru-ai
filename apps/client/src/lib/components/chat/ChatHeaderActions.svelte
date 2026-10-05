@@ -3,7 +3,7 @@
   import PanelRight from "@lucide/svelte/icons/panel-right";
   import Settings2 from "@lucide/svelte/icons/settings-2";
   import SquareArrowOutUpRight from "@lucide/svelte/icons/square-arrow-out-up-right";
-  import { openDetachedChatWindow } from "$lib/chat/local-execution-ui";
+  import { openDetachedChatWindow } from "$lib/chat/workspace/local-execution-ui";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import { BUILD_PLATFORM_PROFILE, platformHasCapability } from "$lib/platform";
   import { getChat } from "$lib/stores/chat.svelte";

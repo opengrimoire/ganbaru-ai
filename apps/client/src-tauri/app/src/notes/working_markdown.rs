@@ -1,14 +1,16 @@
 //! Authorized Chat-facing integration for working-folder Markdown files.
 
-use crate::chat::models::{ChatError, ChatErrorCode, ChatResult, ProjectWorkingFolderId};
-use crate::chat::repository::workspaces;
+use crate::chat::workspace::commands::authorize_working_folder;
 use crate::chat::workspace::{
     AuthorizedWorkingFolder, WorkingFolderAuthorizationOperation,
     ensure_managed_working_folder_binding, open_authorized_path,
 };
-use crate::chat::workspace_commands::authorize_working_folder;
-use crate::db_path::connect_sqlite;
-use ganbaru_notes::notes::working_markdown::{
+use crate::db::connect_sqlite;
+use ganbaru_chat::repository::workspaces;
+use ganbaru_chat_contracts::models::{
+    ChatError, ChatErrorCode, ChatResult, ProjectWorkingFolderId,
+};
+use ganbaru_notes::working_markdown::{
     self, WorkingMarkdownError, WorkingMarkdownFile, WorkingMarkdownNode, WorkingMarkdownNodeKind,
 };
 use serde::Serialize;

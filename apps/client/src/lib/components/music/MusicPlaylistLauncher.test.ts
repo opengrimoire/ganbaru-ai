@@ -9,8 +9,8 @@ import {
 } from "$lib/api/music-library";
 import { setActiveVaultIdentity } from "$lib/vault/active-vault";
 import { getMusicPlayer } from "$lib/stores/music-player.svelte";
-import { getMusicPlaylistSummaryCache } from "$lib/music/music-playlist-summary-cache.svelte";
-import type { MusicPlaylistPlaybackEntry, MusicPlaylistSummary } from "$lib/music/library-contracts";
+import { getMusicPlaylistSummaryCache } from "$lib/music/playlists/summary-cache.svelte";
+import type { MusicPlaylistPlaybackEntry, MusicPlaylistSummary } from "$lib/music/library/contracts";
 
 vi.mock("$lib/api/music-library", async (importOriginal) => {
   const original = await importOriginal<typeof import("$lib/api/music-library")>();

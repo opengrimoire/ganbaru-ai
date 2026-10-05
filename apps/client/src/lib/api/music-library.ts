@@ -1,11 +1,11 @@
 import { invoke } from "@tauri-apps/api/core";
 import { dbUrl } from "$lib/api/db";
-import { parseMusicTransferPreview, parseMusicTransferResult, type MusicTransferCommit, type MusicTransferFormat, type MusicTransferSource } from "$lib/music/music-interchange";
+import { parseMusicTransferPreview, parseMusicTransferResult, type MusicTransferCommit, type MusicTransferFormat, type MusicTransferSource } from "$lib/music/library/interchange";
 import {
   parseMusicContextAssignments,
   type MusicAssignmentOwnerKind,
   type MusicContextAssignment,
-} from "$lib/music/music-context-assignment";
+} from "$lib/music/context-assignment";
 import {
   parseBindingResult,
   parseBindings,
@@ -75,7 +75,7 @@ import {
   type MusicYouTubeSnapshotResult,
   type MusicYouTubeSourceFailureWrite,
   type MusicYouTubeVideoWrite,
-} from "$lib/music/library-contracts";
+} from "$lib/music/library/contracts";
 
 export type MusicLibraryApiErrorCode = "validation" | "not-found" | "conflict" | "stale-write" | "database" | "unknown";
 

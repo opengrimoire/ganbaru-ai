@@ -8,13 +8,13 @@ use super::support::{
 use super::validation::{
     validate_answers, validate_approval_decision, validate_pending_request, validate_prompt,
 };
-use crate::chat::driver_operations::{complete_driver_operation, replay_driver_receipt};
-use crate::chat::models::*;
-use crate::chat::repository::receipts::{CommandReceiptClaim, claim_command_receipt};
-use crate::chat::runtime::ChatRuntimeRegistry;
 use crate::chat::send_commands::{
     ResolveChatApprovalCommand, ResolveChatUserInputCommand, SteerChatTurnCommand,
 };
+use ganbaru_chat::driver_operations::{complete_driver_operation, replay_driver_receipt};
+use ganbaru_chat::repository::receipts::{CommandReceiptClaim, claim_command_receipt};
+use ganbaru_chat::runtime::ChatRuntimeRegistry;
+use ganbaru_chat_contracts::models::*;
 use tauri::Manager;
 
 pub(crate) async fn steer_turn(

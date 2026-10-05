@@ -7,13 +7,13 @@ members = [
   "crates/ganbaru-chat-contracts",
   "crates/ganbaru-chat-providers",
   "crates/ganbaru-db",
-  "crates/ganbaru-focus",
   "crates/ganbaru-mobile-documents",
   "crates/ganbaru-mobile-distractions",
   "crates/ganbaru-mobile-media",
   "crates/ganbaru-mobile-notifications",
   "crates/ganbaru-native-messaging",
   "crates/ganbaru-notes",
+  "crates/ganbaru-pomodoro",
   "crates/ganbaru-working-folders",
 ]
 
@@ -36,10 +36,17 @@ block2 = "0.6.2"
 cairo-rs = { version = "0.18.5", features = ["png"] }
 chrono = { version = "0.4", default-features = false, features = ["std", "serde"] }
 flate2 = "1.1.9"
+ganbaru-chat = { path = "crates/ganbaru-chat", default-features = false }
+ganbaru-chat-contracts = { path = "crates/ganbaru-chat-contracts" }
+ganbaru-chat-providers = { path = "crates/ganbaru-chat-providers" }
+ganbaru-db = { path = "crates/ganbaru-db" }
 ganbaru-mobile-documents = { path = "crates/ganbaru-mobile-documents" }
 ganbaru-mobile-distractions = { path = "crates/ganbaru-mobile-distractions" }
 ganbaru-mobile-media = { path = "crates/ganbaru-mobile-media" }
 ganbaru-mobile-notifications = { path = "crates/ganbaru-mobile-notifications" }
+ganbaru-notes = { path = "crates/ganbaru-notes" }
+ganbaru-pomodoro = { path = "crates/ganbaru-pomodoro" }
+ganbaru-working-folders = { path = "crates/ganbaru-working-folders" }
 gtk = "0.18"
 jiff = { version = "0.2.37", default-features = false, features = [
   "std",

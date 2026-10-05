@@ -8,12 +8,12 @@
     CHAT_LOCAL_EXECUTION_COMPONENTS,
     listenForChatChanges,
     preloadChatLocalExecutionUi,
-  } from "$lib/chat/local-execution-ui";
-  import { inspectorFocusAction } from "$lib/chat/inspector-model";
+  } from "$lib/chat/workspace/local-execution-ui";
+  import { inspectorFocusAction } from "$lib/chat/workspace/inspector-model";
   import {
     CHAT_OPEN_WORKSPACE_PANEL_EVENT,
     chatWorkspaceRequest,
-  } from "$lib/chat/workspace-events";
+  } from "$lib/chat/workspace/events";
   import {
     alignPanelSizeToDevicePixel,
     CHAT_AUXILIARY_CONVERSATION_MIN_PX,
@@ -35,21 +35,21 @@
   import {
     isChatCheckpointRestoreRequest,
     restoreChatCheckpoint,
-  } from "$lib/chat/checkpoint-restoration";
+  } from "$lib/chat/review/checkpoint-restoration";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import { getChat } from "$lib/stores/chat.svelte";
   import { getPreferences } from "$lib/stores/preferences.svelte";
   import { getProjects } from "$lib/stores/projects.svelte";
-  import { getSettingsLauncher } from "$lib/stores/settingsLauncher.svelte";
+  import { getSettingsLauncher } from "$lib/stores/settings-launcher.svelte";
   import { BUILD_PLATFORM_PROFILE, platformHasCapability } from "$lib/platform";
   import ChatWorkspaceHeader from "./ChatWorkspaceHeader.svelte";
   import ChatFirstUse from "./ChatFirstUse.svelte";
   import ChatHeaderActions from "./ChatHeaderActions.svelte";
   import ChatProjectSettingsPanel from "./ChatProjectSettingsPanel.svelte";
-  import ChatChannelRail from "./ChatChannelRail.svelte";
-  import ChatChannelArchive from "./ChatChannelArchive.svelte";
-  import ChatChannelFeed from "./ChatChannelFeed.svelte";
-  import ChatReplyThreadPanel from "./ChatReplyThreadPanel.svelte";
+  import ChatChannelRail from "$lib/components/chat/channels/ChatChannelRail.svelte";
+  import ChatChannelArchive from "$lib/components/chat/channels/ChatChannelArchive.svelte";
+  import ChatChannelFeed from "$lib/components/chat/channels/ChatChannelFeed.svelte";
+  import ChatReplyThreadPanel from "$lib/components/chat/timeline/ChatReplyThreadPanel.svelte";
 
   const localization = getLocalization();
   const { t } = localization;

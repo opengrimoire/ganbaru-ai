@@ -63,8 +63,10 @@ The Android artifact intentionally includes mobile anti-distraction, notificatio
 
 The machine-readable ceilings and required or forbidden module sets are authoritative in:
 
-- `apps/client/scripts/first-use-bundle-baseline.json`
-- `apps/client/scripts/android-bundle-baseline.json`
+- `apps/client/scripts/bundle-contracts/baselines/first-use.json`
+- `apps/client/scripts/bundle-contracts/baselines/android.json`
+
+Both checks fail before inspecting the build when a baseline names an application source path that no longer exists, so renaming or deleting a module cannot silently disable a rule. Dependency package entries are not checked on disk because forbidden packages may be intentionally absent.
 
 Ceilings are set to the measured import graph without extra headroom, so an unexpected eager import fails the contract. Raising a ceiling requires a concrete user-visible rationale. Record the reason in the change, not as a chronology in this document. Uncommon panels and heavy layouts, such as Notes database layouts, link editing, and deletion confirmation, stay behind lazy boundaries so initial routes remain small.
 
@@ -92,7 +94,7 @@ Provider maintenance can compare an installed Codex app-server schema with the c
 pnpm --dir apps/client run check:codex-protocol-installed
 ```
 
-Use `generate:codex-protocol` or `generate:opencode-protocol` only after a reviewed protocol change.
+The scripts under `apps/client/scripts/provider-protocols/` check by default and regenerate only with `--write`; the OpenCode script also needs `--source <path-or-url>` to compare or regenerate. Use `generate:codex-protocol` or `generate:opencode-protocol` only after a reviewed protocol change.
 
 ## Changing validation topology
 
