@@ -173,7 +173,7 @@ export class MusicSourcesController {
           videos: preview.videos
             .filter((video) => video.metadataResolved)
             .map(({ videoId, title, channel }) => ({ videoId, title, channel })),
-          resolvedAt: this.now(),
+          resolvedAtMs: this.now(),
         });
       },
       {
@@ -328,17 +328,17 @@ export class MusicSourcesController {
     if (!trimmedName) throw new Error("Enter a source name.");
     const rootId = this.id();
     const collectionId = this.id();
-    const createdAt = this.now();
+    const createdAtMs = this.now();
     await this.api.createRoot({
       rootId,
       collectionId,
       identityKey: `local-root:${rootId}`,
       name: trimmedName,
-      createdAt,
+      createdAtMs,
     });
     await this.api.bindRoot(this.vaultId, rootId, selection.folderPath);
     await this.loadProjection();
-    const target = this.localTarget(collectionId, rootId, trimmedName, selection.folderPath, createdAt);
+    const target = this.localTarget(collectionId, rootId, trimmedName, selection.folderPath, createdAtMs);
     const plan = this.refresh.prepare([target]);
     if (waitForRefresh) {
       const failure = refreshFailure(await this.runRefresh(plan, true));
@@ -382,7 +382,7 @@ export class MusicSourcesController {
       name: trimmedName,
       localRootId: collection.localRootId,
       youtubePlaylistId: collection.youtubePlaylistId,
-      updatedAt: this.now(),
+      updatedAtMs: this.now(),
     });
     await this.loadProjection();
     notifyMusicLibraryChanged();
@@ -422,7 +422,7 @@ export class MusicSourcesController {
   }
 
   async addYouTube(preview: MusicYouTubeSourcePreview, name: string): Promise<string> {
-    const resolvedAt = this.now();
+    const resolvedAtMs = this.now();
     if (preview.kind === "youtube-video" && preview.videoId) {
       await this.api.saveYouTubeVideo({
         videoId: preview.videoId,
@@ -430,7 +430,7 @@ export class MusicSourcesController {
         channel: preview.channel,
         durationMs: preview.durationMs,
         resolutionState: "ready",
-        resolvedAt,
+        resolvedAtMs,
       });
       return preview.videoId;
     }
@@ -444,7 +444,7 @@ export class MusicSourcesController {
       videos: preview.videos
         .filter((video) => video.metadataResolved)
         .map(({ videoId, title, channel }) => ({ videoId, title, channel })),
-      resolvedAt,
+      resolvedAtMs,
     });
     await this.load();
     return collectionId;
@@ -578,7 +578,7 @@ export class MusicSourcesController {
       expectedVersion: collection.version,
       expectedImpact: impact,
       removeOrphanedItems,
-      removedAt: this.now(),
+      removedAtMs: this.now(),
     });
     this.removalImpact = null;
     await this.load();
@@ -589,7 +589,7 @@ export class MusicSourcesController {
       planId: this.id(),
       rootId,
       replacementFolderPath,
-      createdAt: this.now(),
+      createdAtMs: this.now(),
     });
     const entries = await this.api.relinkEntries(plan.id, 0, 500);
     this.relinkPlan = plan;
@@ -619,7 +619,7 @@ export class MusicSourcesController {
     rootId: string,
     name: string,
     folderPath: string,
-    requestedAt: number,
+    requestedAtMs: number,
   ): Extract<MusicSourceRefreshTarget, { kind: "local-root" }> {
     return {
       collectionId,
@@ -633,7 +633,7 @@ export class MusicSourcesController {
         availableRoots: this.bindings.flatMap((binding) => binding.folderPath
           ? [{ rootId: binding.rootId, folderPath: binding.folderPath }]
           : []),
-        requestedAt,
+        requestedAtMs,
       },
     };
   }

@@ -20,10 +20,10 @@ struct RefreshJobRow {
     truncated_count: i64,
     absence_determined: i64,
     status_message: String,
-    requested_at: i64,
-    started_at: Option<i64>,
-    finished_at: Option<i64>,
-    updated_at: i64,
+    requested_at_ms: i64,
+    started_at_ms: Option<i64>,
+    finished_at_ms: Option<i64>,
+    updated_at_ms: i64,
 }
 
 impl TryFrom<RefreshJobRow> for MusicRefreshJobProgress {
@@ -55,10 +55,10 @@ impl TryFrom<RefreshJobRow> for MusicRefreshJobProgress {
                 }
             },
             status_message: row.status_message,
-            requested_at: row.requested_at,
-            started_at: row.started_at,
-            finished_at: row.finished_at,
-            updated_at: row.updated_at,
+            requested_at_ms: row.requested_at_ms,
+            started_at_ms: row.started_at_ms,
+            finished_at_ms: row.finished_at_ms,
+            updated_at_ms: row.updated_at_ms,
         })
     }
 }
@@ -126,11 +126,11 @@ pub(super) async fn prepare(
     sqlx::query(
         "UPDATE music_refresh_jobs
          SET state = 'cancelled', status_message = 'Superseded by a newer refresh.',
-             finished_at = ?, updated_at = ?
+             finished_at_ms = ?, updated_at_ms = ?
          WHERE source_collection_id = ? AND state IN ('queued', 'running')",
     )
-    .bind(request.requested_at)
-    .bind(request.requested_at)
+    .bind(request.requested_at_ms)
+    .bind(request.requested_at_ms)
     .bind(&request.collection_id)
     .execute(&mut *transaction)
     .await
@@ -138,15 +138,15 @@ pub(super) async fn prepare(
     sqlx::query(
         "INSERT INTO music_refresh_jobs
             (id, source_collection_id, local_root_id, kind, state, generation,
-             status_message, requested_at, updated_at)
+             status_message, requested_at_ms, updated_at_ms)
          VALUES (?, ?, ?, 'local-root', 'queued', ?, 'Waiting to scan.', ?, ?)",
     )
     .bind(&request.job_id)
     .bind(&request.collection_id)
     .bind(&request.root_id)
     .bind(generation)
-    .bind(request.requested_at)
-    .bind(request.requested_at)
+    .bind(request.requested_at_ms)
+    .bind(request.requested_at_ms)
     .execute(&mut *transaction)
     .await
     .map_err(|error| map_conflict("create local music refresh", error))?;
@@ -161,9 +161,9 @@ pub(super) async fn prepare(
     sqlx::query(
         "UPDATE music_source_collections
          SET refresh_state = 'queued', last_refresh_error_code = NULL,
-             updated_at = ?, version = version + 1 WHERE id = ?",
+             updated_at_ms = ?, version = version + 1 WHERE id = ?",
     )
-    .bind(request.requested_at)
+    .bind(request.requested_at_ms)
     .bind(&request.collection_id)
     .execute(&mut *transaction)
     .await
@@ -179,8 +179,8 @@ pub(super) async fn mark_running(pool: &SqlitePool, job_id: &str) -> MusicLibrar
     let now = now_ms();
     let result = sqlx::query(
         "UPDATE music_refresh_jobs
-         SET state = 'running', started_at = COALESCE(started_at, ?),
-             status_message = 'Discovering media files.', updated_at = ?
+         SET state = 'running', started_at_ms = COALESCE(started_at_ms, ?),
+             status_message = 'Discovering media files.', updated_at_ms = ?
          WHERE id = ? AND state = 'queued'",
     )
     .bind(now)
@@ -204,8 +204,8 @@ pub(super) async fn load_progress(
     let row = sqlx::query_as::<_, RefreshJobRow>(
         "SELECT id, source_collection_id, local_root_id, kind, state, generation,
                 discovered_count, processed_count, skipped_count, issue_count,
-                truncated_count, absence_determined, status_message, requested_at,
-                started_at, finished_at, updated_at
+                truncated_count, absence_determined, status_message, requested_at_ms,
+                started_at_ms, finished_at_ms, updated_at_ms
          FROM music_refresh_jobs WHERE id = ?",
     )
     .bind(job_id)
@@ -230,7 +230,7 @@ pub(super) async fn cancel(
     let result = sqlx::query(
         "UPDATE music_refresh_jobs
          SET state = 'cancelled', status_message = 'Refresh cancelled. Existing availability was preserved.',
-             finished_at = ?, updated_at = ?
+             finished_at_ms = ?, updated_at_ms = ?
          WHERE id = ? AND state IN ('queued', 'running')",
     )
     .bind(cancelled_at)
@@ -345,7 +345,7 @@ pub(super) async fn save_discovery_batch(
     sqlx::query(
         "UPDATE music_refresh_jobs
          SET discovered_count = discovered_count + ?, skipped_count = skipped_count + ?,
-             status_message = 'Discovering media files.', updated_at = ?
+             status_message = 'Discovering media files.', updated_at_ms = ?
          WHERE id = ? AND state = 'running'",
     )
     .bind(discovered)
@@ -397,7 +397,7 @@ pub(super) async fn reconcile_batch(
             &mut transaction,
             &item_id,
             media,
-            request.requested_at,
+            request.requested_at_ms,
             ambiguous,
         )
         .await?;
@@ -413,7 +413,7 @@ pub(super) async fn reconcile_batch(
         .await?;
         sqlx::query(
             "INSERT INTO music_source_collection_items
-                (collection_id, item_id, first_discovered_at, last_seen_generation,
+                (collection_id, item_id, first_discovered_at_ms, last_seen_generation,
                  missing_from_latest_snapshot)
              VALUES (?, ?, ?, ?, 0)
              ON CONFLICT(collection_id, item_id) DO UPDATE SET
@@ -422,7 +422,7 @@ pub(super) async fn reconcile_batch(
         )
         .bind(&request.collection_id)
         .bind(&item_id)
-        .bind(request.requested_at)
+        .bind(request.requested_at_ms)
         .bind(generation)
         .execute(&mut *transaction)
         .await
@@ -466,7 +466,7 @@ pub(super) async fn reconcile_batch(
     sqlx::query(
         "UPDATE music_refresh_jobs
          SET processed_count = processed_count + ?, issue_count = issue_count + ?,
-             status_message = 'Cataloging discovered media.', updated_at = ?
+             status_message = 'Cataloging discovered media.', updated_at_ms = ?
          WHERE id = ? AND state = 'running'",
     )
     .bind(evidence.len() as i64)
@@ -513,7 +513,7 @@ pub(super) async fn record_media_failure(
     sqlx::query(
         "UPDATE music_refresh_jobs
          SET skipped_count = skipped_count + 1, issue_count = issue_count + 1,
-             updated_at = ? WHERE id = ? AND state = 'running'",
+             updated_at_ms = ? WHERE id = ? AND state = 'running'",
     )
     .bind(now_ms())
     .bind(&request.job_id)
@@ -531,17 +531,17 @@ pub(super) async fn finalize_success(
     request: &MusicLocalRefreshRequest,
     generation: i64,
 ) -> MusicLibraryResult<()> {
-    let finished_at = now_ms();
+    let finished_at_ms = now_ms();
     let mut transaction = pool
         .begin()
         .await
         .map_err(|error| MusicLibraryError::database("begin complete music refresh", error))?;
     sqlx::query(
         "UPDATE music_local_locations
-         SET availability = 'missing', updated_at = ?
+         SET availability = 'missing', updated_at_ms = ?
          WHERE root_id = ? AND COALESCE(last_seen_generation, 0) < ?",
     )
-    .bind(finished_at)
+    .bind(finished_at_ms)
     .bind(&request.root_id)
     .bind(generation)
     .execute(&mut *transaction)
@@ -570,14 +570,14 @@ pub(super) async fn finalize_success(
              ) THEN 'ambiguous'
              ELSE 'missing'
          END,
-         updated_at = ?, version = version + 1
+         updated_at_ms = ?, version = version + 1
          WHERE item.source_kind = 'local-file'
            AND EXISTS (
                 SELECT 1 FROM music_local_locations AS location
                 WHERE location.item_id = item.id AND location.root_id = ?
            )",
     )
-    .bind(finished_at)
+    .bind(finished_at_ms)
     .bind(&request.root_id)
     .execute(&mut *transaction)
     .await
@@ -585,25 +585,25 @@ pub(super) async fn finalize_success(
     sqlx::query(
         "UPDATE music_refresh_jobs
          SET state = 'completed', absence_determined = 1,
-             status_message = 'Refresh complete.', finished_at = ?, updated_at = ?
+             status_message = 'Refresh complete.', finished_at_ms = ?, updated_at_ms = ?
          WHERE id = ? AND state = 'running'",
     )
-    .bind(finished_at)
-    .bind(finished_at)
+    .bind(finished_at_ms)
+    .bind(finished_at_ms)
     .bind(&request.job_id)
     .execute(&mut *transaction)
     .await
     .map_err(|error| MusicLibraryError::database("complete local music refresh", error))?;
     sqlx::query(
         "UPDATE music_source_collections
-         SET refresh_state = 'idle', last_successful_refresh_at = ?,
-             previous_successful_refresh_at = last_successful_refresh_at,
+         SET refresh_state = 'idle', last_successful_refresh_at_ms = ?,
+             previous_successful_refresh_at_ms = last_successful_refresh_at_ms,
              last_refresh_error_code = NULL, snapshot_generation = ?,
-             updated_at = ?, version = version + 1 WHERE id = ?",
+             updated_at_ms = ?, version = version + 1 WHERE id = ?",
     )
-    .bind(finished_at)
+    .bind(finished_at_ms)
     .bind(generation)
-    .bind(finished_at)
+    .bind(finished_at_ms)
     .bind(&request.collection_id)
     .execute(&mut *transaction)
     .await
@@ -624,7 +624,7 @@ pub(super) async fn finish_incomplete(
     request: &MusicLocalRefreshRequest,
     message: &str,
 ) -> MusicLibraryResult<()> {
-    let finished_at = now_ms();
+    let finished_at_ms = now_ms();
     let progress = load_progress(pool, &request.job_id).await?;
     if progress.state == MusicRefreshJobState::Cancelled {
         return Ok(());
@@ -655,13 +655,13 @@ pub(super) async fn finish_incomplete(
     sqlx::query(
         "UPDATE music_refresh_jobs
          SET state = ?, issue_count = issue_count + 1, absence_determined = 0,
-             status_message = ?, finished_at = ?, updated_at = ?
+             status_message = ?, finished_at_ms = ?, updated_at_ms = ?
          WHERE id = ? AND state = 'running'",
     )
     .bind(state)
     .bind(message)
-    .bind(finished_at)
-    .bind(finished_at)
+    .bind(finished_at_ms)
+    .bind(finished_at_ms)
     .bind(&request.job_id)
     .execute(&mut *transaction)
     .await
@@ -669,14 +669,14 @@ pub(super) async fn finish_incomplete(
     sqlx::query(
         "UPDATE music_source_collections
          SET refresh_state = ?, last_refresh_error_code = 'refresh-incomplete',
-             updated_at = ?, version = version + 1
+             updated_at_ms = ?, version = version + 1
          WHERE id = ? AND NOT EXISTS (
             SELECT 1 FROM music_refresh_jobs AS newer
             WHERE newer.source_collection_id = ? AND newer.generation > ?
          )",
     )
     .bind(source_state)
-    .bind(finished_at)
+    .bind(finished_at_ms)
     .bind(&request.collection_id)
     .bind(&request.collection_id)
     .bind(progress.generation)
@@ -744,14 +744,14 @@ async fn upsert_item(
     transaction: &mut Transaction<'_, Sqlite>,
     item_id: &str,
     media: &LocalMediaEvidence,
-    discovered_at: i64,
+    discovered_at_ms: i64,
     ambiguous: bool,
 ) -> MusicLibraryResult<()> {
     sqlx::query(
         "INSERT INTO music_library_items
             (id, identity_key, source_kind, media_kind, original_title, original_artist,
              original_album, original_track_number, original_artwork_identity, duration_ms,
-             availability, discovered_at, updated_at)
+             availability, discovered_at_ms, updated_at_ms)
          VALUES (?, ?, 'local-file', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
             media_kind = excluded.media_kind,
@@ -762,7 +762,7 @@ async fn upsert_item(
             original_artwork_identity = excluded.original_artwork_identity,
             duration_ms = excluded.duration_ms,
             availability = excluded.availability,
-            updated_at = excluded.updated_at,
+            updated_at_ms = excluded.updated_at_ms,
             version = music_library_items.version + 1",
     )
     .bind(item_id)
@@ -775,7 +775,7 @@ async fn upsert_item(
     .bind(&media.original_artwork_identity)
     .bind(media.duration_ms)
     .bind(if ambiguous { "ambiguous" } else { "available" })
-    .bind(discovered_at)
+    .bind(discovered_at_ms)
     .bind(now_ms())
     .execute(&mut **transaction)
     .await
@@ -797,7 +797,7 @@ async fn upsert_location(
         "INSERT INTO music_local_locations
             (id, item_id, root_id, relative_path, file_size_bytes, modified_at_ms,
              lightweight_fingerprint, strong_fingerprint, availability,
-             last_seen_generation, first_seen_at, updated_at)
+             last_seen_generation, first_seen_at_ms, updated_at_ms)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(root_id, relative_path) DO UPDATE SET
             item_id = excluded.item_id,
@@ -807,7 +807,7 @@ async fn upsert_location(
             strong_fingerprint = excluded.strong_fingerprint,
             availability = excluded.availability,
             last_seen_generation = excluded.last_seen_generation,
-            updated_at = excluded.updated_at",
+            updated_at_ms = excluded.updated_at_ms",
     )
     .bind(location_id)
     .bind(item_id)
@@ -819,7 +819,7 @@ async fn upsert_location(
     .bind(strong_hash)
     .bind(if ambiguous { "ambiguous" } else { "available" })
     .bind(generation)
-    .bind(request.requested_at)
+    .bind(request.requested_at_ms)
     .bind(now_ms())
     .execute(&mut **transaction)
     .await
@@ -846,7 +846,7 @@ async fn insert_issue(
     );
     sqlx::query(
         "INSERT OR REPLACE INTO music_refresh_job_issues
-            (id, job_id, issue_code, relative_path, item_id, message, created_at)
+            (id, job_id, issue_code, relative_path, item_id, message, created_at_ms)
          VALUES (?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(issue_id)

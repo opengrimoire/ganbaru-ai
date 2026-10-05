@@ -35,7 +35,7 @@ fn context_assignments_replace_all_phases_atomically_and_increment_versions() {
                         MusicAssignmentBehavior::PauseMusic,
                     ),
                 ],
-                updated_at: 1_700_000_000_000,
+                updated_at_ms: 1_700_000_000_000,
             },
         )
         .await
@@ -58,7 +58,7 @@ fn context_assignments_replace_all_phases_atomically_and_increment_versions() {
                         MusicAssignmentBehavior::KeepCurrentMusic,
                     ),
                 ],
-                updated_at: 1_700_000_000_100,
+                updated_at_ms: 1_700_000_000_100,
             },
         )
         .await
@@ -86,7 +86,7 @@ fn context_assignments_enforce_owner_provenance_and_unique_phases() {
                 owner_kind: MusicAssignmentOwnerKind::EventSnapshot,
                 owner_id: "event-1".to_string(),
                 assignments: vec![snapshot],
-                updated_at: 1_700_000_000_000,
+                updated_at_ms: 1_700_000_000_000,
             },
         )
         .await
@@ -108,7 +108,7 @@ fn context_assignments_enforce_owner_provenance_and_unique_phases() {
                         MusicAssignmentBehavior::KeepCurrentMusic,
                     ),
                 ],
-                updated_at: 1_700_000_000_000,
+                updated_at_ms: 1_700_000_000_000,
             },
         )
         .await
@@ -139,7 +139,7 @@ fn work_environment_contract_round_trips_without_a_settings_surface() {
                 owner_kind: MusicAssignmentOwnerKind::WorkEnvironment,
                 owner_id: "environment-1".to_string(),
                 assignments: vec![environment],
-                updated_at: 1_700_000_000_000,
+                updated_at_ms: 1_700_000_000_000,
             },
         )
         .await

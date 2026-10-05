@@ -11,7 +11,7 @@ fn archive_and_restore_preserve_task_links_music_versions_and_independent_import
     tauri::async_runtime::block_on(async {
         let pool = super::metadata::seed().await;
         sqlx::raw_sql("UPDATE project_task_event_links SET link_kind='reference';
-            INSERT INTO music_context_assignments (owner_kind, owner_id, phase, behavior, provenance_kind, updated_at, version, soundscape_behavior)
+            INSERT INTO music_context_assignments (owner_kind, owner_id, phase, behavior, provenance_kind, updated_at_ms, version, soundscape_behavior)
                 VALUES ('event-override', 'source', 'short-break', 'pause-music', 'explicit', 9, 7, 'keep-current-soundscape');")
             .execute(&pool).await.unwrap();
         let link: (String, String) = sqlx::query_as(

@@ -16,8 +16,8 @@ export interface MusicSoundscapeDefinition {
   groupId: string | null;
   availability: MusicSoundscapeAvailability;
   localPath: string | null;
-  createdAt: number;
-  updatedAt: number;
+  createdAtMs: number;
+  updatedAtMs: number;
   version: number;
 }
 
@@ -32,7 +32,7 @@ export interface MusicSoundscapeWrite {
   deviceId: string;
   localPath: string | null;
   expectedVersion: number | null;
-  updatedAt: number;
+  updatedAtMs: number;
 }
 
 export interface MusicSoundscapeState {
@@ -44,7 +44,7 @@ export interface MusicSoundscapeState {
   localLevel: number | null;
   desiredPlaying: boolean;
   volume: number;
-  updatedAt: number;
+  updatedAtMs: number;
   version: number;
 }
 
@@ -52,8 +52,8 @@ export interface MusicSoundscapeGroup {
   id: string;
   name: string;
   icon: string;
-  createdAt: number;
-  updatedAt: number;
+  createdAtMs: number;
+  updatedAtMs: number;
   version: number;
 }
 
@@ -62,7 +62,7 @@ export interface MusicSoundscapeGroupWrite {
   name: string;
   icon: string;
   expectedVersion: number | null;
-  updatedAt: number;
+  updatedAtMs: number;
 }
 
 export interface MusicSoundscapeStateWrite {
@@ -74,7 +74,7 @@ export interface MusicSoundscapeStateWrite {
   desiredPlaying: boolean;
   volume: number;
   expectedVersion: number;
-  updatedAt: number;
+  updatedAtMs: number;
 }
 
 export interface MusicSoundscapeSnapshot {
@@ -130,8 +130,8 @@ export function parseMusicSoundscape(value: unknown, label = "soundscape"): Musi
     groupId: optionalText(row.groupId, `${label}.groupId`),
     availability: enumeration(row.availability, availability, `${label}.availability`),
     localPath: optionalText(row.localPath, `${label}.localPath`),
-    createdAt: integer(row.createdAt, `${label}.createdAt`),
-    updatedAt: integer(row.updatedAt, `${label}.updatedAt`),
+    createdAtMs: integer(row.createdAtMs, `${label}.createdAtMs`),
+    updatedAtMs: integer(row.updatedAtMs, `${label}.updatedAtMs`),
     version: integer(row.version, `${label}.version`),
   };
 }
@@ -141,8 +141,8 @@ export function parseMusicSoundscapeGroup(value: unknown, label = "sound group")
     id: text(row.id, `${label}.id`),
     name: text(row.name, `${label}.name`),
     icon: iconText(row.icon, `${label}.icon`),
-    createdAt: integer(row.createdAt, `${label}.createdAt`),
-    updatedAt: integer(row.updatedAt, `${label}.updatedAt`),
+    createdAtMs: integer(row.createdAtMs, `${label}.createdAtMs`),
+    updatedAtMs: integer(row.updatedAtMs, `${label}.updatedAtMs`),
     version: integer(row.version, `${label}.version`),
   };
 }
@@ -168,7 +168,7 @@ export function parseMusicSoundscapeState(value: unknown): MusicSoundscapeState 
   if ((!multipleEnabled && activeIds.length > 1) || (desiredPlaying && activeIds.length === 0)) throw new Error("soundscape state has an invalid playback mode");
   if (volume < 0 || volume > 1) throw new Error("soundscape state.volume is out of range");
   if ([generatedLevel, localLevel].some((level) => level !== null && (level < 0 || level > 2))) throw new Error("soundscape state.section level is out of range");
-  return { activeSoundscapeId, activeIds, multipleEnabled, generatedLevel, localLevel, desiredPlaying, automaticIntent, volume, updatedAt: integer(row.updatedAt, "soundscape state.updatedAt"), version: integer(row.version, "soundscape state.version") };
+  return { activeSoundscapeId, activeIds, multipleEnabled, generatedLevel, localLevel, desiredPlaying, automaticIntent, volume, updatedAtMs: integer(row.updatedAtMs, "soundscape state.updatedAtMs"), version: integer(row.version, "soundscape state.version") };
 }
 export function parseMusicSoundscapeSnapshot(value: unknown): MusicSoundscapeSnapshot {
   const row = record(value, "soundscape snapshot");

@@ -39,7 +39,7 @@ const detail = (): MusicInspectorDetail => ({
     originalTrackNumber: null, originalArtworkIdentity: null, youtubeResolutionState: null,
     titleOverride: null, artistOverride: null, albumOverride: null, artworkOverride: null,
     durationMs: 1_000, availability: "available", reviewState: "unreviewed",
-    reviewChangedAt: null, reviewDeferredUntil: null, discoveredAt: 1, updatedAt: 1, version: 1,
+    reviewChangedAtMs: null, reviewDeferredUntilMs: null, discoveredAtMs: 1, updatedAtMs: 1, version: 1,
   },
   locations: [], memberships: [], membershipSkipRanges: [], snoozes: [], signals: [], statistics: null, sourceCollectionIds: [],
 });
@@ -48,8 +48,8 @@ const listItem = (): MusicItemListEntry => ({
   id: "item", identityKey: "local:item", sourceKind: "local-file", mediaKind: "audio",
   title: "Track", artist: "Artist", album: "Album", localRootId: "root",
   relativePath: "Track.flac", sourceCollectionIds: ["source"], originalArtworkIdentity: null, artworkOverride: null, durationMs: 1_000,
-  availability: "available", reviewState: "unreviewed", discoveredAt: 1, updatedAt: 1, version: 1,
-  playlistCount: 0, activeSnoozeCount: 0, lastPlayedAt: null, playCount: 0,
+  availability: "available", reviewState: "unreviewed", discoveredAtMs: 1, updatedAtMs: 1, version: 1,
+  playlistCount: 0, activeSnoozeCount: 0, lastPlayedAtMs: null, playCount: 0,
   membershipId: null, membershipPosition: null, membershipWeight: null,
   membershipEnabled: null, membershipVersion: null,
 });

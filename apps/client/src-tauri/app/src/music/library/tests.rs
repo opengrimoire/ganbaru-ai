@@ -19,7 +19,7 @@ pub(super) async fn seed_item(pool: &SqlitePool, id: &str, identity: &str) {
     sqlx::query(
         "INSERT INTO music_library_items
             (id, identity_key, source_kind, original_title, availability, review_state,
-             discovered_at, updated_at)
+             discovered_at_ms, updated_at_ms)
          VALUES (?, ?, 'local-file', ?, 'available', 'unreviewed',
              1700000000000, 1700000000000)",
     )
@@ -40,7 +40,7 @@ pub(super) fn playlist(id: &str) -> MusicPlaylistCreate {
         mix_enabled: false,
         repeat_mode: MusicRepeatMode::All,
         intended_uses: vec![MusicIntendedUse::Focus],
-        created_at: 1_700_000_000_000,
+        created_at_ms: 1_700_000_000_000,
     }
 }
 
@@ -77,7 +77,7 @@ pub(super) fn membership(index: usize) -> MusicMembershipWrite {
         volume: None,
         rate: None,
         expected_version: None,
-        updated_at: 1_700_000_000_000,
+        updated_at_ms: 1_700_000_000_000,
     }
 }
 
@@ -100,7 +100,7 @@ fn soundscape_selection_preserves_order_and_removal_updates_state() {
                 desired_playing: true,
                 volume: 0.1,
                 expected_version: initial.version,
-                updated_at: initial.updated_at + 1,
+                updated_at_ms: initial.updated_at_ms + 1,
             },
         )
         .await
@@ -113,7 +113,7 @@ fn soundscape_selection_preserves_order_and_removal_updates_state() {
 
         sqlx::query(
             "INSERT INTO music_soundscapes
-                (id, source_kind, name, availability, created_at, updated_at, version)
+                (id, source_kind, name, availability, created_at_ms, updated_at_ms, version)
              VALUES ('local-test', 'local-loop', 'Test', 'missing', 1, 1, 1)",
         )
         .execute(&pool)
@@ -130,7 +130,7 @@ fn soundscape_selection_preserves_order_and_removal_updates_state() {
                 desired_playing: true,
                 volume: 0.1,
                 expected_version: selected.version,
-                updated_at: selected.updated_at + 1,
+                updated_at_ms: selected.updated_at_ms + 1,
             },
         )
         .await
@@ -200,7 +200,7 @@ fn built_in_music_playlists_are_protected_localizable_and_repaired() {
                 repeat_mode: detail.repeat_mode,
                 intended_uses: detail.intended_uses,
                 expected_version: detail.version,
-                updated_at: 1_700_000_000_100,
+                updated_at_ms: 1_700_000_000_100,
             },
         )
         .await
@@ -245,7 +245,7 @@ fn local_root_creation_is_atomic_and_rejects_duplicate_identity() {
             collection_id: "source-soundtracks".to_string(),
             identity_key: "local-root:root-soundtracks".to_string(),
             name: "Soundtracks".to_string(),
-            created_at: 1_700_000_000_000,
+            created_at_ms: 1_700_000_000_000,
         };
         let receipt = writes::create_local_root(&pool, request.clone())
             .await
@@ -375,8 +375,8 @@ fn row_mapping_rejects_unknown_persisted_enums_with_field_context() {
         end_ms: None,
         volume: None,
         rate: None,
-        created_at: 1_700_000_000_000,
-        updated_at: 1_700_000_000_000,
+        created_at_ms: 1_700_000_000_000,
+        updated_at_ms: 1_700_000_000_000,
         version: 1,
     };
 
@@ -405,7 +405,7 @@ fn playlist_create_update_and_stale_detection_are_transactional() {
                 repeat_mode: MusicRepeatMode::Off,
                 intended_uses: vec![MusicIntendedUse::Focus, MusicIntendedUse::Reading],
                 expected_version: 1,
-                updated_at: 1_700_000_000_100,
+                updated_at_ms: 1_700_000_000_100,
             },
         )
         .await
@@ -423,7 +423,7 @@ fn playlist_create_update_and_stale_detection_are_transactional() {
                 repeat_mode: MusicRepeatMode::All,
                 intended_uses: Vec::new(),
                 expected_version: 1,
-                updated_at: 1_700_000_000_200,
+                updated_at_ms: 1_700_000_000_200,
             },
         )
         .await
@@ -542,7 +542,7 @@ fn duplicate_playlist_preserves_membership_details_and_ranges() {
                 source_playlist_id: "playlist-1".to_string(),
                 new_playlist_id: "playlist-2".to_string(),
                 name: "Focus copy".to_string(),
-                created_at: 1_700_000_001_000,
+                created_at_ms: 1_700_000_001_000,
             },
         )
         .await
@@ -620,7 +620,7 @@ fn deletion_requires_current_impact_and_repairs_assignments_atomically() {
                     provenance_kind: MusicAssignmentProvenanceKind::Explicit,
                     provenance_id: None,
                 }],
-                updated_at: 1_700_000_000_000,
+                updated_at_ms: 1_700_000_000_000,
             },
         )
         .await
@@ -695,7 +695,7 @@ fn deferred_review_items_remain_visible_before_and_after_their_optional_date() {
                 review_state: MusicReviewState::Deferred,
                 deferred_until: Some(1_700_000_200_000),
                 expected_version: 1,
-                updated_at: 1_700_000_100_000,
+                updated_at_ms: 1_700_000_100_000,
             },
         )
         .await
@@ -751,10 +751,10 @@ fn playlist_item_window_counts_only_snoozes_effective_in_that_playlist() {
                 item_ids: vec!["item-1".to_string()],
                 scope: MusicSnoozeScope::Playlist,
                 playlist_id: Some("playlist-2".to_string()),
-                starts_at: 1_700_000_000_000,
-                ends_at: Some(1_700_000_200_000),
+                starts_at_ms: 1_700_000_000_000,
+                ends_at_ms: Some(1_700_000_200_000),
                 reason: String::new(),
-                created_at: 1_700_000_000_000,
+                created_at_ms: 1_700_000_000_000,
             },
         )
         .await
@@ -797,7 +797,7 @@ fn metadata_overrides_preserve_original_values_and_refresh_search() {
                 album_override: None,
                 artwork_override: None,
                 expected_version: 1,
-                updated_at: 1_700_000_100_000,
+                updated_at_ms: 1_700_000_100_000,
             },
         )
         .await
@@ -830,7 +830,7 @@ fn item_signals_replace_in_bulk_and_refresh_search() {
             MusicItemSignalsWrite {
                 item_ids: vec!["item-1".to_string(), "item-2".to_string()],
                 signals: vec![MusicItemSignal::Lyrics, MusicItemSignal::SuddenChanges],
-                updated_at: 1_700_000_100_000,
+                updated_at_ms: 1_700_000_100_000,
             },
         )
         .await
@@ -861,7 +861,7 @@ fn item_signals_replace_in_bulk_and_refresh_search() {
             MusicItemSignalsWrite {
                 item_ids: vec!["item-1".to_string()],
                 signals: vec![MusicItemSignal::Calm],
-                updated_at: 1_700_000_200_000,
+                updated_at_ms: 1_700_000_200_000,
             },
         )
         .await
@@ -966,7 +966,7 @@ fn bulk_membership_edits_preserve_existing_settings_and_commit_as_one_change() {
                 remove_playlist_ids: vec![],
                 weight_playlist_ids: vec![],
                 weight: None,
-                updated_at: 1_700_000_000_100,
+                updated_at_ms: 1_700_000_000_100,
             },
         )
         .await
@@ -989,7 +989,7 @@ fn bulk_membership_edits_preserve_existing_settings_and_commit_as_one_change() {
                 remove_playlist_ids: vec![],
                 weight_playlist_ids: vec!["playlist-1".to_string()],
                 weight: Some(MusicWeight::MoreOften),
-                updated_at: 1_700_000_000_200,
+                updated_at_ms: 1_700_000_000_200,
             },
         )
         .await
@@ -1005,7 +1005,7 @@ fn bulk_membership_edits_preserve_existing_settings_and_commit_as_one_change() {
                 remove_playlist_ids: vec!["playlist-1".to_string()],
                 weight_playlist_ids: vec![],
                 weight: None,
-                updated_at: 1_700_000_000_300,
+                updated_at_ms: 1_700_000_000_300,
             },
         )
         .await
@@ -1061,7 +1061,7 @@ fn playlist_collection_reorder_persists_all_positions_atomically() {
                         expected_version: *expected_version,
                     })
                     .collect(),
-                updated_at: 1_700_000_000_100,
+                updated_at_ms: 1_700_000_000_100,
             },
         )
         .await
@@ -1088,7 +1088,7 @@ fn playlist_collection_reorder_persists_all_positions_atomically() {
                         expected_version,
                     })
                     .collect(),
-                updated_at: 1_700_000_000_200,
+                updated_at_ms: 1_700_000_000_200,
             },
         )
         .await;
@@ -1131,7 +1131,7 @@ fn playlist_reorder_and_playback_projection_share_canonical_memberships() {
                 playlist_id: "playlist-1".to_string(),
                 item_id: "item-3".to_string(),
                 target_index: 0,
-                updated_at: 1_700_000_000_100,
+                updated_at_ms: 1_700_000_000_100,
             },
         )
         .await
@@ -1148,7 +1148,7 @@ fn playlist_reorder_and_playback_projection_share_canonical_memberships() {
         .unwrap();
         sqlx::query(
             "INSERT INTO music_snoozes
-                (id, item_id, scope, playlist_id, starts_at, ends_at, reason, created_at)
+                (id, item_id, scope, playlist_id, starts_at_ms, ends_at_ms, reason, created_at_ms)
              VALUES ('snooze-2', 'item-2', 'playlist', 'playlist-1',
                 1700000000000, 1700000001000, '', 1700000000000)",
         )
@@ -1240,7 +1240,7 @@ fn bulk_review_and_snooze_updates_are_atomic() {
                 ],
                 review_state: MusicReviewState::Reviewed,
                 deferred_until: None,
-                updated_at: 1_700_000_000_100,
+                updated_at_ms: 1_700_000_000_100,
             },
         )
         .await
@@ -1253,10 +1253,10 @@ fn bulk_review_and_snooze_updates_are_atomic() {
                 item_ids: vec!["item-1".to_string(), "item-2".to_string()],
                 scope: MusicSnoozeScope::AllPlaylists,
                 playlist_id: None,
-                starts_at: 1_700_000_000_100,
-                ends_at: Some(1_700_086_400_100),
+                starts_at_ms: 1_700_000_000_100,
+                ends_at_ms: Some(1_700_086_400_100),
                 reason: String::new(),
-                created_at: 1_700_000_000_100,
+                created_at_ms: 1_700_000_000_100,
             },
         )
         .await
@@ -1307,7 +1307,7 @@ fn review_selection_applies_memberships_and_review_state_in_one_transaction() {
                 review_state: MusicReviewState::Reviewed,
                 add_playlist_ids: vec!["playlist-1".to_string()],
                 remove_playlist_ids: vec![],
-                updated_at: 1_700_000_000_100,
+                updated_at_ms: 1_700_000_000_100,
             },
         )
         .await
@@ -1361,7 +1361,7 @@ fn stale_review_selection_does_not_apply_partial_memberships() {
                 review_state: MusicReviewState::Reviewed,
                 add_playlist_ids: vec!["playlist-1".to_string()],
                 remove_playlist_ids: vec![],
-                updated_at: 1_700_000_000_100,
+                updated_at_ms: 1_700_000_000_100,
             },
         )
         .await
@@ -1410,7 +1410,7 @@ fn review_selection_ignores_unassigned_items_in_one_transaction() {
                 review_state: MusicReviewState::Ignored,
                 add_playlist_ids: vec![],
                 remove_playlist_ids: vec![],
-                updated_at: 1_700_000_000_100,
+                updated_at_ms: 1_700_000_000_100,
             },
         )
         .await
@@ -1457,7 +1457,7 @@ fn review_selection_rejects_ignoring_items_assigned_to_playlists() {
                 review_state: MusicReviewState::Ignored,
                 add_playlist_ids: vec![],
                 remove_playlist_ids: vec![],
-                updated_at: 1_700_000_000_100,
+                updated_at_ms: 1_700_000_000_100,
             },
         )
         .await
@@ -1489,7 +1489,7 @@ fn overlapping_snoozes_expire_and_resume_independently() {
         )
         .await
         .unwrap();
-        for (id, scope, playlist_id, ends_at) in [
+        for (id, scope, playlist_id, ends_at_ms) in [
             (
                 "snooze-global",
                 MusicSnoozeScope::AllPlaylists,
@@ -1510,10 +1510,10 @@ fn overlapping_snoozes_expire_and_resume_independently() {
                     item_ids: vec!["item-1".to_string()],
                     scope,
                     playlist_id,
-                    starts_at: 1_700_000_000_000,
-                    ends_at,
+                    starts_at_ms: 1_700_000_000_000,
+                    ends_at_ms,
                     reason: String::new(),
-                    created_at: 1_700_000_000_000,
+                    created_at_ms: 1_700_000_000_000,
                 },
             )
             .await

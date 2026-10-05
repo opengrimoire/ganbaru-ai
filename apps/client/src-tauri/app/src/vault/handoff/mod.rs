@@ -61,7 +61,7 @@ pub(crate) struct PairingInvitationView {
     invitation: String,
     qr: QrMatrix,
     endpoint: String,
-    expires_at_unix_ms: i64,
+    expires_at_ms: i64,
     #[cfg(target_os = "linux")]
     network_access: network_access::NetworkAccessStatus,
 }
@@ -314,7 +314,7 @@ pub(crate) async fn handoff_create_pairing_invitation<R: Runtime>(
         qr: invitation_qr_matrix(&invitation)?,
         invitation: encoded,
         endpoint: endpoint.to_string(),
-        expires_at_unix_ms: invitation.expires_at_unix_ms,
+        expires_at_ms: invitation.expires_at_ms,
         #[cfg(target_os = "linux")]
         network_access: network_access::status(
             &app.path()

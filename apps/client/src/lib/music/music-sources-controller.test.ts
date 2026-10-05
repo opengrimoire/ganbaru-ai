@@ -74,18 +74,18 @@ function api(overrides: Partial<MusicSourcesControllerApi> = {}): MusicSourcesCo
     createRelink: vi.fn(async (request) => ({
       id: request.planId, rootId: request.rootId, state: "ready" as const, exactCount: 0,
       likelyCount: 0, ambiguousCount: 0, missingCount: 0, newCount: 0,
-      createdAt: request.createdAt, updatedAt: request.createdAt,
+      createdAtMs: request.createdAtMs, updatedAtMs: request.createdAtMs,
     })),
     relinkEntries: vi.fn(async (_planId, offset, limit) => ({ entries: [], totalCount: 0, offset, limit })),
     applyRelink: vi.fn(async (request) => ({
       id: request.planId, rootId: "root-1", state: "applied" as const, exactCount: 0,
       likelyCount: 0, ambiguousCount: 0, missingCount: 0, newCount: 0,
-      createdAt: request.appliedAt, updatedAt: request.appliedAt,
+      createdAtMs: request.appliedAt, updatedAtMs: request.appliedAt,
     })),
     cancelRelink: vi.fn(async (planId, cancelledAt) => ({
       id: planId, rootId: "root-1", state: "cancelled" as const, exactCount: 0,
       likelyCount: 0, ambiguousCount: 0, missingCount: 0, newCount: 0,
-      createdAt: cancelledAt, updatedAt: cancelledAt,
+      createdAtMs: cancelledAt, updatedAtMs: cancelledAt,
     })),
     ...overrides,
   };
@@ -94,7 +94,7 @@ function api(overrides: Partial<MusicSourcesControllerApi> = {}): MusicSourcesCo
 describe("MusicSourcesController", () => {
   it("loads roots, collections, and device bindings as one vault projection", async () => {
     const controller = createMusicSourcesController(api({
-      roots: vi.fn(async () => [{ id: "root-1", name: "OST", createdAt: 1, updatedAt: 1, version: 1 }]),
+      roots: vi.fn(async () => [{ id: "root-1", name: "OST", createdAtMs: 1, updatedAtMs: 1, version: 1 }]),
       bindings: vi.fn(async () => [{ rootId: "root-1", folderPath: "/music/ost", status: "available" as const }]),
     }), () => 10, () => "id", refreshStub());
     controller.setVault("vault-1");
@@ -108,8 +108,8 @@ describe("MusicSourcesController", () => {
     const collection = {
       id: "collection-1", kind: "local-root" as const, identityKey: "local-root:root-1",
       name: "Music", localRootId: "root-1", youtubePlaylistId: null, refreshState: "idle" as const,
-      lastSuccessfulRefreshAt: null, previousSuccessfulRefreshAt: null, lastRefreshErrorCode: null,
-      snapshotGeneration: 1, createdAt: 1, updatedAt: 1, version: 1, discoveryEnabled: true, removedAt: null,
+      lastSuccessfulRefreshAtMs: null, previousSuccessfulRefreshAtMs: null, lastRefreshErrorCode: null,
+      snapshotGeneration: 1, createdAtMs: 1, updatedAtMs: 1, version: 1, discoveryEnabled: true, removedAtMs: null,
     };
     const saveCollection = vi.fn(async (request: Parameters<MusicSourcesControllerApi["saveCollection"]>[0]) => ({ id: request.id, version: 2 }));
     const controller = createMusicSourcesController(api({
@@ -152,14 +152,14 @@ describe("MusicSourcesController", () => {
       youtubePlaylistId: null,
       discoveryEnabled: true,
       refreshState: "idle" as const,
-      lastSuccessfulRefreshAt: null,
-      previousSuccessfulRefreshAt: null,
+      lastSuccessfulRefreshAtMs: null,
+      previousSuccessfulRefreshAtMs: null,
       lastRefreshErrorCode: null,
       snapshotGeneration: 0,
-      createdAt: 1,
-      updatedAt: 1,
+      createdAtMs: 1,
+      updatedAtMs: 1,
       version: 1,
-      removedAt: null,
+      removedAtMs: null,
     };
     const bindRoot = vi.fn(async (_vaultId: string, rootId: string, folderPath: string) => ({
       rootId,
@@ -168,7 +168,7 @@ describe("MusicSourcesController", () => {
     }));
     const refresh = refreshStub();
     const controller = createMusicSourcesController(api({
-      roots: vi.fn(async () => [{ id: "root-1", name: "Music", createdAt: 1, updatedAt: 1, version: 1 }]),
+      roots: vi.fn(async () => [{ id: "root-1", name: "Music", createdAtMs: 1, updatedAtMs: 1, version: 1 }]),
       collections: vi.fn(async () => [collection]),
       bindings: vi.fn(async () => [{ rootId: "root-1", folderPath: "content://new-tree", status: "available" as const }]),
       pickFolder: vi.fn(async () => ({ folderPath: "content://new-tree", tracks: [], truncated: false })),
@@ -221,14 +221,14 @@ describe("MusicSourcesController", () => {
         youtubePlaylistId: null,
         discoveryEnabled: true,
         refreshState: "idle",
-        lastSuccessfulRefreshAt: null,
-        previousSuccessfulRefreshAt: null,
+        lastSuccessfulRefreshAtMs: null,
+        previousSuccessfulRefreshAtMs: null,
         lastRefreshErrorCode: null,
         snapshotGeneration: 0,
-        createdAt: 1,
-        updatedAt: 1,
+        createdAtMs: 1,
+        updatedAtMs: 1,
         version: 1,
-        removedAt: null,
+        removedAtMs: null,
       },
       {
         id: "ready",
@@ -239,14 +239,14 @@ describe("MusicSourcesController", () => {
         youtubePlaylistId: null,
         discoveryEnabled: true,
         refreshState: "idle",
-        lastSuccessfulRefreshAt: 10,
-        previousSuccessfulRefreshAt: null,
+        lastSuccessfulRefreshAtMs: 10,
+        previousSuccessfulRefreshAtMs: null,
         lastRefreshErrorCode: null,
         snapshotGeneration: 1,
-        createdAt: 1,
-        updatedAt: 10,
+        createdAtMs: 1,
+        updatedAtMs: 10,
         version: 2,
-        removedAt: null,
+        removedAtMs: null,
       },
     ];
     controller.bindings = [
@@ -316,7 +316,7 @@ describe("MusicSourcesController", () => {
   it("does not detect a default folder when a local root already exists", async () => {
     const detectDefaultFolder = vi.fn(async () => null);
     const controller = createMusicSourcesController(api({
-      roots: vi.fn(async () => [{ id: "root-1", name: "OST", createdAt: 1, updatedAt: 1, version: 1 }]),
+      roots: vi.fn(async () => [{ id: "root-1", name: "OST", createdAtMs: 1, updatedAtMs: 1, version: 1 }]),
       detectDefaultFolder,
     }), () => 10, () => "id", refreshStub());
     controller.setVault("vault-1");

@@ -7,7 +7,7 @@ fn usage_samples_reject_protected_desktop_apps() {
         source_type: "desktop-app".to_string(),
         source_key: "Terminal".to_string(),
         display_name: Some("Terminal".to_string()),
-        started_at: 1_779_923_600_000,
+        started_at_ms: 1_779_923_600_000,
         elapsed_seconds: 30,
         local_date: "2026-05-28".to_string(),
     };
@@ -147,7 +147,7 @@ fn usage_samples_normalize_website_hosts() {
         source_type: "website".to_string(),
         source_key: "YouTube.com.".to_string(),
         display_name: Some("YouTube".to_string()),
-        started_at: 1_779_923_600_000,
+        started_at_ms: 1_779_923_600_000,
         elapsed_seconds: 30,
         local_date: "2026-05-28".to_string(),
     };
@@ -164,7 +164,7 @@ fn usage_sample_fallback_ids_are_stable_for_exactly_once_batch_retries() {
         source_type: "desktop-app".to_string(),
         source_key: "Steam".to_string(),
         display_name: Some("Steam".to_string()),
-        started_at: 1_720_000_000_000,
+        started_at_ms: 1_720_000_000_000,
         elapsed_seconds: 5,
         local_date: "2026-07-11".to_string(),
     };
@@ -187,10 +187,10 @@ fn usage_sample_batch_rolls_back_when_a_late_insert_fails() {
                 source_type TEXT NOT NULL,
                 source_key TEXT NOT NULL,
                 display_name TEXT,
-                started_at INTEGER NOT NULL,
+                started_at_ms INTEGER NOT NULL,
                 elapsed_seconds INTEGER NOT NULL CHECK (elapsed_seconds < 100),
                 local_date TEXT NOT NULL,
-                created_at INTEGER NOT NULL
+                created_at_ms INTEGER NOT NULL
             )",
         )
         .execute(&pool)
@@ -214,7 +214,7 @@ fn usage_sample_batch_rolls_back_when_a_late_insert_fails() {
                     source_type: "website".to_string(),
                     source_key: "example.com".to_string(),
                     display_name: None,
-                    started_at: 1,
+                    started_at_ms: 1,
                     elapsed_seconds,
                     local_date: "2026-05-26".to_string(),
                 },

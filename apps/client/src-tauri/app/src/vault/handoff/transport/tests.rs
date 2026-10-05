@@ -337,10 +337,10 @@ async fn authenticated_distractions_exchange_returns_acknowledged_and_combined_s
         source_type: "mobile-app".to_string(),
         source_key: "com.example.video".to_string(),
         display_name: Some("Video".to_string()),
-        started_at_unix_ms: 1_700_000_000_000,
+        started_at_ms: 1_700_000_000_000,
         elapsed_seconds: 30,
         local_date: "2026-09-13".to_string(),
-        created_at_unix_ms: 1_700_000_030_000,
+        created_at_ms: 1_700_000_030_000,
     };
     let expected = sample.clone();
     let response_sample = sample.clone();

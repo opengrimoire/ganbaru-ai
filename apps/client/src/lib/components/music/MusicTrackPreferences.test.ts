@@ -209,11 +209,11 @@ describe("MusicTrackPreferences", () => {
     player.currentSource = source;
     player.queue = [source];
     player.activeQueueItemIds = ["snoozed"];
-    const startsAt = Date.now() - 1_000;
+    const startsAtMs = Date.now() - 1_000;
     api.getMusicInspectorDetail.mockResolvedValueOnce({ snoozes: [{
       id: "snooze-1", itemId: "snoozed", scope: "all-playlists", playlistId: null,
-      startsAt, endsAt: musicSnoozeEndsAt("week", startsAt, Intl.DateTimeFormat().resolvedOptions().timeZone),
-      reason: "", createdAt: startsAt,
+      startsAtMs, endsAtMs: musicSnoozeEndsAt("week", startsAtMs, Intl.DateTimeFormat().resolvedOptions().timeZone),
+      reason: "", createdAtMs: startsAtMs,
     }] });
     target = document.createElement("div");
     document.body.append(target);

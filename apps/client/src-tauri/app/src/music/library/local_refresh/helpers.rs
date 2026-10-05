@@ -17,7 +17,7 @@ pub(super) fn validate_request(request: &MusicLocalRefreshRequest) -> MusicLibra
             return Err(MusicLibraryError::validation(field, "is required"));
         }
     }
-    if request.requested_at <= 0 {
+    if request.requested_at_ms <= 0 {
         return Err(MusicLibraryError::validation(
             "requestedAt",
             "must be a positive Unix epoch millisecond value",

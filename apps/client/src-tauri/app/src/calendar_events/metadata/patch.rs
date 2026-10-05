@@ -176,11 +176,11 @@ impl Metadata {
                             soundscape_behavior: value.soundscape_behavior.as_ref().into(),
                             provenance_kind: value.provenance_kind.as_ref().into(),
                             provenance_id: value.provenance_id.clone(),
-                            updated_at: old.map_or(now_ms, |row| row.updated_at),
+                            updated_at_ms: old.map_or(now_ms, |row| row.updated_at_ms),
                             version: old.map_or(1, |row| row.version),
                         };
                         if old != Some(&row) {
-                            row.updated_at = now_ms;
+                            row.updated_at_ms = now_ms;
                             row.version = old.map_or(Ok(1), |row| {
                                 row.version
                                     .checked_add(1)

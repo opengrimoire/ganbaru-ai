@@ -81,7 +81,7 @@ export class MusicPlaylistController {
       await createMusicPlaylist({
         id: playlistId,
         ...normalizedDraft(draft),
-        createdAt: this.now(),
+        createdAtMs: this.now(),
       });
       await this.library.refreshAfterMutation();
       await this.load(playlistId);
@@ -108,13 +108,13 @@ export class MusicPlaylistController {
         apply: () => { Object.assign(detail, next); this.patchSummary(detail.id, next); },
         rollback: () => { Object.assign(detail, previous); this.patchSummary(detail.id, previous); },
         persist: () => updateMusicPlaylist({
-          id: detail.id, ...next, expectedVersion: previous.version, updatedAt: this.now(),
+          id: detail.id, ...next, expectedVersion: previous.version, updatedAtMs: this.now(),
         }),
         undo: async () => {
           const receipt = await updateMusicPlaylist({
             id: previous.id, name: previous.name, icon: previous.icon,
             shuffleEnabled: previous.shuffleEnabled, mixEnabled: previous.mixEnabled, repeatMode: previous.repeatMode,
-            intendedUses: previous.intendedUses, expectedVersion: detail.version, updatedAt: this.now(),
+            intendedUses: previous.intendedUses, expectedVersion: detail.version, updatedAtMs: this.now(),
           });
           Object.assign(detail, previous, { version: receipt.version });
           this.patchSummary(detail.id, previous);
@@ -141,7 +141,7 @@ export class MusicPlaylistController {
         sourcePlaylistId: detail.id,
         newPlaylistId: playlistId,
         name: name.trim(),
-        createdAt: this.now(),
+        createdAtMs: this.now(),
       });
       await this.library.refreshAfterMutation();
       return playlistId;

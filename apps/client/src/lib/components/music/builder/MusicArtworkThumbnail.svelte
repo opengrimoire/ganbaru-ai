@@ -25,7 +25,7 @@
       ? youtubeVideoIdFromIdentity(item.identityKey)
       : null;
     void refreshTick;
-    item.updatedAt;
+    item.updatedAtMs;
     const request = ++requestVersion;
     currentUrl = null;
     const load = source

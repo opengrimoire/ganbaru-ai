@@ -17,7 +17,7 @@ fn review_window_includes_ignored_items_for_local_visibility_filtering() {
                  WHEN 'due' THEN 'deferred'
                  WHEN 'future' THEN 'deferred'
                  ELSE review_state END,
-                 review_deferred_until = CASE id
+                 review_deferred_until_ms = CASE id
                  WHEN 'due' THEN 1700000000000
                  WHEN 'future' THEN 1800000000000
                  ELSE NULL END",
@@ -52,7 +52,7 @@ fn item_windows_are_bounded_stable_filterable_and_grouped() {
                 "INSERT INTO music_library_items
                     (id, identity_key, source_kind, media_kind, youtube_video_id,
                      original_title, original_artist,
-                     original_album, availability, review_state, discovered_at, updated_at)
+                     original_album, availability, review_state, discovered_at_ms, updated_at_ms)
                  VALUES (?, ?, ?, 'audio', ?, ?, ?, ?, ?, ?, ?, ?)",
             )
             .bind(format!("item-{index:04}"))
@@ -91,7 +91,7 @@ fn item_windows_are_bounded_stable_filterable_and_grouped() {
             .unwrap();
         }
         sqlx::query(
-            "INSERT INTO music_local_roots (id, name, created_at, updated_at)
+            "INSERT INTO music_local_roots (id, name, created_at_ms, updated_at_ms)
              VALUES ('window-root', 'Music', 1700000000000, 1700000000000)",
         )
         .execute(&mut *transaction)
@@ -99,7 +99,7 @@ fn item_windows_are_bounded_stable_filterable_and_grouped() {
         .unwrap();
         sqlx::query(
             "INSERT INTO music_local_locations
-                (id, item_id, root_id, relative_path, availability, first_seen_at, updated_at)
+                (id, item_id, root_id, relative_path, availability, first_seen_at_ms, updated_at_ms)
              VALUES ('window-location', 'item-0001', 'window-root', 'Games/Nier/theme.flac',
                  'available', 1700000000000, 1700000000000)",
         )
@@ -180,12 +180,14 @@ fn playlist_window_uses_manual_order_and_returns_membership_state() {
             )
             .await
             .unwrap();
-            sqlx::query("UPDATE music_playlist_memberships SET created_at = ? WHERE item_id = ?")
-                .bind(1_700_000_000_000_i64 + index as i64)
-                .bind(format!("item-{index}"))
-                .execute(&pool)
-                .await
-                .unwrap();
+            sqlx::query(
+                "UPDATE music_playlist_memberships SET created_at_ms = ? WHERE item_id = ?",
+            )
+            .bind(1_700_000_000_000_i64 + index as i64)
+            .bind(format!("item-{index}"))
+            .execute(&pool)
+            .await
+            .unwrap();
         }
         let mut request = library_window();
         request.destination = MusicListDestination::Playlist;
@@ -241,7 +243,7 @@ fn source_order_and_artwork_overrides_are_projected_in_library_rows() {
         }
         sqlx::query(
             "INSERT INTO music_source_collections
-                (id, kind, identity_key, name, youtube_playlist_id, created_at, updated_at)
+                (id, kind, identity_key, name, youtube_playlist_id, created_at_ms, updated_at_ms)
              VALUES ('source-1', 'youtube-playlist', 'youtube:list', 'Source', 'list', ?, ?)",
         )
         .bind(1_700_000_000_000_i64)
@@ -252,7 +254,7 @@ fn source_order_and_artwork_overrides_are_projected_in_library_rows() {
         for (item_id, position) in [("item-0", 2_i64), ("item-1", 0), ("item-2", 1)] {
             sqlx::query(
                 "INSERT INTO music_source_collection_items
-                    (collection_id, item_id, source_position, first_discovered_at)
+                    (collection_id, item_id, source_position, first_discovered_at_ms)
                  VALUES ('source-1', ?, ?, ?)",
             )
             .bind(item_id)
@@ -309,7 +311,7 @@ fn summaries_issues_and_inspector_return_composed_data_without_row_queries() {
         .await
         .unwrap();
         sqlx::query(
-            "INSERT INTO music_local_roots (id, name, created_at, updated_at)
+            "INSERT INTO music_local_roots (id, name, created_at_ms, updated_at_ms)
              VALUES ('root-1', 'Soundtracks', 1700000000000, 1700000000000)",
         )
         .execute(&pool)
@@ -317,7 +319,7 @@ fn summaries_issues_and_inspector_return_composed_data_without_row_queries() {
         .unwrap();
         sqlx::query(
             "INSERT INTO music_local_locations
-                (id, item_id, root_id, relative_path, availability, first_seen_at, updated_at)
+                (id, item_id, root_id, relative_path, availability, first_seen_at_ms, updated_at_ms)
              VALUES ('location-1', 'item-1', 'root-1', 'Album/track.flac',
                  'available', 1700000000000, 1700000000000)",
         )
@@ -326,7 +328,7 @@ fn summaries_issues_and_inspector_return_composed_data_without_row_queries() {
         .unwrap();
         sqlx::query(
             "INSERT INTO music_source_collections
-                (id, kind, identity_key, name, local_root_id, created_at, updated_at)
+                (id, kind, identity_key, name, local_root_id, created_at_ms, updated_at_ms)
              VALUES ('source-1', 'local-root', 'root:root-1', 'Soundtracks', 'root-1',
                  1700000000000, 1700000000000)",
         )
@@ -335,7 +337,7 @@ fn summaries_issues_and_inspector_return_composed_data_without_row_queries() {
         .unwrap();
         sqlx::query(
             "INSERT INTO music_source_collection_items
-                (collection_id, item_id, first_discovered_at)
+                (collection_id, item_id, first_discovered_at_ms)
              VALUES ('source-1', 'item-1', 1700000000000)",
         )
         .execute(&pool)
@@ -353,7 +355,7 @@ fn summaries_issues_and_inspector_return_composed_data_without_row_queries() {
             assert_eq!(window.groups[0].count, 1);
         }
         sqlx::query(
-            "INSERT INTO music_item_signals (item_id, signal, created_at)
+            "INSERT INTO music_item_signals (item_id, signal, created_at_ms)
              VALUES ('item-1', 'calm', 1700000000000)",
         )
         .execute(&pool)
@@ -361,7 +363,7 @@ fn summaries_issues_and_inspector_return_composed_data_without_row_queries() {
         .unwrap();
         sqlx::query(
             "UPDATE music_library_items
-             SET availability = 'missing', updated_at = 1700000000000
+             SET availability = 'missing', updated_at_ms = 1700000000000
              WHERE id = 'item-1'",
         )
         .execute(&pool)
@@ -414,7 +416,7 @@ fn review_and_membership_queries_use_purpose_built_indexes() {
             "EXPLAIN QUERY PLAN
              SELECT id FROM music_library_items
              WHERE review_state = 'unreviewed'
-             ORDER BY discovered_at, id LIMIT 50",
+             ORDER BY discovered_at_ms, id LIMIT 50",
         )
         .fetch_all(&pool)
         .await
@@ -449,7 +451,7 @@ fn search_rebuild_repairs_stale_rows_and_incremental_membership_metadata() {
         sqlx::query(
             "INSERT INTO music_library_items
                 (id, identity_key, source_kind, media_kind, original_title, original_artist,
-                 original_album, availability, review_state, discovered_at, updated_at)
+                 original_album, availability, review_state, discovered_at_ms, updated_at_ms)
              VALUES ('item-1', 'local:item-1', 'local-file', 'audio',
                  'Café de la pluie 雨', 'Artista', 'Lectura tranquila',
                  'available', 'unreviewed', 1700000000000, 1700000000000)",
@@ -540,7 +542,7 @@ fn search_rebuild_repairs_stale_rows_and_incremental_membership_metadata() {
                 repeat_mode: MusicRepeatMode::All,
                 intended_uses: vec![MusicIntendedUse::General],
                 expected_version: 1,
-                updated_at: 1_700_000_200_000,
+                updated_at_ms: 1_700_000_200_000,
             },
         )
         .await

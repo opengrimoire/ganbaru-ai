@@ -91,7 +91,7 @@ async fn seed_roots_and_collections(tx: &mut Transaction<'_, Sqlite>) -> MusicLi
     for root_index in 0..LOCAL_ROOT_COUNT {
         let root_id = root_id(root_index);
         sqlx::query(
-            "INSERT INTO music_local_roots (id, name, created_at, updated_at)
+            "INSERT INTO music_local_roots (id, name, created_at_ms, updated_at_ms)
              VALUES (?, ?, ?, ?)",
         )
         .bind(&root_id)
@@ -105,7 +105,7 @@ async fn seed_roots_and_collections(tx: &mut Transaction<'_, Sqlite>) -> MusicLi
         sqlx::query(
             "INSERT INTO music_source_collections
                 (id, kind, identity_key, name, local_root_id, refresh_state,
-                 last_successful_refresh_at, snapshot_generation, created_at, updated_at)
+                 last_successful_refresh_at_ms, snapshot_generation, created_at_ms, updated_at_ms)
              VALUES (?, 'local-root', ?, ?, ?, 'idle', ?, 3, ?, ?)",
         )
         .bind(local_collection_id(root_index))
@@ -125,7 +125,7 @@ async fn seed_roots_and_collections(tx: &mut Transaction<'_, Sqlite>) -> MusicLi
         sqlx::query(
             "INSERT INTO music_source_collections
                 (id, kind, identity_key, name, youtube_playlist_id, refresh_state,
-                 last_successful_refresh_at, snapshot_generation, created_at, updated_at)
+                 last_successful_refresh_at_ms, snapshot_generation, created_at_ms, updated_at_ms)
              VALUES (?, 'youtube-playlist', ?, ?, ?, 'idle', ?, 2, ?, ?)",
         )
         .bind(youtube_collection_id(collection_index))
@@ -171,7 +171,7 @@ async fn seed_playlists(tx: &mut Transaction<'_, Sqlite>) -> MusicLibraryResult<
     for (index, name) in NAMES.into_iter().enumerate() {
         sqlx::query(
             "INSERT INTO music_playlists
-                (id, name, icon, shuffle_enabled, repeat_mode, sort_order, created_at, updated_at)
+                (id, name, icon, shuffle_enabled, repeat_mode, sort_order, created_at_ms, updated_at_ms)
              VALUES (?, ?, ?, ?, 'all', ?, ?, ?)",
         )
         .bind(playlist_id(index))
@@ -203,7 +203,7 @@ async fn seed_items(tx: &mut Transaction<'_, Sqlite>) -> MusicLibraryResult<()> 
             "INSERT INTO music_library_items
                 (id, identity_key, source_kind, media_kind, youtube_video_id,
                  original_title, original_artist, original_album, duration_ms,
-                 availability, review_state, review_changed_at, discovered_at, updated_at) ",
+                 availability, review_state, review_changed_at_ms, discovered_at_ms, updated_at_ms) ",
         );
         query.push_values(start..end, |mut row, index| {
             let local = index < LOCAL_ITEM_COUNT;
@@ -272,7 +272,7 @@ async fn seed_locations(tx: &mut Transaction<'_, Sqlite>) -> MusicLibraryResult<
             "INSERT INTO music_local_locations
                 (id, item_id, root_id, relative_path, file_size_bytes, modified_at_ms,
                  lightweight_fingerprint, availability, last_seen_generation,
-                 first_seen_at, updated_at) ",
+                 first_seen_at_ms, updated_at_ms) ",
         );
         query.push_values(start..end, |mut row, index| {
             let root_index = index % LOCAL_ROOT_COUNT;
@@ -302,7 +302,7 @@ async fn seed_locations(tx: &mut Transaction<'_, Sqlite>) -> MusicLibraryResult<
             "INSERT INTO music_local_locations
                 (id, item_id, root_id, relative_path, file_size_bytes, modified_at_ms,
                  lightweight_fingerprint, availability, last_seen_generation,
-                 first_seen_at, updated_at) ",
+                 first_seen_at_ms, updated_at_ms) ",
         );
         query.push_values(chunk.iter().copied(), |mut row, index| {
             let second_root = (index % LOCAL_ROOT_COUNT + 1) % LOCAL_ROOT_COUNT;
@@ -332,7 +332,7 @@ async fn seed_source_provenance(tx: &mut Transaction<'_, Sqlite>) -> MusicLibrar
         let end = (start + INSERT_BATCH_SIZE).min(item_count());
         let mut query = QueryBuilder::<Sqlite>::new(
             "INSERT INTO music_source_collection_items
-                (collection_id, item_id, source_position, first_discovered_at,
+                (collection_id, item_id, source_position, first_discovered_at_ms,
                  last_seen_generation, missing_from_latest_snapshot) ",
         );
         query.push_values(start..end, |mut row, index| {
@@ -368,7 +368,7 @@ async fn seed_source_provenance(tx: &mut Transaction<'_, Sqlite>) -> MusicLibrar
     for chunk in duplicate_items.chunks(INSERT_BATCH_SIZE) {
         let mut query = QueryBuilder::<Sqlite>::new(
             "INSERT INTO music_source_collection_items
-                (collection_id, item_id, source_position, first_discovered_at,
+                (collection_id, item_id, source_position, first_discovered_at_ms,
                  last_seen_generation, missing_from_latest_snapshot) ",
         );
         query.push_values(
@@ -410,7 +410,7 @@ async fn seed_memberships(tx: &mut Transaction<'_, Sqlite>) -> MusicLibraryResul
             let mut query = QueryBuilder::<Sqlite>::new(
                 "INSERT INTO music_playlist_memberships
                     (id, playlist_id, item_id, position, weight, enabled,
-                     start_ms, end_ms, volume, rate, created_at, updated_at) ",
+                     start_ms, end_ms, volume, rate, created_at_ms, updated_at_ms) ",
             );
             query.push_values(chunk.iter().enumerate(), |mut row, (offset, item_index)| {
                 let position = chunk_index * INSERT_BATCH_SIZE + offset;
@@ -444,7 +444,7 @@ async fn seed_snoozes(tx: &mut Transaction<'_, Sqlite>) -> MusicLibraryResult<us
     for chunk in indices.chunks(INSERT_BATCH_SIZE) {
         let mut query = QueryBuilder::<Sqlite>::new(
             "INSERT INTO music_snoozes
-                (id, item_id, scope, playlist_id, starts_at, ends_at, reason, created_at) ",
+                (id, item_id, scope, playlist_id, starts_at_ms, ends_at_ms, reason, created_at_ms) ",
         );
         query.push_values(chunk.iter().copied(), |mut row, index| {
             let global = index.is_multiple_of(2);
@@ -472,7 +472,7 @@ async fn seed_signals_statistics_and_history(
     let signal_indices = (0..item_count()).step_by(17).collect::<Vec<_>>();
     for chunk in signal_indices.chunks(INSERT_BATCH_SIZE) {
         let mut query = QueryBuilder::<Sqlite>::new(
-            "INSERT INTO music_item_signals (item_id, signal, created_at) ",
+            "INSERT INTO music_item_signals (item_id, signal, created_at_ms) ",
         );
         query.push_values(chunk.iter().copied(), |mut row, index| {
             let signals = [
@@ -498,7 +498,7 @@ async fn seed_signals_statistics_and_history(
     for chunk in statistic_indices.chunks(INSERT_BATCH_SIZE) {
         let mut query = QueryBuilder::<Sqlite>::new(
             "INSERT INTO music_listening_statistics
-                (item_id, last_played_at, play_count, completion_count, skip_count, updated_at) ",
+                (item_id, last_played_at_ms, play_count, completion_count, skip_count, updated_at_ms) ",
         );
         query.push_values(chunk.iter().copied(), |mut row, index| {
             let plays = (index % 31 + 1) as i64;
@@ -519,7 +519,7 @@ async fn seed_signals_statistics_and_history(
     for playlist_index in 0..PLAYLIST_COUNT {
         let mut query = QueryBuilder::<Sqlite>::new(
             "INSERT INTO music_recent_selections
-                (playlist_id, item_id, selection_kind, selected_at) ",
+                (playlist_id, item_id, selection_kind, selected_at_ms) ",
         );
         query.push_values(0..64, |mut row, history_index| {
             let index = (playlist_index * 173 + history_index * 19) % item_count();

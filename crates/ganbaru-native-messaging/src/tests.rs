@@ -326,10 +326,10 @@ fn usage_samples_are_spooled_outside_the_vault_until_the_app_acknowledges_them()
         source_type: "website".to_string(),
         source_key: "example.com".to_string(),
         display_name: Some("Example".to_string()),
-        started_at: 1_700_000_000_000,
+        started_at_ms: 1_700_000_000_000,
         elapsed_seconds: 30,
         local_date: "2026-06-10".to_string(),
-        created_at: 1_700_000_030_000,
+        created_at_ms: 1_700_000_030_000,
     };
 
     assert!(super::record_usage_sample(None, Some(&vault_path), sample()).is_err());
@@ -374,7 +374,7 @@ fn retried_browser_usage_keeps_the_same_device_sample_id() {
         source_key: Some("example.com".to_string()),
         display_name: Some("Example".to_string()),
         elapsed_seconds: Some(30),
-        started_at: Some(1_700_000_000_000),
+        started_at_ms: Some(1_700_000_000_000),
         local_date: Some("2026-06-10".to_string()),
     };
     let first = super::normalize_usage_sample(&request).unwrap();

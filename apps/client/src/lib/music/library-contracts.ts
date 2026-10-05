@@ -42,19 +42,19 @@ export interface MusicPlaylistCreate {
   mixEnabled: boolean;
   repeatMode: MusicRepeatMode;
   intendedUses: MusicIntendedUse[];
-  createdAt: number;
+  createdAtMs: number;
 }
-export interface MusicPlaylistUpdate extends Omit<MusicPlaylistCreate, "createdAt"> {
+export interface MusicPlaylistUpdate extends Omit<MusicPlaylistCreate, "createdAtMs"> {
   expectedVersion: number;
-  updatedAt: number;
+  updatedAtMs: number;
 }
 export interface MusicPlaylistOrderEntry { playlistId: string; expectedVersion: number }
-export interface MusicPlaylistsReorder { playlists: MusicPlaylistOrderEntry[]; updatedAt: number }
+export interface MusicPlaylistsReorder { playlists: MusicPlaylistOrderEntry[]; updatedAtMs: number }
 export interface MusicPlaylistDuplicate {
   sourcePlaylistId: string;
   newPlaylistId: string;
   name: string;
-  createdAt: number;
+  createdAtMs: number;
 }
 export interface MusicPlaylistDelete {
   playlistId: string;
@@ -67,7 +67,7 @@ export interface MusicReviewWrite {
   reviewState: MusicReviewState;
   deferredUntil: number | null;
   expectedVersion: number;
-  updatedAt: number;
+  updatedAtMs: number;
 }
 export interface MusicMetadataOverrideWrite {
   itemId: string;
@@ -76,7 +76,7 @@ export interface MusicMetadataOverrideWrite {
   albumOverride: string | null;
   artworkOverride: string | null;
   expectedVersion: number;
-  updatedAt: number;
+  updatedAtMs: number;
 }
 export interface MusicMembershipWrite {
   id: string;
@@ -90,7 +90,7 @@ export interface MusicMembershipWrite {
   volume: number | null;
   rate: number | null;
   expectedVersion: number | null;
-  updatedAt: number;
+  updatedAtMs: number;
 }
 export interface MusicBulkMembershipWrite { memberships: MusicMembershipWrite[] }
 export interface MusicBulkMembershipEdit {
@@ -100,11 +100,11 @@ export interface MusicBulkMembershipEdit {
   removePlaylistIds: string[];
   weightPlaylistIds: string[];
   weight: MusicWeight | null;
-  updatedAt: number;
+  updatedAtMs: number;
 }
 export interface MusicBulkMembershipResult { changedCount: number }
 export interface MusicMembershipMatrixEntry { itemId: string; playlistId: string; weight: MusicWeight }
-export interface MusicPlaylistReorder { playlistId: string; itemId: string; targetIndex: number; updatedAt: number }
+export interface MusicPlaylistReorder { playlistId: string; itemId: string; targetIndex: number; updatedAtMs: number }
 export interface MusicPlaylistReorderResult { itemIds: string[] }
 export interface MusicPlaylistPlaybackEntry {
   membershipId: string;
@@ -140,16 +140,16 @@ export interface MusicListeningUpdate {
   outcome: MusicListeningOutcome;
   occurredAt: number;
 }
-export interface MusicRecentSelection { itemId: string; selectedAt: number }
+export interface MusicRecentSelection { itemId: string; selectedAtMs: number }
 export interface MusicVersionedItem { itemId: string; expectedVersion: number }
-export interface MusicBulkReviewWrite { items: MusicVersionedItem[]; reviewState: MusicReviewState; deferredUntil: number | null; updatedAt: number }
+export interface MusicBulkReviewWrite { items: MusicVersionedItem[]; reviewState: MusicReviewState; deferredUntil: number | null; updatedAtMs: number }
 export interface MusicReviewSelectionWrite {
   actionId: string;
   items: MusicVersionedItem[];
   reviewState: Extract<MusicReviewState, "reviewed" | "ignored">;
   addPlaylistIds: string[];
   removePlaylistIds: string[];
-  updatedAt: number;
+  updatedAtMs: number;
 }
 export interface MusicReviewSelectionResult {
   membershipChangedCount: number;
@@ -161,10 +161,10 @@ export interface MusicBulkSnoozeWrite {
   itemIds: string[];
   scope: MusicSnoozeScope;
   playlistId: string | null;
-  startsAt: number;
-  endsAt: number | null;
+  startsAtMs: number;
+  endsAtMs: number | null;
   reason: string;
-  createdAt: number;
+  createdAtMs: number;
 }
 export interface MusicMembershipRemove { membershipIds: string[] }
 export interface MusicMembershipSkipRange { id: string; membershipId: string; startMs: number; endMs: number; sortOrder: number }
@@ -174,13 +174,13 @@ export interface MusicSnoozeWrite {
   itemId: string;
   scope: MusicSnoozeScope;
   playlistId: string | null;
-  startsAt: number;
-  endsAt: number | null;
+  startsAtMs: number;
+  endsAtMs: number | null;
   reason: string;
-  createdAt: number;
+  createdAtMs: number;
 }
 export interface MusicInterchangeImportResult { playlistCount: number; itemCount: number; membershipCount: number; assignmentCount: number }
-export interface MusicItemSignalsWrite { itemIds: string[]; signals: MusicItemSignal[]; updatedAt: number }
+export interface MusicItemSignalsWrite { itemIds: string[]; signals: MusicItemSignal[]; updatedAtMs: number }
 export interface MusicCollectionWrite {
   id: string;
   kind: MusicCollectionKind;
@@ -188,14 +188,14 @@ export interface MusicCollectionWrite {
   name: string;
   localRootId: string | null;
   youtubePlaylistId: string | null;
-  updatedAt: number;
+  updatedAtMs: number;
 }
 export interface MusicLocalRootCreate {
   rootId: string;
   collectionId: string;
   identityKey: string;
   name: string;
-  createdAt: number;
+  createdAtMs: number;
 }
 export interface MusicItemRepairPreview {
   itemId: string;
@@ -256,12 +256,12 @@ export interface MusicItemListEntry {
   durationMs: number | null;
   availability: MusicItemAvailability;
   reviewState: MusicReviewState;
-  discoveredAt: number;
-  updatedAt: number;
+  discoveredAtMs: number;
+  updatedAtMs: number;
   version: number;
   playlistCount: number;
   activeSnoozeCount: number;
-  lastPlayedAt: number | null;
+  lastPlayedAtMs: number | null;
   playCount: number;
   membershipId: string | null;
   membershipPosition: number | null;
@@ -299,7 +299,7 @@ export interface MusicSourceSummary {
   kind: MusicCollectionKind;
   name: string;
   refreshState: MusicRefreshState;
-  lastSuccessfulRefreshAt: number | null;
+  lastSuccessfulRefreshAtMs: number | null;
   localRootId: string | null;
   youtubePlaylistId: string | null;
   itemCount: number;
@@ -323,7 +323,7 @@ export interface MusicIssue {
   relativePath: string | null;
   actionRequired: boolean;
   message: string;
-  createdAt: number;
+  createdAtMs: number;
 }
 export interface MusicLibraryItem {
   id: string;
@@ -344,10 +344,10 @@ export interface MusicLibraryItem {
   durationMs: number | null;
   availability: MusicItemAvailability;
   reviewState: MusicReviewState;
-  reviewChangedAt: number | null;
-  reviewDeferredUntil: number | null;
-  discoveredAt: number;
-  updatedAt: number;
+  reviewChangedAtMs: number | null;
+  reviewDeferredUntilMs: number | null;
+  discoveredAtMs: number;
+  updatedAtMs: number;
   version: number;
 }
 export interface MusicLocalRefreshRequest {
@@ -356,7 +356,7 @@ export interface MusicLocalRefreshRequest {
   collectionId: string;
   folderPath: string;
   availableRoots: MusicAvailableRootPath[];
-  requestedAt: number;
+  requestedAtMs: number;
 }
 export interface MusicAvailableRootPath { rootId: string; folderPath: string }
 export interface MusicYouTubeVideoWrite {
@@ -365,7 +365,7 @@ export interface MusicYouTubeVideoWrite {
   channel: string;
   durationMs: number | null;
   resolutionState: MusicYouTubeResolutionState;
-  resolvedAt: number;
+  resolvedAtMs: number;
 }
 export interface MusicYouTubePlaylistSnapshotWrite {
   collectionId: string;
@@ -373,7 +373,7 @@ export interface MusicYouTubePlaylistSnapshotWrite {
   name: string;
   videoIds: string[];
   videos?: MusicYouTubePlaylistVideoWrite[];
-  resolvedAt: number;
+  resolvedAtMs: number;
 }
 export interface MusicYouTubePlaylistVideoWrite {
   videoId: string;
@@ -409,10 +409,10 @@ export interface MusicRefreshJobProgress {
   truncatedCount: number;
   absenceDetermined: boolean;
   statusMessage: string;
-  requestedAt: number;
-  startedAt: number | null;
-  finishedAt: number | null;
-  updatedAt: number;
+  requestedAtMs: number;
+  startedAtMs: number | null;
+  finishedAtMs: number | null;
+  updatedAtMs: number;
 }
 export interface MusicLocalLocation {
   id: string;
@@ -425,21 +425,21 @@ export interface MusicLocalLocation {
   strongFingerprint: string | null;
   availability: MusicLocationAvailability;
   lastSeenGeneration: number | null;
-  firstSeenAt: number;
-  updatedAt: number;
+  firstSeenAtMs: number;
+  updatedAtMs: number;
 }
 export interface MusicPlaylistMembership extends Omit<MusicMembershipWrite, "expectedVersion"> {
-  createdAt: number;
+  createdAtMs: number;
   version: number;
 }
 export interface MusicSnooze extends MusicSnoozeWrite {}
 export interface MusicListeningStatistics {
   itemId: string;
-  lastPlayedAt: number | null;
+  lastPlayedAtMs: number | null;
   playCount: number;
   completionCount: number;
   skipCount: number;
-  updatedAt: number;
+  updatedAtMs: number;
 }
 export interface MusicInspectorDetail {
   item: MusicLibraryItem;
@@ -451,7 +451,7 @@ export interface MusicInspectorDetail {
   statistics: MusicListeningStatistics | null;
   sourceCollectionIds: string[];
 }
-export interface MusicLocalRoot { id: string; name: string; createdAt: number; updatedAt: number; version: number }
+export interface MusicLocalRoot { id: string; name: string; createdAtMs: number; updatedAtMs: number; version: number }
 export interface MusicSourceCollection {
   id: string;
   kind: MusicCollectionKind;
@@ -460,21 +460,21 @@ export interface MusicSourceCollection {
   localRootId: string | null;
   youtubePlaylistId: string | null;
   refreshState: MusicRefreshState;
-  lastSuccessfulRefreshAt: number | null;
-  previousSuccessfulRefreshAt: number | null;
+  lastSuccessfulRefreshAtMs: number | null;
+  previousSuccessfulRefreshAtMs: number | null;
   lastRefreshErrorCode: string | null;
   snapshotGeneration: number;
-  createdAt: number;
-  updatedAt: number;
+  createdAtMs: number;
+  updatedAtMs: number;
   version: number;
   discoveryEnabled: boolean;
-  removedAt: number | null;
+  removedAtMs: number | null;
 }
 export interface MusicRelinkPlanRequest {
   planId: string;
   rootId: string;
   replacementFolderPath: string;
-  createdAt: number;
+  createdAtMs: number;
 }
 export interface MusicRelinkPlanSummary {
   id: string;
@@ -485,8 +485,8 @@ export interface MusicRelinkPlanSummary {
   ambiguousCount: number;
   missingCount: number;
   newCount: number;
-  createdAt: number;
-  updatedAt: number;
+  createdAtMs: number;
+  updatedAtMs: number;
 }
 export interface MusicRelinkPlanEntry {
   id: string;
@@ -497,7 +497,7 @@ export interface MusicRelinkPlanEntry {
   candidateItemIds: string[];
   fileSizeBytes: number | null;
   resolvedItemId: string | null;
-  resolvedAt: number | null;
+  resolvedAtMs: number | null;
 }
 export interface MusicRelinkPlanWindow {
   entries: MusicRelinkPlanEntry[];
@@ -524,7 +524,7 @@ export interface MusicSourceRemovalRequest {
   expectedVersion: number;
   expectedImpact: MusicSourceRemovalImpact;
   removeOrphanedItems: boolean;
-  removedAt: number;
+  removedAtMs: number;
 }
 export interface MusicPlaylist {
   id: string;
@@ -535,11 +535,11 @@ export interface MusicPlaylist {
   repeatMode: MusicRepeatMode;
   intendedUses: MusicIntendedUse[];
   sortOrder: number;
-  createdAt: number;
-  updatedAt: number;
+  createdAtMs: number;
+  updatedAtMs: number;
   version: number;
 }
-export interface MusicSearchRebuildResult { indexedItemCount: number; schemaVersion: number; fingerprint: string; rebuiltAt: number }
+export interface MusicSearchRebuildResult { indexedItemCount: number; schemaVersion: number; fingerprint: string; rebuiltAtMs: number }
 export interface LocalRootBinding { rootId: string; folderPath: string | null; status: LocalRootBindingStatus }
 
 const sourceKinds = ["local-file", "youtube-video"] as const;
@@ -630,7 +630,7 @@ export function parseYouTubeSnapshotResult(value: unknown): MusicYouTubeSnapshot
 }
 export function parseRefreshJobProgress(value: unknown, label = "music refresh progress"): MusicRefreshJobProgress {
   const row = object(value, label); return {
-    jobId: string(row.jobId, `${label}.jobId`), collectionId: string(row.collectionId, `${label}.collectionId`), rootId: nullable(row.rootId, string, `${label}.rootId`), kind: enumeration(row.kind, collectionKinds, `${label}.kind`), state: enumeration(row.state, refreshJobStates, `${label}.state`), generation: number(row.generation, `${label}.generation`), discoveredCount: number(row.discoveredCount, `${label}.discoveredCount`), processedCount: number(row.processedCount, `${label}.processedCount`), skippedCount: number(row.skippedCount, `${label}.skippedCount`), issueCount: number(row.issueCount, `${label}.issueCount`), truncatedCount: number(row.truncatedCount, `${label}.truncatedCount`), absenceDetermined: boolean(row.absenceDetermined, `${label}.absenceDetermined`), statusMessage: string(row.statusMessage, `${label}.statusMessage`), requestedAt: number(row.requestedAt, `${label}.requestedAt`), startedAt: nullable(row.startedAt, number, `${label}.startedAt`), finishedAt: nullable(row.finishedAt, number, `${label}.finishedAt`), updatedAt: number(row.updatedAt, `${label}.updatedAt`),
+    jobId: string(row.jobId, `${label}.jobId`), collectionId: string(row.collectionId, `${label}.collectionId`), rootId: nullable(row.rootId, string, `${label}.rootId`), kind: enumeration(row.kind, collectionKinds, `${label}.kind`), state: enumeration(row.state, refreshJobStates, `${label}.state`), generation: number(row.generation, `${label}.generation`), discoveredCount: number(row.discoveredCount, `${label}.discoveredCount`), processedCount: number(row.processedCount, `${label}.processedCount`), skippedCount: number(row.skippedCount, `${label}.skippedCount`), issueCount: number(row.issueCount, `${label}.issueCount`), truncatedCount: number(row.truncatedCount, `${label}.truncatedCount`), absenceDetermined: boolean(row.absenceDetermined, `${label}.absenceDetermined`), statusMessage: string(row.statusMessage, `${label}.statusMessage`), requestedAtMs: number(row.requestedAtMs, `${label}.requestedAtMs`), startedAtMs: nullable(row.startedAtMs, number, `${label}.startedAtMs`), finishedAtMs: nullable(row.finishedAtMs, number, `${label}.finishedAtMs`), updatedAtMs: number(row.updatedAtMs, `${label}.updatedAtMs`),
   };
 }
 export function parseDeleteImpact(value: unknown, label = "playlist delete impact"): MusicPlaylistDeleteImpact {
@@ -655,9 +655,9 @@ function parseItemEntry(value: unknown, label: string): MusicItemListEntry {
     sourceCollectionIds: array(row.sourceCollectionIds, string, `${label}.sourceCollectionIds`),
     originalArtworkIdentity: nullable(row.originalArtworkIdentity, string, `${label}.originalArtworkIdentity`), artworkOverride: nullable(row.artworkOverride, string, `${label}.artworkOverride`),
     durationMs: nullable(row.durationMs, number, `${label}.durationMs`), availability: enumeration(row.availability, itemAvailability, `${label}.availability`),
-    reviewState: enumeration(row.reviewState, reviewStates, `${label}.reviewState`), discoveredAt: number(row.discoveredAt, `${label}.discoveredAt`),
-    updatedAt: number(row.updatedAt, `${label}.updatedAt`), version: number(row.version, `${label}.version`), playlistCount: number(row.playlistCount, `${label}.playlistCount`),
-    activeSnoozeCount: number(row.activeSnoozeCount, `${label}.activeSnoozeCount`), lastPlayedAt: nullable(row.lastPlayedAt, number, `${label}.lastPlayedAt`),
+    reviewState: enumeration(row.reviewState, reviewStates, `${label}.reviewState`), discoveredAtMs: number(row.discoveredAtMs, `${label}.discoveredAtMs`),
+    updatedAtMs: number(row.updatedAtMs, `${label}.updatedAtMs`), version: number(row.version, `${label}.version`), playlistCount: number(row.playlistCount, `${label}.playlistCount`),
+    activeSnoozeCount: number(row.activeSnoozeCount, `${label}.activeSnoozeCount`), lastPlayedAtMs: nullable(row.lastPlayedAtMs, number, `${label}.lastPlayedAtMs`),
     playCount: number(row.playCount, `${label}.playCount`), membershipId: nullable(row.membershipId, string, `${label}.membershipId`),
     membershipPosition: nullable(row.membershipPosition, number, `${label}.membershipPosition`),
     membershipWeight: row.membershipWeight === null ? null : enumeration(row.membershipWeight, weights, `${label}.membershipWeight`),
@@ -685,14 +685,14 @@ export const parsePlaylistSummaries = (value: unknown): MusicPlaylistSummary[] =
 function parseSourceSummary(value: unknown, label: string): MusicSourceSummary {
   const row = object(value, label); return {
     id: string(row.id, `${label}.id`), kind: enumeration(row.kind, collectionKinds, `${label}.kind`), name: string(row.name, `${label}.name`),
-    refreshState: enumeration(row.refreshState, refreshStates, `${label}.refreshState`), lastSuccessfulRefreshAt: nullable(row.lastSuccessfulRefreshAt, number, `${label}.lastSuccessfulRefreshAt`),
+    refreshState: enumeration(row.refreshState, refreshStates, `${label}.refreshState`), lastSuccessfulRefreshAtMs: nullable(row.lastSuccessfulRefreshAtMs, number, `${label}.lastSuccessfulRefreshAtMs`),
     localRootId: nullable(row.localRootId, string, `${label}.localRootId`), youtubePlaylistId: nullable(row.youtubePlaylistId, string, `${label}.youtubePlaylistId`),
     itemCount: number(row.itemCount, `${label}.itemCount`), missingCount: number(row.missingCount, `${label}.missingCount`), newCount: number(row.newCount, `${label}.newCount`), unreviewedCount: number(row.unreviewedCount, `${label}.unreviewedCount`), unavailableCount: number(row.unavailableCount, `${label}.unavailableCount`), ambiguousCount: number(row.ambiguousCount, `${label}.ambiguousCount`), openIssueCount: number(row.openIssueCount, `${label}.openIssueCount`), health: enumeration(row.health, sourceHealthStates, `${label}.health`), discoveryEnabled: boolean(row.discoveryEnabled, `${label}.discoveryEnabled`), version: number(row.version, `${label}.version`),
   };
 }
 export const parseSourceSummaries = (value: unknown): MusicSourceSummary[] => array(value, parseSourceSummary, "source summaries");
 function parseIssue(value: unknown, label: string): MusicIssue {
-  const row = object(value, label); return { id: string(row.id, `${label}.id`), issueKind: string(row.issueKind, `${label}.issueKind`), itemId: nullable(row.itemId, string, `${label}.itemId`), playlistId: nullable(row.playlistId, string, `${label}.playlistId`), collectionId: nullable(row.collectionId, string, `${label}.collectionId`), rootId: nullable(row.rootId, string, `${label}.rootId`), relativePath: nullable(row.relativePath, string, `${label}.relativePath`), actionRequired: boolean(row.actionRequired, `${label}.actionRequired`), message: string(row.message, `${label}.message`), createdAt: number(row.createdAt, `${label}.createdAt`) };
+  const row = object(value, label); return { id: string(row.id, `${label}.id`), issueKind: string(row.issueKind, `${label}.issueKind`), itemId: nullable(row.itemId, string, `${label}.itemId`), playlistId: nullable(row.playlistId, string, `${label}.playlistId`), collectionId: nullable(row.collectionId, string, `${label}.collectionId`), rootId: nullable(row.rootId, string, `${label}.rootId`), relativePath: nullable(row.relativePath, string, `${label}.relativePath`), actionRequired: boolean(row.actionRequired, `${label}.actionRequired`), message: string(row.message, `${label}.message`), createdAtMs: number(row.createdAtMs, `${label}.createdAtMs`) };
 }
 export const parseIssues = (value: unknown): MusicIssue[] => array(value, parseIssue, "music issues");
 function parseLibraryItem(value: unknown, label: string): MusicLibraryItem {
@@ -700,32 +700,32 @@ function parseLibraryItem(value: unknown, label: string): MusicLibraryItem {
     id: string(row.id, `${label}.id`), identityKey: string(row.identityKey, `${label}.identityKey`), sourceKind: enumeration(row.sourceKind, sourceKinds, `${label}.sourceKind`), mediaKind: enumeration(row.mediaKind, mediaKinds, `${label}.mediaKind`),
     youtubeVideoId: nullable(row.youtubeVideoId, string, `${label}.youtubeVideoId`), originalTitle: string(row.originalTitle, `${label}.originalTitle`), originalArtist: string(row.originalArtist, `${label}.originalArtist`), originalAlbum: string(row.originalAlbum, `${label}.originalAlbum`), originalTrackNumber: nullable(row.originalTrackNumber, number, `${label}.originalTrackNumber`), originalArtworkIdentity: nullable(row.originalArtworkIdentity, string, `${label}.originalArtworkIdentity`), youtubeResolutionState: nullable(row.youtubeResolutionState, (entry, entryLabel) => enumeration(entry, youtubeResolutionStates, entryLabel), `${label}.youtubeResolutionState`),
     titleOverride: nullable(row.titleOverride, string, `${label}.titleOverride`), artistOverride: nullable(row.artistOverride, string, `${label}.artistOverride`), albumOverride: nullable(row.albumOverride, string, `${label}.albumOverride`), artworkOverride: nullable(row.artworkOverride, string, `${label}.artworkOverride`),
-    durationMs: nullable(row.durationMs, number, `${label}.durationMs`), availability: enumeration(row.availability, itemAvailability, `${label}.availability`), reviewState: enumeration(row.reviewState, reviewStates, `${label}.reviewState`), reviewChangedAt: nullable(row.reviewChangedAt, number, `${label}.reviewChangedAt`), reviewDeferredUntil: nullable(row.reviewDeferredUntil, number, `${label}.reviewDeferredUntil`), discoveredAt: number(row.discoveredAt, `${label}.discoveredAt`), updatedAt: number(row.updatedAt, `${label}.updatedAt`), version: number(row.version, `${label}.version`),
+    durationMs: nullable(row.durationMs, number, `${label}.durationMs`), availability: enumeration(row.availability, itemAvailability, `${label}.availability`), reviewState: enumeration(row.reviewState, reviewStates, `${label}.reviewState`), reviewChangedAtMs: nullable(row.reviewChangedAtMs, number, `${label}.reviewChangedAtMs`), reviewDeferredUntilMs: nullable(row.reviewDeferredUntilMs, number, `${label}.reviewDeferredUntilMs`), discoveredAtMs: number(row.discoveredAtMs, `${label}.discoveredAtMs`), updatedAtMs: number(row.updatedAtMs, `${label}.updatedAtMs`), version: number(row.version, `${label}.version`),
   };
 }
 function parseLocation(value: unknown, label: string): MusicLocalLocation {
-  const row = object(value, label); return { id: string(row.id, `${label}.id`), itemId: string(row.itemId, `${label}.itemId`), rootId: string(row.rootId, `${label}.rootId`), relativePath: string(row.relativePath, `${label}.relativePath`), fileSizeBytes: nullable(row.fileSizeBytes, number, `${label}.fileSizeBytes`), modifiedAtMs: nullable(row.modifiedAtMs, number, `${label}.modifiedAtMs`), lightweightFingerprint: nullable(row.lightweightFingerprint, string, `${label}.lightweightFingerprint`), strongFingerprint: nullable(row.strongFingerprint, string, `${label}.strongFingerprint`), availability: enumeration(row.availability, locationAvailability, `${label}.availability`), lastSeenGeneration: nullable(row.lastSeenGeneration, number, `${label}.lastSeenGeneration`), firstSeenAt: number(row.firstSeenAt, `${label}.firstSeenAt`), updatedAt: number(row.updatedAt, `${label}.updatedAt`) };
+  const row = object(value, label); return { id: string(row.id, `${label}.id`), itemId: string(row.itemId, `${label}.itemId`), rootId: string(row.rootId, `${label}.rootId`), relativePath: string(row.relativePath, `${label}.relativePath`), fileSizeBytes: nullable(row.fileSizeBytes, number, `${label}.fileSizeBytes`), modifiedAtMs: nullable(row.modifiedAtMs, number, `${label}.modifiedAtMs`), lightweightFingerprint: nullable(row.lightweightFingerprint, string, `${label}.lightweightFingerprint`), strongFingerprint: nullable(row.strongFingerprint, string, `${label}.strongFingerprint`), availability: enumeration(row.availability, locationAvailability, `${label}.availability`), lastSeenGeneration: nullable(row.lastSeenGeneration, number, `${label}.lastSeenGeneration`), firstSeenAtMs: number(row.firstSeenAtMs, `${label}.firstSeenAtMs`), updatedAtMs: number(row.updatedAtMs, `${label}.updatedAtMs`) };
 }
 function parseMembership(value: unknown, label: string): MusicPlaylistMembership {
-  const row = object(value, label); return { id: string(row.id, `${label}.id`), playlistId: string(row.playlistId, `${label}.playlistId`), itemId: string(row.itemId, `${label}.itemId`), position: number(row.position, `${label}.position`), weight: enumeration(row.weight, weights, `${label}.weight`), enabled: boolean(row.enabled, `${label}.enabled`), startMs: nullable(row.startMs, number, `${label}.startMs`), endMs: nullable(row.endMs, number, `${label}.endMs`), volume: nullable(row.volume, finite, `${label}.volume`), rate: nullable(row.rate, finite, `${label}.rate`), updatedAt: number(row.updatedAt, `${label}.updatedAt`), createdAt: number(row.createdAt, `${label}.createdAt`), version: number(row.version, `${label}.version`) };
+  const row = object(value, label); return { id: string(row.id, `${label}.id`), playlistId: string(row.playlistId, `${label}.playlistId`), itemId: string(row.itemId, `${label}.itemId`), position: number(row.position, `${label}.position`), weight: enumeration(row.weight, weights, `${label}.weight`), enabled: boolean(row.enabled, `${label}.enabled`), startMs: nullable(row.startMs, number, `${label}.startMs`), endMs: nullable(row.endMs, number, `${label}.endMs`), volume: nullable(row.volume, finite, `${label}.volume`), rate: nullable(row.rate, finite, `${label}.rate`), updatedAtMs: number(row.updatedAtMs, `${label}.updatedAtMs`), createdAtMs: number(row.createdAtMs, `${label}.createdAtMs`), version: number(row.version, `${label}.version`) };
 }
 function parseMembershipSkipRange(value: unknown, label: string): MusicMembershipSkipRange {
   const row = object(value, label); return { id: string(row.id, `${label}.id`), membershipId: string(row.membershipId, `${label}.membershipId`), startMs: number(row.startMs, `${label}.startMs`), endMs: number(row.endMs, `${label}.endMs`), sortOrder: number(row.sortOrder, `${label}.sortOrder`) };
 }
 function parseSnooze(value: unknown, label: string): MusicSnooze {
-  const row = object(value, label); return { id: string(row.id, `${label}.id`), itemId: string(row.itemId, `${label}.itemId`), scope: enumeration(row.scope, snoozeScopes, `${label}.scope`), playlistId: nullable(row.playlistId, string, `${label}.playlistId`), startsAt: number(row.startsAt, `${label}.startsAt`), endsAt: nullable(row.endsAt, number, `${label}.endsAt`), reason: string(row.reason, `${label}.reason`), createdAt: number(row.createdAt, `${label}.createdAt`) };
+  const row = object(value, label); return { id: string(row.id, `${label}.id`), itemId: string(row.itemId, `${label}.itemId`), scope: enumeration(row.scope, snoozeScopes, `${label}.scope`), playlistId: nullable(row.playlistId, string, `${label}.playlistId`), startsAtMs: number(row.startsAtMs, `${label}.startsAtMs`), endsAtMs: nullable(row.endsAtMs, number, `${label}.endsAtMs`), reason: string(row.reason, `${label}.reason`), createdAtMs: number(row.createdAtMs, `${label}.createdAtMs`) };
 }
 function parseStatistics(value: unknown, label: string): MusicListeningStatistics {
-  const row = object(value, label); return { itemId: string(row.itemId, `${label}.itemId`), lastPlayedAt: nullable(row.lastPlayedAt, number, `${label}.lastPlayedAt`), playCount: number(row.playCount, `${label}.playCount`), completionCount: number(row.completionCount, `${label}.completionCount`), skipCount: number(row.skipCount, `${label}.skipCount`), updatedAt: number(row.updatedAt, `${label}.updatedAt`) };
+  const row = object(value, label); return { itemId: string(row.itemId, `${label}.itemId`), lastPlayedAtMs: nullable(row.lastPlayedAtMs, number, `${label}.lastPlayedAtMs`), playCount: number(row.playCount, `${label}.playCount`), completionCount: number(row.completionCount, `${label}.completionCount`), skipCount: number(row.skipCount, `${label}.skipCount`), updatedAtMs: number(row.updatedAtMs, `${label}.updatedAtMs`) };
 }
 export function parseInspectorDetail(value: unknown): MusicInspectorDetail {
   const row = object(value, "music inspector"); return { item: parseLibraryItem(row.item, "music inspector.item"), locations: array(row.locations, parseLocation, "music inspector.locations"), memberships: array(row.memberships, parseMembership, "music inspector.memberships"), membershipSkipRanges: array(row.membershipSkipRanges, parseMembershipSkipRange, "music inspector.membershipSkipRanges"), snoozes: array(row.snoozes, parseSnooze, "music inspector.snoozes"), signals: array(row.signals, (entry, label) => enumeration(entry, signals, label), "music inspector.signals"), statistics: row.statistics === null ? null : parseStatistics(row.statistics, "music inspector.statistics"), sourceCollectionIds: array(row.sourceCollectionIds, string, "music inspector.sourceCollectionIds") };
 }
-function parseRoot(value: unknown, label: string): MusicLocalRoot { const row = object(value, label); return { id: string(row.id, `${label}.id`), name: string(row.name, `${label}.name`), createdAt: number(row.createdAt, `${label}.createdAt`), updatedAt: number(row.updatedAt, `${label}.updatedAt`), version: number(row.version, `${label}.version`) }; }
+function parseRoot(value: unknown, label: string): MusicLocalRoot { const row = object(value, label); return { id: string(row.id, `${label}.id`), name: string(row.name, `${label}.name`), createdAtMs: number(row.createdAtMs, `${label}.createdAtMs`), updatedAtMs: number(row.updatedAtMs, `${label}.updatedAtMs`), version: number(row.version, `${label}.version`) }; }
 export const parseRoots = (value: unknown): MusicLocalRoot[] => array(value, parseRoot, "music roots");
-function parseCollection(value: unknown, label: string): MusicSourceCollection { const row = object(value, label); return { id: string(row.id, `${label}.id`), kind: enumeration(row.kind, collectionKinds, `${label}.kind`), identityKey: string(row.identityKey, `${label}.identityKey`), name: string(row.name, `${label}.name`), localRootId: nullable(row.localRootId, string, `${label}.localRootId`), youtubePlaylistId: nullable(row.youtubePlaylistId, string, `${label}.youtubePlaylistId`), refreshState: enumeration(row.refreshState, refreshStates, `${label}.refreshState`), lastSuccessfulRefreshAt: nullable(row.lastSuccessfulRefreshAt, number, `${label}.lastSuccessfulRefreshAt`), previousSuccessfulRefreshAt: nullable(row.previousSuccessfulRefreshAt, number, `${label}.previousSuccessfulRefreshAt`), lastRefreshErrorCode: nullable(row.lastRefreshErrorCode, string, `${label}.lastRefreshErrorCode`), snapshotGeneration: number(row.snapshotGeneration, `${label}.snapshotGeneration`), createdAt: number(row.createdAt, `${label}.createdAt`), updatedAt: number(row.updatedAt, `${label}.updatedAt`), version: number(row.version, `${label}.version`), discoveryEnabled: boolean(row.discoveryEnabled, `${label}.discoveryEnabled`), removedAt: nullable(row.removedAt, number, `${label}.removedAt`) }; }
+function parseCollection(value: unknown, label: string): MusicSourceCollection { const row = object(value, label); return { id: string(row.id, `${label}.id`), kind: enumeration(row.kind, collectionKinds, `${label}.kind`), identityKey: string(row.identityKey, `${label}.identityKey`), name: string(row.name, `${label}.name`), localRootId: nullable(row.localRootId, string, `${label}.localRootId`), youtubePlaylistId: nullable(row.youtubePlaylistId, string, `${label}.youtubePlaylistId`), refreshState: enumeration(row.refreshState, refreshStates, `${label}.refreshState`), lastSuccessfulRefreshAtMs: nullable(row.lastSuccessfulRefreshAtMs, number, `${label}.lastSuccessfulRefreshAtMs`), previousSuccessfulRefreshAtMs: nullable(row.previousSuccessfulRefreshAtMs, number, `${label}.previousSuccessfulRefreshAtMs`), lastRefreshErrorCode: nullable(row.lastRefreshErrorCode, string, `${label}.lastRefreshErrorCode`), snapshotGeneration: number(row.snapshotGeneration, `${label}.snapshotGeneration`), createdAtMs: number(row.createdAtMs, `${label}.createdAtMs`), updatedAtMs: number(row.updatedAtMs, `${label}.updatedAtMs`), version: number(row.version, `${label}.version`), discoveryEnabled: boolean(row.discoveryEnabled, `${label}.discoveryEnabled`), removedAtMs: nullable(row.removedAtMs, number, `${label}.removedAtMs`) }; }
 export const parseCollections = (value: unknown): MusicSourceCollection[] => array(value, parseCollection, "music collections");
-export function parsePlaylist(value: unknown): MusicPlaylist { const row = object(value, "music playlist"); return { id: string(row.id, "music playlist.id"), name: string(row.name, "music playlist.name"), icon: string(row.icon, "music playlist.icon"), shuffleEnabled: boolean(row.shuffleEnabled, "music playlist.shuffleEnabled"), mixEnabled: boolean(row.mixEnabled, "music playlist.mixEnabled"), repeatMode: enumeration(row.repeatMode, repeatModes, "music playlist.repeatMode"), intendedUses: array(row.intendedUses, (entry, label) => enumeration(entry, intendedUses, label), "music playlist.intendedUses"), sortOrder: number(row.sortOrder, "music playlist.sortOrder"), createdAt: number(row.createdAt, "music playlist.createdAt"), updatedAt: number(row.updatedAt, "music playlist.updatedAt"), version: number(row.version, "music playlist.version") }; }
+export function parsePlaylist(value: unknown): MusicPlaylist { const row = object(value, "music playlist"); return { id: string(row.id, "music playlist.id"), name: string(row.name, "music playlist.name"), icon: string(row.icon, "music playlist.icon"), shuffleEnabled: boolean(row.shuffleEnabled, "music playlist.shuffleEnabled"), mixEnabled: boolean(row.mixEnabled, "music playlist.mixEnabled"), repeatMode: enumeration(row.repeatMode, repeatModes, "music playlist.repeatMode"), intendedUses: array(row.intendedUses, (entry, label) => enumeration(entry, intendedUses, label), "music playlist.intendedUses"), sortOrder: number(row.sortOrder, "music playlist.sortOrder"), createdAtMs: number(row.createdAtMs, "music playlist.createdAtMs"), updatedAtMs: number(row.updatedAtMs, "music playlist.updatedAtMs"), version: number(row.version, "music playlist.version") }; }
 function parseBinding(value: unknown, label: string): LocalRootBinding { const row = object(value, label); return { rootId: string(row.rootId, `${label}.rootId`), folderPath: nullable(row.folderPath, string, `${label}.folderPath`), status: enumeration(row.status, rootStatuses, `${label}.status`) }; }
 export const parseBindings = (value: unknown): LocalRootBinding[] => array(value, parseBinding, "music root bindings");
 export const parseBindingResult = (value: unknown): LocalRootBinding => parseBinding(value, "music root binding");
@@ -769,8 +769,8 @@ export function parseRelinkPlanSummary(value: unknown): MusicRelinkPlanSummary {
     ambiguousCount: number(row.ambiguousCount, "music relink plan.ambiguousCount"),
     missingCount: number(row.missingCount, "music relink plan.missingCount"),
     newCount: number(row.newCount, "music relink plan.newCount"),
-    createdAt: number(row.createdAt, "music relink plan.createdAt"),
-    updatedAt: number(row.updatedAt, "music relink plan.updatedAt"),
+    createdAtMs: number(row.createdAtMs, "music relink plan.createdAtMs"),
+    updatedAtMs: number(row.updatedAtMs, "music relink plan.updatedAtMs"),
   };
 }
 export function parseRelinkPlanWindow(value: unknown): MusicRelinkPlanWindow {
@@ -787,7 +787,7 @@ export function parseRelinkPlanWindow(value: unknown): MusicRelinkPlanWindow {
         candidateItemIds: array(item.candidateItemIds, string, `${label}.candidateItemIds`),
         fileSizeBytes: nullable(item.fileSizeBytes, number, `${label}.fileSizeBytes`),
         resolvedItemId: nullable(item.resolvedItemId, string, `${label}.resolvedItemId`),
-        resolvedAt: nullable(item.resolvedAt, number, `${label}.resolvedAt`),
+        resolvedAtMs: nullable(item.resolvedAtMs, number, `${label}.resolvedAtMs`),
       };
     }, "music relink plan window.entries"),
     totalCount: number(row.totalCount, "music relink plan window.totalCount"),

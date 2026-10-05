@@ -22,10 +22,10 @@ pub(crate) struct LinkedUsageRow {
     pub source_type: String,
     pub source_key: String,
     pub display_name: Option<String>,
-    pub started_at: i64,
+    pub started_at_ms: i64,
     pub elapsed_seconds: i64,
     pub local_date: String,
-    pub created_at: i64,
+    pub created_at_ms: i64,
 }
 
 pub(crate) fn spool_path<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<PathBuf, String> {
@@ -58,10 +58,10 @@ async fn open_spool(path: &Path) -> Result<SqlitePool, String> {
             source_type TEXT NOT NULL,
             source_key TEXT NOT NULL,
             display_name TEXT,
-            started_at INTEGER NOT NULL,
+            started_at_ms INTEGER NOT NULL,
             elapsed_seconds INTEGER NOT NULL,
             local_date TEXT NOT NULL,
-            created_at INTEGER NOT NULL
+            created_at_ms INTEGER NOT NULL
         )",
     )
     .execute(&pool)
@@ -75,10 +75,10 @@ async fn open_spool(path: &Path) -> Result<SqlitePool, String> {
             source_type TEXT NOT NULL,
             source_key TEXT NOT NULL,
             display_name TEXT,
-            started_at INTEGER NOT NULL,
+            started_at_ms INTEGER NOT NULL,
             elapsed_seconds INTEGER NOT NULL,
             local_date TEXT NOT NULL,
-            created_at INTEGER NOT NULL
+            created_at_ms INTEGER NOT NULL
         )",
     )
     .execute(&pool)
@@ -162,10 +162,10 @@ async fn enqueue_native_samples_at(
                     source_type: sample.source_type.clone(),
                     source_key: sample.source_key.clone(),
                     display_name: sample.display_name.clone(),
-                    started_at: sample.started_at,
+                    started_at_ms: sample.started_at_ms,
                     elapsed_seconds: sample.elapsed_seconds,
                     local_date: sample.local_date.clone(),
-                    created_at: sample.created_at,
+                    created_at_ms: sample.created_at_ms,
                 },
                 device_id,
             )
@@ -204,8 +204,8 @@ async fn enqueue_native_samples_at(
             if !exists { added += 1; }
             if count + added > MAX_PENDING_SAMPLES { return Err("the linked-device Distractions spool is full".into()); }
             let message = row_to_message(&LinkedUsageRow { id: sample.id.clone(), source_type: sample.source_type.clone(), source_key: sample.source_key.clone(),
-                display_name: sample.display_name.clone(), started_at: sample.started_at, elapsed_seconds: sample.elapsed_seconds,
-                local_date: sample.local_date.clone(), created_at: sample.created_at }, device_id);
+                display_name: sample.display_name.clone(), started_at_ms: sample.started_at_ms, elapsed_seconds: sample.elapsed_seconds,
+                local_date: sample.local_date.clone(), created_at_ms: sample.created_at_ms }, device_id);
             insert_message_executor(&mut tx, "pending_usage_samples", vault_id, &message).await?;
         }
         sqlx::query("INSERT INTO native_usage_batch_receipts (vault_id, device_id, batch_id, digest) VALUES (?, ?, ?, ?)
@@ -275,8 +275,8 @@ async fn compact_pending_tx(
 ) -> Result<(), String> {
     let rows = sqlx::query(
         "SELECT source_type, source_key, MAX(display_name) AS display_name,
-                MIN(started_at) AS started_at, SUM(elapsed_seconds) AS elapsed_seconds,
-                local_date, MAX(created_at) AS created_at,
+                MIN(started_at_ms) AS started_at_ms, SUM(elapsed_seconds) AS elapsed_seconds,
+                local_date, MAX(created_at_ms) AS created_at_ms,
                 GROUP_CONCAT(hex(CAST(sample_id AS BLOB)), '|' ORDER BY sample_id) AS identity_members
          FROM pending_usage_samples p
          WHERE vault_id = ? AND device_id = ? AND NOT EXISTS (
@@ -295,10 +295,10 @@ async fn compact_pending_tx(
         let source_key: String = row.try_get("source_key").map_err(|e| e.to_string())?;
         let display_name: Option<String> =
             row.try_get("display_name").map_err(|e| e.to_string())?;
-        let started_at_unix_ms: i64 = row.try_get("started_at").map_err(|e| e.to_string())?;
+        let started_at_ms: i64 = row.try_get("started_at_ms").map_err(|e| e.to_string())?;
         let mut elapsed_seconds: i64 = row.try_get("elapsed_seconds").map_err(|e| e.to_string())?;
         let local_date: String = row.try_get("local_date").map_err(|e| e.to_string())?;
-        let created_at_unix_ms: i64 = row.try_get("created_at").map_err(|e| e.to_string())?;
+        let created_at_ms: i64 = row.try_get("created_at_ms").map_err(|e| e.to_string())?;
         let members: String = row
             .try_get("identity_members")
             .map_err(|error| error.to_string())?;
@@ -311,10 +311,10 @@ async fn compact_pending_tx(
                 source_type: source_type.clone(),
                 source_key: source_key.clone(),
                 display_name: display_name.clone(),
-                started_at_unix_ms,
+                started_at_ms,
                 elapsed_seconds: elapsed_seconds.min(86_400),
                 local_date: local_date.clone(),
-                created_at_unix_ms,
+                created_at_ms,
             });
             elapsed_seconds -= elapsed_seconds.min(86_400);
             part += 1;
@@ -795,18 +795,18 @@ pub(crate) async fn import_linked_samples(
     for sample in samples {
         sqlx::query(
             "INSERT OR IGNORE INTO distractions_usage_samples
-                (id, source_type, source_key, display_name, started_at,
-                 elapsed_seconds, local_date, created_at)
+                (id, source_type, source_key, display_name, started_at_ms,
+                 elapsed_seconds, local_date, created_at_ms)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(canonical_sample_id(&sample.device_id, &sample.sample_id))
         .bind(&sample.source_type)
         .bind(&sample.source_key)
         .bind(&sample.display_name)
-        .bind(sample.started_at_unix_ms)
+        .bind(sample.started_at_ms)
         .bind(sample.elapsed_seconds)
         .bind(&sample.local_date)
-        .bind(sample.created_at_unix_ms)
+        .bind(sample.created_at_ms)
         .execute(&mut *transaction)
         .await
         .map_err(|error| format!("import linked Distractions sample: {error}"))?;
@@ -826,8 +826,8 @@ pub(crate) async fn aggregate_owner_samples(
 ) -> Result<Vec<DistractionsSampleMessage>, String> {
     let rows = sqlx::query(
         "SELECT source_type, source_key, MAX(display_name) AS display_name,
-                MIN(started_at) AS started_at, SUM(elapsed_seconds) AS elapsed_seconds,
-                local_date, MAX(created_at) AS created_at
+                MIN(started_at_ms) AS started_at_ms, SUM(elapsed_seconds) AS elapsed_seconds,
+                local_date, MAX(created_at_ms) AS created_at_ms
          FROM distractions_usage_samples
          WHERE local_date IN (
              SELECT DISTINCT local_date FROM distractions_usage_samples
@@ -852,8 +852,8 @@ pub(crate) async fn aggregate_owner_samples(
         let identity = format!("{source_type}|{source_key}|{local_date}");
         let display_name: Option<String> =
             row.try_get("display_name").map_err(|e| e.to_string())?;
-        let started_at_unix_ms: i64 = row.try_get("started_at").map_err(|e| e.to_string())?;
-        let created_at_unix_ms: i64 = row.try_get("created_at").map_err(|e| e.to_string())?;
+        let started_at_ms: i64 = row.try_get("started_at_ms").map_err(|e| e.to_string())?;
+        let created_at_ms: i64 = row.try_get("created_at_ms").map_err(|e| e.to_string())?;
         let mut part = 0_u32;
         while elapsed_seconds > 0 {
             if samples.len() >= MAX_DISTRACTIONS_SAMPLES {
@@ -866,10 +866,10 @@ pub(crate) async fn aggregate_owner_samples(
                 source_type: source_type.clone(),
                 source_key: source_key.clone(),
                 display_name: display_name.clone(),
-                started_at_unix_ms,
+                started_at_ms,
                 elapsed_seconds: chunk,
                 local_date: local_date.clone(),
-                created_at_unix_ms,
+                created_at_ms,
             });
             elapsed_seconds -= chunk;
             part += 1;
@@ -889,10 +889,10 @@ pub(crate) fn row_to_message(
         source_type: sample.source_type.clone(),
         source_key: sample.source_key.clone(),
         display_name: sample.display_name.clone(),
-        started_at_unix_ms: sample.started_at,
+        started_at_ms: sample.started_at_ms,
         elapsed_seconds: sample.elapsed_seconds,
         local_date: sample.local_date.clone(),
-        created_at_unix_ms: sample.created_at,
+        created_at_ms: sample.created_at_ms,
     }
 }
 
@@ -930,7 +930,7 @@ async fn insert_message_executor(
     let query = format!(
         "INSERT OR IGNORE INTO {table}
             (sample_id, vault_id, device_id, source_type, source_key, display_name,
-             started_at, elapsed_seconds, local_date, created_at)
+             started_at_ms, elapsed_seconds, local_date, created_at_ms)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     );
     sqlx::query(&query)
@@ -940,10 +940,10 @@ async fn insert_message_executor(
         .bind(&sample.source_type)
         .bind(&sample.source_key)
         .bind(&sample.display_name)
-        .bind(sample.started_at_unix_ms)
+        .bind(sample.started_at_ms)
         .bind(sample.elapsed_seconds)
         .bind(&sample.local_date)
-        .bind(sample.created_at_unix_ms)
+        .bind(sample.created_at_ms)
         .execute(executor)
         .await
         .map_err(|error| format!("store linked Distractions sample: {error}"))?;
@@ -980,10 +980,10 @@ async fn read_messages_with_limit(
     }
     let query = format!(
         "SELECT sample_id, device_id, source_type, source_key, display_name,
-                started_at, elapsed_seconds, local_date, created_at
+                started_at_ms, elapsed_seconds, local_date, created_at_ms
          FROM {table}
          WHERE vault_id = ? AND (? IS NULL OR device_id = ?)
-         ORDER BY created_at ASC, sample_id ASC LIMIT ?"
+         ORDER BY created_at_ms ASC, sample_id ASC LIMIT ?"
     );
     let rows = sqlx::query(&query)
         .bind(vault_id)
@@ -1001,10 +1001,10 @@ async fn read_messages_with_limit(
                 source_type: row.try_get("source_type").map_err(|e| e.to_string())?,
                 source_key: row.try_get("source_key").map_err(|e| e.to_string())?,
                 display_name: row.try_get("display_name").map_err(|e| e.to_string())?,
-                started_at_unix_ms: row.try_get("started_at").map_err(|e| e.to_string())?,
+                started_at_ms: row.try_get("started_at_ms").map_err(|e| e.to_string())?,
                 elapsed_seconds: row.try_get("elapsed_seconds").map_err(|e| e.to_string())?,
                 local_date: row.try_get("local_date").map_err(|e| e.to_string())?,
-                created_at_unix_ms: row.try_get("created_at").map_err(|e| e.to_string())?,
+                created_at_ms: row.try_get("created_at_ms").map_err(|e| e.to_string())?,
             })
         })
         .collect()
@@ -1055,10 +1055,10 @@ mod tests {
             source_type: "mobile-app".to_string(),
             source_key: "com.example.video".to_string(),
             display_name: Some("Video".to_string()),
-            started_at_unix_ms: 1_700_000_000_000,
+            started_at_ms: 1_700_000_000_000,
             elapsed_seconds: seconds,
             local_date: "2026-09-13".to_string(),
-            created_at_unix_ms: 1_700_000_001_000,
+            created_at_ms: 1_700_000_001_000,
         }
     }
 
@@ -1069,10 +1069,10 @@ mod tests {
             source_type: message.source_type,
             source_key: message.source_key,
             display_name: message.display_name,
-            started_at: message.started_at_unix_ms,
+            started_at_ms: message.started_at_ms,
             elapsed_seconds: message.elapsed_seconds,
             local_date: message.local_date,
-            created_at: message.created_at_unix_ms,
+            created_at_ms: message.created_at_ms,
         }
     }
 
@@ -1348,8 +1348,8 @@ mod tests {
         sqlx::query(
             "CREATE TABLE distractions_usage_samples (
             id TEXT PRIMARY KEY, source_type TEXT NOT NULL, source_key TEXT NOT NULL,
-            display_name TEXT, started_at INTEGER NOT NULL, elapsed_seconds INTEGER NOT NULL,
-            local_date TEXT NOT NULL, created_at INTEGER NOT NULL)",
+            display_name TEXT, started_at_ms INTEGER NOT NULL, elapsed_seconds INTEGER NOT NULL,
+            local_date TEXT NOT NULL, created_at_ms INTEGER NOT NULL)",
         )
         .execute(&canonical)
         .await
@@ -1667,10 +1667,10 @@ mod tests {
                 source_type TEXT NOT NULL,
                 source_key TEXT NOT NULL,
                 display_name TEXT,
-                started_at INTEGER NOT NULL,
+                started_at_ms INTEGER NOT NULL,
                 elapsed_seconds INTEGER NOT NULL,
                 local_date TEXT NOT NULL,
-                created_at INTEGER NOT NULL
+                created_at_ms INTEGER NOT NULL
             )",
         )
         .execute(&pool)
@@ -1685,8 +1685,8 @@ mod tests {
             .expect("retry import");
         sqlx::query(
             "INSERT INTO distractions_usage_samples
-                (id, source_type, source_key, display_name, started_at,
-                 elapsed_seconds, local_date, created_at)
+                (id, source_type, source_key, display_name, started_at_ms,
+                 elapsed_seconds, local_date, created_at_ms)
              VALUES ('owner', 'mobile-app', 'com.example.video', 'Video', 1, 12,
                      '2026-09-13', 2)",
         )

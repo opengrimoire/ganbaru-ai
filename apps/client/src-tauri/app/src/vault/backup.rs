@@ -950,11 +950,11 @@ mod tests {
             "INSERT INTO chat_conversations (id, project_id, conversation_kind, last_activity_at, created_at, updated_at) VALUES ('handoff-conversation', 'project-routine-learning', 'channel', '2026-09-14T09:00:00Z', '2026-09-14T09:00:00Z', '2026-09-14T09:00:00Z')",
             "INSERT INTO chat_channels (id, project_id, conversation_id, name, created_at, updated_at) VALUES ('handoff-channel', 'project-routine-learning', 'handoff-conversation', 'Portable chat', '2026-09-14T09:00:00Z', '2026-09-14T09:00:00Z')",
             "INSERT INTO quick_notes (id, title, body_plain_text) VALUES ('handoff-quick-note', 'Portable quick note', 'Portable quick-note body')",
-            "INSERT INTO themes (id, display_name, blend_canvas, seed_blend_canvas, derivation_engine_version, created_at, updated_at, icon_label, seed_icon_label) VALUES ('handoff-theme', 'Portable theme', '{}', '{}', 1, 1, 1, 'dark', 'dark')",
-            "INSERT INTO distractions_usage_samples (id, source_type, source_key, display_name, started_at, elapsed_seconds, local_date, created_at) VALUES ('handoff-usage', 'mobile-app', 'app.example', 'Portable usage', 1, 45, '2026-09-14', 1)",
-            "INSERT INTO music_playlists (id, name, created_at, updated_at) VALUES ('handoff-playlist', 'Portable playlist', 1, 1)",
-            "INSERT INTO music_library_items (id, identity_key, source_kind, original_title, discovered_at, updated_at) VALUES ('handoff-track', 'local:portable-track', 'local-file', 'Portable track', 1, 1)",
-            "INSERT INTO music_playlist_memberships (id, playlist_id, item_id, position, created_at, updated_at) VALUES ('handoff-membership', 'handoff-playlist', 'handoff-track', 0, 1, 1)",
+            "INSERT INTO themes (id, display_name, blend_canvas, seed_blend_canvas, derivation_engine_version, created_at_ms, updated_at_ms, icon_label, seed_icon_label) VALUES ('handoff-theme', 'Portable theme', '{}', '{}', 1, 1, 1, 'dark', 'dark')",
+            "INSERT INTO distractions_usage_samples (id, source_type, source_key, display_name, started_at_ms, elapsed_seconds, local_date, created_at_ms) VALUES ('handoff-usage', 'mobile-app', 'app.example', 'Portable usage', 1, 45, '2026-09-14', 1)",
+            "INSERT INTO music_playlists (id, name, created_at_ms, updated_at_ms) VALUES ('handoff-playlist', 'Portable playlist', 1, 1)",
+            "INSERT INTO music_library_items (id, identity_key, source_kind, original_title, discovered_at_ms, updated_at_ms) VALUES ('handoff-track', 'local:portable-track', 'local-file', 'Portable track', 1, 1)",
+            "INSERT INTO music_playlist_memberships (id, playlist_id, item_id, position, created_at_ms, updated_at_ms) VALUES ('handoff-membership', 'handoff-playlist', 'handoff-track', 0, 1, 1)",
         ] {
             sqlx::query(statement).execute(&source_pool).await.unwrap();
         }

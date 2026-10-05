@@ -284,7 +284,7 @@ class SoundscapeStore {
     try {
       const saved = await upsertMusicSoundscape({ ...write, deviceId: this.deviceId });
       this.definitions = [...this.definitions.filter((entry) => entry.id !== saved.id), saved]
-        .sort((left, right) => left.createdAt - right.createdAt || left.name.localeCompare(right.name));
+        .sort((left, right) => left.createdAtMs - right.createdAtMs || left.name.localeCompare(right.name));
     } catch (error) { this.error = message(error); throw error; }
     finally { this.saving = false; }
   }
@@ -340,7 +340,7 @@ class SoundscapeStore {
         desiredPlaying,
         volume,
         expectedVersion: current.version,
-        updatedAt: Date.now(),
+        updatedAtMs: Date.now(),
       });
       if (generation === this.generation) this.persisted = saved;
     });

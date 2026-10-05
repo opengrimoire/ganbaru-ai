@@ -25,7 +25,7 @@ export class MusicInterchangeController {
   mappedRootIds = $state<Set<string>>(new Set());
   importResult = $state<MusicInterchangeImportResult | null>(null);
   availableRoots = $state<Array<{ id: string; name: string }>>([]);
-  private selectedAt = 0;
+  private selectedAtMs = 0;
   private sourceVaultId: string | null = null;
   private previewSource: MusicTransferSource | null = null;
   private pendingCommit = $state<MusicTransferCommit | null>(null);
@@ -77,7 +77,7 @@ export class MusicInterchangeController {
 
   private currentSource(): MusicTransferSource {
     if (this.importedContents === null) throw new Error("Choose a Music import file");
-    return { contents: this.importedContents, playlistName: this.importPlaylistName.trim(), relativeRootId: this.m3u8RootId || null, selectedAt: this.selectedAt };
+    return { contents: this.importedContents, playlistName: this.importPlaylistName.trim(), relativeRootId: this.m3u8RootId || null, selectedAtMs: this.selectedAtMs };
   }
 
   private requireVault(): string {
@@ -118,7 +118,7 @@ export class MusicInterchangeController {
       const contents = await pickAndReadMusicInterchangeFile();
       if (contents === null) return false;
       this.importedContents = contents;
-      this.selectedAt = this.now();
+      this.selectedAtMs = this.now();
       await this.loadPreview();
       return true;
     } catch (error) {

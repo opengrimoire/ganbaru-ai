@@ -51,8 +51,8 @@ pub(super) fn request(conflict: MusicImportPlaylistConflict) -> MusicInterchange
                     }],
                     snoozes: vec![MusicInterchangeSnooze {
                         scope: MusicSnoozeScope::Playlist,
-                        starts_at: 1_700_000_000_000,
-                        ends_at: Some(1_700_086_400_000),
+                        starts_at_ms: 1_700_000_000_000,
+                        ends_at_ms: Some(1_700_086_400_000),
                         reason: "Rest".to_string(),
                     }],
                 }],

@@ -23,9 +23,9 @@ describe("music track preferences", () => {
   });
 
   it("resumes only snoozes in the selected scope", () => {
-    const snooze = (id: string, playlistId: string | null, endsAt: number | null): MusicSnooze => ({
+    const snooze = (id: string, playlistId: string | null, endsAtMs: number | null): MusicSnooze => ({
       id, itemId: "song", scope: playlistId ? "playlist" : "all-playlists", playlistId,
-      startsAt: 100, endsAt, reason: "", createdAt: 100,
+      startsAtMs: 100, endsAtMs, reason: "", createdAtMs: 100,
     });
     const snoozes = [snooze("global", null, null), snooze("a", "a", 300), snooze("b", "b", null), snooze("old", "a", 150)];
     expect(musicSnoozesForScope(snoozes, null, 200).map((entry) => entry.id)).toEqual(["global", "a", "b"]);

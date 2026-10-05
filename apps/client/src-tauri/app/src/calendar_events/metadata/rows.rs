@@ -238,7 +238,7 @@ stored_row!(MusicAssignment, "music_context_assignments", "owner_id = ?1 AND own
     soundscape_id: Option<String>,
     provenance_kind: String,
     provenance_id: Option<String>,
-    updated_at: i64,
+    updated_at_ms: i64,
     version: i64,
     soundscape_behavior: String,
 });

@@ -76,7 +76,7 @@ pub struct MusicContextAssignment {
     pub soundscape_behavior: MusicSoundscapeBehavior,
     pub provenance_kind: MusicAssignmentProvenanceKind,
     pub provenance_id: Option<String>,
-    pub updated_at: i64,
+    pub updated_at_ms: i64,
     pub version: i64,
 }
 
@@ -98,7 +98,7 @@ pub struct MusicContextAssignmentSet {
     pub owner_kind: MusicAssignmentOwnerKind,
     pub owner_id: String,
     pub assignments: Vec<MusicContextAssignmentDraft>,
-    pub updated_at: i64,
+    pub updated_at_ms: i64,
 }
 
 /// Canonical assignment fields shared by context reads and bounded transfers.
@@ -124,7 +124,7 @@ pub(crate) async fn assignments(
     validate_id(owner_id, "ownerId")?;
     let rows = sqlx::query_as::<_, AssignmentRow>(
         "SELECT owner_kind, owner_id, phase, behavior, playlist_id, soundscape_id, soundscape_behavior,
-                provenance_kind, provenance_id, updated_at, version
+                provenance_kind, provenance_id, updated_at_ms, version
          FROM music_context_assignments
          WHERE owner_kind = ? AND owner_id = ?
          ORDER BY CASE phase WHEN 'focus' THEN 0 WHEN 'short-break' THEN 1 ELSE 2 END",
@@ -151,7 +151,7 @@ pub(crate) async fn replace_assignments(
         request.owner_kind,
         &request.owner_id,
         request.assignments,
-        request.updated_at,
+        request.updated_at_ms,
     )
     .await?;
     transaction.commit().await.map_err(|error| {
@@ -165,13 +165,13 @@ pub(crate) async fn replace_assignments_in_transaction(
     owner_kind: MusicAssignmentOwnerKind,
     owner_id: &str,
     assignments: Vec<MusicContextAssignmentDraft>,
-    updated_at: i64,
+    updated_at_ms: i64,
 ) -> MusicLibraryResult<()> {
     validate_set(&MusicContextAssignmentSet {
         owner_kind,
         owner_id: owner_id.to_string(),
         assignments: assignments.clone(),
-        updated_at,
+        updated_at_ms,
     })?;
     let prior_versions = sqlx::query_as::<_, (String, i64)>(
         "SELECT phase, version FROM music_context_assignments
@@ -199,7 +199,7 @@ pub(crate) async fn replace_assignments_in_transaction(
         sqlx::query(
             "INSERT INTO music_context_assignments
                 (owner_kind, owner_id, phase, behavior, playlist_id, soundscape_id, soundscape_behavior,
-                 provenance_kind, provenance_id, updated_at, version)
+                 provenance_kind, provenance_id, updated_at_ms, version)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(owner_kind.as_ref())
@@ -211,7 +211,7 @@ pub(crate) async fn replace_assignments_in_transaction(
         .bind(assignment.soundscape_behavior.as_ref())
         .bind(assignment.provenance_kind.as_ref())
         .bind(assignment.provenance_id)
-        .bind(updated_at)
+        .bind(updated_at_ms)
         .bind(version)
         .execute(&mut **transaction)
         .await
@@ -224,7 +224,7 @@ pub(crate) async fn replace_assignments_in_transaction(
 
 pub(crate) fn validate_set(request: &MusicContextAssignmentSet) -> MusicLibraryResult<()> {
     validate_id(&request.owner_id, "ownerId")?;
-    if request.updated_at <= 0 {
+    if request.updated_at_ms <= 0 {
         return Err(MusicLibraryError::validation(
             "updatedAt",
             "must be positive",
@@ -318,7 +318,7 @@ pub(crate) fn decode(row: AssignmentRow) -> MusicLibraryResult<MusicContextAssig
             |message| MusicLibraryError::runtime("decode assignment provenance", message),
         )?,
         provenance_id: row.8,
-        updated_at: row.9,
+        updated_at_ms: row.9,
         version: row.10,
     })
 }

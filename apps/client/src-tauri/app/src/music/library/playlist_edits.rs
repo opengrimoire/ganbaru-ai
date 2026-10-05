@@ -25,7 +25,7 @@ pub(crate) async fn bulk_edit_memberships(
             let result = sqlx::query(
                 "INSERT INTO music_playlist_memberships
                     (id, playlist_id, item_id, position, weight, enabled,
-                     created_at, updated_at, version)
+                     created_at_ms, updated_at_ms, version)
                  VALUES (?, ?, ?, ?, 'normal', 1, ?, ?, 1)
                  ON CONFLICT(playlist_id, item_id) DO NOTHING",
             )
@@ -33,8 +33,8 @@ pub(crate) async fn bulk_edit_memberships(
             .bind(playlist_id)
             .bind(item_id)
             .bind(next_position)
-            .bind(request.updated_at)
-            .bind(request.updated_at)
+            .bind(request.updated_at_ms)
+            .bind(request.updated_at_ms)
             .execute(&mut *transaction)
             .await
             .map_err(|error| MusicLibraryError::database("bulk add playlist membership", error))?;
@@ -68,11 +68,11 @@ pub(crate) async fn bulk_edit_memberships(
             for item_id in &request.item_ids {
                 let result = sqlx::query(
                     "UPDATE music_playlist_memberships
-                     SET weight = ?, updated_at = ?, version = version + 1
+                     SET weight = ?, updated_at_ms = ?, version = version + 1
                      WHERE playlist_id = ? AND item_id = ?",
                 )
                 .bind(weight.as_ref())
-                .bind(request.updated_at)
+                .bind(request.updated_at_ms)
                 .bind(playlist_id)
                 .bind(item_id)
                 .execute(&mut *transaction)
@@ -129,10 +129,10 @@ pub(crate) async fn reorder_playlist(
     for (position, (membership_id, _)) in reordered.iter().enumerate() {
         sqlx::query(
             "UPDATE music_playlist_memberships
-             SET position = ?, updated_at = ?, version = version + 1 WHERE id = ?",
+             SET position = ?, updated_at_ms = ?, version = version + 1 WHERE id = ?",
         )
         .bind(position as i64)
-        .bind(request.updated_at)
+        .bind(request.updated_at_ms)
         .bind(membership_id)
         .execute(&mut *transaction)
         .await
@@ -173,11 +173,11 @@ pub(crate) async fn reorder_playlists(
     for (position, playlist) in request.playlists.iter().enumerate() {
         let result = sqlx::query(
             "UPDATE music_playlists
-             SET sort_order = ?, updated_at = ?, version = version + 1
+             SET sort_order = ?, updated_at_ms = ?, version = version + 1
              WHERE id = ? AND version = ?",
         )
         .bind(position as i64)
-        .bind(request.updated_at)
+        .bind(request.updated_at_ms)
         .bind(&playlist.playlist_id)
         .bind(playlist.expected_version)
         .execute(&mut *transaction)
@@ -210,14 +210,14 @@ pub(crate) async fn bulk_set_review_state(
     for item in &request.items {
         let updated = sqlx::query(
             "UPDATE music_library_items
-             SET review_state = ?, review_changed_at = ?, review_deferred_until = ?,
-                 updated_at = ?, version = version + 1
+             SET review_state = ?, review_changed_at_ms = ?, review_deferred_until_ms = ?,
+                 updated_at_ms = ?, version = version + 1
              WHERE id = ? AND version = ?",
         )
         .bind(request.review_state.as_ref())
-        .bind(request.updated_at)
+        .bind(request.updated_at_ms)
         .bind(request.deferred_until)
-        .bind(request.updated_at)
+        .bind(request.updated_at_ms)
         .bind(&item.item_id)
         .bind(item.expected_version)
         .execute(&mut *transaction)
@@ -294,7 +294,7 @@ pub(crate) async fn apply_review_selection(
             let result = sqlx::query(
                 "INSERT INTO music_playlist_memberships
                     (id, playlist_id, item_id, position, weight, enabled,
-                     created_at, updated_at, version)
+                     created_at_ms, updated_at_ms, version)
                  VALUES (?, ?, ?, ?, 'normal', 1, ?, ?, 1)
                  ON CONFLICT(playlist_id, item_id) DO NOTHING",
             )
@@ -302,8 +302,8 @@ pub(crate) async fn apply_review_selection(
             .bind(playlist_id)
             .bind(&item.item_id)
             .bind(next_position)
-            .bind(request.updated_at)
-            .bind(request.updated_at)
+            .bind(request.updated_at_ms)
+            .bind(request.updated_at_ms)
             .execute(&mut *transaction)
             .await
             .map_err(|error| {
@@ -341,13 +341,13 @@ pub(crate) async fn apply_review_selection(
         let version = if should_update_review {
             let result = sqlx::query(
                 "UPDATE music_library_items
-                 SET review_state = ?, review_changed_at = ?, review_deferred_until = NULL,
-                     updated_at = ?, version = version + 1
+                 SET review_state = ?, review_changed_at_ms = ?, review_deferred_until_ms = NULL,
+                     updated_at_ms = ?, version = version + 1
                  WHERE id = ? AND version = ?",
             )
             .bind(request.review_state.as_ref())
-            .bind(request.updated_at)
-            .bind(request.updated_at)
+            .bind(request.updated_at_ms)
+            .bind(request.updated_at_ms)
             .bind(&item.item_id)
             .bind(item.expected_version)
             .execute(&mut *transaction)
@@ -394,17 +394,17 @@ pub(crate) async fn bulk_snooze(
     for (index, item_id) in request.item_ids.iter().enumerate() {
         sqlx::query(
             "INSERT INTO music_snoozes
-                (id, item_id, scope, playlist_id, starts_at, ends_at, reason, created_at)
+                (id, item_id, scope, playlist_id, starts_at_ms, ends_at_ms, reason, created_at_ms)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(format!("{}:{}", request.action_id, index))
         .bind(item_id)
         .bind(request.scope.as_ref())
         .bind(&request.playlist_id)
-        .bind(request.starts_at)
-        .bind(request.ends_at)
+        .bind(request.starts_at_ms)
+        .bind(request.ends_at_ms)
         .bind(&request.reason)
-        .bind(request.created_at)
+        .bind(request.created_at_ms)
         .execute(&mut *transaction)
         .await
         .map_err(|error| MusicLibraryError::database("bulk save snooze", error))?;

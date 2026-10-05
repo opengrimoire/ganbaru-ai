@@ -43,7 +43,7 @@ struct NativeRequest {
     source_key: Option<String>,
     display_name: Option<String>,
     elapsed_seconds: Option<i64>,
-    started_at: Option<i64>,
+    started_at_ms: Option<i64>,
     local_date: Option<String>,
 }
 
@@ -287,10 +287,10 @@ fn normalize_usage_sample(request: &NativeRequest) -> Result<UsageSample, String
     if elapsed_seconds <= 0 || elapsed_seconds > 86_400 {
         return Err("usage elapsedSeconds must be between 1 and 86400".to_string());
     }
-    let started_at = request
-        .started_at
+    let started_at_ms = request
+        .started_at_ms
         .ok_or_else(|| "usage startedAt is required".to_string())?;
-    if started_at < 0 {
+    if started_at_ms < 0 {
         return Err("usage startedAt must be non-negative".to_string());
     }
     let local_date = request
@@ -308,7 +308,7 @@ fn normalize_usage_sample(request: &NativeRequest) -> Result<UsageSample, String
     for value in [
         source_type,
         source_key.as_str(),
-        &started_at.to_string(),
+        &started_at_ms.to_string(),
         &elapsed_seconds.to_string(),
         local_date.as_str(),
     ] {
@@ -319,10 +319,10 @@ fn normalize_usage_sample(request: &NativeRequest) -> Result<UsageSample, String
         source_type: source_type.to_string(),
         source_key,
         display_name,
-        started_at,
+        started_at_ms,
         elapsed_seconds,
         local_date,
-        created_at: now_epoch_ms(),
+        created_at_ms: now_epoch_ms(),
     })
 }
 

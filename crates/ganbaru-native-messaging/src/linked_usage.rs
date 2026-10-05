@@ -16,10 +16,10 @@ pub(super) struct UsageSample {
     pub source_type: String,
     pub source_key: String,
     pub display_name: Option<String>,
-    pub started_at: i64,
+    pub started_at_ms: i64,
     pub elapsed_seconds: i64,
     pub local_date: String,
-    pub created_at: i64,
+    pub created_at_ms: i64,
 }
 
 #[derive(Deserialize)]
@@ -71,10 +71,10 @@ pub(super) fn record_usage_sample(
                 source_type TEXT NOT NULL,
                 source_key TEXT NOT NULL,
                 display_name TEXT,
-                started_at INTEGER NOT NULL,
+                started_at_ms INTEGER NOT NULL,
                 elapsed_seconds INTEGER NOT NULL,
                 local_date TEXT NOT NULL,
-                created_at INTEGER NOT NULL
+                created_at_ms INTEGER NOT NULL
             )",
         )
         .execute(&pool)
@@ -97,7 +97,7 @@ pub(super) fn record_usage_sample(
         sqlx::query(
             "INSERT OR IGNORE INTO pending_usage_samples
                 (sample_id, vault_id, device_id, source_type, source_key, display_name,
-                 started_at, elapsed_seconds, local_date, created_at)
+                 started_at_ms, elapsed_seconds, local_date, created_at_ms)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(sample.id)
@@ -106,10 +106,10 @@ pub(super) fn record_usage_sample(
         .bind(sample.source_type)
         .bind(sample.source_key)
         .bind(sample.display_name)
-        .bind(sample.started_at)
+        .bind(sample.started_at_ms)
         .bind(sample.elapsed_seconds)
         .bind(sample.local_date)
-        .bind(sample.created_at)
+        .bind(sample.created_at_ms)
         .execute(&pool)
         .await
         .map_err(|e| format!("spool usage sample: {e}"))?;
@@ -155,8 +155,8 @@ async fn compact(pool: &sqlx::SqlitePool, vault_id: &str, device_id: &str) -> Re
         "CREATE TEMP TABLE compacted_usage_samples AS
          SELECT MIN(sample_id) AS sample_id, vault_id, device_id, source_type,
                 source_key, MAX(display_name) AS display_name,
-                MIN(started_at) AS started_at, SUM(elapsed_seconds) AS elapsed_seconds,
-                local_date, MAX(created_at) AS created_at
+                MIN(started_at_ms) AS started_at_ms, SUM(elapsed_seconds) AS elapsed_seconds,
+                local_date, MAX(created_at_ms) AS created_at_ms
          FROM pending_usage_samples
          WHERE vault_id = ? AND device_id = ?
          GROUP BY vault_id, device_id, source_type, source_key, local_date",

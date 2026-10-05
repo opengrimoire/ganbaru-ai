@@ -37,7 +37,7 @@ describe("native Music transfer dialog", () => {
     const controller = new MusicInterchangeController(() => [], () => [], () => "vault", () => 100);
     controller.show("import");
     expect(await controller.readImport()).toBe(true);
-    expect(calls.preview).toHaveBeenCalledExactlyOnceWith("vault", { contents: "#EXTM3U\ntrack.flac", playlistName: "Imported playlist", relativeRootId: null, selectedAt: 100 });
+    expect(calls.preview).toHaveBeenCalledExactlyOnceWith("vault", { contents: "#EXTM3U\ntrack.flac", playlistName: "Imported playlist", relativeRootId: null, selectedAtMs: 100 });
     expect(controller.unresolvedM3uCount()).toBe(1);
     controller.show("export", "playlist");
     expect(await controller.exportSelected()).toBe(true);

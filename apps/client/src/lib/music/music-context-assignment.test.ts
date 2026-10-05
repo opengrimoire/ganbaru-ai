@@ -13,7 +13,7 @@ describe("music context assignment boundary", () => {
       soundscapeBehavior: "inherit",
       provenanceKind: "explicit",
       provenanceId: null,
-      updatedAt: 1_700_000_000_000,
+      updatedAtMs: 1_700_000_000_000,
       version: 2,
     }])).toEqual([expect.objectContaining({
       ownerId: "project-1",
@@ -33,7 +33,7 @@ describe("music context assignment boundary", () => {
       soundscapeBehavior: "inherit",
       provenanceKind: "explicit",
       provenanceId: null,
-      updatedAt: 1,
+      updatedAtMs: 1,
       version: 1,
     };
     expect(() => parseMusicContextAssignments([{ ...valid, behavior: "surprise-me" }])).toThrow("behavior");

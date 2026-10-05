@@ -20,7 +20,7 @@ async fn migrated_pool() -> SqlitePool {
 
 async fn seed_root(pool: &SqlitePool) {
     sqlx::query(
-        "INSERT INTO music_local_roots (id, name, created_at, updated_at)
+        "INSERT INTO music_local_roots (id, name, created_at_ms, updated_at_ms)
          VALUES ('root-1', 'Test music', 1700000000000, 1700000000000)",
     )
     .execute(pool)
@@ -28,7 +28,7 @@ async fn seed_root(pool: &SqlitePool) {
     .unwrap();
     sqlx::query(
         "INSERT INTO music_source_collections
-            (id, kind, identity_key, name, local_root_id, created_at, updated_at)
+            (id, kind, identity_key, name, local_root_id, created_at_ms, updated_at_ms)
          VALUES ('collection-1', 'local-root', 'local-root:root-1',
                  'Test music', 'root-1', 1700000000000, 1700000000000)",
     )
@@ -50,7 +50,7 @@ fn temp_root(label: &str) -> PathBuf {
     path
 }
 
-fn request(job_id: &str, root: &Path, requested_at: i64) -> MusicLocalRefreshRequest {
+fn request(job_id: &str, root: &Path, requested_at_ms: i64) -> MusicLocalRefreshRequest {
     MusicLocalRefreshRequest {
         job_id: job_id.to_string(),
         root_id: "root-1".to_string(),
@@ -60,7 +60,7 @@ fn request(job_id: &str, root: &Path, requested_at: i64) -> MusicLocalRefreshReq
             root_id: "root-1".to_string(),
             folder_path: root.to_string_lossy().to_string(),
         }],
-        requested_at,
+        requested_at_ms,
     }
 }
 
@@ -570,7 +570,7 @@ fn partial_refresh_keeps_unseen_locations_available_and_reports_uncertainty() {
 
 async fn seed_extra_root(pool: &SqlitePool, root_id: &str, collection_id: &str) {
     sqlx::query(
-        "INSERT INTO music_local_roots (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)",
+        "INSERT INTO music_local_roots (id, name, created_at_ms, updated_at_ms) VALUES (?, ?, ?, ?)",
     )
     .bind(root_id)
     .bind(root_id)
@@ -581,7 +581,7 @@ async fn seed_extra_root(pool: &SqlitePool, root_id: &str, collection_id: &str) 
     .unwrap();
     sqlx::query(
         "INSERT INTO music_source_collections
-            (id, kind, identity_key, name, local_root_id, created_at, updated_at)
+            (id, kind, identity_key, name, local_root_id, created_at_ms, updated_at_ms)
          VALUES (?, 'local-root', ?, ?, ?, ?, ?)",
     )
     .bind(collection_id)
@@ -609,7 +609,7 @@ async fn run_root_refresh(
     collection_id: &str,
     root: &Path,
     available_roots: Vec<super::super::MusicAvailableRootPath>,
-    requested_at: i64,
+    requested_at_ms: i64,
 ) {
     let refresh = MusicLocalRefreshRequest {
         job_id: job_id.to_string(),
@@ -617,7 +617,7 @@ async fn run_root_refresh(
         collection_id: collection_id.to_string(),
         folder_path: root.to_string_lossy().to_string(),
         available_roots,
-        requested_at,
+        requested_at_ms,
     };
     prepare(pool, &refresh).await.unwrap();
     let result = run_prepared(pool, refresh).await.unwrap();

@@ -123,7 +123,7 @@ fn hard_deleted_future_source_has_only_a_process_local_preimage_and_restores_its
             INSERT INTO calendar_event_pomodoro_configs (event_id, rhythm_kind, rhythm_source) VALUES ('source', 'sequence', 'custom');
             INSERT INTO calendar_event_pomodoro_config_sequence_steps (event_id, step_index, focus_duration_minutes, break_phase, break_duration_minutes)
                 VALUES ('source', 0, 25, 'short_break', 5);
-            INSERT INTO music_context_assignments (owner_kind, owner_id, phase, behavior, provenance_kind, updated_at, version)
+            INSERT INTO music_context_assignments (owner_kind, owner_id, phase, behavior, provenance_kind, updated_at_ms, version)
                 VALUES ('event-snapshot', 'source', 'focus', 'pause-music', 'explicit', 8, 4);")
             .execute(&pool).await.unwrap();
         let mut tx = pool.begin().await.unwrap();

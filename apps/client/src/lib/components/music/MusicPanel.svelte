@@ -377,7 +377,7 @@
     const playlistId = player.activePlaylistId;
     const now = Date.now();
     const active = (await getMusicInspectorDetail(itemId)).snoozes.filter((entry) =>
-      entry.startsAt <= now && (entry.endsAt === null || entry.endsAt > now)
+      entry.startsAtMs <= now && (entry.endsAtMs === null || entry.endsAtMs > now)
       && (playlistId === null || entry.scope === "all-playlists" || entry.playlistId === playlistId));
     await Promise.all(active.map((entry) => removeMusicSnooze(entry.id)));
     if (player.activeQueueItemIds[index] === itemId && player.activePlaylistId === playlistId) {

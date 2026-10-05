@@ -235,7 +235,7 @@ async fn import_roots(
 ) -> MusicLibraryResult<()> {
     for root in &request.document.roots {
         sqlx::query(
-            "INSERT INTO music_local_roots (id, name, created_at, updated_at, version)
+            "INSERT INTO music_local_roots (id, name, created_at_ms, updated_at_ms, version)
              VALUES (?, ?, ?, ?, 1) ON CONFLICT(id) DO NOTHING",
         )
         .bind(&root.id)
@@ -280,7 +280,7 @@ async fn import_playlist(
             .map(|playlist| playlist.icon)
             .unwrap_or(playlist.icon.trim());
         sqlx::query(
-            "UPDATE music_playlists SET name = ?, icon = ?, shuffle_enabled = ?, mix_enabled = ?, repeat_mode = ?, updated_at = ?, version = version + 1 WHERE id = ?",
+            "UPDATE music_playlists SET name = ?, icon = ?, shuffle_enabled = ?, mix_enabled = ?, repeat_mode = ?, updated_at_ms = ?, version = version + 1 WHERE id = ?",
         )
         .bind(protected_name)
         .bind(protected_icon)
@@ -306,7 +306,7 @@ async fn import_playlist(
             })?;
     } else {
         sqlx::query(
-            "INSERT INTO music_playlists (id, name, icon, shuffle_enabled, mix_enabled, repeat_mode, sort_order, created_at, updated_at, version)
+            "INSERT INTO music_playlists (id, name, icon, shuffle_enabled, mix_enabled, repeat_mode, sort_order, created_at_ms, updated_at_ms, version)
              VALUES (?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order), -1) + 1 FROM music_playlists), ?, ?, 1)",
         )
         .bind(&target_id)
@@ -359,7 +359,7 @@ async fn import_item(
             "INSERT INTO music_library_items
                 (id, identity_key, source_kind, media_kind, youtube_video_id, original_title,
                  original_artist, original_album, duration_ms, availability, review_state,
-                 discovered_at, updated_at, version)
+                 discovered_at_ms, updated_at_ms, version)
              VALUES (?, ?, ?, 'unknown', ?, ?, ?, ?, ?, ?, 'unreviewed', ?, ?, 1)",
         )
         .bind(&item_id)
@@ -382,7 +382,7 @@ async fn import_item(
         .map_err(|error| MusicLibraryError::database("import music item", error))?;
     } else if request.replace_item_descriptions {
         sqlx::query(
-            "UPDATE music_library_items SET original_title = ?, original_artist = ?, original_album = ?, duration_ms = ?, updated_at = ?, version = version + 1 WHERE id = ?",
+            "UPDATE music_library_items SET original_title = ?, original_artist = ?, original_album = ?, duration_ms = ?, updated_at_ms = ?, version = version + 1 WHERE id = ?",
         )
         .bind(&item.title)
         .bind(&item.artist)
@@ -402,7 +402,7 @@ async fn import_item(
             .map_err(|error| MusicLibraryError::database("replace imported signals", error))?;
         for signal in &item.signals {
             sqlx::query(
-                "INSERT INTO music_item_signals (item_id, signal, created_at) VALUES (?, ?, ?)",
+                "INSERT INTO music_item_signals (item_id, signal, created_at_ms) VALUES (?, ?, ?)",
             )
             .bind(&item_id)
             .bind(signal.as_ref())
@@ -415,7 +415,7 @@ async fn import_item(
     for (location_index, location) in item.locations.iter().enumerate() {
         sqlx::query(
             "INSERT INTO music_local_locations
-                (id, item_id, root_id, relative_path, availability, first_seen_at, updated_at)
+                (id, item_id, root_id, relative_path, availability, first_seen_at_ms, updated_at_ms)
              VALUES (?, ?, ?, ?, 'missing', ?, ?)
              ON CONFLICT DO NOTHING",
         )
@@ -455,7 +455,7 @@ async fn import_membership(
     sqlx::query(
         "INSERT INTO music_playlist_memberships
             (id, playlist_id, item_id, position, weight, enabled, start_ms, end_ms,
-             volume, rate, created_at, updated_at, version)
+             volume, rate, created_at_ms, updated_at_ms, version)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)",
     )
     .bind(&membership_id)
@@ -496,22 +496,22 @@ async fn import_membership(
             item_id.to_string(),
             snooze.scope.as_ref().to_string(),
             mapped_playlist_id.map(str::to_string),
-            snooze.starts_at,
-            snooze.ends_at,
+            snooze.starts_at_ms,
+            snooze.ends_at_ms,
             snooze.reason.clone(),
         );
         if !imported_snoozes.insert(snooze_key) {
             continue;
         }
         sqlx::query(
-            "INSERT INTO music_snoozes (id, item_id, scope, playlist_id, starts_at, ends_at, reason, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO music_snoozes (id, item_id, scope, playlist_id, starts_at_ms, ends_at_ms, reason, created_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(format!("{membership_id}:snooze:{snooze_index}"))
         .bind(item_id)
         .bind(snooze.scope.as_ref())
         .bind(mapped_playlist_id)
-        .bind(snooze.starts_at)
-        .bind(snooze.ends_at)
+        .bind(snooze.starts_at_ms)
+        .bind(snooze.ends_at_ms)
         .bind(&snooze.reason)
         .bind(request.imported_at)
         .execute(&mut **transaction)
@@ -539,7 +539,7 @@ async fn import_assignments(
         sqlx::query(
             "INSERT INTO music_context_assignments
                 (owner_kind, owner_id, phase, behavior, playlist_id, soundscape_id,
-                 soundscape_behavior, provenance_kind, provenance_id, updated_at, version)
+                 soundscape_behavior, provenance_kind, provenance_id, updated_at_ms, version)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
              ON CONFLICT(owner_kind, owner_id, phase) DO UPDATE SET
                 behavior = excluded.behavior, playlist_id = excluded.playlist_id,
@@ -547,7 +547,7 @@ async fn import_assignments(
                 soundscape_behavior = excluded.soundscape_behavior,
                 provenance_kind = excluded.provenance_kind,
                 provenance_id = excluded.provenance_id,
-                updated_at = excluded.updated_at, version = music_context_assignments.version + 1",
+                updated_at_ms = excluded.updated_at_ms, version = music_context_assignments.version + 1",
         )
         .bind(assignment.owner_kind.as_ref())
         .bind(&assignment.owner_id)

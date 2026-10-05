@@ -34,13 +34,13 @@ pub(crate) async fn create_plan(
         ));
     }
     sqlx::query(
-        "INSERT INTO music_relink_plans (id, root_id, state, created_at, updated_at)
+        "INSERT INTO music_relink_plans (id, root_id, state, created_at_ms, updated_at_ms)
          VALUES (?, ?, 'planning', ?, ?)",
     )
     .bind(&request.plan_id)
     .bind(&request.root_id)
-    .bind(request.created_at)
-    .bind(request.created_at)
+    .bind(request.created_at_ms)
+    .bind(request.created_at_ms)
     .execute(pool)
     .await
     .map_err(|error| map_plan_conflict("create relink plan", error))?;
@@ -208,7 +208,7 @@ async fn save_entry(
         "INSERT INTO music_relink_plan_entries
             (id, plan_id, match_kind, old_location_id, suggested_item_id,
              candidate_relative_path, candidate_item_ids, file_size_bytes,
-             lightweight_fingerprint, created_at)
+             lightweight_fingerprint, created_at_ms)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(entry_id)
@@ -220,7 +220,7 @@ async fn save_entry(
     .bind(candidate_json)
     .bind(evidence.map(|value| value.file_size_bytes))
     .bind(evidence.map(|value| value.lightweight_fingerprint.as_str()))
-    .bind(request.created_at)
+    .bind(request.created_at_ms)
     .execute(pool)
     .await
     .map_err(|error| map_plan_conflict("save relink candidate", error))?;
@@ -280,14 +280,14 @@ async fn finalize_plan(
             ambiguous_count = (SELECT COUNT(*) FROM music_relink_plan_entries WHERE plan_id = ? AND match_kind = 'ambiguous'),
             missing_count = (SELECT COUNT(*) FROM music_relink_plan_entries WHERE plan_id = ? AND match_kind = 'missing'),
             new_count = (SELECT COUNT(*) FROM music_relink_plan_entries WHERE plan_id = ? AND match_kind = 'new'),
-            updated_at = ? WHERE id = ? AND state = 'planning'",
+            updated_at_ms = ? WHERE id = ? AND state = 'planning'",
     )
     .bind(&request.plan_id)
     .bind(&request.plan_id)
     .bind(&request.plan_id)
     .bind(&request.plan_id)
     .bind(&request.plan_id)
-    .bind(request.created_at)
+    .bind(request.created_at_ms)
     .bind(&request.plan_id)
     .execute(pool)
     .await
@@ -301,7 +301,7 @@ pub(crate) async fn plan_summary(
 ) -> MusicLibraryResult<MusicRelinkPlanSummary> {
     let row: (String, String, String, i64, i64, i64, i64, i64, i64, i64) = sqlx::query_as(
         "SELECT id, root_id, state, exact_count, likely_count, ambiguous_count,
-                    missing_count, new_count, created_at, updated_at
+                    missing_count, new_count, created_at_ms, updated_at_ms
              FROM music_relink_plans WHERE id = ?",
     )
     .bind(plan_id)
@@ -319,8 +319,8 @@ pub(crate) async fn plan_summary(
         ambiguous_count: row.5,
         missing_count: row.6,
         new_count: row.7,
-        created_at: row.8,
-        updated_at: row.9,
+        created_at_ms: row.8,
+        updated_at_ms: row.9,
     })
 }
 
@@ -340,7 +340,7 @@ pub(crate) async fn plan_entries(
     let rows = sqlx::query(
         "SELECT id, match_kind, old_location_id, suggested_item_id,
                 candidate_relative_path, candidate_item_ids, file_size_bytes,
-                resolved_item_id, resolved_at
+                resolved_item_id, resolved_at_ms
          FROM music_relink_plan_entries WHERE plan_id = ?
          ORDER BY CASE match_kind WHEN 'ambiguous' THEN 0 WHEN 'likely' THEN 1
                   WHEN 'missing' THEN 2 WHEN 'new' THEN 3 ELSE 4 END,
@@ -370,7 +370,7 @@ pub(crate) async fn plan_entries(
                 candidate_item_ids,
                 file_size_bytes: row.get("file_size_bytes"),
                 resolved_item_id: row.get("resolved_item_id"),
-                resolved_at: row.get("resolved_at"),
+                resolved_at_ms: row.get("resolved_at_ms"),
             })
         })
         .collect::<MusicLibraryResult<Vec<_>>>()?;
@@ -409,7 +409,7 @@ pub(crate) async fn apply_plan(
         .await
         .map_err(|error| MusicLibraryError::database("begin relink apply", error))?;
     sqlx::query(
-        "UPDATE music_local_locations SET availability = 'missing', updated_at = ?
+        "UPDATE music_local_locations SET availability = 'missing', updated_at_ms = ?
          WHERE root_id = ?",
     )
     .bind(request.applied_at)
@@ -458,7 +458,7 @@ pub(crate) async fn apply_plan(
         sqlx::query(
             "UPDATE music_local_locations
              SET relative_path = ?, file_size_bytes = ?, lightweight_fingerprint = ?,
-                 availability = 'available', updated_at = ? WHERE id = ?",
+                 availability = 'available', updated_at_ms = ? WHERE id = ?",
         )
         .bind(relative_path)
         .bind(entry.file_size_bytes)
@@ -470,7 +470,7 @@ pub(crate) async fn apply_plan(
         .map_err(|error| map_plan_conflict("apply relink mapping", error))?;
         sqlx::query(
             "UPDATE music_relink_plan_entries
-             SET resolved_item_id = ?, resolved_at = ? WHERE id = ?",
+             SET resolved_item_id = ?, resolved_at_ms = ? WHERE id = ?",
         )
         .bind(item_id)
         .bind(request.applied_at)
@@ -484,7 +484,7 @@ pub(crate) async fn apply_plan(
              WHEN EXISTS (SELECT 1 FROM music_local_locations AS location
                           WHERE location.item_id = item.id AND location.availability = 'available')
              THEN 'available' ELSE 'missing' END,
-             updated_at = ?, version = version + 1
+             updated_at_ms = ?, version = version + 1
          WHERE item.source_kind = 'local-file' AND EXISTS (
              SELECT 1 FROM music_local_locations AS location
              WHERE location.item_id = item.id AND location.root_id = ?)",
@@ -495,7 +495,7 @@ pub(crate) async fn apply_plan(
     .await
     .map_err(|error| MusicLibraryError::database("reconcile relink item availability", error))?;
     sqlx::query(
-        "UPDATE music_relink_plans SET state = 'applied', updated_at = ?
+        "UPDATE music_relink_plans SET state = 'applied', updated_at_ms = ?
          WHERE id = ? AND state = 'ready'",
     )
     .bind(request.applied_at)
@@ -506,7 +506,7 @@ pub(crate) async fn apply_plan(
     sqlx::query(
         "UPDATE music_source_collections SET refresh_state = 'partial',
              last_refresh_error_code = 'refresh-required-after-relink',
-             updated_at = ?, version = version + 1
+             updated_at_ms = ?, version = version + 1
          WHERE local_root_id = ?",
     )
     .bind(request.applied_at)
@@ -595,7 +595,7 @@ pub(crate) async fn cancel_plan(
         ));
     }
     let result = sqlx::query(
-        "UPDATE music_relink_plans SET state = 'cancelled', updated_at = ?
+        "UPDATE music_relink_plans SET state = 'cancelled', updated_at_ms = ?
          WHERE id = ? AND state IN ('planning', 'ready')",
     )
     .bind(cancelled_at)
@@ -627,7 +627,7 @@ fn validate_plan_request(request: &MusicRelinkPlanRequest) -> MusicLibraryResult
             "must be an absolute directory path",
         ));
     }
-    if request.created_at <= 0 {
+    if request.created_at_ms <= 0 {
         return Err(MusicLibraryError::validation(
             "createdAt",
             "must be positive",

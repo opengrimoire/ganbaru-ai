@@ -17,7 +17,7 @@ vi.mock("$lib/api/soundscape", () => api);
 const state: MusicSoundscapeState = {
   activeSoundscapeId: "noise", activeIds: ["noise"], multipleEnabled: false,
   generatedLevel: null, localLevel: null, desiredPlaying: true, automaticIntent: true,
-  volume: 0.4, updatedAt: 1, version: 2,
+  volume: 0.4, updatedAtMs: 1, version: 2,
 };
 const idle: MusicSoundscapeSnapshot = { status: "idle", sourceId: null, volume: 0.4, errorCode: null };
 
@@ -28,7 +28,7 @@ beforeEach(() => {
   api.getMusicSoundscapes.mockResolvedValue([{
     id: "noise", sourceKind: "generated-noise", generatedKind: "white", availability: "available",
     localPath: null, bundledIdentity: null, name: "Noise", icon: "lucide:audio-lines",
-    groupId: null, createdAt: 1, updatedAt: 1, version: 1,
+    groupId: null, createdAtMs: 1, updatedAtMs: 1, version: 1,
   }]);
   api.getMusicSoundscapeGroups.mockResolvedValue([]);
   api.getMusicSoundscapeState.mockResolvedValue(state);

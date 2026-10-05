@@ -28,7 +28,7 @@ export function musicSnoozesForScope(
   playlistId: string | null,
   now: number,
 ): MusicSnooze[] {
-  return snoozes.filter((entry) => entry.startsAt <= now
-    && (entry.endsAt === null || entry.endsAt > now)
+  return snoozes.filter((entry) => entry.startsAtMs <= now
+    && (entry.endsAtMs === null || entry.endsAtMs > now)
     && (playlistId === null || (entry.scope === "playlist" && entry.playlistId === playlistId)));
 }

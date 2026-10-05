@@ -44,7 +44,7 @@ pub(crate) async fn create_playlist(
         .map_err(|error| MusicLibraryError::database("begin create music playlist", error))?;
     sqlx::query(
         "INSERT INTO music_playlists
-            (id, name, icon, shuffle_enabled, mix_enabled, repeat_mode, sort_order, created_at, updated_at, version)
+            (id, name, icon, shuffle_enabled, mix_enabled, repeat_mode, sort_order, created_at_ms, updated_at_ms, version)
          VALUES (?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order), -1) + 1 FROM music_playlists), ?, ?, 1)",
     )
     .bind(&request.id)
@@ -53,8 +53,8 @@ pub(crate) async fn create_playlist(
     .bind(request.shuffle_enabled)
     .bind(request.mix_enabled)
     .bind(request.repeat_mode.as_ref())
-    .bind(request.created_at)
-    .bind(request.created_at)
+    .bind(request.created_at_ms)
+    .bind(request.created_at_ms)
     .execute(&mut *transaction)
     .await
     .map_err(|error| map_database_error("create music playlist", error))?;
@@ -94,7 +94,7 @@ pub(crate) async fn update_playlist(
     let result = sqlx::query(
         "UPDATE music_playlists
          SET name = ?, icon = ?, shuffle_enabled = ?, mix_enabled = ?, repeat_mode = ?,
-             updated_at = ?, version = version + 1
+             updated_at_ms = ?, version = version + 1
          WHERE id = ? AND version = ?",
     )
     .bind(protected_name)
@@ -102,7 +102,7 @@ pub(crate) async fn update_playlist(
     .bind(request.shuffle_enabled)
     .bind(request.mix_enabled)
     .bind(request.repeat_mode.as_ref())
-    .bind(request.updated_at)
+    .bind(request.updated_at_ms)
     .bind(&request.id)
     .bind(request.expected_version)
     .execute(&mut *transaction)
@@ -162,7 +162,7 @@ pub(crate) async fn duplicate_playlist(
     };
     sqlx::query(
         "INSERT INTO music_playlists
-            (id, name, icon, shuffle_enabled, mix_enabled, repeat_mode, sort_order, created_at, updated_at, version)
+            (id, name, icon, shuffle_enabled, mix_enabled, repeat_mode, sort_order, created_at_ms, updated_at_ms, version)
          VALUES (?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order), -1) + 1 FROM music_playlists), ?, ?, 1)",
     )
     .bind(&request.new_playlist_id)
@@ -171,8 +171,8 @@ pub(crate) async fn duplicate_playlist(
     .bind(shuffle_enabled)
     .bind(mix_enabled)
     .bind(repeat_mode)
-    .bind(request.created_at)
-    .bind(request.created_at)
+    .bind(request.created_at_ms)
+    .bind(request.created_at_ms)
     .execute(&mut *transaction)
     .await
     .map_err(|error| map_database_error("duplicate music playlist", error))?;
@@ -188,15 +188,15 @@ pub(crate) async fn duplicate_playlist(
     sqlx::query(
         "INSERT INTO music_playlist_memberships
             (id, playlist_id, item_id, position, weight, enabled,
-             start_ms, end_ms, volume, rate, created_at, updated_at, version)
+             start_ms, end_ms, volume, rate, created_at_ms, updated_at_ms, version)
          SELECT 'duplicate-membership:' || ? || ':' || id, ?, item_id, position, weight, enabled,
                 start_ms, end_ms, volume, rate, ?, ?, 1
          FROM music_playlist_memberships WHERE playlist_id = ?",
     )
     .bind(&request.new_playlist_id)
     .bind(&request.new_playlist_id)
-    .bind(request.created_at)
-    .bind(request.created_at)
+    .bind(request.created_at_ms)
+    .bind(request.created_at_ms)
     .bind(&request.source_playlist_id)
     .execute(&mut *transaction)
     .await
@@ -432,13 +432,13 @@ pub(crate) async fn set_review_state(
     validate_review_write(&request)?;
     let result = sqlx::query(
         "UPDATE music_library_items
-         SET review_state = ?, review_changed_at = ?, review_deferred_until = ?, updated_at = ?, version = version + 1
+         SET review_state = ?, review_changed_at_ms = ?, review_deferred_until_ms = ?, updated_at_ms = ?, version = version + 1
          WHERE id = ? AND version = ?",
     )
     .bind(request.review_state.as_ref())
-    .bind(request.updated_at)
+    .bind(request.updated_at_ms)
     .bind(request.deferred_until)
-    .bind(request.updated_at)
+    .bind(request.updated_at_ms)
     .bind(&request.item_id)
     .bind(request.expected_version)
     .execute(pool)
@@ -475,14 +475,14 @@ pub(crate) async fn set_metadata_overrides(
     let result = sqlx::query(
         "UPDATE music_library_items
          SET title_override = ?, artist_override = ?, album_override = ?, artwork_override = ?,
-             updated_at = ?, version = version + 1
+             updated_at_ms = ?, version = version + 1
          WHERE id = ? AND version = ?",
     )
     .bind(request.title_override.as_deref().map(str::trim))
     .bind(request.artist_override.as_deref().map(str::trim))
     .bind(request.album_override.as_deref().map(str::trim))
     .bind(request.artwork_override.as_deref().map(str::trim))
-    .bind(request.updated_at)
+    .bind(request.updated_at_ms)
     .bind(&request.item_id)
     .bind(request.expected_version)
     .execute(&mut *transaction)
@@ -531,19 +531,19 @@ pub(crate) async fn set_item_signals(
             .map_err(|error| MusicLibraryError::database("replace music item signals", error))?;
         for signal in &request.signals {
             sqlx::query(
-                "INSERT INTO music_item_signals (item_id, signal, created_at) VALUES (?, ?, ?)",
+                "INSERT INTO music_item_signals (item_id, signal, created_at_ms) VALUES (?, ?, ?)",
             )
             .bind(item_id)
             .bind(signal.as_ref())
-            .bind(request.updated_at)
+            .bind(request.updated_at_ms)
             .execute(&mut *transaction)
             .await
             .map_err(|error| MusicLibraryError::database("save music item signal", error))?;
         }
         sqlx::query(
-            "UPDATE music_library_items SET updated_at = ?, version = version + 1 WHERE id = ?",
+            "UPDATE music_library_items SET updated_at_ms = ?, version = version + 1 WHERE id = ?",
         )
-        .bind(request.updated_at)
+        .bind(request.updated_at_ms)
         .bind(item_id)
         .execute(&mut *transaction)
         .await
@@ -566,7 +566,7 @@ async fn upsert_membership_in_transaction(
         let updated = sqlx::query(
             "UPDATE music_playlist_memberships
              SET position = ?, weight = ?, enabled = ?, start_ms = ?, end_ms = ?,
-                 volume = ?, rate = ?, updated_at = ?, version = version + 1
+                 volume = ?, rate = ?, updated_at_ms = ?, version = version + 1
              WHERE id = ? AND playlist_id = ? AND item_id = ? AND version = ?",
         )
         .bind(membership.position)
@@ -576,7 +576,7 @@ async fn upsert_membership_in_transaction(
         .bind(membership.end_ms)
         .bind(membership.volume)
         .bind(membership.rate)
-        .bind(membership.updated_at)
+        .bind(membership.updated_at_ms)
         .bind(&membership.id)
         .bind(&membership.playlist_id)
         .bind(&membership.item_id)
@@ -606,7 +606,7 @@ async fn upsert_membership_in_transaction(
     sqlx::query(
         "INSERT INTO music_playlist_memberships
             (id, playlist_id, item_id, position, weight, enabled,
-             start_ms, end_ms, volume, rate, created_at, updated_at, version)
+             start_ms, end_ms, volume, rate, created_at_ms, updated_at_ms, version)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
          ON CONFLICT(playlist_id, item_id) DO UPDATE SET
             position = excluded.position,
@@ -616,7 +616,7 @@ async fn upsert_membership_in_transaction(
             end_ms = excluded.end_ms,
             volume = excluded.volume,
             rate = excluded.rate,
-            updated_at = excluded.updated_at,
+            updated_at_ms = excluded.updated_at_ms,
             version = music_playlist_memberships.version + 1",
     )
     .bind(&membership.id)
@@ -629,8 +629,8 @@ async fn upsert_membership_in_transaction(
     .bind(membership.end_ms)
     .bind(membership.volume)
     .bind(membership.rate)
-    .bind(membership.updated_at)
-    .bind(membership.updated_at)
+    .bind(membership.updated_at_ms)
+    .bind(membership.updated_at_ms)
     .execute(&mut **transaction)
     .await
     .map_err(|error| map_database_error("save playlist membership", error))?;
@@ -762,7 +762,7 @@ pub(crate) async fn upsert_source_collection(
     sqlx::query(
         "INSERT INTO music_source_collections
             (id, kind, identity_key, name, local_root_id, youtube_playlist_id,
-             created_at, updated_at, version)
+             created_at_ms, updated_at_ms, version)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)
          ON CONFLICT(id) DO UPDATE SET
             kind = excluded.kind,
@@ -770,7 +770,7 @@ pub(crate) async fn upsert_source_collection(
             name = excluded.name,
             local_root_id = excluded.local_root_id,
             youtube_playlist_id = excluded.youtube_playlist_id,
-            updated_at = excluded.updated_at,
+            updated_at_ms = excluded.updated_at_ms,
             version = music_source_collections.version + 1",
     )
     .bind(&request.id)
@@ -779,8 +779,8 @@ pub(crate) async fn upsert_source_collection(
     .bind(request.name.trim())
     .bind(&request.local_root_id)
     .bind(&request.youtube_playlist_id)
-    .bind(request.updated_at)
-    .bind(request.updated_at)
+    .bind(request.updated_at_ms)
+    .bind(request.updated_at_ms)
     .execute(pool)
     .await
     .map_err(|error| map_database_error("save music source collection", error))?;
@@ -806,27 +806,27 @@ pub(crate) async fn create_local_root(
         .await
         .map_err(|error| MusicLibraryError::database("begin local music root creation", error))?;
     sqlx::query(
-        "INSERT INTO music_local_roots (id, name, created_at, updated_at)
+        "INSERT INTO music_local_roots (id, name, created_at_ms, updated_at_ms)
          VALUES (?, ?, ?, ?)",
     )
     .bind(&request.root_id)
     .bind(request.name.trim())
-    .bind(request.created_at)
-    .bind(request.created_at)
+    .bind(request.created_at_ms)
+    .bind(request.created_at_ms)
     .execute(&mut *transaction)
     .await
     .map_err(|error| map_database_error("create local music root", error))?;
     sqlx::query(
         "INSERT INTO music_source_collections
-            (id, kind, identity_key, name, local_root_id, created_at, updated_at)
+            (id, kind, identity_key, name, local_root_id, created_at_ms, updated_at_ms)
          VALUES (?, 'local-root', ?, ?, ?, ?, ?)",
     )
     .bind(&request.collection_id)
     .bind(&request.identity_key)
     .bind(request.name.trim())
     .bind(&request.root_id)
-    .bind(request.created_at)
-    .bind(request.created_at)
+    .bind(request.created_at_ms)
+    .bind(request.created_at_ms)
     .execute(&mut *transaction)
     .await
     .map_err(|error| map_database_error("create local music source", error))?;

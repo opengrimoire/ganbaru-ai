@@ -16,7 +16,7 @@
   const quietZoneModules = 4;
   let now = $state(Date.now());
   let refreshRequestedFor = $state<string | null>(null);
-  const remaining = $derived(Math.max(0, invitation.expiresAtUnixMs - now));
+  const remaining = $derived(Math.max(0, invitation.expiresAtMs - now));
 
   $effect(() => {
     if (remaining > 0 || refreshRequestedFor === invitation.invitation) return;

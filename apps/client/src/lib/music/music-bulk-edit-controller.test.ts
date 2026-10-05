@@ -53,8 +53,8 @@ describe("MusicBulkEditController", () => {
   it("applies memberships and marks every selected track reviewed without replacing the item window", async () => {
     const library = {
       currentWindow: { items: [
-        { id: "item-1", reviewState: "unreviewed", updatedAt: 1, version: 1 },
-        { id: "item-2", reviewState: "deferred", updatedAt: 1, version: 2 },
+        { id: "item-1", reviewState: "unreviewed", updatedAtMs: 1, version: 1 },
+        { id: "item-2", reviewState: "deferred", updatedAtMs: 1, version: 2 },
       ] },
       refreshAfterMutation: vi.fn(async () => true),
       refreshSummariesAfterMutation: vi.fn(async () => true),
@@ -70,8 +70,8 @@ describe("MusicBulkEditController", () => {
       addPlaylistIds: ["focus"],
     }));
     expect(library.currentWindow.items).toEqual([
-      { id: "item-1", reviewState: "reviewed", updatedAt: 100, version: 2 },
-      { id: "item-2", reviewState: "reviewed", updatedAt: 100, version: 3 },
+      { id: "item-1", reviewState: "reviewed", updatedAtMs: 100, version: 2 },
+      { id: "item-2", reviewState: "reviewed", updatedAtMs: 100, version: 3 },
     ]);
     expect(library.refreshAfterMutation).not.toHaveBeenCalled();
     expect(library.refreshSummariesAfterMutation).toHaveBeenCalledOnce();
@@ -82,8 +82,8 @@ describe("MusicBulkEditController", () => {
     const library = {
       currentWindow: {
         items: [
-          { id: "item-1", reviewState: "unreviewed", updatedAt: 1, version: 1 },
-          { id: "item-2", reviewState: "deferred", updatedAt: 1, version: 2 },
+          { id: "item-1", reviewState: "unreviewed", updatedAtMs: 1, version: 1 },
+          { id: "item-2", reviewState: "deferred", updatedAtMs: 1, version: 2 },
         ],
         totalCount: 4,
       },
@@ -101,11 +101,11 @@ describe("MusicBulkEditController", () => {
       reviewState: "ignored",
       addPlaylistIds: [],
       removePlaylistIds: [],
-      updatedAt: 100,
+      updatedAtMs: 100,
     });
     expect(library.currentWindow.items).toEqual([
-      { id: "item-1", reviewState: "ignored", updatedAt: 100, version: 2 },
-      { id: "item-2", reviewState: "ignored", updatedAt: 100, version: 3 },
+      { id: "item-1", reviewState: "ignored", updatedAtMs: 100, version: 2 },
+      { id: "item-2", reviewState: "ignored", updatedAtMs: 100, version: 3 },
     ]);
     expect(library.currentWindow.totalCount).toBe(4);
     expect(library.refreshAfterMutation).not.toHaveBeenCalled();
@@ -125,8 +125,8 @@ describe("MusicBulkEditController", () => {
     const library = {
       currentWindow: {
         items: [
-          { id: "item-1", reviewState: "unreviewed", updatedAt: 1, version: 1 },
-          { id: "item-2", reviewState: "deferred", updatedAt: 1, version: 2 },
+          { id: "item-1", reviewState: "unreviewed", updatedAtMs: 1, version: 1 },
+          { id: "item-2", reviewState: "deferred", updatedAtMs: 1, version: 2 },
         ],
         totalCount: 2,
       },
@@ -138,8 +138,8 @@ describe("MusicBulkEditController", () => {
 
     const pending = controller.ignoreReviewSelection();
     expect(library.currentWindow.items).toEqual([
-      { id: "item-1", reviewState: "ignored", updatedAt: 100, version: 1 },
-      { id: "item-2", reviewState: "ignored", updatedAt: 100, version: 2 },
+      { id: "item-1", reviewState: "ignored", updatedAtMs: 100, version: 1 },
+      { id: "item-2", reviewState: "ignored", updatedAtMs: 100, version: 2 },
     ]);
     resolveRequest({
       membershipChangedCount: 0,
@@ -154,8 +154,8 @@ describe("MusicBulkEditController", () => {
     const library = {
       currentWindow: {
         items: [
-          { id: "item-1", reviewState: "ignored", updatedAt: 1, version: 2 },
-          { id: "item-2", reviewState: "ignored", updatedAt: 1, version: 3 },
+          { id: "item-1", reviewState: "ignored", updatedAtMs: 1, version: 2 },
+          { id: "item-2", reviewState: "ignored", updatedAtMs: 1, version: 3 },
         ],
       },
       refreshAfterMutation: vi.fn(async () => true),
@@ -168,7 +168,7 @@ describe("MusicBulkEditController", () => {
       items: [{ itemId: "item-1", expectedVersion: 2 }, { itemId: "item-2", expectedVersion: 3 }],
       reviewState: "unreviewed",
       deferredUntil: null,
-      updatedAt: 100,
+      updatedAtMs: 100,
     });
     expect(library.refreshAfterMutation).toHaveBeenCalledOnce();
   });
@@ -177,8 +177,8 @@ describe("MusicBulkEditController", () => {
     const library = {
       currentWindow: {
         items: [
-          { id: "item-1", reviewState: "unreviewed", updatedAt: 1, version: 1 },
-          { id: "item-2", reviewState: "unreviewed", updatedAt: 1, version: 1 },
+          { id: "item-1", reviewState: "unreviewed", updatedAtMs: 1, version: 1 },
+          { id: "item-2", reviewState: "unreviewed", updatedAtMs: 1, version: 1 },
         ],
         totalCount: 2,
       },

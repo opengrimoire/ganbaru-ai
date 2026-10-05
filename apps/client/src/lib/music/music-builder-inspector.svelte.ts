@@ -3,13 +3,13 @@ import type { MusicInspectorDetail, MusicItemSignal, MusicMembershipSkipRange, M
 
 export interface MusicBuilderInspectorApi {
   detail(itemId: string): Promise<MusicInspectorDetail>;
-  setSignals(itemId: string, signals: MusicItemSignal[], updatedAt: number): Promise<number>;
+  setSignals(itemId: string, signals: MusicItemSignal[], updatedAtMs: number): Promise<number>;
 }
 
 const defaultApi: MusicBuilderInspectorApi = {
   detail: getMusicInspectorDetail,
-  async setSignals(itemId, signals, updatedAt) {
-    const [receipt] = await setMusicItemSignals({ itemIds: [itemId], signals, updatedAt });
+  async setSignals(itemId, signals, updatedAtMs) {
+    const [receipt] = await setMusicItemSignals({ itemIds: [itemId], signals, updatedAtMs });
     if (!receipt) throw new Error("The signal update did not return a receipt.");
     return receipt.version;
   },
@@ -130,7 +130,7 @@ export class MusicBuilderInspectorController {
         itemId: detail.item.id,
         ...overrides,
         expectedVersion: detail.item.version,
-        updatedAt: Date.now(),
+        updatedAtMs: Date.now(),
       });
       Object.assign(detail.item, overrides, { version: receipt.version });
       return true;
@@ -190,7 +190,7 @@ export class MusicBuilderInspectorController {
     this.error = null;
     try {
       const receipt = await saveMusicAdvancedMembership({
-        membership: { ...membership, expectedVersion: membership.version, updatedAt: Date.now() },
+        membership: { ...membership, expectedVersion: membership.version, updatedAtMs: Date.now() },
         skipRanges,
       });
       membership.version = receipt.version;

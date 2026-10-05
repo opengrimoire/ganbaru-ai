@@ -10,8 +10,8 @@ function window(id: string, title = id): MusicItemWindow {
     items: [{
       id, identityKey: `local:${id}`, sourceKind: "local-file", mediaKind: "audio",
       title, artist: "", album: "", localRootId: "root-1", relativePath: `${title}.flac`, sourceCollectionIds: ["source-1"], originalArtworkIdentity: null, artworkOverride: null, durationMs: null, availability: "available",
-      reviewState: "unreviewed", discoveredAt: 1, updatedAt: 1, version: 1,
-      playlistCount: 0, activeSnoozeCount: 0, lastPlayedAt: null, playCount: 0,
+      reviewState: "unreviewed", discoveredAtMs: 1, updatedAtMs: 1, version: 1,
+      playlistCount: 0, activeSnoozeCount: 0, lastPlayedAtMs: null, playCount: 0,
       membershipId: null, membershipPosition: null, membershipWeight: null,
       membershipEnabled: null, membershipVersion: null,
     }],

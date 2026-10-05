@@ -111,7 +111,7 @@ pub(super) async fn prepare(
     let version: i64 = sqlx::query_scalar(
         "UPDATE music_soundscape_state
          SET active_soundscape_id = CASE WHEN ? THEN ? ELSE active_soundscape_id END,
-             desired_playing = ?, automatic_intent = 1, version = version + 1, updated_at = MAX(updated_at + 1, ?)
+             desired_playing = ?, automatic_intent = 1, version = version + 1, updated_at_ms = MAX(updated_at_ms + 1, ?)
          WHERE singleton = 1 RETURNING version",
     )
     .bind(request.is_some())
@@ -256,7 +256,7 @@ impl Owner {
         };
         if result.is_err() {
             let _permit = self.write_permit().await?;
-            sqlx::query("UPDATE music_soundscape_state SET desired_playing = 0, version = version + 1, updated_at = MAX(updated_at + 1, ?) WHERE singleton = 1 AND version = ?")
+            sqlx::query("UPDATE music_soundscape_state SET desired_playing = 0, version = version + 1, updated_at_ms = MAX(updated_at_ms + 1, ?) WHERE singleton = 1 AND version = ?")
                 .bind(now_ms()).bind(accepted_version).execute(self.pool.as_ref().expect("initialized music pool")).await
                 .map_err(|error| MusicLibraryError::database("revoke failed automatic background sound", error))?;
         }

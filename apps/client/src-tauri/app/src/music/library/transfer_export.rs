@@ -67,13 +67,13 @@ pub(super) async fn snapshot_with_budget(
     let ranges = budget.read::<(String, i64, i64)>(transaction,
         "SELECT membership_id, start_ms, end_ms FROM music_membership_skip_ranges WHERE membership_id IN (SELECT id FROM music_playlist_memberships WHERE playlist_id IN (SELECT value FROM json_each(?))) ORDER BY membership_id, sort_order, id", &["membership_id"], &[&selected], MAX_CHILD_ROWS).await?;
     let snoozes = budget.read::<MusicSnoozeRow>(transaction,
-        "SELECT * FROM music_snoozes WHERE item_id IN (SELECT value FROM json_each(?)) AND (scope = 'all-playlists' OR playlist_id IN (SELECT value FROM json_each(?))) ORDER BY item_id, starts_at, id", &["id", "item_id", "scope", "playlist_id", "reason"], &[&item_ids, &selected], MAX_CHILD_ROWS).await?;
+        "SELECT * FROM music_snoozes WHERE item_id IN (SELECT value FROM json_each(?)) AND (scope = 'all-playlists' OR playlist_id IN (SELECT value FROM json_each(?))) ORDER BY item_id, starts_at_ms, id", &["id", "item_id", "scope", "playlist_id", "reason"], &[&item_ids, &selected], MAX_CHILD_ROWS).await?;
     let uses = budget.read::<(String, String)>(transaction,
         "SELECT playlist_id, intended_use FROM music_playlist_intended_uses WHERE playlist_id IN (SELECT value FROM json_each(?)) ORDER BY playlist_id, intended_use", &["playlist_id", "intended_use"], &[&selected], MAX_CHILD_ROWS).await?;
     let roots = budget.read::<(String, String)>(transaction,
         "SELECT id, name FROM music_local_roots WHERE id IN (SELECT root_id FROM music_local_locations WHERE item_id IN (SELECT value FROM json_each(?))) ORDER BY id", &["id", "name"], &[&item_ids], MAX_PLAYLISTS).await?;
     let assignments = budget.read::<crate::music_context::AssignmentRow>(transaction,
-        "SELECT owner_kind, owner_id, phase, behavior, playlist_id, soundscape_id, soundscape_behavior, provenance_kind, provenance_id, updated_at, version FROM music_context_assignments WHERE playlist_id IN (SELECT value FROM json_each(?)) ORDER BY owner_kind, owner_id, phase", &["owner_kind", "owner_id", "phase", "behavior", "playlist_id", "soundscape_id", "soundscape_behavior", "provenance_kind", "provenance_id"], &[&selected], MAX_MEMBERSHIPS).await?;
+        "SELECT owner_kind, owner_id, phase, behavior, playlist_id, soundscape_id, soundscape_behavior, provenance_kind, provenance_id, updated_at_ms, version FROM music_context_assignments WHERE playlist_id IN (SELECT value FROM json_each(?)) ORDER BY owner_kind, owner_id, phase", &["owner_kind", "owner_id", "phase", "behavior", "playlist_id", "soundscape_id", "soundscape_behavior", "provenance_kind", "provenance_id"], &[&selected], MAX_MEMBERSHIPS).await?;
 
     let mut items_by_id = HashMap::new();
     for item in items {
@@ -141,8 +141,8 @@ pub(super) async fn snapshot_with_budget(
             })
             .map(|entry| MusicInterchangeSnooze {
                 scope: entry.scope,
-                starts_at: entry.starts_at,
-                ends_at: entry.ends_at,
+                starts_at_ms: entry.starts_at_ms,
+                ends_at_ms: entry.ends_at_ms,
                 reason: entry.reason.clone(),
             })
             .collect();

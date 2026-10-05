@@ -40,7 +40,7 @@ pub struct DistractionsUsageSampleInput {
     pub(crate) source_type: String,
     pub(crate) source_key: String,
     pub(crate) display_name: Option<String>,
-    pub(crate) started_at: i64,
+    pub(crate) started_at_ms: i64,
     pub(crate) elapsed_seconds: i64,
     pub(crate) local_date: String,
 }
@@ -66,10 +66,10 @@ pub struct DistractionsUsageSampleRow {
     pub(crate) source_type: String,
     pub(crate) source_key: String,
     pub(crate) display_name: Option<String>,
-    pub(crate) started_at: i64,
+    pub(crate) started_at_ms: i64,
     pub(crate) elapsed_seconds: i64,
     pub(crate) local_date: String,
-    pub(crate) created_at: i64,
+    pub(crate) created_at_ms: i64,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

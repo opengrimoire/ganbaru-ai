@@ -63,12 +63,12 @@
   const itemId = $derived(queueIndex >= 0 ? player.activeQueueItemIds[queueIndex] ?? null : null);
   const targetMemberships = $derived(musicMembershipsForScope(memberships, scopePlaylistId));
   const currentWeight = $derived(musicWeightForScope(targetMemberships));
-  const scopeSnoozes = $derived(snoozes.filter((entry) => entry.startsAt <= Date.now()
-    && (entry.endsAt === null || entry.endsAt > Date.now())
+  const scopeSnoozes = $derived(snoozes.filter((entry) => entry.startsAtMs <= Date.now()
+    && (entry.endsAtMs === null || entry.endsAtMs > Date.now())
     && (scopePlaylistId === null ? entry.scope === "all-playlists"
       : entry.scope === "playlist" && entry.playlistId === scopePlaylistId)));
   const selectedSnooze = $derived(scopeSnoozes.length === 1
-    ? musicSnoozePreset(scopeSnoozes[0].startsAt, scopeSnoozes[0].endsAt, Intl.DateTimeFormat().resolvedOptions().timeZone)
+    ? musicSnoozePreset(scopeSnoozes[0].startsAtMs, scopeSnoozes[0].endsAtMs, Intl.DateTimeFormat().resolvedOptions().timeZone)
     : null);
   const scopeOptions = $derived([
     { value: "", label: t("music.preferences.everywhere") },
@@ -212,7 +212,7 @@
         removePlaylistIds: [],
         weightPlaylistIds: playlistIds,
         weight,
-        updatedAt: Date.now(),
+        updatedAtMs: Date.now(),
       });
       if (player.activePlaylistId && playlistIds.includes(player.activePlaylistId) && itemId === targetItemId) player.applyCurrentQueueWeight(weight);
       notifyMusicLibraryChanged();
@@ -233,7 +233,7 @@
     const activePlaylistId = player.activePlaylistId;
     const selectedPlaylistId = scopePlaylistId;
     const scope = selectedPlaylistId ? "playlist" : "all-playlists";
-    const endsAt = musicSnoozeEndsAt(duration, now, Intl.DateTimeFormat().resolvedOptions().timeZone);
+    const endsAtMs = musicSnoozeEndsAt(duration, now, Intl.DateTimeFormat().resolvedOptions().timeZone);
     const previousSnoozes = scopeSnoozes;
     const isTurningOff = selectedSnooze === duration;
     busy = true;
@@ -251,14 +251,14 @@
         itemIds: [targetItemId],
         scope,
         playlistId: selectedPlaylistId,
-        startsAt: now,
-        endsAt,
+        startsAtMs: now,
+        endsAtMs,
         reason: "",
-        createdAt: now,
+        createdAtMs: now,
       });
       if (itemId === targetItemId && player.activePlaylistId === activePlaylistId
         && (selectedPlaylistId === null || selectedPlaylistId === activePlaylistId)) {
-        player.applyCurrentQueueSnooze(endsAt);
+        player.applyCurrentQueueSnooze(endsAtMs);
       }
       notifyMusicLibraryChanged();
       close(false);
@@ -277,8 +277,8 @@
       .filter((entry) => player.activeSourceQueueId !== null
         || entry.scope === "all-playlists" || entry.playlistId === player.activePlaylistId);
     if (remaining.length === 0) player.clearCurrentQueueSnooze();
-    else player.applyCurrentQueueSnooze(remaining.some((entry) => entry.endsAt === null)
-      ? null : Math.max(...remaining.map((entry) => entry.endsAt ?? 0)));
+    else player.applyCurrentQueueSnooze(remaining.some((entry) => entry.endsAtMs === null)
+      ? null : Math.max(...remaining.map((entry) => entry.endsAtMs ?? 0)));
   }
 </script>
 

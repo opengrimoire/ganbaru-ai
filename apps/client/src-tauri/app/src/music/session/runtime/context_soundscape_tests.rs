@@ -107,7 +107,7 @@ async fn native_music_background_pause_preserves_selection_and_keep_does_not_mut
             desired_playing: false,
             volume: persisted.volume,
             expected_version: persisted.version,
-            updated_at: persisted.updated_at + 1,
+            updated_at_ms: persisted.updated_at_ms + 1,
         },
     )
     .await

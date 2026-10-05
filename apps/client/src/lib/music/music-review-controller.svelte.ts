@@ -66,7 +66,7 @@ export class MusicReviewController {
           id: this.id(), playlistId: playlist.id, itemId: detail.item.id,
           position: playlist.totalCount, weight: "normal", enabled: true,
           startMs: null, endMs: null, volume: null, rate: null,
-          updatedAt: timestamp, createdAt: timestamp, version: 0,
+          updatedAtMs: timestamp, createdAtMs: timestamp, version: 0,
         };
         const write = { ...membership, expectedVersion: null as number | null };
         const receipts = await this.library.runOptimistic({
@@ -102,11 +102,11 @@ export class MusicReviewController {
         apply: () => { membership.weight = next; },
         rollback: () => { membership.weight = previous; },
         persist: () => upsertMusicMemberships({
-          memberships: [{ ...membership, weight: next, expectedVersion: membership.version, updatedAt: this.now() }],
+          memberships: [{ ...membership, weight: next, expectedVersion: membership.version, updatedAtMs: this.now() }],
         }),
         undo: async () => {
           const [receipt] = await upsertMusicMemberships({
-            memberships: [{ ...membership, weight: previous, expectedVersion: membership.version, updatedAt: this.now() }],
+            memberships: [{ ...membership, weight: previous, expectedVersion: membership.version, updatedAtMs: this.now() }],
           });
           membership.weight = previous;
           membership.version = receipt?.version ?? membership.version;
@@ -158,7 +158,7 @@ export class MusicReviewController {
     try {
       await createMusicPlaylist({
         id: playlistId, name, icon: iconInput.trim(), shuffleEnabled: true, mixEnabled: false,
-        repeatMode: "all", intendedUses: [], createdAt: this.now(),
+        repeatMode: "all", intendedUses: [], createdAtMs: this.now(),
       });
       await this.library.refreshAfterMutation();
       const playlist = this.library.playlistSummaries.find((entry) => entry.id === playlistId);
@@ -181,30 +181,30 @@ export class MusicReviewController {
     const detail = this.inspector.detail;
     if (!detail || this.actionBusy) return false;
     const previousReviewState = detail.item.reviewState;
-    const previousDeferredUntil = detail.item.reviewDeferredUntil;
-    const previousChangedAt = detail.item.reviewChangedAt;
-    const previousUpdatedAt = detail.item.updatedAt;
+    const previousDeferredUntil = detail.item.reviewDeferredUntilMs;
+    const previousChangedAt = detail.item.reviewChangedAtMs;
+    const previousUpdatedAt = detail.item.updatedAtMs;
     const previousSelectedItemId = this.library.currentState.selectedItemId;
     const listItem = this.library.currentWindow.items.find((item) => item.id === detail.item.id);
     const previousListState = listItem
-      ? { reviewState: listItem.reviewState, updatedAt: listItem.updatedAt }
+      ? { reviewState: listItem.reviewState, updatedAtMs: listItem.updatedAtMs }
       : null;
-    const updatedAt = this.now();
+    const updatedAtMs = this.now();
     this.actionBusy = true;
     detail.item.reviewState = reviewState;
-    detail.item.reviewDeferredUntil = deferredUntil;
-    detail.item.reviewChangedAt = updatedAt;
-    detail.item.updatedAt = updatedAt;
+    detail.item.reviewDeferredUntilMs = deferredUntil;
+    detail.item.reviewChangedAtMs = updatedAtMs;
+    detail.item.updatedAtMs = updatedAtMs;
     if (listItem) {
       listItem.reviewState = reviewState;
-      listItem.updatedAt = updatedAt;
+      listItem.updatedAtMs = updatedAtMs;
     }
     if (nextItemId) this.inspector.selectCached(nextItemId);
     this.library.selectItem(nextItemId);
     try {
       const receipt = await setMusicReviewState({
         itemId: detail.item.id, reviewState, deferredUntil,
-        expectedVersion: detail.item.version, updatedAt,
+        expectedVersion: detail.item.version, updatedAtMs,
       });
       detail.item.version = receipt.version;
       if (listItem) listItem.version = receipt.version;
@@ -223,12 +223,12 @@ export class MusicReviewController {
       return true;
     } catch (error) {
       detail.item.reviewState = previousReviewState;
-      detail.item.reviewDeferredUntil = previousDeferredUntil;
-      detail.item.reviewChangedAt = previousChangedAt;
-      detail.item.updatedAt = previousUpdatedAt;
+      detail.item.reviewDeferredUntilMs = previousDeferredUntil;
+      detail.item.reviewChangedAtMs = previousChangedAt;
+      detail.item.updatedAtMs = previousUpdatedAt;
       if (listItem && previousListState) {
         listItem.reviewState = previousListState.reviewState;
-        listItem.updatedAt = previousListState.updatedAt;
+        listItem.updatedAtMs = previousListState.updatedAtMs;
       }
       this.inspector.clear();
       this.inspector.itemId = detail.item.id;

@@ -36,14 +36,14 @@ fn enrollment<'a>(invitation: &'a PairingInvitation, phone: &'a StoredIdentity) 
     }
 }
 
-fn enroll_device(manager: &PairingManager, device_id: &str, device_label: &str, now_unix_ms: i64) {
+fn enroll_device(manager: &PairingManager, device_id: &str, device_label: &str, now_ms: i64) {
     let invitation = manager
         .create_invitation(
             "127.0.0.1:41000".parse().expect("endpoint"),
             "vault-1".to_string(),
             0,
             crate::vault::handoff::protocol::test_compatibility(),
-            now_unix_ms,
+            now_ms,
         )
         .expect("invitation");
     let identity = create_identity(device_id.to_string()).expect("peer identity");
@@ -62,7 +62,7 @@ fn enroll_device(manager: &PairingManager, device_id: &str, device_label: &str, 
                 },
                 certificate_b64: &identity.certificate,
             },
-            now_unix_ms + 1,
+            now_ms + 1,
         )
         .expect("enroll device");
 }
@@ -83,7 +83,7 @@ fn invitation_is_single_use_and_not_restored_after_restart() {
             100,
         )
         .expect("invitation");
-    assert_eq!(invitation.expires_at_unix_ms, 180_100);
+    assert_eq!(invitation.expires_at_ms, 180_100);
     let phone = create_identity("device-phone".to_string()).expect("phone identity");
     manager
         .enroll_peer(enrollment(&invitation, &phone), 101)
@@ -116,18 +116,18 @@ fn repeated_enrollment_updates_one_existing_membership() {
         .expect("initialize");
     let phone = create_identity("device-phone".to_string()).expect("phone identity");
 
-    for now_unix_ms in [100, 200] {
+    for now_ms in [100, 200] {
         let invitation = manager
             .create_invitation(
                 "127.0.0.1:41000".parse().expect("endpoint"),
                 "vault-1".to_string(),
                 0,
                 crate::vault::handoff::protocol::test_compatibility(),
-                now_unix_ms,
+                now_ms,
             )
             .expect("invitation");
         manager
-            .enroll_peer(enrollment(&invitation, &phone), now_unix_ms + 1)
+            .enroll_peer(enrollment(&invitation, &phone), now_ms + 1)
             .expect("enroll same phone");
     }
 
@@ -441,10 +441,7 @@ fn expired_invitation_is_rejected() {
     let phone = create_identity("device-phone".to_string()).expect("phone identity");
     assert!(
         manager
-            .enroll_peer(
-                enrollment(&invitation, &phone),
-                invitation.expires_at_unix_ms,
-            )
+            .enroll_peer(enrollment(&invitation, &phone), invitation.expires_at_ms,)
             .unwrap_err()
             .contains("expired")
     );

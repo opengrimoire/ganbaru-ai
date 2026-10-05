@@ -122,7 +122,7 @@ export class MusicBulkEditController {
         mixEnabled: false,
         repeatMode: "all",
         intendedUses: [],
-        createdAt: this.now(),
+        createdAtMs: this.now(),
       });
       if (!await this.library.refreshSummariesAfterMutation()) {
         throw this.library.error ?? new Error("The new playlist could not be loaded.");
@@ -194,11 +194,11 @@ export class MusicBulkEditController {
       return false;
     }
 
-    const updatedAt = this.now();
+    const updatedAtMs = this.now();
     const ignoredSnapshots = reviewState === "ignored"
       ? itemIds.flatMap((itemId) => {
           const item = itemsById.get(itemId);
-          return item ? [{ item, reviewState: item.reviewState, updatedAt: item.updatedAt }] : [];
+          return item ? [{ item, reviewState: item.reviewState, updatedAtMs: item.updatedAtMs }] : [];
         })
       : [];
     this.saving = true;
@@ -206,7 +206,7 @@ export class MusicBulkEditController {
     try {
       for (const snapshot of ignoredSnapshots) {
         snapshot.item.reviewState = "ignored";
-        snapshot.item.updatedAt = updatedAt;
+        snapshot.item.updatedAtMs = updatedAtMs;
       }
       const result = await applyMusicReviewSelection({
         actionId: this.id(),
@@ -214,7 +214,7 @@ export class MusicBulkEditController {
         reviewState,
         addPlaylistIds,
         removePlaylistIds,
-        updatedAt,
+        updatedAtMs,
       });
       const versions = new Map(result.items.map((receipt) => [receipt.id, receipt.version]));
       const versionedItemIds = itemIds.map((itemId) => {
@@ -227,7 +227,7 @@ export class MusicBulkEditController {
           const item = itemsById.get(itemId);
           if (!item) throw new Error(`The review window omitted item '${itemId}'.`);
           item.reviewState = "reviewed";
-          item.updatedAt = updatedAt;
+          item.updatedAtMs = updatedAtMs;
           item.version = version;
         }
       } else {
@@ -247,7 +247,7 @@ export class MusicBulkEditController {
     } catch (error) {
       for (const snapshot of ignoredSnapshots) {
         snapshot.item.reviewState = snapshot.reviewState;
-        snapshot.item.updatedAt = snapshot.updatedAt;
+        snapshot.item.updatedAtMs = snapshot.updatedAtMs;
       }
       this.error = error instanceof Error ? error.message : String(error);
       return false;
@@ -275,9 +275,9 @@ export class MusicBulkEditController {
         label: "Describe selected tracks",
         apply: () => undefined,
         rollback: () => undefined,
-        persist: () => setMusicItemSignals({ itemIds: this.itemIds, signals, updatedAt: this.now() }),
+        persist: () => setMusicItemSignals({ itemIds: this.itemIds, signals, updatedAtMs: this.now() }),
         undo: async () => {
-          for (const entry of prior) await setMusicItemSignals({ itemIds: [entry.itemId], signals: entry.signals, updatedAt: this.now() });
+          for (const entry of prior) await setMusicItemSignals({ itemIds: [entry.itemId], signals: entry.signals, updatedAtMs: this.now() });
           await this.library.refreshAfterMutation();
         },
       });
@@ -305,7 +305,7 @@ export class MusicBulkEditController {
     this.saving = true;
     this.error = null;
     try {
-      await bulkSetMusicReviewState({ items, reviewState, deferredUntil: null, updatedAt: this.now() });
+      await bulkSetMusicReviewState({ items, reviewState, deferredUntil: null, updatedAtMs: this.now() });
       await this.library.refreshAfterMutation();
       return true;
     } catch (error) {
@@ -316,7 +316,7 @@ export class MusicBulkEditController {
     }
   }
 
-  async snooze(scope: MusicSnoozeScope, playlistId: string | null, endsAt: number | null): Promise<boolean> {
+  async snooze(scope: MusicSnoozeScope, playlistId: string | null, endsAtMs: number | null): Promise<boolean> {
     if (this.saving || this.itemIds.length === 0) return false;
     const now = this.now();
     this.saving = true;
@@ -324,7 +324,7 @@ export class MusicBulkEditController {
     try {
       await bulkSnoozeMusicItems({
         actionId: this.id(), itemIds: this.itemIds, scope, playlistId,
-        startsAt: now, endsAt, reason: "", createdAt: now,
+        startsAtMs: now, endsAtMs, reason: "", createdAtMs: now,
       });
       await this.library.refreshAfterMutation();
       return true;
@@ -363,7 +363,7 @@ export class MusicBulkEditController {
         actionId: this.id(),
         itemIds: this.itemIds,
         ...edit,
-        updatedAt: this.now(),
+        updatedAtMs: this.now(),
       });
       await this.library.refreshAfterMutation();
       return true;

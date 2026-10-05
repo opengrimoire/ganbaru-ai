@@ -88,7 +88,7 @@ pub(crate) fn validate_collection_write(
     validate_id(&collection.id, "id")?;
     validate_id(&collection.identity_key, "identityKey")?;
     validate_name(&collection.name)?;
-    validate_timestamp(collection.updated_at, "updatedAt")?;
+    validate_timestamp(collection.updated_at_ms, "updatedAt")?;
     match collection.kind {
         MusicCollectionKind::LocalRoot
             if collection.local_root_id.is_none() || collection.youtube_playlist_id.is_some() =>
@@ -115,7 +115,7 @@ pub(crate) fn validate_local_root_create(root: &MusicLocalRootCreate) -> MusicLi
     validate_id(&root.collection_id, "collectionId")?;
     validate_id(&root.identity_key, "identityKey")?;
     validate_name(&root.name)?;
-    validate_timestamp(root.created_at, "createdAt")
+    validate_timestamp(root.created_at_ms, "createdAt")
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -144,7 +144,7 @@ pub(crate) fn validate_playlist_create(playlist: &MusicPlaylistCreate) -> MusicL
     validate_name(&playlist.name)?;
     validate_icon(&playlist.icon)?;
     validate_playlist_playback_mode(playlist.shuffle_enabled, playlist.mix_enabled)?;
-    validate_timestamp(playlist.created_at, "createdAt")?;
+    validate_timestamp(playlist.created_at_ms, "createdAt")?;
     validate_unique_intended_uses(&playlist.intended_uses)
 }
 
@@ -159,7 +159,7 @@ pub(crate) fn validate_playlist_update(playlist: &MusicPlaylistUpdate) -> MusicL
             "must be greater than zero",
         ));
     }
-    validate_timestamp(playlist.updated_at, "updatedAt")?;
+    validate_timestamp(playlist.updated_at_ms, "updatedAt")?;
     validate_unique_intended_uses(&playlist.intended_uses)
 }
 
@@ -199,7 +199,7 @@ pub(crate) fn validate_membership_write(
     validate_id(&membership.id, "id")?;
     validate_id(&membership.playlist_id, "playlistId")?;
     validate_id(&membership.item_id, "itemId")?;
-    validate_timestamp(membership.updated_at, "updatedAt")?;
+    validate_timestamp(membership.updated_at_ms, "updatedAt")?;
     if membership.position < 0 {
         return Err(MusicLibraryError::validation(
             "position",
@@ -309,7 +309,7 @@ pub(crate) fn validate_bulk_membership_edit(
             "cannot add and remove the same playlist",
         ));
     }
-    validate_timestamp(request.updated_at, "updatedAt")?;
+    validate_timestamp(request.updated_at_ms, "updatedAt")?;
     match (
         request.weight_playlist_ids.is_empty(),
         request.weight.is_some(),
@@ -340,7 +340,7 @@ pub(crate) fn validate_playlist_reorder(request: &MusicPlaylistReorder) -> Music
             "must be zero or greater",
         ));
     }
-    validate_timestamp(request.updated_at, "updatedAt")
+    validate_timestamp(request.updated_at_ms, "updatedAt")
 }
 
 pub(crate) fn validate_playlists_reorder(
@@ -368,7 +368,7 @@ pub(crate) fn validate_playlists_reorder(
             ));
         }
     }
-    validate_timestamp(request.updated_at, "updatedAt")
+    validate_timestamp(request.updated_at_ms, "updatedAt")
 }
 
 pub(crate) fn validate_bulk_review_write(request: &MusicBulkReviewWrite) -> MusicLibraryResult<()> {
@@ -394,7 +394,7 @@ pub(crate) fn validate_bulk_review_write(request: &MusicBulkReviewWrite) -> Musi
             ));
         }
     }
-    validate_timestamp(request.updated_at, "updatedAt")?;
+    validate_timestamp(request.updated_at_ms, "updatedAt")?;
     if request.review_state != MusicReviewState::Deferred && request.deferred_until.is_some() {
         return Err(MusicLibraryError::validation(
             "deferredUntil",
@@ -442,16 +442,19 @@ pub(crate) fn validate_review_selection_write(
             "cannot add and remove the same playlist",
         ));
     }
-    validate_timestamp(request.updated_at, "updatedAt")
+    validate_timestamp(request.updated_at_ms, "updatedAt")
 }
 
 pub(crate) fn validate_bulk_snooze_write(request: &MusicBulkSnoozeWrite) -> MusicLibraryResult<()> {
     validate_id(&request.action_id, "actionId")?;
     validate_bounded_unique_ids(&request.item_ids, "itemIds")?;
-    validate_timestamp(request.starts_at, "startsAt")?;
-    validate_timestamp(request.created_at, "createdAt")?;
+    validate_timestamp(request.starts_at_ms, "startsAt")?;
+    validate_timestamp(request.created_at_ms, "createdAt")?;
     validate_optional_text(&request.reason, "reason", MAX_REASON_CHARS)?;
-    if request.ends_at.is_some_and(|end| end <= request.starts_at) {
+    if request
+        .ends_at_ms
+        .is_some_and(|end| end <= request.starts_at_ms)
+    {
         return Err(MusicLibraryError::validation(
             "endsAt",
             "must be later than startsAt",
@@ -480,7 +483,7 @@ pub(crate) fn validate_playlist_duplicate(
         ));
     }
     validate_name(&request.name)?;
-    validate_timestamp(request.created_at, "createdAt")
+    validate_timestamp(request.created_at_ms, "createdAt")
 }
 
 pub(crate) fn validate_playlist_delete(request: &MusicPlaylistDelete) -> MusicLibraryResult<()> {
@@ -537,11 +540,11 @@ pub(crate) fn validate_review_write(request: &MusicReviewWrite) -> MusicLibraryR
             "must be greater than zero",
         ));
     }
-    validate_timestamp(request.updated_at, "updatedAt")?;
+    validate_timestamp(request.updated_at_ms, "updatedAt")?;
     if request.review_state == MusicReviewState::Deferred {
         if let Some(deferred_until) = request.deferred_until {
             validate_timestamp(deferred_until, "deferredUntil")?;
-            if deferred_until <= request.updated_at {
+            if deferred_until <= request.updated_at_ms {
                 return Err(MusicLibraryError::validation(
                     "deferredUntil",
                     "must be later than updatedAt",
@@ -582,7 +585,7 @@ pub(crate) fn validate_metadata_override_write(
             }
         }
     }
-    validate_timestamp(request.updated_at, "updatedAt")
+    validate_timestamp(request.updated_at_ms, "updatedAt")
 }
 
 pub(crate) fn validate_item_signals_write(
@@ -602,7 +605,7 @@ pub(crate) fn validate_item_signals_write(
             "must not contain duplicate values",
         ));
     }
-    validate_timestamp(request.updated_at, "updatedAt")
+    validate_timestamp(request.updated_at_ms, "updatedAt")
 }
 
 pub(crate) fn validate_membership_remove(

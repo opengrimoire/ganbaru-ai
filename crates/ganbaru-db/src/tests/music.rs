@@ -7,7 +7,7 @@ fn repeated_migration_startup_preserves_music_data() {
     super::block_on(async {
         let pool = migrated_memory_pool().await;
         sqlx::query(
-            "INSERT INTO music_playlists (id, name, icon, created_at, updated_at)
+            "INSERT INTO music_playlists (id, name, icon, created_at_ms, updated_at_ms)
              VALUES ('playlist-1', 'Deep focus', 'emoji:🎧', 1, 1)",
         )
         .execute(&pool)
@@ -91,7 +91,7 @@ fn canonical_music_schema_keeps_device_paths_out_of_logical_roots() {
         assert!(
             item_columns
                 .iter()
-                .any(|column| column == "review_deferred_until")
+                .any(|column| column == "review_deferred_until_ms")
         );
         let membership_columns =
             sqlx::query("SELECT name FROM pragma_table_info('music_playlist_memberships')")
@@ -114,7 +114,7 @@ fn canonical_music_schema_enforces_identity_membership_and_snooze_invariants() {
     super::block_on(async {
         let pool = migrated_memory_pool().await;
         sqlx::query(
-            "INSERT INTO music_playlists (id, name, created_at, updated_at)
+            "INSERT INTO music_playlists (id, name, created_at_ms, updated_at_ms)
              VALUES ('playlist-1', 'Focus', 1700000000000, 1700000000000)",
         )
         .execute(&pool)
@@ -123,7 +123,7 @@ fn canonical_music_schema_enforces_identity_membership_and_snooze_invariants() {
         sqlx::query(
             "INSERT INTO music_library_items
                 (id, identity_key, source_kind, youtube_video_id, original_title,
-                 availability, review_state, discovered_at, updated_at)
+                 availability, review_state, discovered_at_ms, updated_at_ms)
              VALUES
                 ('item-1', 'local:item-1', 'local-file', NULL, 'Focus',
                  'available', 'unreviewed', 1700000000000, 1700000000000),
@@ -135,7 +135,7 @@ fn canonical_music_schema_enforces_identity_membership_and_snooze_invariants() {
         .unwrap();
         sqlx::query(
             "INSERT INTO music_playlist_memberships
-                (id, playlist_id, item_id, position, created_at, updated_at)
+                (id, playlist_id, item_id, position, created_at_ms, updated_at_ms)
              VALUES ('membership-1', 'playlist-1', 'item-1', 0, 1700000000000, 1700000000000)",
         )
         .execute(&pool)
@@ -144,7 +144,7 @@ fn canonical_music_schema_enforces_identity_membership_and_snooze_invariants() {
 
         let duplicate_membership = sqlx::query(
             "INSERT INTO music_playlist_memberships
-                (id, playlist_id, item_id, position, created_at, updated_at)
+                (id, playlist_id, item_id, position, created_at_ms, updated_at_ms)
              VALUES ('membership-2', 'playlist-1', 'item-1', 1, 1700000000000, 1700000000000)",
         )
         .execute(&pool)
@@ -153,7 +153,7 @@ fn canonical_music_schema_enforces_identity_membership_and_snooze_invariants() {
 
         let local_item_with_youtube_id = sqlx::query(
             "INSERT INTO music_library_items
-                (id, identity_key, source_kind, youtube_video_id, discovered_at, updated_at)
+                (id, identity_key, source_kind, youtube_video_id, discovered_at_ms, updated_at_ms)
              VALUES ('bad-item', 'local:bad', 'local-file', 'video-bad', 1700000000000, 1700000000000)",
         )
         .execute(&pool)
@@ -162,7 +162,7 @@ fn canonical_music_schema_enforces_identity_membership_and_snooze_invariants() {
 
         let playlist_snooze_without_playlist = sqlx::query(
             "INSERT INTO music_snoozes
-                (id, item_id, scope, playlist_id, starts_at, created_at)
+                (id, item_id, scope, playlist_id, starts_at_ms, created_at_ms)
              VALUES ('bad-snooze', 'item-1', 'playlist', NULL, 1700000000000, 1700000000000)",
         )
         .execute(&pool)

@@ -230,7 +230,7 @@ export function createMusicYouTubeAdapter(
         channel: "",
         durationMs: null,
         resolutionState: "resolving",
-        resolvedAt: currentTime(),
+        resolvedAtMs: currentTime(),
       });
     }
     try {
@@ -289,7 +289,7 @@ export function createMusicYouTubeAdapter(
         playlistId: message.playlistId,
         name: state.currentSource?.title || message.playlistId,
         videoIds: message.videoIds,
-        resolvedAt: currentTime(),
+        resolvedAtMs: currentTime(),
       });
     } catch (error) {
       reportPersistenceError("save the YouTube playlist snapshot", error);
@@ -336,7 +336,7 @@ export function createMusicYouTubeAdapter(
             channel: "",
             durationMs: state.snapshot.durationMs,
             resolutionState,
-            resolvedAt: currentTime(),
+            resolvedAtMs: currentTime(),
           });
         }
       }
@@ -372,7 +372,7 @@ export function createMusicYouTubeAdapter(
           channel: message.channel ?? "",
           durationMs: message.durationMs,
           resolutionState: "ready",
-          resolvedAt: currentTime(),
+          resolvedAtMs: currentTime(),
         });
       }
     }

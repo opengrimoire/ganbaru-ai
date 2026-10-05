@@ -7,7 +7,7 @@ fn schema_creates_distractions_usage_samples() {
 
         sqlx::query(
             "INSERT INTO distractions_usage_samples
-                (id, source_type, source_key, display_name, started_at, elapsed_seconds, local_date, created_at)
+                (id, source_type, source_key, display_name, started_at_ms, elapsed_seconds, local_date, created_at_ms)
              VALUES ('sample-1', 'website', 'youtube.com', 'youtube.com', 1779923600000, 30, '2026-05-28', 1779923630000)",
         )
         .execute(&pool)
@@ -16,7 +16,7 @@ fn schema_creates_distractions_usage_samples() {
 
         let invalid = sqlx::query(
             "INSERT INTO distractions_usage_samples
-                (id, source_type, source_key, started_at, elapsed_seconds, local_date, created_at)
+                (id, source_type, source_key, started_at_ms, elapsed_seconds, local_date, created_at_ms)
              VALUES ('sample-2', 'website', 'youtube.com', 1779923600000, 0, '2026-05-28', 1779923630000)",
         )
         .execute(&pool)

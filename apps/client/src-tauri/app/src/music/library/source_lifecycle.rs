@@ -104,12 +104,12 @@ pub(crate) async fn remove_source(
     cancel_active_refreshes(&mut transaction, &request).await?;
     let result = sqlx::query(
         "UPDATE music_source_collections
-         SET discovery_enabled = 0, removed_at = ?, refresh_state = 'idle',
-             last_refresh_error_code = NULL, updated_at = ?, version = version + 1
+         SET discovery_enabled = 0, removed_at_ms = ?, refresh_state = 'idle',
+             last_refresh_error_code = NULL, updated_at_ms = ?, version = version + 1
          WHERE id = ? AND version = ?",
     )
-    .bind(request.removed_at)
-    .bind(request.removed_at)
+    .bind(request.removed_at_ms)
+    .bind(request.removed_at_ms)
     .bind(&request.collection_id)
     .bind(request.expected_version)
     .execute(&mut *transaction)
@@ -138,11 +138,11 @@ async fn cancel_active_refreshes(
     sqlx::query(
         "UPDATE music_refresh_jobs SET state = 'cancelled',
              status_message = 'Source discovery was stopped. Existing catalog data was preserved.',
-             finished_at = ?, updated_at = ?
+             finished_at_ms = ?, updated_at_ms = ?
          WHERE source_collection_id = ? AND state IN ('queued', 'running')",
     )
-    .bind(request.removed_at)
-    .bind(request.removed_at)
+    .bind(request.removed_at_ms)
+    .bind(request.removed_at_ms)
     .bind(&request.collection_id)
     .execute(&mut **transaction)
     .await
@@ -198,7 +198,7 @@ async fn prune_orphaned_items(
 fn validate_request(request: &MusicSourceRemovalRequest) -> MusicLibraryResult<()> {
     if request.collection_id.trim().is_empty()
         || request.expected_version <= 0
-        || request.removed_at <= 0
+        || request.removed_at_ms <= 0
     {
         return Err(MusicLibraryError::validation(
             "collectionId",

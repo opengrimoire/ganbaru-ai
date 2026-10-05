@@ -3,7 +3,7 @@ use sqlx::SqlitePool;
 
 pub(crate) async fn groups(pool: &SqlitePool) -> MusicLibraryResult<Vec<MusicSoundscapeGroup>> {
     let rows = sqlx::query_as::<_, (String, String, String, i64, i64, i64)>(
-        "SELECT id, name, icon, created_at, updated_at, version
+        "SELECT id, name, icon, created_at_ms, updated_at_ms, version
          FROM music_soundscape_groups ORDER BY lower(name), id",
     )
     .fetch_all(pool)
@@ -15,8 +15,8 @@ pub(crate) async fn groups(pool: &SqlitePool) -> MusicLibraryResult<Vec<MusicSou
             id: row.0,
             name: row.1,
             icon: row.2,
-            created_at: row.3,
-            updated_at: row.4,
+            created_at_ms: row.3,
+            updated_at_ms: row.4,
             version: row.5,
         })
         .collect())
@@ -34,7 +34,7 @@ pub(crate) async fn upsert(
         ));
     }
     super::validate_icon(&request.icon)?;
-    if request.updated_at <= 0 {
+    if request.updated_at_ms <= 0 {
         return Err(MusicLibraryError::validation(
             "updatedAt",
             "must be positive",
@@ -45,7 +45,7 @@ pub(crate) async fn upsert(
         .await
         .map_err(|error| MusicLibraryError::database("begin sound group update", error))?;
     let existing = sqlx::query_as::<_, (i64, i64)>(
-        "SELECT created_at, version FROM music_soundscape_groups WHERE id = ?",
+        "SELECT created_at_ms, version FROM music_soundscape_groups WHERE id = ?",
     )
     .bind(&request.id)
     .fetch_optional(&mut *transaction)
@@ -60,19 +60,19 @@ pub(crate) async fn upsert(
     } else if request.expected_version.is_some() {
         return Err(MusicLibraryError::not_found("sound group", &request.id));
     }
-    let created_at = existing.map(|row| row.0).unwrap_or(request.updated_at);
+    let created_at_ms = existing.map(|row| row.0).unwrap_or(request.updated_at_ms);
     let version = existing.map(|row| row.1 + 1).unwrap_or(1);
     sqlx::query(
-        "INSERT INTO music_soundscape_groups (id, name, icon, created_at, updated_at, version)
+        "INSERT INTO music_soundscape_groups (id, name, icon, created_at_ms, updated_at_ms, version)
          VALUES (?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET name = excluded.name, icon = excluded.icon,
-           updated_at = excluded.updated_at, version = excluded.version",
+           updated_at_ms = excluded.updated_at_ms, version = excluded.version",
     )
     .bind(&request.id)
     .bind(request.name.trim())
     .bind(&request.icon)
-    .bind(created_at)
-    .bind(request.updated_at)
+    .bind(created_at_ms)
+    .bind(request.updated_at_ms)
     .bind(version)
     .execute(&mut *transaction)
     .await
@@ -82,8 +82,8 @@ pub(crate) async fn upsert(
         id: request.id,
         name: request.name.trim().to_owned(),
         icon: request.icon,
-        created_at,
-        updated_at: request.updated_at,
+        created_at_ms,
+        updated_at_ms: request.updated_at_ms,
         version,
     })
 }
@@ -124,7 +124,7 @@ mod tests {
                     name: "Rain".into(),
                     icon: "lucide:cloud-rain".into(),
                     expected_version: None,
-                    updated_at: 1_700_000_000_000,
+                    updated_at_ms: 1_700_000_000_000,
                 },
             )
             .await
@@ -139,13 +139,13 @@ mod tests {
                         name: "Storm".into(),
                         icon: "lucide:wind".into(),
                         expected_version: None,
-                        updated_at: 1_700_000_000_001,
+                        updated_at_ms: 1_700_000_000_001,
                     }
                 )
                 .await
                 .is_err()
             );
-            sqlx::query("INSERT INTO music_soundscapes (id, source_kind, name, availability, created_at, updated_at, version, group_id) VALUES ('local-storm', 'local-loop', 'Storm', 'missing', 1, 1, 1, ?)")
+            sqlx::query("INSERT INTO music_soundscapes (id, source_kind, name, availability, created_at_ms, updated_at_ms, version, group_id) VALUES ('local-storm', 'local-loop', 'Storm', 'missing', 1, 1, 1, ?)")
                 .bind(&created.id).execute(&pool).await.unwrap();
             remove(&pool, &created.id, created.version).await.unwrap();
             let group_id: Option<String> = sqlx::query_scalar(

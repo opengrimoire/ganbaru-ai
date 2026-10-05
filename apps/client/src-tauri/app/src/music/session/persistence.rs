@@ -254,10 +254,10 @@ pub(super) async fn commit_in_transaction(
             "music checkpoint exceeds its size limit",
         ));
     }
-    sqlx::query("INSERT INTO music_session_checkpoints (device_id, session_id, revision, checkpoint_json, updated_at)
+    sqlx::query("INSERT INTO music_session_checkpoints (device_id, session_id, revision, checkpoint_json, updated_at_ms)
         VALUES (?, ?, ?, ?, ?) ON CONFLICT(device_id) DO UPDATE SET
         session_id = excluded.session_id, revision = excluded.revision,
-        checkpoint_json = excluded.checkpoint_json, updated_at = excluded.updated_at")
+        checkpoint_json = excluded.checkpoint_json, updated_at_ms = excluded.updated_at_ms")
         .bind(device_id).bind(&state.session_id).bind(state.revision as i64).bind(encoded).bind(now_ms)
         .execute(&mut *connection).await.map_err(|error| MusicLibraryError::database("save music checkpoint", error))?;
     for update in &transition.listening {
@@ -267,7 +267,7 @@ pub(super) async fn commit_in_transaction(
         // The receipt result contains no resolved source data and is never replayed as a live session.
         let result = serde_json::json!({"sessionId": state.session_id, "revision": state.revision})
             .to_string();
-        sqlx::query("INSERT INTO music_session_receipts (device_id, action_id, request_hash, result_json, committed_at) VALUES (?, ?, ?, ?, ?)")
+        sqlx::query("INSERT INTO music_session_receipts (device_id, action_id, request_hash, result_json, committed_at_ms) VALUES (?, ?, ?, ?, ?)")
             .bind(device_id).bind(action_id).bind(hash).bind(result).bind(now_ms).execute(&mut *connection).await
             .map_err(|error| MusicLibraryError::database("record music session receipt", error))?;
     }

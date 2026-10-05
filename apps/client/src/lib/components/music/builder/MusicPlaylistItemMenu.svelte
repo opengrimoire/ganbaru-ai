@@ -56,10 +56,10 @@
   const duration = $derived(formatMusicDuration(item.durationMs));
   const selectedSnooze = $derived.by(() => {
     const now = Date.now();
-    const scoped = snoozes.filter((entry) => entry.startsAt <= now && (entry.endsAt === null || entry.endsAt > now)
+    const scoped = snoozes.filter((entry) => entry.startsAtMs <= now && (entry.endsAtMs === null || entry.endsAtMs > now)
       && (context === "source" ? entry.scope === "all-playlists" : entry.scope === "playlist" && entry.playlistId === snoozePlaylistId));
     return scoped.length === 1
-      ? musicSnoozePreset(scoped[0].startsAt, scoped[0].endsAt, Intl.DateTimeFormat().resolvedOptions().timeZone)
+      ? musicSnoozePreset(scoped[0].startsAtMs, scoped[0].endsAtMs, Intl.DateTimeFormat().resolvedOptions().timeZone)
       : null;
   });
 

@@ -70,11 +70,11 @@ pub(crate) struct PairingInvitation {
     pub coordinator_device_id: String,
     pub vault_id: String,
     pub generation: u64,
-    pub expires_at_unix_ms: i64,
+    pub expires_at_ms: i64,
 }
 
 impl PairingInvitation {
-    pub(crate) fn validate(&self, now_unix_ms: i64) -> Result<(), String> {
+    pub(crate) fn validate(&self, now_ms: i64) -> Result<(), String> {
         validate_protocol(self.protocol_version)?;
         self.compatibility.validate()?;
         validate_identifier("invitation id", &self.invitation_id)?;
@@ -85,7 +85,7 @@ impl PairingInvitation {
         self.endpoint
             .parse::<std::net::SocketAddr>()
             .map_err(|_| "pairing invitation endpoint is invalid".to_string())?;
-        if self.expires_at_unix_ms <= now_unix_ms {
+        if self.expires_at_ms <= now_ms {
             return Err("pairing invitation has expired".to_string());
         }
         Ok(())
@@ -137,10 +137,10 @@ pub(crate) struct DistractionsSampleMessage {
     pub source_type: String,
     pub source_key: String,
     pub display_name: Option<String>,
-    pub started_at_unix_ms: i64,
+    pub started_at_ms: i64,
     pub elapsed_seconds: i64,
     pub local_date: String,
-    pub created_at_unix_ms: i64,
+    pub created_at_ms: i64,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
@@ -485,10 +485,10 @@ fn validate_distractions_sample(sample: &DistractionsSampleMessage) -> Result<()
             .display_name
             .as_ref()
             .is_some_and(|name| name.len() > 120)
-        || sample.started_at_unix_ms < 0
+        || sample.started_at_ms < 0
         || !(1..=86_400).contains(&sample.elapsed_seconds)
         || !valid_local_date(&sample.local_date)
-        || sample.created_at_unix_ms < 0
+        || sample.created_at_ms < 0
     {
         return Err("Distractions sample metadata is invalid".to_string());
     }
@@ -559,17 +559,14 @@ pub(crate) fn encode_invitation(invitation: &PairingInvitation) -> Result<String
     ))
 }
 
-pub(crate) fn decode_invitation(
-    encoded: &str,
-    now_unix_ms: i64,
-) -> Result<PairingInvitation, String> {
+pub(crate) fn decode_invitation(encoded: &str, now_ms: i64) -> Result<PairingInvitation, String> {
     if encoded.is_empty() || encoded.len() > 8 * 1024 {
         return Err("pairing invitation has an invalid size".to_string());
     }
     let json = base64::Engine::decode(&base64::engine::general_purpose::URL_SAFE_NO_PAD, encoded)
         .map_err(|error| format!("decode pairing invitation: {error}"))?;
     let invitation: PairingInvitation = decode_bounded_json(&json, "pairing invitation")?;
-    invitation.validate(now_unix_ms)?;
+    invitation.validate(now_ms)?;
     Ok(invitation)
 }
 
@@ -618,10 +615,10 @@ pub(crate) fn decode_pairing_qr_luma(
     width: usize,
     height: usize,
     luma: &[u8],
-    now_unix_ms: i64,
+    now_ms: i64,
 ) -> Result<PairingInvitation, String> {
     let payload = decode_qr_luma(width, height, luma)?;
-    decode_pairing_qr_payload(&payload, now_unix_ms)
+    decode_pairing_qr_payload(&payload, now_ms)
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -645,14 +642,11 @@ fn encode_pairing_qr_payload(invitation: &PairingInvitation) -> Result<Vec<u8>, 
     push_qr_string(&mut payload, &invitation.coordinator_device_id)?;
     push_qr_string(&mut payload, &invitation.vault_id)?;
     payload.extend_from_slice(&invitation.generation.to_be_bytes());
-    payload.extend_from_slice(&invitation.expires_at_unix_ms.to_be_bytes());
+    payload.extend_from_slice(&invitation.expires_at_ms.to_be_bytes());
     Ok(payload)
 }
 
-fn decode_pairing_qr_payload(
-    payload: &[u8],
-    now_unix_ms: i64,
-) -> Result<PairingInvitation, String> {
+fn decode_pairing_qr_payload(payload: &[u8], now_ms: i64) -> Result<PairingInvitation, String> {
     if !payload.starts_with(PAIRING_QR_MAGIC) {
         return Err("pairing QR code has an unsupported format".to_string());
     }
@@ -668,7 +662,7 @@ fn decode_pairing_qr_payload(
     let coordinator_device_id = take_qr_string(payload, &mut position)?;
     let vault_id = take_qr_string(payload, &mut position)?;
     let generation = u64::from_be_bytes(take_qr_array(payload, &mut position)?);
-    let expires_at_unix_ms = i64::from_be_bytes(take_qr_array(payload, &mut position)?);
+    let expires_at_ms = i64::from_be_bytes(take_qr_array(payload, &mut position)?);
     if position != payload.len() {
         return Err("pairing QR code contains unexpected data".to_string());
     }
@@ -686,9 +680,9 @@ fn decode_pairing_qr_payload(
         coordinator_device_id,
         vault_id,
         generation,
-        expires_at_unix_ms,
+        expires_at_ms,
     };
-    invitation.validate(now_unix_ms)?;
+    invitation.validate(now_ms)?;
     Ok(invitation)
 }
 
@@ -820,7 +814,7 @@ mod tests {
             coordinator_device_id: "device-abcdefghijklmnopqrstuv".to_string(),
             vault_id: "vault-abcdefghijklmnopqrstuv".to_string(),
             generation: 7,
-            expires_at_unix_ms: i64::MAX,
+            expires_at_ms: i64::MAX,
         }
     }
 

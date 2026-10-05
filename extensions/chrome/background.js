@@ -64,11 +64,11 @@ async function readActiveUsage() {
   const stored = await activeUsageStore().get(ACTIVE_USAGE_STORAGE_KEY);
   const usage = stored[ACTIVE_USAGE_STORAGE_KEY];
   if (!usage || typeof usage !== "object") return null;
-  if (typeof usage.host !== "string" || typeof usage.startedAt !== "number") return null;
+  if (typeof usage.host !== "string" || typeof usage.startedAtMs !== "number") return null;
   return {
     tabId: typeof usage.tabId === "number" ? usage.tabId : null,
     host: usage.host,
-    startedAt: usage.startedAt,
+    startedAtMs: usage.startedAtMs,
   };
 }
 
@@ -167,7 +167,7 @@ async function queryTrackableFocusedTab() {
 
 async function recordUsageInterval(usage, endedAt) {
   if (!usage) return;
-  const elapsedSeconds = Math.floor((endedAt - usage.startedAt) / 1000);
+  const elapsedSeconds = Math.floor((endedAt - usage.startedAtMs) / 1000);
   if (elapsedSeconds > 0) {
     await sendNativeMessage({
       type: "record_usage",
@@ -175,8 +175,8 @@ async function recordUsageInterval(usage, endedAt) {
       sourceKey: usage.host,
       displayName: usage.host,
       elapsedSeconds,
-      startedAt: usage.startedAt,
-      localDate: localDateString(usage.startedAt),
+      startedAtMs: usage.startedAtMs,
+      localDate: localDateString(usage.startedAtMs),
     });
   }
 }
@@ -187,7 +187,7 @@ async function refreshActiveUsage({ forceFlush = false } = {}) {
   const target = await queryTrackableFocusedTab();
 
   if (!usage) {
-    if (target) await writeActiveUsage({ ...target, startedAt: now });
+    if (target) await writeActiveUsage({ ...target, startedAtMs: now });
     return;
   }
 
@@ -195,7 +195,7 @@ async function refreshActiveUsage({ forceFlush = false } = {}) {
   if (forceFlush || !sameHost) {
     await recordUsageInterval(usage, now);
     if (target) {
-      await writeActiveUsage({ ...target, startedAt: now });
+      await writeActiveUsage({ ...target, startedAtMs: now });
     } else {
       await clearActiveUsage();
     }

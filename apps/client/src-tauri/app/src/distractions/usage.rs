@@ -62,8 +62,8 @@ pub(super) fn normalize_usage_sample(
     if sample.elapsed_seconds <= 0 || sample.elapsed_seconds > 86_400 {
         return Err("elapsed_seconds must be between 1 and 86400".to_string());
     }
-    if sample.started_at < 0 {
-        return Err("started_at must be non-negative".to_string());
+    if sample.started_at_ms < 0 {
+        return Err("started_at_ms must be non-negative".to_string());
     }
     if !validate_local_date(&sample.local_date) {
         return Err("local_date must use yyyy-mm-dd".to_string());
@@ -71,7 +71,7 @@ pub(super) fn normalize_usage_sample(
     let id = sample.id.unwrap_or_else(|| {
         let identity = format!(
             "{source_type}|{source_key}|{}|{}",
-            sample.started_at, sample.local_date
+            sample.started_at_ms, sample.local_date
         );
         format!(
             "{fallback_id_prefix}-{:x}",
@@ -87,10 +87,10 @@ pub(super) fn normalize_usage_sample(
         source_type,
         source_key,
         display_name: normalize_usage_display_name(sample.display_name),
-        started_at: sample.started_at,
+        started_at_ms: sample.started_at_ms,
         elapsed_seconds: sample.elapsed_seconds,
         local_date: sample.local_date,
-        created_at: now_epoch_ms(),
+        created_at_ms: now_epoch_ms(),
     })
 }
 
@@ -103,17 +103,17 @@ pub(super) async fn insert_usage_samples(
     for sample in samples {
         sqlx::query(
             "INSERT OR IGNORE INTO distractions_usage_samples
-                (id, source_type, source_key, display_name, started_at, elapsed_seconds, local_date, created_at)
+                (id, source_type, source_key, display_name, started_at_ms, elapsed_seconds, local_date, created_at_ms)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(sample.id)
         .bind(sample.source_type)
         .bind(sample.source_key)
         .bind(sample.display_name)
-        .bind(sample.started_at)
+        .bind(sample.started_at_ms)
         .bind(sample.elapsed_seconds)
         .bind(sample.local_date)
-        .bind(sample.created_at)
+        .bind(sample.created_at_ms)
         .execute(&mut *tx)
         .await
         .map_err(|e| format!("record distraction usage sample: {e}"))?;

@@ -233,7 +233,7 @@ describe("MusicPanel", () => {
     const now = Date.now();
     snoozeApi.getMusicInspectorDetail.mockResolvedValue({ snoozes: [{
       id: "active-snooze", itemId: "snoozed", scope: "all-playlists", playlistId: null,
-      startsAt: now - 1_000, endsAt: now + 86_400_000, reason: "", createdAt: now - 1_000,
+      startsAtMs: now - 1_000, endsAtMs: now + 86_400_000, reason: "", createdAtMs: now - 1_000,
     }] });
     target = document.createElement("div");
     document.body.append(target);

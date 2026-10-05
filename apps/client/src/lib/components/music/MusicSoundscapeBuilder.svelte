@@ -69,7 +69,7 @@
         groupId: replace.groupId,
         localPath: path,
         expectedVersion: replace.version,
-        updatedAt: Date.now(),
+        updatedAtMs: Date.now(),
       });
     } catch (error) {
       console.error("Could not add background sound", error);
@@ -91,7 +91,7 @@
         groupId: pending.groupId,
         localPath: pending.path,
         expectedVersion: null,
-        updatedAt: Date.now(),
+        updatedAtMs: Date.now(),
       });
       pendingSound = null;
     } catch (error) {
@@ -122,7 +122,7 @@
         name,
         icon: groupIconDraft,
         expectedVersion: current?.version ?? null,
-        updatedAt: Date.now(),
+        updatedAtMs: Date.now(),
       });
       editingGroupId = null;
     } catch (error) {

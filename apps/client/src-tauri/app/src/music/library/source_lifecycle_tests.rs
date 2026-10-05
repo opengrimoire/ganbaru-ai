@@ -19,7 +19,7 @@ async fn pool() -> SqlitePool {
 
 async fn seed(pool: &SqlitePool) {
     sqlx::query(
-        "INSERT INTO music_local_roots (id, name, created_at, updated_at)
+        "INSERT INTO music_local_roots (id, name, created_at_ms, updated_at_ms)
          VALUES ('root-1', 'Music', 1, 1)",
     )
     .execute(pool)
@@ -27,7 +27,7 @@ async fn seed(pool: &SqlitePool) {
     .unwrap();
     sqlx::query(
         "INSERT INTO music_source_collections
-            (id, kind, identity_key, name, local_root_id, created_at, updated_at)
+            (id, kind, identity_key, name, local_root_id, created_at_ms, updated_at_ms)
          VALUES ('source-1', 'local-root', 'root:1', 'Music', 'root-1', 1, 1)",
     )
     .execute(pool)
@@ -35,7 +35,7 @@ async fn seed(pool: &SqlitePool) {
     .unwrap();
     sqlx::query(
         "INSERT INTO music_source_collections
-            (id, kind, identity_key, name, youtube_playlist_id, created_at, updated_at)
+            (id, kind, identity_key, name, youtube_playlist_id, created_at_ms, updated_at_ms)
          VALUES ('source-2', 'youtube-playlist', 'youtube:2', 'Online', 'PLsource2', 1, 1)",
     )
     .execute(pool)
@@ -45,7 +45,7 @@ async fn seed(pool: &SqlitePool) {
         sqlx::query(
             "INSERT INTO music_library_items
                 (id, identity_key, source_kind, media_kind, original_title,
-                 availability, discovered_at, updated_at)
+                 availability, discovered_at_ms, updated_at_ms)
              VALUES (?, ?, 'local-file', 'audio', ?, 'available', 1, 1)",
         )
         .bind(item_id)
@@ -56,7 +56,7 @@ async fn seed(pool: &SqlitePool) {
         .unwrap();
         sqlx::query(
             "INSERT INTO music_source_collection_items
-                (collection_id, item_id, first_discovered_at)
+                (collection_id, item_id, first_discovered_at_ms)
              VALUES ('source-1', ?, 1)",
         )
         .bind(item_id)
@@ -66,7 +66,7 @@ async fn seed(pool: &SqlitePool) {
     }
     sqlx::query(
         "INSERT INTO music_local_locations
-            (id, item_id, root_id, relative_path, availability, first_seen_at, updated_at)
+            (id, item_id, root_id, relative_path, availability, first_seen_at_ms, updated_at_ms)
          VALUES ('location-orphan', 'item-orphan', 'root-1', 'orphan.mp3', 'available', 1, 1)",
     )
     .execute(pool)
@@ -74,14 +74,14 @@ async fn seed(pool: &SqlitePool) {
     .unwrap();
     sqlx::query(
         "INSERT INTO music_source_collection_items
-            (collection_id, item_id, first_discovered_at)
+            (collection_id, item_id, first_discovered_at_ms)
          VALUES ('source-2', 'item-shared', 1)",
     )
     .execute(pool)
     .await
     .unwrap();
     sqlx::query(
-        "INSERT INTO music_playlists (id, name, created_at, updated_at)
+        "INSERT INTO music_playlists (id, name, created_at_ms, updated_at_ms)
          VALUES ('playlist-1', 'Focus', 1, 1)",
     )
     .execute(pool)
@@ -89,7 +89,7 @@ async fn seed(pool: &SqlitePool) {
     .unwrap();
     sqlx::query(
         "INSERT INTO music_playlist_memberships
-            (id, playlist_id, item_id, position, created_at, updated_at)
+            (id, playlist_id, item_id, position, created_at_ms, updated_at_ms)
          VALUES ('membership-1', 'playlist-1', 'item-member', 0, 1, 1)",
     )
     .execute(pool)
@@ -98,7 +98,7 @@ async fn seed(pool: &SqlitePool) {
     sqlx::query(
         "INSERT INTO music_refresh_jobs
             (id, source_collection_id, local_root_id, kind, state, generation,
-             requested_at, updated_at)
+             requested_at_ms, updated_at_ms)
          VALUES ('refresh-1', 'source-1', 'root-1', 'local-root', 'running', 1, 2, 2)",
     )
     .execute(pool)
@@ -138,7 +138,7 @@ fn source_removal_preserves_referenced_items_and_prunes_only_reviewed_orphans() 
                 expected_version: 1,
                 expected_impact: impact,
                 remove_orphaned_items: true,
-                removed_at: 100,
+                removed_at_ms: 100,
             },
         )
         .await
@@ -151,7 +151,7 @@ fn source_removal_preserves_referenced_items_and_prunes_only_reviewed_orphans() 
         assert_eq!(remaining, vec!["item-member", "item-shared"]);
         assert!(media_file.exists());
         let source_state: (i64, Option<i64>) = sqlx::query_as(
-            "SELECT discovery_enabled, removed_at FROM music_source_collections
+            "SELECT discovery_enabled, removed_at_ms FROM music_source_collections
              WHERE id = 'source-1'",
         )
         .fetch_one(&pool)
@@ -194,7 +194,7 @@ fn source_removal_rejects_stale_impact_without_partial_changes() {
                 expected_version: 1,
                 expected_impact: impact,
                 remove_orphaned_items: false,
-                removed_at: 100,
+                removed_at_ms: 100,
             },
         )
         .await
@@ -217,7 +217,7 @@ fn source_projection_updates_for_review_health_relink_and_removal() {
         seed(&pool).await;
         sqlx::query(
             "UPDATE music_source_collections
-             SET last_successful_refresh_at = 1000, previous_successful_refresh_at = 0
+             SET last_successful_refresh_at_ms = 1000, previous_successful_refresh_at_ms = 0
              WHERE id = 'source-1'",
         )
         .execute(&pool)
@@ -249,7 +249,7 @@ fn source_projection_updates_for_review_health_relink_and_removal() {
         .unwrap();
         sqlx::query(
             "INSERT INTO music_relink_plans
-                (id, root_id, state, ambiguous_count, created_at, updated_at)
+                (id, root_id, state, ambiguous_count, created_at_ms, updated_at_ms)
              VALUES ('projection-plan', 'root-1', 'ready', 1, 10, 10)",
         )
         .execute(&pool)
@@ -258,7 +258,7 @@ fn source_projection_updates_for_review_health_relink_and_removal() {
         sqlx::query(
             "INSERT INTO music_relink_plan_entries
                 (id, plan_id, match_kind, suggested_item_id, candidate_relative_path,
-                 candidate_item_ids, created_at)
+                 candidate_item_ids, created_at_ms)
              VALUES ('projection-entry', 'projection-plan', 'ambiguous', NULL,
                      'moved.mp3', '[\"item-orphan\",\"item-shared\"]', 10)",
         )
@@ -286,7 +286,7 @@ fn source_projection_updates_for_review_health_relink_and_removal() {
                 expected_version: 1,
                 expected_impact: impact,
                 remove_orphaned_items: false,
-                removed_at: 2_000,
+                removed_at_ms: 2_000,
             },
         )
         .await

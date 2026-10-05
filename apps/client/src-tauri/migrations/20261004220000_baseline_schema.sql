@@ -4,7 +4,7 @@
 -- Layout: one section per domain. Parent tables come before their children, each table is
 -- followed by its indexes, and each section ends with its triggers. Seed data comes last.
 --
--- Conventions: TEXT ids, TEXT RFC 3339 UTC timestamps named *_at unless a section says otherwise,
+-- Conventions: TEXT ids, TEXT RFC 3339 UTC timestamps named *_at, INTEGER Unix epoch milliseconds named *_ms,
 -- INTEGER 0/1 booleans, and idx_<table>_<purpose> index names. Foreign keys that protect history use
 -- ON DELETE NO ACTION instead of RESTRICT, so a cascade that removes both rows in one statement
 -- succeeds regardless of the order SQLite visits the child tables.
@@ -1029,7 +1029,7 @@ CREATE TABLE calendar_event_archive_music_assignments (
     soundscape_id TEXT,
     provenance_kind TEXT NOT NULL CHECK (provenance_kind IN ('explicit', 'copied-project', 'work-environment')),
     provenance_id TEXT,
-    updated_at INTEGER NOT NULL CHECK (updated_at > 0),
+    updated_at_ms INTEGER NOT NULL CHECK (updated_at_ms > 0),
     version INTEGER NOT NULL CHECK (version > 0),
     soundscape_behavior TEXT NOT NULL CHECK (soundscape_behavior IN (
             'inherit', 'play-selected', 'pause-soundscape', 'keep-current-soundscape'
@@ -1129,7 +1129,7 @@ CREATE TABLE calendar_edit_receipts (
     command_id TEXT PRIMARY KEY NOT NULL,
     intent_hash TEXT NOT NULL,
     result_json TEXT NOT NULL,
-    created_at INTEGER NOT NULL
+    created_at_ms INTEGER NOT NULL
 );
 
 
@@ -1585,7 +1585,7 @@ CREATE INDEX idx_pomodoro_adaptive_outcomes_decision
 ON pomodoro_adaptive_outcomes(decision_id, measured_at);
 
 
--- Distractions: Block events and usage samples. Usage sample times are INTEGER Unix epoch milliseconds.
+-- Distractions: Block events and usage samples.
 
 CREATE TABLE distractions_block_events (
     id TEXT PRIMARY KEY CHECK (trim(id) <> ''),
@@ -1639,20 +1639,20 @@ CREATE TABLE distractions_usage_samples (
     source_type TEXT NOT NULL CHECK (source_type IN ('website', 'desktop-app', 'mobile-app')),
     source_key TEXT NOT NULL CHECK (trim(source_key) <> ''),
     display_name TEXT,
-    started_at INTEGER NOT NULL CHECK (started_at >= 0),
+    started_at_ms INTEGER NOT NULL CHECK (started_at_ms >= 0),
     elapsed_seconds INTEGER NOT NULL CHECK (elapsed_seconds > 0 AND elapsed_seconds <= 86400),
     local_date TEXT NOT NULL CHECK (
         length(local_date) = 10
         AND substr(local_date, 5, 1) = '-'
         AND substr(local_date, 8, 1) = '-'
     ),
-    created_at INTEGER NOT NULL CHECK (created_at >= 0)
+    created_at_ms INTEGER NOT NULL CHECK (created_at_ms >= 0)
 );
 CREATE INDEX idx_distractions_usage_samples_date_source ON distractions_usage_samples(local_date, source_type, source_key);
-CREATE INDEX idx_distractions_usage_samples_started ON distractions_usage_samples(started_at);
+CREATE INDEX idx_distractions_usage_samples_started ON distractions_usage_samples(started_at_ms);
 
 
--- Music: Library, sources, playlists, soundscapes, and the native session. Times are INTEGER Unix epoch milliseconds.
+-- Music: Library, sources, playlists, soundscapes, and the native session.
 
 CREATE TABLE music_library_items (
     id TEXT PRIMARY KEY,
@@ -1672,9 +1672,9 @@ CREATE TABLE music_library_items (
         CHECK (availability IN ('available', 'missing', 'unavailable', 'ambiguous', 'unknown')),
     review_state TEXT NOT NULL DEFAULT 'unreviewed'
         CHECK (review_state IN ('unreviewed', 'reviewed', 'deferred', 'ignored')),
-    review_changed_at INTEGER,
-    discovered_at INTEGER NOT NULL CHECK (discovered_at > 0),
-    updated_at INTEGER NOT NULL CHECK (updated_at > 0),
+    review_changed_at_ms INTEGER,
+    discovered_at_ms INTEGER NOT NULL CHECK (discovered_at_ms > 0),
+    updated_at_ms INTEGER NOT NULL CHECK (updated_at_ms > 0),
     version INTEGER NOT NULL DEFAULT 1 CHECK (version > 0),
     original_track_number INTEGER
         CHECK (original_track_number IS NULL OR original_track_number > 0),
@@ -1686,8 +1686,8 @@ CREATE TABLE music_library_items (
             'resolving', 'ready', 'unavailable', 'embedding-blocked', 'timed-out'
         )
     ),
-    review_deferred_until INTEGER
-        CHECK (review_deferred_until IS NULL OR review_deferred_until > 0),
+    review_deferred_until_ms INTEGER
+        CHECK (review_deferred_until_ms IS NULL OR review_deferred_until_ms > 0),
     CHECK (
         (source_kind = 'local-file' AND youtube_video_id IS NULL)
         OR (source_kind = 'youtube-video' AND youtube_video_id IS NOT NULL AND trim(youtube_video_id) <> '')
@@ -1696,34 +1696,34 @@ CREATE TABLE music_library_items (
 CREATE INDEX idx_music_library_items_availability
     ON music_library_items(availability, source_kind, id);
 CREATE INDEX idx_music_library_items_review
-    ON music_library_items(review_state, discovered_at, id);
+    ON music_library_items(review_state, discovered_at_ms, id);
 CREATE INDEX idx_music_library_items_review_deferred_until
-ON music_library_items(review_state, review_deferred_until, discovered_at, id);
+ON music_library_items(review_state, review_deferred_until_ms, discovered_at_ms, id);
 
 CREATE TABLE music_item_signals (
     item_id TEXT NOT NULL REFERENCES music_library_items(id) ON DELETE CASCADE,
     signal TEXT NOT NULL
         CHECK (signal IN ('lyrics', 'sudden-changes', 'high-intensity', 'calm', 'repetitive', 'energizing')),
-    created_at INTEGER NOT NULL CHECK (created_at > 0),
+    created_at_ms INTEGER NOT NULL CHECK (created_at_ms > 0),
     PRIMARY KEY (item_id, signal)
 );
 
 CREATE TABLE music_listening_statistics (
     item_id TEXT PRIMARY KEY REFERENCES music_library_items(id) ON DELETE CASCADE,
-    last_played_at INTEGER,
+    last_played_at_ms INTEGER,
     play_count INTEGER NOT NULL DEFAULT 0 CHECK (play_count >= 0),
     completion_count INTEGER NOT NULL DEFAULT 0 CHECK (completion_count >= 0),
     skip_count INTEGER NOT NULL DEFAULT 0 CHECK (skip_count >= 0),
-    updated_at INTEGER NOT NULL CHECK (updated_at > 0)
+    updated_at_ms INTEGER NOT NULL CHECK (updated_at_ms > 0)
 );
 CREATE INDEX idx_music_listening_statistics_last_played
-    ON music_listening_statistics(last_played_at DESC, item_id);
+    ON music_listening_statistics(last_played_at_ms DESC, item_id);
 
 CREATE TABLE music_local_roots (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL CHECK (trim(name) <> ''),
-    created_at INTEGER NOT NULL CHECK (created_at > 0),
-    updated_at INTEGER NOT NULL CHECK (updated_at > 0),
+    created_at_ms INTEGER NOT NULL CHECK (created_at_ms > 0),
+    updated_at_ms INTEGER NOT NULL CHECK (updated_at_ms > 0),
     version INTEGER NOT NULL DEFAULT 1 CHECK (version > 0)
 );
 
@@ -1739,8 +1739,8 @@ CREATE TABLE music_local_locations (
     availability TEXT NOT NULL DEFAULT 'unknown'
         CHECK (availability IN ('available', 'missing', 'ambiguous', 'unsupported', 'unknown')),
     last_seen_generation INTEGER CHECK (last_seen_generation IS NULL OR last_seen_generation >= 0),
-    first_seen_at INTEGER NOT NULL CHECK (first_seen_at > 0),
-    updated_at INTEGER NOT NULL CHECK (updated_at > 0),
+    first_seen_at_ms INTEGER NOT NULL CHECK (first_seen_at_ms > 0),
+    updated_at_ms INTEGER NOT NULL CHECK (updated_at_ms > 0),
     UNIQUE (root_id, relative_path),
     UNIQUE (root_id, item_id, relative_path)
 );
@@ -1758,8 +1758,8 @@ CREATE TABLE music_relink_plans (
     ambiguous_count INTEGER NOT NULL DEFAULT 0 CHECK (ambiguous_count >= 0),
     missing_count INTEGER NOT NULL DEFAULT 0 CHECK (missing_count >= 0),
     new_count INTEGER NOT NULL DEFAULT 0 CHECK (new_count >= 0),
-    created_at INTEGER NOT NULL CHECK (created_at > 0),
-    updated_at INTEGER NOT NULL CHECK (updated_at > 0)
+    created_at_ms INTEGER NOT NULL CHECK (created_at_ms > 0),
+    updated_at_ms INTEGER NOT NULL CHECK (updated_at_ms > 0)
 );
 
 CREATE TABLE music_relink_plan_entries (
@@ -1773,8 +1773,8 @@ CREATE TABLE music_relink_plan_entries (
     file_size_bytes INTEGER CHECK (file_size_bytes IS NULL OR file_size_bytes >= 0),
     lightweight_fingerprint TEXT,
     resolved_item_id TEXT REFERENCES music_library_items(id) ON DELETE SET NULL,
-    resolved_at INTEGER,
-    created_at INTEGER NOT NULL CHECK (created_at > 0)
+    resolved_at_ms INTEGER,
+    created_at_ms INTEGER NOT NULL CHECK (created_at_ms > 0)
 );
 CREATE INDEX idx_music_relink_plan_entries_window
     ON music_relink_plan_entries(plan_id, match_kind, candidate_relative_path, id);
@@ -1788,16 +1788,16 @@ CREATE TABLE music_source_collections (
     youtube_playlist_id TEXT UNIQUE,
     refresh_state TEXT NOT NULL DEFAULT 'idle'
         CHECK (refresh_state IN ('idle', 'queued', 'running', 'partial', 'failed')),
-    last_successful_refresh_at INTEGER,
+    last_successful_refresh_at_ms INTEGER,
     last_refresh_error_code TEXT,
     snapshot_generation INTEGER NOT NULL DEFAULT 0 CHECK (snapshot_generation >= 0),
-    created_at INTEGER NOT NULL CHECK (created_at > 0),
-    updated_at INTEGER NOT NULL CHECK (updated_at > 0),
+    created_at_ms INTEGER NOT NULL CHECK (created_at_ms > 0),
+    updated_at_ms INTEGER NOT NULL CHECK (updated_at_ms > 0),
     version INTEGER NOT NULL DEFAULT 1 CHECK (version > 0),
     discovery_enabled INTEGER NOT NULL DEFAULT 1
         CHECK (discovery_enabled IN (0, 1)),
-    removed_at INTEGER,
-    previous_successful_refresh_at INTEGER,
+    removed_at_ms INTEGER,
+    previous_successful_refresh_at_ms INTEGER,
     UNIQUE (local_root_id),
     CHECK (
         (kind = 'local-root' AND local_root_id IS NOT NULL AND youtube_playlist_id IS NULL)
@@ -1810,7 +1810,7 @@ CREATE TABLE music_source_collections (
     )
 );
 CREATE INDEX idx_music_source_collections_kind_state
-    ON music_source_collections(kind, refresh_state, updated_at);
+    ON music_source_collections(kind, refresh_state, updated_at_ms);
 
 CREATE TABLE music_refresh_jobs (
     id TEXT PRIMARY KEY CHECK (trim(id) <> ''),
@@ -1828,10 +1828,10 @@ CREATE TABLE music_refresh_jobs (
     truncated_count INTEGER NOT NULL DEFAULT 0 CHECK (truncated_count >= 0),
     absence_determined INTEGER NOT NULL DEFAULT 0 CHECK (absence_determined IN (0, 1)),
     status_message TEXT NOT NULL DEFAULT '',
-    requested_at INTEGER NOT NULL CHECK (requested_at > 0),
-    started_at INTEGER,
-    finished_at INTEGER,
-    updated_at INTEGER NOT NULL CHECK (updated_at > 0),
+    requested_at_ms INTEGER NOT NULL CHECK (requested_at_ms > 0),
+    started_at_ms INTEGER,
+    finished_at_ms INTEGER,
+    updated_at_ms INTEGER NOT NULL CHECK (updated_at_ms > 0),
     CHECK (
         (kind = 'local-root' AND local_root_id IS NOT NULL)
         OR (kind = 'youtube-playlist' AND local_root_id IS NULL)
@@ -1857,16 +1857,16 @@ CREATE TABLE music_refresh_job_issues (
     relative_path TEXT,
     item_id TEXT REFERENCES music_library_items(id) ON DELETE SET NULL,
     message TEXT NOT NULL CHECK (trim(message) <> ''),
-    created_at INTEGER NOT NULL CHECK (created_at > 0)
+    created_at_ms INTEGER NOT NULL CHECK (created_at_ms > 0)
 );
 CREATE INDEX idx_music_refresh_job_issues_job
-    ON music_refresh_job_issues(job_id, created_at, id);
+    ON music_refresh_job_issues(job_id, created_at_ms, id);
 
 CREATE TABLE music_source_collection_items (
     collection_id TEXT NOT NULL REFERENCES music_source_collections(id) ON DELETE CASCADE,
     item_id TEXT NOT NULL REFERENCES music_library_items(id) ON DELETE CASCADE,
     source_position INTEGER CHECK (source_position IS NULL OR source_position >= 0),
-    first_discovered_at INTEGER NOT NULL CHECK (first_discovered_at > 0),
+    first_discovered_at_ms INTEGER NOT NULL CHECK (first_discovered_at_ms > 0),
     last_seen_generation INTEGER NOT NULL DEFAULT 0 CHECK (last_seen_generation >= 0),
     missing_from_latest_snapshot INTEGER NOT NULL DEFAULT 0
         CHECK (missing_from_latest_snapshot IN (0, 1)),
@@ -1880,8 +1880,8 @@ CREATE INDEX idx_music_source_collection_items_order
 CREATE TABLE music_playlists (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
-    created_at INTEGER NOT NULL,
-    updated_at INTEGER NOT NULL,
+    created_at_ms INTEGER NOT NULL,
+    updated_at_ms INTEGER NOT NULL,
     icon TEXT NOT NULL DEFAULT 'lucide:list-music',
     shuffle_enabled INTEGER NOT NULL DEFAULT 0 CHECK (shuffle_enabled IN (0, 1)),
     repeat_mode TEXT NOT NULL DEFAULT 'all' CHECK (repeat_mode IN ('off', 'all', 'one')),
@@ -1911,8 +1911,8 @@ CREATE TABLE music_playlist_memberships (
     end_ms INTEGER CHECK (end_ms IS NULL OR end_ms >= 0),
     volume REAL CHECK (volume IS NULL OR (volume >= 0 AND volume <= 1)),
     rate REAL CHECK (rate IS NULL OR (rate >= 0.25 AND rate <= 2)),
-    created_at INTEGER NOT NULL CHECK (created_at > 0),
-    updated_at INTEGER NOT NULL CHECK (updated_at > 0),
+    created_at_ms INTEGER NOT NULL CHECK (created_at_ms > 0),
+    updated_at_ms INTEGER NOT NULL CHECK (updated_at_ms > 0),
     version INTEGER NOT NULL DEFAULT 1 CHECK (version > 0),
     UNIQUE (playlist_id, item_id),
     CHECK (start_ms IS NULL OR end_ms IS NULL OR end_ms >= start_ms)
@@ -1950,38 +1950,38 @@ CREATE TABLE music_recent_selections (
     playlist_id TEXT REFERENCES music_playlists(id) ON DELETE CASCADE,
     item_id TEXT NOT NULL REFERENCES music_library_items(id) ON DELETE CASCADE,
     selection_kind TEXT NOT NULL CHECK (selection_kind IN ('automatic', 'manual')),
-    selected_at INTEGER NOT NULL CHECK (selected_at > 0)
+    selected_at_ms INTEGER NOT NULL CHECK (selected_at_ms > 0)
 );
 CREATE INDEX idx_music_recent_selections_item
-    ON music_recent_selections(item_id, selected_at DESC, id DESC);
+    ON music_recent_selections(item_id, selected_at_ms DESC, id DESC);
 CREATE INDEX idx_music_recent_selections_playlist
-    ON music_recent_selections(playlist_id, selected_at DESC, id DESC);
+    ON music_recent_selections(playlist_id, selected_at_ms DESC, id DESC);
 
 CREATE TABLE music_snoozes (
     id TEXT PRIMARY KEY,
     item_id TEXT NOT NULL REFERENCES music_library_items(id) ON DELETE CASCADE,
     scope TEXT NOT NULL CHECK (scope IN ('playlist', 'all-playlists')),
     playlist_id TEXT REFERENCES music_playlists(id) ON DELETE CASCADE,
-    starts_at INTEGER NOT NULL CHECK (starts_at > 0),
-    ends_at INTEGER CHECK (ends_at IS NULL OR ends_at > starts_at),
+    starts_at_ms INTEGER NOT NULL CHECK (starts_at_ms > 0),
+    ends_at_ms INTEGER CHECK (ends_at_ms IS NULL OR ends_at_ms > starts_at_ms),
     reason TEXT NOT NULL DEFAULT '',
-    created_at INTEGER NOT NULL CHECK (created_at > 0),
+    created_at_ms INTEGER NOT NULL CHECK (created_at_ms > 0),
     CHECK (
         (scope = 'playlist' AND playlist_id IS NOT NULL)
         OR (scope = 'all-playlists' AND playlist_id IS NULL)
     )
 );
 CREATE INDEX idx_music_snoozes_active_item
-    ON music_snoozes(item_id, ends_at, starts_at);
+    ON music_snoozes(item_id, ends_at_ms, starts_at_ms);
 CREATE INDEX idx_music_snoozes_playlist
-    ON music_snoozes(playlist_id, item_id, ends_at);
+    ON music_snoozes(playlist_id, item_id, ends_at_ms);
 
 CREATE TABLE music_soundscape_groups (
     id TEXT PRIMARY KEY CHECK (trim(id) <> ''),
     name TEXT NOT NULL CHECK (trim(name) <> ''),
     icon TEXT NOT NULL CHECK (trim(icon) <> ''),
-    created_at INTEGER NOT NULL CHECK (created_at > 0),
-    updated_at INTEGER NOT NULL CHECK (updated_at > 0),
+    created_at_ms INTEGER NOT NULL CHECK (created_at_ms > 0),
+    updated_at_ms INTEGER NOT NULL CHECK (updated_at_ms > 0),
     version INTEGER NOT NULL DEFAULT 1 CHECK (version > 0)
 );
 
@@ -1998,8 +1998,8 @@ CREATE TABLE music_soundscapes (
     icon TEXT NOT NULL DEFAULT 'lucide:audio-lines' CHECK (trim(icon) <> ''),
     group_id TEXT REFERENCES music_soundscape_groups(id) ON DELETE SET NULL,
     availability TEXT NOT NULL CHECK (availability IN ('available', 'missing', 'unsupported')),
-    created_at INTEGER NOT NULL CHECK (created_at > 0),
-    updated_at INTEGER NOT NULL CHECK (updated_at > 0),
+    created_at_ms INTEGER NOT NULL CHECK (created_at_ms > 0),
+    updated_at_ms INTEGER NOT NULL CHECK (updated_at_ms > 0),
     version INTEGER NOT NULL DEFAULT 1 CHECK (version > 0),
     CHECK (
         (source_kind = 'generated-noise' AND generated_kind IS NOT NULL AND bundled_identity IS NULL)
@@ -2023,7 +2023,7 @@ CREATE TABLE music_soundscape_locations (
     availability TEXT NOT NULL CHECK (availability IN ('available', 'missing', 'unsupported')),
     file_size_bytes INTEGER CHECK (file_size_bytes IS NULL OR file_size_bytes >= 0),
     modified_at_ms INTEGER,
-    updated_at INTEGER NOT NULL CHECK (updated_at > 0),
+    updated_at_ms INTEGER NOT NULL CHECK (updated_at_ms > 0),
     PRIMARY KEY (soundscape_id, device_id)
 );
 CREATE INDEX idx_music_soundscape_locations_device
@@ -2037,7 +2037,7 @@ CREATE TABLE music_soundscape_state (
     local_level REAL CHECK (local_level IS NULL OR (local_level >= 0.0 AND local_level <= 2.0)),
     desired_playing INTEGER NOT NULL DEFAULT 0 CHECK (desired_playing IN (0, 1)),
     volume REAL NOT NULL DEFAULT 0.1 CHECK (volume >= 0.0 AND volume <= 1.0),
-    updated_at INTEGER NOT NULL CHECK (updated_at > 0),
+    updated_at_ms INTEGER NOT NULL CHECK (updated_at_ms > 0),
     version INTEGER NOT NULL DEFAULT 1 CHECK (version > 0),
     automatic_intent INTEGER NOT NULL DEFAULT 0 CHECK (automatic_intent IN (0, 1))
 );
@@ -2066,7 +2066,7 @@ CREATE TABLE music_context_assignments (
             'work-environment'
         )),
     provenance_id TEXT,
-    updated_at INTEGER NOT NULL CHECK (updated_at > 0),
+    updated_at_ms INTEGER NOT NULL CHECK (updated_at_ms > 0),
     version INTEGER NOT NULL DEFAULT 1 CHECK (version > 0),
     soundscape_behavior TEXT NOT NULL DEFAULT 'inherit'
         CHECK (soundscape_behavior IN (
@@ -2090,7 +2090,7 @@ CREATE TABLE music_session_checkpoints (
     session_id TEXT NOT NULL,
     revision INTEGER NOT NULL,
     checkpoint_json TEXT NOT NULL,
-    updated_at INTEGER NOT NULL
+    updated_at_ms INTEGER NOT NULL
 );
 
 CREATE TABLE music_session_receipts (
@@ -2098,7 +2098,7 @@ CREATE TABLE music_session_receipts (
     action_id TEXT NOT NULL,
     request_hash TEXT NOT NULL,
     result_json TEXT NOT NULL,
-    committed_at INTEGER NOT NULL,
+    committed_at_ms INTEGER NOT NULL,
     PRIMARY KEY (device_id, action_id)
 );
 
@@ -2106,14 +2106,14 @@ CREATE TABLE music_transfer_receipts (
     action_id TEXT PRIMARY KEY NOT NULL,
     request_hash TEXT NOT NULL,
     result_json TEXT NOT NULL,
-    committed_at INTEGER NOT NULL
+    committed_at_ms INTEGER NOT NULL
 );
 
 CREATE TABLE music_search_index_state (
     singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
     schema_version INTEGER NOT NULL CHECK (schema_version > 0),
     fingerprint TEXT NOT NULL,
-    rebuilt_at INTEGER NOT NULL CHECK (rebuilt_at > 0)
+    rebuilt_at_ms INTEGER NOT NULL CHECK (rebuilt_at_ms > 0)
 );
 
 CREATE VIRTUAL TABLE music_search_fts USING fts5(
@@ -2129,7 +2129,7 @@ CREATE VIRTUAL TABLE music_search_fts USING fts5(
 );
 
 
--- Notes: Pages, blocks, databases, comments, assets, history, and derived indexes. Notes rows use created_time and last_edited_time for content times; index rows use updated_at for the time they were written.
+-- Notes: Pages, blocks, databases, comments, assets, history, and derived indexes. Notes rows mirror the Notion object model, so content times are created_time and last_edited_time; index rows use updated_at for the time they were written.
 
 CREATE TABLE notes_local_users (
     id TEXT PRIMARY KEY CHECK (trim(id) <> ''),
@@ -3784,7 +3784,7 @@ BEGIN
 END;
 
 
--- Themes: Theme times are INTEGER Unix epoch milliseconds.
+-- Themes.
 
 CREATE TABLE themes (
     id TEXT PRIMARY KEY CHECK (id NOT IN ('light', 'dark')),
@@ -3792,8 +3792,8 @@ CREATE TABLE themes (
     blend_canvas TEXT NOT NULL,
     seed_blend_canvas TEXT NOT NULL,
     derivation_engine_version INTEGER NOT NULL,
-    created_at INTEGER NOT NULL,
-    updated_at INTEGER NOT NULL,
+    created_at_ms INTEGER NOT NULL,
+    updated_at_ms INTEGER NOT NULL,
     icon_label TEXT NOT NULL CHECK (icon_label IN ('light', 'dark')),
     seed_icon_label TEXT NOT NULL CHECK (seed_icon_label IN ('light', 'dark')),
     calendar_default_mode TEXT NOT NULL DEFAULT 'app-canvas' CHECK (calendar_default_mode IN ('light', 'dark', 'app-canvas', 'custom')),
@@ -3839,7 +3839,7 @@ CREATE INDEX idx_theme_tokens_kind ON theme_tokens(theme_id, kind);
 CREATE TABLE theme_upgrade_dismissals (
     theme_id TEXT NOT NULL REFERENCES themes(id) ON DELETE CASCADE,
     engine_version INTEGER NOT NULL,
-    dismissed_at INTEGER NOT NULL,
+    dismissed_at_ms INTEGER NOT NULL,
     PRIMARY KEY (theme_id, engine_version)
 );
 
@@ -6602,19 +6602,19 @@ VALUES (1, NULL);
 
 INSERT INTO music_soundscapes (
     id, source_kind, generated_kind, bundled_identity, name,
-    availability, created_at, updated_at, version
+    availability, created_at_ms, updated_at_ms, version
 ) VALUES
     ('generated-white-noise', 'generated-noise', 'white', NULL, 'White noise', 'available', CAST(strftime('%s', 'now') AS INTEGER) * 1000, CAST(strftime('%s', 'now') AS INTEGER) * 1000, 1),
     ('generated-pink-noise', 'generated-noise', 'pink', NULL, 'Pink noise', 'available', CAST(strftime('%s', 'now') AS INTEGER) * 1000, CAST(strftime('%s', 'now') AS INTEGER) * 1000, 1),
     ('generated-brown-noise', 'generated-noise', 'brown', NULL, 'Brown noise', 'available', CAST(strftime('%s', 'now') AS INTEGER) * 1000, CAST(strftime('%s', 'now') AS INTEGER) * 1000, 1);
 
 INSERT INTO music_soundscape_state (
-    singleton, active_soundscape_id, desired_playing, volume, updated_at, version
+    singleton, active_soundscape_id, desired_playing, volume, updated_at_ms, version
 ) VALUES (1, NULL, 0, 0.1, CAST(strftime('%s', 'now') AS INTEGER) * 1000, 1);
 
 INSERT INTO music_playlists (
     id, name, icon, shuffle_enabled, repeat_mode, sort_order,
-    created_at, updated_at, version
+    created_at_ms, updated_at_ms, version
 )
 VALUES
     ('playlist-default-start-of-day', 'Start of the day!', 'lucide:sunrise', 1, 'all', 0, 1, 1, 1),

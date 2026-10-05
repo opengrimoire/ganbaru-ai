@@ -20,10 +20,10 @@ function progress(state: MusicRefreshJobProgress["state"], jobId: string): Music
     truncatedCount: 0,
     absenceDetermined: state === "completed",
     statusMessage: state,
-    requestedAt: 1,
-    startedAt: 1,
-    finishedAt: state === "completed" ? 2 : null,
-    updatedAt: 2,
+    requestedAtMs: 1,
+    startedAtMs: 1,
+    finishedAtMs: state === "completed" ? 2 : null,
+    updatedAtMs: 2,
   };
 }
 
@@ -38,7 +38,7 @@ function local(collectionId: string): MusicSourceRefreshTarget {
       collectionId,
       folderPath: "/music",
       availableRoots: [{ rootId: collectionId, folderPath: "/music" }],
-      requestedAt: 1,
+      requestedAtMs: 1,
     },
   };
 }

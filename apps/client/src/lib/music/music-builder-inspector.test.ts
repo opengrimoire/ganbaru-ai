@@ -10,7 +10,7 @@ function detail(id: string): MusicInspectorDetail {
       originalTrackNumber: null, originalArtworkIdentity: null, youtubeResolutionState: null,
       titleOverride: null, artistOverride: null, albumOverride: null, artworkOverride: null,
       durationMs: null, availability: "available", reviewState: "unreviewed",
-      reviewChangedAt: null, reviewDeferredUntil: null, discoveredAt: 1, updatedAt: 1, version: 1,
+      reviewChangedAtMs: null, reviewDeferredUntilMs: null, discoveredAtMs: 1, updatedAtMs: 1, version: 1,
     },
     locations: [], memberships: [], membershipSkipRanges: [], snoozes: [], signals: [], statistics: null,
     sourceCollectionIds: [],

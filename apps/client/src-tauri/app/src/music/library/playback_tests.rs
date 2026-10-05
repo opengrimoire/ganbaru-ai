@@ -56,7 +56,7 @@ fn listening_updates_keep_aggregates_and_recent_selections_separate() {
         .unwrap();
 
         let statistics = sqlx::query_as::<_, (Option<i64>, i64, i64, i64)>(
-            "SELECT last_played_at, play_count, completion_count, skip_count
+            "SELECT last_played_at_ms, play_count, completion_count, skip_count
              FROM music_listening_statistics WHERE item_id = 'item-1'",
         )
         .fetch_one(&pool)
@@ -71,7 +71,7 @@ fn listening_updates_keep_aggregates_and_recent_selections_separate() {
             .await
             .unwrap();
         assert_eq!(recent.len(), 1);
-        assert_eq!(recent[0].selected_at, 1_700_000_000_001);
+        assert_eq!(recent[0].selected_at_ms, 1_700_000_000_001);
     });
 }
 
@@ -108,8 +108,8 @@ fn recent_selections_are_newest_first_and_bounded_per_playlist() {
         let recent = playback::recent_selections(&pool, Some("playlist-1".to_string()), 64)
             .await
             .unwrap();
-        assert_eq!(recent.first().unwrap().selected_at, 1_700_000_000_070);
-        assert_eq!(recent.last().unwrap().selected_at, 1_700_000_000_007);
+        assert_eq!(recent.first().unwrap().selected_at_ms, 1_700_000_000_070);
+        assert_eq!(recent.last().unwrap().selected_at_ms, 1_700_000_000_007);
         assert!(
             playback::recent_selections(&pool, Some("playlist-1".to_string()), 65,)
                 .await

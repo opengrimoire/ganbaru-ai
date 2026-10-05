@@ -3,7 +3,7 @@ import { groupMusicIssues, musicIssueGroup } from "$lib/music/music-issue-presen
 import type { MusicIssue } from "$lib/music/library-contracts";
 
 function issue(issueKind: string): MusicIssue {
-  return { id: issueKind, issueKind, itemId: null, playlistId: null, collectionId: null, rootId: null, relativePath: null, actionRequired: true, message: issueKind, createdAt: 1 };
+  return { id: issueKind, issueKind, itemId: null, playlistId: null, collectionId: null, rootId: null, relativePath: null, actionRequired: true, message: issueKind, createdAtMs: 1 };
 }
 
 describe("music issue presentation", () => {

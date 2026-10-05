@@ -113,7 +113,7 @@ impl Accounting {
             if !seen.insert(source.key.clone()) {
                 continue;
             }
-            for (date, started_at, milliseconds) in &windows {
+            for (date, started_at_ms, milliseconds) in &windows {
                 let key = (source.key.clone(), date.clone());
                 let total = self.fractions.get(&key).copied().unwrap_or(0) + milliseconds;
                 self.fractions.insert(key, total % 1_000);
@@ -121,7 +121,7 @@ impl Accounting {
                     continue;
                 }
                 let digest = Sha256::digest(
-                    format!("{identity}|{}|{date}|{started_at}", source.key).as_bytes(),
+                    format!("{identity}|{}|{date}|{started_at_ms}", source.key).as_bytes(),
                 );
                 samples.push(usage::normalize_usage_sample(
                     DistractionsUsageSampleInput {
@@ -129,7 +129,7 @@ impl Accounting {
                         source_type: "desktop-app".into(),
                         source_key: source.key.clone(),
                         display_name: Some(source.label.clone()),
-                        started_at: *started_at,
+                        started_at_ms: *started_at_ms,
                         elapsed_seconds: (total / 1_000) as i64,
                         local_date: date.clone(),
                     },

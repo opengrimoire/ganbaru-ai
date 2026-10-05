@@ -82,7 +82,7 @@ pub(super) async fn seed() -> sqlx::SqlitePool {
         INSERT INTO calendar_event_pomodoro_configs (event_id, rhythm_kind, rhythm_source) VALUES ('source', 'sequence', 'custom');
         INSERT INTO calendar_event_pomodoro_config_sequence_steps (event_id, step_index, focus_duration_minutes, break_phase, break_duration_minutes)
             VALUES ('source', 0, 25, 'short_break', 5);
-        INSERT INTO music_context_assignments (owner_kind, owner_id, phase, behavior, provenance_kind, updated_at)
+        INSERT INTO music_context_assignments (owner_kind, owner_id, phase, behavior, provenance_kind, updated_at_ms)
             VALUES ('event-snapshot', 'source', 'focus', 'keep-current-music', 'explicit', 1);
         INSERT INTO icalendar_component_properties (id, component_id, name, value_type)
             VALUES ('property', 'event', 'x-preserved', 'text'), ('zone-property', 'zone', 'tzid', 'text'),

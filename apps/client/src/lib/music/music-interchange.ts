@@ -7,7 +7,7 @@ export interface MusicTransferSource {
   contents: string;
   playlistName: string;
   relativeRootId: string | null;
-  selectedAt: number;
+  selectedAtMs: number;
 }
 
 /** A reviewed import action; preserve the complete request when retrying a lost response. */

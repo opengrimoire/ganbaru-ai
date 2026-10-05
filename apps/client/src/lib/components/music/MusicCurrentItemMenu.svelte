@@ -137,7 +137,7 @@
         removePlaylistIds,
         weightPlaylistIds: [],
         weight: null,
-        updatedAt: Date.now(),
+        updatedAtMs: Date.now(),
       });
       notifyMusicLibraryChanged();
       if (open && request === generation && itemId === targetItemId) {

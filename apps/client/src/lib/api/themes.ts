@@ -53,14 +53,14 @@ export interface ThemeRow {
   /** Decorative sun/moon tag for the theme list and editor icon. */
   icon_label: "light" | "dark";
   seed_icon_label: "light" | "dark";
-  created_at: number;
-  updated_at: number;
+  created_at_ms: number;
+  updated_at_ms: number;
 }
 
 export interface DismissalRow {
   theme_id: string;
   engine_version: number;
-  dismissed_at: number;
+  dismissed_at_ms: number;
 }
 
 /**
@@ -161,7 +161,7 @@ export async function deleteTheme(id: string): Promise<void> {
  * Children rows are wiped and re-inserted because the buffer can shift
  * any row's value or isolated flag arbitrarily; reconciling row-by-row
  * would not be cheaper. The parent themes row is updated in place so
- * created_at survives and dismissals are not cascaded.
+ * created_at_ms survives and dismissals are not cascaded.
  */
 export async function replaceThemeContent(write: UserThemeWrite): Promise<void> {
   await invoke<void>("theme_replace_content", {

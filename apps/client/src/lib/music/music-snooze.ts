@@ -3,10 +3,10 @@ import { Temporal } from "@js-temporal/polyfill";
 export type MusicSnoozePreset = "day" | "week" | "month";
 
 /** Recognizes a timed preset saved with its start and end instants. */
-export function musicSnoozePreset(startsAt: number, endsAt: number | null, timeZone: string): MusicSnoozePreset | null {
-  if (endsAt === null) return null;
+export function musicSnoozePreset(startsAtMs: number, endsAtMs: number | null, timeZone: string): MusicSnoozePreset | null {
+  if (endsAtMs === null) return null;
   for (const duration of ["day", "week", "month"] as const) {
-    if (musicSnoozeEndsAt(duration, startsAt, timeZone) === endsAt) return duration;
+    if (musicSnoozeEndsAt(duration, startsAtMs, timeZone) === endsAtMs) return duration;
   }
   return null;
 }

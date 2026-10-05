@@ -723,7 +723,7 @@
     try {
       const receipts = await reorderMusicPlaylists({
         playlists: next.map((entry) => ({ playlistId: entry.id, expectedVersion: entry.version })),
-        updatedAt: Date.now(),
+        updatedAtMs: Date.now(),
       });
       const versions = new Map(receipts.map((receipt) => [receipt.id, receipt.version]));
       library.playlistSummaries = next.map((entry) => ({ ...entry, version: versions.get(entry.id) ?? entry.version }));
@@ -842,7 +842,7 @@
       removePlaylistIds: [destination.playlistId],
       weightPlaylistIds: [],
       weight: null,
-      updatedAt: Date.now(),
+      updatedAtMs: Date.now(),
     });
     await library.refreshAfterMutation();
     await playlist.refreshActivePlayback(sources.bindings);
@@ -857,7 +857,7 @@
       removePlaylistIds: [],
       weightPlaylistIds: [destination.playlistId],
       weight,
-      updatedAt: Date.now(),
+      updatedAtMs: Date.now(),
     });
     await library.refreshAfterMutation();
     await playlist.refreshActivePlayback(sources.bindings);
@@ -867,35 +867,35 @@
     const now = Date.now();
     const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
     const existing = (await getMusicInspectorDetail(item.id)).snoozes;
-    const scoped = existing.filter((entry) => entry.startsAt <= now && (entry.endsAt === null || entry.endsAt > now)
+    const scoped = existing.filter((entry) => entry.startsAtMs <= now && (entry.endsAtMs === null || entry.endsAtMs > now)
       && (playlistId === null ? entry.scope === "all-playlists" : entry.scope === "playlist" && entry.playlistId === playlistId));
-    const turningOff = scoped.length === 1 && musicSnoozePreset(scoped[0].startsAt, scoped[0].endsAt, timeZone) === duration;
+    const turningOff = scoped.length === 1 && musicSnoozePreset(scoped[0].startsAtMs, scoped[0].endsAtMs, timeZone) === duration;
     await Promise.all(scoped.map((entry) => removeMusicSnooze(entry.id)));
-    const endsAt = musicSnoozeEndsAt(duration, now, timeZone);
+    const endsAtMs = musicSnoozeEndsAt(duration, now, timeZone);
     if (!turningOff) {
       await bulkSnoozeMusicItems({
         actionId: crypto.randomUUID(),
         itemIds: [item.id],
         scope: playlistId === null ? "all-playlists" : "playlist",
         playlistId,
-        startsAt: now,
-        endsAt,
+        startsAtMs: now,
+        endsAtMs,
         reason: "",
-        createdAt: now,
+        createdAtMs: now,
       });
     }
     const queueIndex = audition.musicPlayer.activeQueueItemIds.indexOf(item.id);
     if (queueIndex >= 0 && (playlistId === null || playlistId === audition.musicPlayer.activePlaylistId)) {
       if (turningOff) {
         const remaining = existing.filter((entry) => !scoped.some((removed) => removed.id === entry.id)
-          && entry.startsAt <= now && (entry.endsAt === null || entry.endsAt > now)
+          && entry.startsAtMs <= now && (entry.endsAtMs === null || entry.endsAtMs > now)
           && (audition.musicPlayer.activeSourceQueueId !== null
             || entry.scope === "all-playlists" || entry.playlistId === audition.musicPlayer.activePlaylistId));
         if (remaining.length === 0) audition.musicPlayer.clearQueueItemSnooze(queueIndex);
-        else audition.musicPlayer.applyQueueItemSnooze(queueIndex, remaining.some((entry) => entry.endsAt === null)
-          ? null : Math.max(...remaining.map((entry) => entry.endsAt ?? 0)));
+        else audition.musicPlayer.applyQueueItemSnooze(queueIndex, remaining.some((entry) => entry.endsAtMs === null)
+          ? null : Math.max(...remaining.map((entry) => entry.endsAtMs ?? 0)));
       } else {
-        audition.musicPlayer.applyQueueItemSnooze(queueIndex, endsAt);
+        audition.musicPlayer.applyQueueItemSnooze(queueIndex, endsAtMs);
       }
     }
     await library.refreshAfterMutation();
@@ -914,7 +914,7 @@
   async function removeItemSnoozes(item: MusicItemListEntry, playlistId: string | null): Promise<void> {
     const now = Date.now();
     const active = (await getMusicInspectorDetail(item.id)).snoozes.filter((entry) =>
-      entry.startsAt <= now && (entry.endsAt === null || entry.endsAt > now)
+      entry.startsAtMs <= now && (entry.endsAtMs === null || entry.endsAtMs > now)
       && (playlistId === null || entry.scope === "all-playlists" || entry.playlistId === playlistId));
     await Promise.all(active.map((entry) => removeMusicSnooze(entry.id)));
     const queueIndex = audition.musicPlayer.activeQueueItemIds.indexOf(item.id);

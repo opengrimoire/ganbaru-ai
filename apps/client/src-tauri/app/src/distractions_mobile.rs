@@ -67,10 +67,10 @@ struct PendingEvent {
     kind: String,
     package_name: String,
     display_name: String,
-    started_at: i64,
+    started_at_ms: i64,
     elapsed_seconds: i64,
     local_date: String,
-    occurred_at: i64,
+    occurred_at_ms: i64,
     reason: Option<String>,
     rule_id: Option<String>,
     run_id: Option<String>,
@@ -136,7 +136,7 @@ fn normalize_event(mut event: PendingEvent) -> Result<PendingEvent, String> {
     if !crate::distractions_limits::validate_local_date(&event.local_date) {
         return Err("mobile Distractions local date is invalid".to_string());
     }
-    if event.started_at < 0 || event.occurred_at < 0 {
+    if event.started_at_ms < 0 || event.occurred_at_ms < 0 {
         return Err("mobile Distractions timestamp is invalid".to_string());
     }
     if event.kind == "usage" && !(1..=86_400).contains(&event.elapsed_seconds) {
@@ -182,17 +182,17 @@ async fn import_events(pool: &SqlitePool, events: &[PendingEvent]) -> Result<(),
         if event.kind == "usage" {
             sqlx::query(
                 "INSERT OR IGNORE INTO distractions_usage_samples
-                    (id, source_type, source_key, display_name, started_at,
-                     elapsed_seconds, local_date, created_at)
+                    (id, source_type, source_key, display_name, started_at_ms,
+                     elapsed_seconds, local_date, created_at_ms)
                  VALUES (?, 'mobile-app', ?, ?, ?, ?, ?, ?)",
             )
             .bind(&event.id)
             .bind(&event.package_name)
             .bind(&event.display_name)
-            .bind(event.started_at)
+            .bind(event.started_at_ms)
             .bind(event.elapsed_seconds)
             .bind(&event.local_date)
-            .bind(event.occurred_at)
+            .bind(event.occurred_at_ms)
             .execute(&mut *transaction)
             .await
             .map_err(|error| format!("import mobile Distractions usage: {error}"))?;
@@ -211,7 +211,7 @@ async fn import_events(pool: &SqlitePool, events: &[PendingEvent]) -> Result<(),
         } else {
             None
         };
-        let occurred_at = DateTime::<Utc>::from_timestamp_millis(event.occurred_at)
+        let occurred_at = DateTime::<Utc>::from_timestamp_millis(event.occurred_at_ms)
             .ok_or_else(|| "mobile Distractions block timestamp is invalid".to_string())?
             .to_rfc3339_opts(SecondsFormat::Millis, true);
         let decision = if event.reason.as_deref() == Some("usage_limit") {
@@ -543,10 +543,10 @@ fn pending_event_message(
         source_type: "mobile-app".to_string(),
         source_key: event.package_name.clone(),
         display_name: Some(event.display_name.clone()),
-        started_at_unix_ms: event.started_at,
+        started_at_ms: event.started_at_ms,
         elapsed_seconds: event.elapsed_seconds,
         local_date: event.local_date.clone(),
-        created_at_unix_ms: event.occurred_at,
+        created_at_ms: event.occurred_at_ms,
     }
 }
 
@@ -560,10 +560,10 @@ mod tests {
             kind: "usage".into(),
             package_name: "com.example.video".into(),
             display_name: "Video".into(),
-            started_at: 1_000,
+            started_at_ms: 1_000,
             elapsed_seconds: 1,
             local_date: "2026-10-02".into(),
-            occurred_at: 2_000,
+            occurred_at_ms: 2_000,
             reason: None,
             rule_id: None,
             run_id: None,
@@ -620,7 +620,7 @@ mod tests {
             .as_millisecond();
         let pending: Vec<_> = ["local", "peer", "new"].into_iter().map(|id| serde_json::json!({
             "id": id, "kind": "usage", "packageName": "com.example.video", "displayName": "Video",
-            "startedAt": now - 1_000, "elapsedSeconds": 1, "occurredAt": now,
+            "startedAtMs": now - 1_000, "elapsedSeconds": 1, "occurredAtMs": now,
             "localDate": "2026-10-02", "vaultId": "vault",
         })).collect();
         let capture = projection::GuardianCapture::decode(&serde_json::json!({

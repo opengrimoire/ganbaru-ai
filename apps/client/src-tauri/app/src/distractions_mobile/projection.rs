@@ -362,8 +362,8 @@ mod tests {
     }
     fn pending_value() -> Value {
         json!({"id": "pending", "kind": "usage", "packageName": "com.example.video",
-            "displayName": "Video", "startedAt": now() - 2_000, "elapsedSeconds": 2,
-            "localDate": "2026-10-02", "occurredAt": now(), "vaultId": "vault"})
+            "displayName": "Video", "startedAtMs": now() - 2_000, "elapsedSeconds": 2,
+            "localDate": "2026-10-02", "occurredAtMs": now(), "vaultId": "vault"})
     }
     fn copy() -> NotificationCopy {
         NotificationCopy {
@@ -450,10 +450,10 @@ mod tests {
                 kind: "usage".into(),
                 package_name: "com.example.video".into(),
                 display_name: "Video".into(),
-                started_at: now() - 2_000,
+                started_at_ms: now() - 2_000,
                 elapsed_seconds: 2,
                 local_date: "2026-10-02".into(),
-                occurred_at: now(),
+                occurred_at_ms: now(),
                 reason: None,
                 rule_id: None,
                 run_id: None,

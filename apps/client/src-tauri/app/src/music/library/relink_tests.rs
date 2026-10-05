@@ -54,7 +54,7 @@ async fn pool() -> SqlitePool {
 
 async fn seed_root(pool: &SqlitePool) {
     sqlx::query(
-        "INSERT INTO music_local_roots (id, name, created_at, updated_at)
+        "INSERT INTO music_local_roots (id, name, created_at_ms, updated_at_ms)
          VALUES ('root-1', 'Soundtracks', 1, 1)",
     )
     .execute(pool)
@@ -62,7 +62,7 @@ async fn seed_root(pool: &SqlitePool) {
     .unwrap();
     sqlx::query(
         "INSERT INTO music_source_collections
-            (id, kind, identity_key, name, local_root_id, created_at, updated_at)
+            (id, kind, identity_key, name, local_root_id, created_at_ms, updated_at_ms)
          VALUES ('collection-1', 'local-root', 'root:1', 'Soundtracks', 'root-1', 1, 1)",
     )
     .execute(pool)
@@ -83,7 +83,7 @@ async fn seed_location(
     sqlx::query(
         "INSERT INTO music_library_items
             (id, identity_key, source_kind, media_kind, original_title,
-             availability, discovered_at, updated_at)
+             availability, discovered_at_ms, updated_at_ms)
          VALUES (?, ?, 'local-file', 'audio', ?, 'missing', 1, 1)",
     )
     .bind(item_id)
@@ -95,7 +95,7 @@ async fn seed_location(
     sqlx::query(
         "INSERT INTO music_local_locations
             (id, item_id, root_id, relative_path, file_size_bytes,
-             lightweight_fingerprint, availability, first_seen_at, updated_at)
+             lightweight_fingerprint, availability, first_seen_at_ms, updated_at_ms)
          VALUES (?, ?, 'root-1', ?, ?, ?, 'missing', 1, 1)",
     )
     .bind(location_id)
@@ -108,7 +108,7 @@ async fn seed_location(
     .unwrap();
     sqlx::query(
         "INSERT INTO music_source_collection_items
-            (collection_id, item_id, first_discovered_at)
+            (collection_id, item_id, first_discovered_at_ms)
          VALUES ('collection-1', ?, 1)",
     )
     .bind(item_id)
@@ -122,7 +122,7 @@ fn plan_request(folder: &TestDirectory, plan_id: &str) -> MusicRelinkPlanRequest
         plan_id: plan_id.to_string(),
         root_id: "root-1".to_string(),
         replacement_folder_path: folder.path().to_string_lossy().into_owned(),
-        created_at: 100,
+        created_at_ms: 100,
     }
 }
 
@@ -160,7 +160,7 @@ fn relink_plan_classifies_and_applies_reorganized_partial_roots() {
         )
         .await;
         sqlx::query(
-            "INSERT INTO music_playlists (id, name, created_at, updated_at)
+            "INSERT INTO music_playlists (id, name, created_at_ms, updated_at_ms)
              VALUES ('playlist-1', 'Focus', 1, 1)",
         )
         .execute(&pool)
@@ -168,7 +168,7 @@ fn relink_plan_classifies_and_applies_reorganized_partial_roots() {
         .unwrap();
         sqlx::query(
             "INSERT INTO music_playlist_memberships
-                (id, playlist_id, item_id, position, created_at, updated_at)
+                (id, playlist_id, item_id, position, created_at_ms, updated_at_ms)
              VALUES ('membership-1', 'playlist-1', 'item-likely', 0, 1, 1)",
         )
         .execute(&pool)

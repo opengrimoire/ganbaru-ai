@@ -20,8 +20,8 @@ function item(id: string, relativePath: string | null, sourceKind: "local-file" 
   return {
     id, identityKey: id, sourceKind, mediaKind: "audio", title: id, artist: "", album: "",
     localRootId: sourceKind === "local-file" ? "root-1" : null, relativePath, sourceCollectionIds: [], originalArtworkIdentity: null, artworkOverride: null, durationMs: null, availability: "available", reviewState: "unreviewed",
-    discoveredAt: 1, updatedAt: 1, version: 1, playlistCount: 0, activeSnoozeCount: 0,
-    lastPlayedAt: null, playCount: 0, membershipId: null, membershipPosition: null,
+    discoveredAtMs: 1, updatedAtMs: 1, version: 1, playlistCount: 0, activeSnoozeCount: 0,
+    lastPlayedAtMs: null, playCount: 0, membershipId: null, membershipPosition: null,
     membershipWeight: null, membershipEnabled: null, membershipVersion: null,
   };
 }

@@ -225,10 +225,10 @@ pub struct MusicLibraryItem {
     pub duration_ms: Option<i64>,
     pub availability: MusicItemAvailability,
     pub review_state: MusicReviewState,
-    pub review_changed_at: Option<i64>,
-    pub review_deferred_until: Option<i64>,
-    pub discovered_at: i64,
-    pub updated_at: i64,
+    pub review_changed_at_ms: Option<i64>,
+    pub review_deferred_until_ms: Option<i64>,
+    pub discovered_at_ms: i64,
+    pub updated_at_ms: i64,
     pub version: i64,
 }
 
@@ -237,8 +237,8 @@ pub struct MusicLibraryItem {
 pub struct MusicLocalRoot {
     pub id: String,
     pub name: String,
-    pub created_at: i64,
-    pub updated_at: i64,
+    pub created_at_ms: i64,
+    pub updated_at_ms: i64,
     pub version: i64,
 }
 
@@ -255,8 +255,8 @@ pub struct MusicLocalLocation {
     pub strong_fingerprint: Option<String>,
     pub availability: MusicLocationAvailability,
     pub last_seen_generation: Option<i64>,
-    pub first_seen_at: i64,
-    pub updated_at: i64,
+    pub first_seen_at_ms: i64,
+    pub updated_at_ms: i64,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -269,15 +269,15 @@ pub struct MusicSourceCollection {
     pub local_root_id: Option<String>,
     pub youtube_playlist_id: Option<String>,
     pub refresh_state: MusicRefreshState,
-    pub last_successful_refresh_at: Option<i64>,
-    pub previous_successful_refresh_at: Option<i64>,
+    pub last_successful_refresh_at_ms: Option<i64>,
+    pub previous_successful_refresh_at_ms: Option<i64>,
     pub last_refresh_error_code: Option<String>,
     pub snapshot_generation: i64,
-    pub created_at: i64,
-    pub updated_at: i64,
+    pub created_at_ms: i64,
+    pub updated_at_ms: i64,
     pub version: i64,
     pub discovery_enabled: bool,
-    pub removed_at: Option<i64>,
+    pub removed_at_ms: Option<i64>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -291,8 +291,8 @@ pub struct MusicPlaylist {
     pub repeat_mode: MusicRepeatMode,
     pub intended_uses: Vec<MusicIntendedUse>,
     pub sort_order: i64,
-    pub created_at: i64,
-    pub updated_at: i64,
+    pub created_at_ms: i64,
+    pub updated_at_ms: i64,
     pub version: i64,
 }
 
@@ -309,8 +309,8 @@ pub struct MusicPlaylistMembership {
     pub end_ms: Option<i64>,
     pub volume: Option<f64>,
     pub rate: Option<f64>,
-    pub created_at: i64,
-    pub updated_at: i64,
+    pub created_at_ms: i64,
+    pub updated_at_ms: i64,
     pub version: i64,
 }
 
@@ -321,21 +321,21 @@ pub struct MusicSnooze {
     pub item_id: String,
     pub scope: MusicSnoozeScope,
     pub playlist_id: Option<String>,
-    pub starts_at: i64,
-    pub ends_at: Option<i64>,
+    pub starts_at_ms: i64,
+    pub ends_at_ms: Option<i64>,
     pub reason: String,
-    pub created_at: i64,
+    pub created_at_ms: i64,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MusicListeningStatistics {
     pub item_id: String,
-    pub last_played_at: Option<i64>,
+    pub last_played_at_ms: Option<i64>,
     pub play_count: i64,
     pub completion_count: i64,
     pub skip_count: i64,
-    pub updated_at: i64,
+    pub updated_at_ms: i64,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -346,7 +346,7 @@ pub struct MusicLocalRefreshRequest {
     pub collection_id: String,
     pub folder_path: String,
     pub available_roots: Vec<MusicAvailableRootPath>,
-    pub requested_at: i64,
+    pub requested_at_ms: i64,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -364,7 +364,7 @@ pub struct MusicYouTubeVideoWrite {
     pub channel: String,
     pub duration_ms: Option<i64>,
     pub resolution_state: MusicYouTubeResolutionState,
-    pub resolved_at: i64,
+    pub resolved_at_ms: i64,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -376,7 +376,7 @@ pub struct MusicYouTubePlaylistSnapshotWrite {
     pub video_ids: Vec<String>,
     #[serde(default)]
     pub videos: Vec<MusicYouTubePlaylistVideoWrite>,
-    pub resolved_at: i64,
+    pub resolved_at_ms: i64,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -424,10 +424,10 @@ pub struct MusicRefreshJobProgress {
     pub truncated_count: i64,
     pub absence_determined: bool,
     pub status_message: String,
-    pub requested_at: i64,
-    pub started_at: Option<i64>,
-    pub finished_at: Option<i64>,
-    pub updated_at: i64,
+    pub requested_at_ms: i64,
+    pub started_at_ms: Option<i64>,
+    pub finished_at_ms: Option<i64>,
+    pub updated_at_ms: i64,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -437,7 +437,7 @@ pub struct MusicLocalRootCreate {
     pub collection_id: String,
     pub identity_key: String,
     pub name: String,
-    pub created_at: i64,
+    pub created_at_ms: i64,
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -482,7 +482,7 @@ pub struct MusicCollectionWrite {
     pub name: String,
     pub local_root_id: Option<String>,
     pub youtube_playlist_id: Option<String>,
-    pub updated_at: i64,
+    pub updated_at_ms: i64,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -496,7 +496,7 @@ pub struct MusicPlaylistCreate {
     pub mix_enabled: bool,
     pub repeat_mode: MusicRepeatMode,
     pub intended_uses: Vec<MusicIntendedUse>,
-    pub created_at: i64,
+    pub created_at_ms: i64,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -511,7 +511,7 @@ pub struct MusicPlaylistUpdate {
     pub repeat_mode: MusicRepeatMode,
     pub intended_uses: Vec<MusicIntendedUse>,
     pub expected_version: i64,
-    pub updated_at: i64,
+    pub updated_at_ms: i64,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -525,7 +525,7 @@ pub struct MusicPlaylistOrderEntry {
 #[serde(rename_all = "camelCase")]
 pub struct MusicPlaylistsReorder {
     pub playlists: Vec<MusicPlaylistOrderEntry>,
-    pub updated_at: i64,
+    pub updated_at_ms: i64,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -542,7 +542,7 @@ pub struct MusicMembershipWrite {
     pub volume: Option<f64>,
     pub rate: Option<f64>,
     pub expected_version: Option<i64>,
-    pub updated_at: i64,
+    pub updated_at_ms: i64,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -560,7 +560,7 @@ pub struct MusicBulkMembershipEdit {
     pub remove_playlist_ids: Vec<String>,
     pub weight_playlist_ids: Vec<String>,
     pub weight: Option<MusicWeight>,
-    pub updated_at: i64,
+    pub updated_at_ms: i64,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -583,7 +583,7 @@ pub struct MusicPlaylistReorder {
     pub playlist_id: String,
     pub item_id: String,
     pub target_index: i64,
-    pub updated_at: i64,
+    pub updated_at_ms: i64,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -646,7 +646,7 @@ pub struct MusicListeningUpdate {
 #[cfg(test)]
 pub struct MusicRecentSelection {
     pub item_id: String,
-    pub selected_at: i64,
+    pub selected_at_ms: i64,
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -662,8 +662,8 @@ pub struct MusicSoundscapeDefinition {
     pub group_id: Option<String>,
     pub availability: MusicSoundscapeAvailability,
     pub local_path: Option<String>,
-    pub created_at: i64,
-    pub updated_at: i64,
+    pub created_at_ms: i64,
+    pub updated_at_ms: i64,
     pub version: i64,
 }
 
@@ -681,7 +681,7 @@ pub struct MusicSoundscapeWrite {
     pub device_id: String,
     pub local_path: Option<String>,
     pub expected_version: Option<i64>,
-    pub updated_at: i64,
+    pub updated_at_ms: i64,
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -691,8 +691,8 @@ pub struct MusicSoundscapeGroup {
     pub id: String,
     pub name: String,
     pub icon: String,
-    pub created_at: i64,
-    pub updated_at: i64,
+    pub created_at_ms: i64,
+    pub updated_at_ms: i64,
     pub version: i64,
 }
 
@@ -704,7 +704,7 @@ pub struct MusicSoundscapeGroupWrite {
     pub name: String,
     pub icon: String,
     pub expected_version: Option<i64>,
-    pub updated_at: i64,
+    pub updated_at_ms: i64,
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -720,7 +720,7 @@ pub struct MusicSoundscapeState {
     pub local_level: Option<f64>,
     pub desired_playing: bool,
     pub volume: f64,
-    pub updated_at: i64,
+    pub updated_at_ms: i64,
     pub version: i64,
 }
 
@@ -736,7 +736,7 @@ pub struct MusicSoundscapeStateWrite {
     pub desired_playing: bool,
     pub volume: f64,
     pub expected_version: i64,
-    pub updated_at: i64,
+    pub updated_at_ms: i64,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -752,7 +752,7 @@ pub struct MusicBulkReviewWrite {
     pub items: Vec<MusicVersionedItem>,
     pub review_state: MusicReviewState,
     pub deferred_until: Option<i64>,
-    pub updated_at: i64,
+    pub updated_at_ms: i64,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -763,7 +763,7 @@ pub struct MusicReviewSelectionWrite {
     pub review_state: MusicReviewState,
     pub add_playlist_ids: Vec<String>,
     pub remove_playlist_ids: Vec<String>,
-    pub updated_at: i64,
+    pub updated_at_ms: i64,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -781,10 +781,10 @@ pub struct MusicBulkSnoozeWrite {
     pub item_ids: Vec<String>,
     pub scope: MusicSnoozeScope,
     pub playlist_id: Option<String>,
-    pub starts_at: i64,
-    pub ends_at: Option<i64>,
+    pub starts_at_ms: i64,
+    pub ends_at_ms: Option<i64>,
     pub reason: String,
-    pub created_at: i64,
+    pub created_at_ms: i64,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -800,7 +800,7 @@ pub struct MusicPlaylistDuplicate {
     pub source_playlist_id: String,
     pub new_playlist_id: String,
     pub name: String,
-    pub created_at: i64,
+    pub created_at_ms: i64,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
@@ -838,7 +838,7 @@ pub struct MusicReviewWrite {
     pub review_state: MusicReviewState,
     pub deferred_until: Option<i64>,
     pub expected_version: i64,
-    pub updated_at: i64,
+    pub updated_at_ms: i64,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -850,7 +850,7 @@ pub struct MusicMetadataOverrideWrite {
     pub album_override: Option<String>,
     pub artwork_override: Option<String>,
     pub expected_version: i64,
-    pub updated_at: i64,
+    pub updated_at_ms: i64,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -858,7 +858,7 @@ pub struct MusicMetadataOverrideWrite {
 pub struct MusicItemSignalsWrite {
     pub item_ids: Vec<String>,
     pub signals: Vec<MusicItemSignal>,
-    pub updated_at: i64,
+    pub updated_at_ms: i64,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
@@ -928,12 +928,12 @@ pub struct MusicItemListEntry {
     pub duration_ms: Option<i64>,
     pub availability: MusicItemAvailability,
     pub review_state: MusicReviewState,
-    pub discovered_at: i64,
-    pub updated_at: i64,
+    pub discovered_at_ms: i64,
+    pub updated_at_ms: i64,
     pub version: i64,
     pub playlist_count: i64,
     pub active_snooze_count: i64,
-    pub last_played_at: Option<i64>,
+    pub last_played_at_ms: Option<i64>,
     pub play_count: i64,
     pub membership_id: Option<String>,
     pub membership_position: Option<i64>,
@@ -986,7 +986,7 @@ pub struct MusicSourceSummary {
     pub kind: MusicCollectionKind,
     pub name: String,
     pub refresh_state: MusicRefreshState,
-    pub last_successful_refresh_at: Option<i64>,
+    pub last_successful_refresh_at_ms: Option<i64>,
     pub local_root_id: Option<String>,
     pub youtube_playlist_id: Option<String>,
     pub item_count: i64,
@@ -1013,7 +1013,7 @@ pub struct MusicIssue {
     pub relative_path: Option<String>,
     pub action_required: bool,
     pub message: String,
-    pub created_at: i64,
+    pub created_at_ms: i64,
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -1023,7 +1023,7 @@ pub struct MusicRelinkPlanRequest {
     pub plan_id: String,
     pub root_id: String,
     pub replacement_folder_path: String,
-    pub created_at: i64,
+    pub created_at_ms: i64,
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -1038,8 +1038,8 @@ pub struct MusicRelinkPlanSummary {
     pub ambiguous_count: i64,
     pub missing_count: i64,
     pub new_count: i64,
-    pub created_at: i64,
-    pub updated_at: i64,
+    pub created_at_ms: i64,
+    pub updated_at_ms: i64,
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -1054,7 +1054,7 @@ pub struct MusicRelinkPlanEntry {
     pub candidate_item_ids: Vec<String>,
     pub file_size_bytes: Option<i64>,
     pub resolved_item_id: Option<String>,
-    pub resolved_at: Option<i64>,
+    pub resolved_at_ms: Option<i64>,
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -1102,7 +1102,7 @@ pub struct MusicSourceRemovalRequest {
     pub expected_version: i64,
     pub expected_impact: MusicSourceRemovalImpact,
     pub remove_orphaned_items: bool,
-    pub removed_at: i64,
+    pub removed_at_ms: i64,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -1124,7 +1124,7 @@ pub struct MusicSearchRebuildResult {
     pub indexed_item_count: i64,
     pub schema_version: i64,
     pub fingerprint: String,
-    pub rebuilt_at: i64,
+    pub rebuilt_at_ms: i64,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -1160,8 +1160,8 @@ pub struct MusicInterchangeRange {
 #[serde(rename_all = "camelCase")]
 pub struct MusicInterchangeSnooze {
     pub scope: MusicSnoozeScope,
-    pub starts_at: i64,
-    pub ends_at: Option<i64>,
+    pub starts_at_ms: i64,
+    pub ends_at_ms: Option<i64>,
     pub reason: String,
 }
 

@@ -31,12 +31,12 @@ const item = {
   durationMs: 120_000,
   availability: "available",
   reviewState: "unreviewed",
-  discoveredAt: 1,
-  updatedAt: 1,
+  discoveredAtMs: 1,
+  updatedAtMs: 1,
   version: 1,
   playlistCount: 0,
   activeSnoozeCount: 0,
-  lastPlayedAt: null,
+  lastPlayedAtMs: null,
   playCount: 0,
   membershipId: null,
   membershipPosition: null,
@@ -85,8 +85,8 @@ describe("music library contracts", () => {
         youtubeVideoId: null, originalTitle: "Focus", originalArtist: "", originalAlbum: "",
         originalTrackNumber: null, originalArtworkIdentity: null, youtubeResolutionState: null,
         titleOverride: null, artistOverride: null, albumOverride: null, artworkOverride: null,
-        durationMs: null, availability: "available", reviewState: "reviewed", reviewChangedAt: null, reviewDeferredUntil: null,
-        discoveredAt: 1, updatedAt: 1, version: 1,
+        durationMs: null, availability: "available", reviewState: "reviewed", reviewChangedAtMs: null, reviewDeferredUntilMs: null,
+        discoveredAtMs: 1, updatedAtMs: 1, version: 1,
       },
       locations: [], memberships: [], membershipSkipRanges: [], snoozes: [], signals: ["invented"],
       statistics: null, sourceCollectionIds: [],
@@ -106,8 +106,8 @@ describe("music library contracts", () => {
       kind: "local-root", state: "running", generation: 2,
       discoveredCount: 6000, processedCount: 128, skippedCount: 3,
       issueCount: 1, truncatedCount: 0, absenceDetermined: false,
-      statusMessage: "Cataloging discovered media.", requestedAt: 1,
-      startedAt: 2, finishedAt: null, updatedAt: 3,
+      statusMessage: "Cataloging discovered media.", requestedAtMs: 1,
+      startedAtMs: 2, finishedAtMs: null, updatedAtMs: 3,
     });
     expect(progress.processedCount).toBe(128);
     expect(() => parseRefreshJobProgress({ ...progress, state: "stuck" }))
@@ -134,7 +134,7 @@ describe("music library contracts", () => {
   it("validates actionable source health and repair context", () => {
     const source = parseSourceSummaries([{
       id: "source-1", kind: "local-root", name: "Soundtracks", refreshState: "partial",
-      lastSuccessfulRefreshAt: 10, localRootId: "root-1", youtubePlaylistId: null,
+      lastSuccessfulRefreshAtMs: 10, localRootId: "root-1", youtubePlaylistId: null,
       itemCount: 5, missingCount: 1, newCount: 2, unreviewedCount: 3,
       unavailableCount: 0, ambiguousCount: 1, openIssueCount: 2,
       health: "issues", discoveryEnabled: true, version: 4,
@@ -143,7 +143,7 @@ describe("music library contracts", () => {
     const issue = parseIssues([{
       id: "issue-1", issueKind: "relink-ambiguous", itemId: null, playlistId: null,
       collectionId: "source-1", rootId: "root-1", relativePath: "Album/Track.mp3",
-      actionRequired: true, message: "Choose a match.", createdAt: 10,
+      actionRequired: true, message: "Choose a match.", createdAtMs: 10,
     }])[0];
     expect(issue).toMatchObject({ collectionId: "source-1", actionRequired: true });
   });
@@ -152,14 +152,14 @@ describe("music library contracts", () => {
     expect(parseRelinkPlanSummary({
       id: "plan-1", rootId: "root-1", state: "ready", exactCount: 1,
       likelyCount: 2, ambiguousCount: 1, missingCount: 1, newCount: 3,
-      createdAt: 10, updatedAt: 11,
+      createdAtMs: 10, updatedAtMs: 11,
     }).state).toBe("ready");
     expect(parseRelinkPlanWindow({
       entries: [{
         id: "entry-1", matchKind: "ambiguous", oldLocationId: null,
         suggestedItemId: null, candidateRelativePath: "Track.mp3",
         candidateItemIds: ["item-1", "item-2"], fileSizeBytes: 100,
-        resolvedItemId: null, resolvedAt: null,
+        resolvedItemId: null, resolvedAtMs: null,
       }],
       totalCount: 1, offset: 0, limit: 20,
     }).entries[0]?.candidateItemIds).toHaveLength(2);

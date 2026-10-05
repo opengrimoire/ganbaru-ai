@@ -10,7 +10,7 @@ fn source() -> MusicTransferSource {
         .unwrap(),
         playlist_name: "Imported playlist".to_string(),
         relative_root_id: None,
-        selected_at: 1_700_000_000_000,
+        selected_at_ms: 1_700_000_000_000,
     }
 }
 
@@ -94,7 +94,7 @@ fn music_transfer_admits_database_bytes_before_loading_selected_families() {
             let pool = super::tests::pool().await;
             let initial = reviewed(&pool, source(), "initial").await;
             transfer::commit(&pool, initial, &[]).await.unwrap();
-            sqlx::query("INSERT INTO music_context_assignments (owner_kind, owner_id, phase, behavior, playlist_id, provenance_kind, updated_at) VALUES ('project-default', 'project', 'focus', 'play-automatically', 'playlist-1', 'explicit', 1700000000000)")
+            sqlx::query("INSERT INTO music_context_assignments (owner_kind, owner_id, phase, behavior, playlist_id, provenance_kind, updated_at_ms) VALUES ('project-default', 'project', 'focus', 'play-automatically', 'playlist-1', 'explicit', 1700000000000)")
                 .execute(&pool).await.unwrap();
             let changed = sqlx::query(statement)
                 .bind(&oversized)
@@ -273,7 +273,7 @@ fn music_transfer_matches_only_incoming_records_in_a_larger_library() {
         let pool = super::tests::pool().await;
         let initial = reviewed(&pool, source(), "initial").await;
         transfer::commit(&pool, initial, &[]).await.unwrap();
-        sqlx::query("WITH RECURSIVE numbers(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM numbers WHERE n < 12000) INSERT INTO music_library_items (id, identity_key, source_kind, original_title, discovered_at, updated_at) SELECT 'unrelated-' || n, 'unrelated:' || n, 'local-file', 'Unrelated', 1700000000000, 1700000000000 FROM numbers").execute(&pool).await.unwrap();
+        sqlx::query("WITH RECURSIVE numbers(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM numbers WHERE n < 12000) INSERT INTO music_library_items (id, identity_key, source_kind, original_title, discovered_at_ms, updated_at_ms) SELECT 'unrelated-' || n, 'unrelated:' || n, 'local-file', 'Unrelated', 1700000000000, 1700000000000 FROM numbers").execute(&pool).await.unwrap();
         let preview = transfer::preview(&pool, &source(), &[]).await.unwrap();
         assert_eq!((preview.matched_items, preview.new_items), (1, 0));
         let mut transaction = pool.begin().await.unwrap();

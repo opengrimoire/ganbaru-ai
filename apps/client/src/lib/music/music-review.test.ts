@@ -36,12 +36,12 @@ function detail(sourceKind: "local-file" | "youtube-video"): MusicInspectorDetai
       originalTrackNumber: null, originalArtworkIdentity: null, youtubeResolutionState: null,
       titleOverride: null, artistOverride: null, albumOverride: null, artworkOverride: null,
       durationMs: 1000, availability: "available", reviewState: "unreviewed",
-      reviewChangedAt: null, reviewDeferredUntil: null, discoveredAt: 1, updatedAt: 1, version: 1,
+      reviewChangedAtMs: null, reviewDeferredUntilMs: null, discoveredAtMs: 1, updatedAtMs: 1, version: 1,
     },
     locations: sourceKind === "local-file" ? [{
       id: "location", itemId: "item", rootId: "root", relativePath: "album/song.flac",
       fileSizeBytes: 1, modifiedAtMs: 1, lightweightFingerprint: "a", strongFingerprint: "b",
-      availability: "available", lastSeenGeneration: 1, firstSeenAt: 1, updatedAt: 1,
+      availability: "available", lastSeenGeneration: 1, firstSeenAtMs: 1, updatedAtMs: 1,
     }] : [],
     memberships: [], membershipSkipRanges: [], snoozes: [], signals: [], statistics: null, sourceCollectionIds: [],
   };

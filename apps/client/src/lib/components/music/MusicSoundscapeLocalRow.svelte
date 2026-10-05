@@ -51,7 +51,7 @@
         groupId: definition.groupId,
         localPath: definition.localPath,
         expectedVersion: definition.version,
-        updatedAt: Date.now(),
+        updatedAtMs: Date.now(),
       });
       editing = false;
     } catch (error) {
@@ -73,7 +73,7 @@
         groupId,
         localPath: definition.localPath,
         expectedVersion: definition.version,
-        updatedAt: Date.now(),
+        updatedAtMs: Date.now(),
       });
     } catch (error) {
       console.error("Could not move background sound", error);

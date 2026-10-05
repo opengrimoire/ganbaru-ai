@@ -32,11 +32,17 @@ Identity and time encodings are domain-specific contracts, not global assumption
 
 Many user-authored entities use client-generated UUID text, but stable semantic IDs, hashes, compound source identities, singleton IDs, and built-in values such as the local calendar are also valid. New IDs must be globally stable where synchronization or import requires it and must not expose authority through guessability.
 
-Calendar, Pomodoro, Notes, Projects, and Chat primarily use normalized text timestamps. Music and the distraction blocker also use integer epoch milliseconds in established contracts. A new field follows its domain convention and documents timezone or precision semantics. Do not claim that every timestamp has a Z suffix or convert an established encoding without migration.
+Calendar, Pomodoro, Notes, Projects, and Chat primarily use normalized text timestamps named `*_at`. Integer Unix epoch milliseconds always carry an `_ms` suffix (`created_at_ms`, `review_deferred_until_ms`), both in columns and in the Rust and TypeScript contracts that carry them (`createdAtMs`), so the encoding is visible from the name. Music, themes, and distraction usage samples use integer milliseconds. Notes pages and blocks keep `created_time` and `last_edited_time` because they mirror the Notion object model. A new field follows its domain convention and documents timezone or precision semantics. Do not claim that every timestamp has a Z suffix.
 
 SQLite foreign-key enforcement is required on every connection. Constraints and triggers protect invariants that must hold regardless of caller. Application services still validate first so users receive domain-specific errors rather than raw constraint failures.
 
-Foreign keys that must block deleting a referenced row use `ON DELETE NO ACTION`, not `RESTRICT`. SQLite checks `RESTRICT` immediately, so a cascade that removes both rows in one statement could fail depending on table creation order; `NO ACTION` is checked when the statement ends, which keeps deletes independent of table order. The baseline groups tables by domain with parents before children and each table's indexes beside it, and index names follow `idx_<table>_<purpose>`.
+Foreign keys that must block deleting a referenced row use `ON DELETE NO ACTION`, not `RESTRICT`. SQLite checks `RESTRICT` immediately, so a cascade that removes both rows in one statement could fail depending on table creation order; `NO ACTION` is checked when the statement ends, which keeps deletes independent of table order.
+
+## Naming and layout
+
+Table names are plural snake case and start with their owner. Domains that hold many independent aggregates use the domain name (`notes_`, `music_`, `chat_`, `pomodoro_`, `distractions_`, `calendar_`); child tables of a single aggregate root use the root in singular form (`project_tasks`, `quick_note_tags`, `theme_tokens`). Preserved iCalendar data uses `icalendar_` because it mirrors RFC 5545 objects rather than app concepts. Booleans are `INTEGER` 0 or 1 guarded by a `CHECK`, and index names follow `idx_<table>_<purpose>`.
+
+The baseline groups tables by domain with parents before children, follows each table with its indexes, ends each section with its triggers, and seeds data last. New migrations keep new objects in the same naming scheme.
 
 ## Canonical, derived, and device-local state
 

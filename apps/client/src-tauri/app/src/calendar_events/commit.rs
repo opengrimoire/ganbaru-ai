@@ -287,7 +287,7 @@ impl CommitRequest {
         if result.len() > MAX_RECEIPT_BYTES {
             return Err("Calendar receipt exceeds its byte limit".into());
         }
-        sqlx::query("INSERT INTO calendar_edit_receipts (command_id, intent_hash, result_json, created_at) VALUES (?, ?, ?, ?)")
+        sqlx::query("INSERT INTO calendar_edit_receipts (command_id, intent_hash, result_json, created_at_ms) VALUES (?, ?, ?, ?)")
             .bind(&self.command_id).bind(self.intent_hash()?).bind(result)
             .bind(now_ms).execute(&mut **tx).await.map_err(|error| format!("record Calendar edit receipt: {error}"))?;
         Ok(())

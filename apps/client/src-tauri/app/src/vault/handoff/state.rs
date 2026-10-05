@@ -80,7 +80,7 @@ struct RevokedPeer {
     vault_id: String,
     certificate: String,
     certificate_fingerprint: String,
-    revoked_at_unix_ms: i64,
+    revoked_at_ms: i64,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -444,7 +444,7 @@ impl PairingManager {
         vault_id: String,
         generation: u64,
         compatibility: HandoffCompatibility,
-        now_unix_ms: i64,
+        now_ms: i64,
     ) -> Result<PairingInvitation, String> {
         validate_identifier("vault id", &vault_id)?;
         compatibility.validate()?;
@@ -462,7 +462,7 @@ impl PairingManager {
             coordinator_device_id: state.identity.device_id.clone(),
             vault_id,
             generation,
-            expires_at_unix_ms: now_unix_ms.saturating_add(INVITATION_LIFETIME_MS),
+            expires_at_ms: now_ms.saturating_add(INVITATION_LIFETIME_MS),
         };
         inner.invitations.clear();
         inner.invitations.insert(
@@ -478,7 +478,7 @@ impl PairingManager {
     pub(crate) fn enroll_peer(
         &self,
         enrollment: Enrollment<'_>,
-        now_unix_ms: i64,
+        now_ms: i64,
     ) -> Result<LinkedPeer, String> {
         validate_identifier("device id", enrollment.device_id)?;
         let certificate = decode_certificate(enrollment.certificate_b64)?;
@@ -487,7 +487,7 @@ impl PairingManager {
             .invitations
             .get(enrollment.invitation_id)
             .ok_or_else(|| "pairing invitation is unknown or already used".to_string())?;
-        pending.invitation.validate(now_unix_ms)?;
+        pending.invitation.validate(now_ms)?;
         if pending.invitation.vault_id != enrollment.vault_id
             || !constant_time_equal(
                 pending.invitation.secret.as_bytes(),
@@ -743,7 +743,7 @@ fn constant_time_equal(left: &[u8], right: &[u8]) -> bool {
     difference == 0
 }
 
-fn remember_revoked_peer(state: &mut PairingStateFile, peer: LinkedPeer, revoked_at_unix_ms: i64) {
+fn remember_revoked_peer(state: &mut PairingStateFile, peer: LinkedPeer, revoked_at_ms: i64) {
     state.revoked_peers.insert(
         peer.device_id.clone(),
         RevokedPeer {
@@ -751,14 +751,14 @@ fn remember_revoked_peer(state: &mut PairingStateFile, peer: LinkedPeer, revoked
             vault_id: peer.vault_id,
             certificate: peer.certificate,
             certificate_fingerprint: peer.certificate_fingerprint,
-            revoked_at_unix_ms,
+            revoked_at_ms,
         },
     );
     while state.revoked_peers.len() > MAX_REVOKED_PEERS {
         let Some(oldest_device_id) = state
             .revoked_peers
             .values()
-            .min_by_key(|peer| (peer.revoked_at_unix_ms, peer.device_id.as_str()))
+            .min_by_key(|peer| (peer.revoked_at_ms, peer.device_id.as_str()))
             .map(|peer| peer.device_id.clone())
         else {
             break;
