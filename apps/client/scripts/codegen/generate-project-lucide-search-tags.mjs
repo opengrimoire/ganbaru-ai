@@ -20,9 +20,9 @@ const catalogPath = path.join(
   "lucide-catalog.generated.ts",
 );
 const catalogEntryPattern = /^(\s*\{ slug: )("(?:[^"\\]|\\.)*")(, label: )("(?:[^"\\]|\\.)*")(, category: )("(?:[^"\\]|\\.)*")(, terms: )("(?:[^"\\]|\\.)*")(, iconNode: .*)$/u;
-const generatedHeaderPattern = /^\/\/ Lucide English search tags generated from lucide-static@[^\n]+\n\/\/ Source: [^\n]+\n\n/u;
+const generatedHeaderPattern = /^\/\/ Lucide English search tags generated from lucide-static@[^\n]+\n\/\/ Source: [^\n]+\n/u;
 const appSuppliedTagsBySlug = new Map([
-  ["sport-shoe", ["sport", "shoe", "sneaker", "running", "exercise", "fitness", "footwear"]],
+  ["sport-shoe", ["sneaker", "running", "exercise", "fitness", "footwear"]],
 ]);
 
 function normalizedTerm(value) {
@@ -103,6 +103,6 @@ if (missingTags.length > 0) {
   throw new Error(`Lucide tags are missing for: ${missingTags.slice(0, 10).join(", ")}`);
 }
 
-const header = `// Lucide English search tags generated from lucide-static@${lucideVersion}.\n// Source: ${sourceUrl}\n\n`;
+const header = `// Lucide English search tags generated from lucide-static@${lucideVersion}.\n// Source: ${sourceUrl}\n`;
 await writeFile(catalogPath, `${header}${updatedCatalog}`, "utf8");
 process.stdout.write(`Updated English search tags for ${updatedEntryCount} Lucide icons.\n`);
