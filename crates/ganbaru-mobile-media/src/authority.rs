@@ -14,7 +14,7 @@ pub fn set_music_authority_checker(
         .map_err(|_| "Android Music authority is already installed".to_string())
 }
 
-fn checked(checker: Option<&Checker>, delivery_id: i64) -> bool {
+fn is_delivery_current(checker: Option<&Checker>, delivery_id: i64) -> bool {
     if delivery_id <= 0 {
         return false;
     }
@@ -36,14 +36,17 @@ fn checked(checker: Option<&Checker>, delivery_id: i64) -> bool {
 // SAFETY: The unique symbol matches Kotlin's static isCurrent(long): boolean.
 // JNI passes two ignored opaque pointers and one signed 64-bit jlong, and reads
 // an unsigned 8-bit jboolean. The process-lifetime checker uses safe cached reads.
-// All callback panics, including panic-on-drop payloads, are contained by checked.
-#[unsafe(export_name = "Java_app_ganbaru_mobile_1media_NativeMusicAuthority_isCurrent")]
+// All callback panics, including panic-on-drop payloads, are contained by is_delivery_current.
+#[unsafe(export_name = "Java_org_opengrimoire_ganbaruai_mobile_media_NativeMusicAuthority_isCurrent")]
 pub extern "system" fn native_music_is_current(
     _environment: *mut std::ffi::c_void,
     _class: *mut std::ffi::c_void,
     delivery_id: i64,
 ) -> u8 {
-    u8::from(checked(CHECKER.get().map(Box::as_ref), delivery_id))
+    u8::from(is_delivery_current(
+        CHECKER.get().map(Box::as_ref),
+        delivery_id,
+    ))
 }
 
 #[cfg(test)]
@@ -53,11 +56,11 @@ mod tests {
     #[test]
     fn unavailable_invalid_or_revoked_delivery_cannot_reach_the_decoder() {
         let checker = |id| id == 2;
-        assert!(!checked(None, 2));
-        assert!(!checked(Some(&checker), 0));
-        assert!(!checked(Some(&checker), -1));
-        assert!(!checked(Some(&checker), 1));
-        assert!(checked(Some(&checker), 2));
+        assert!(!is_delivery_current(None, 2));
+        assert!(!is_delivery_current(Some(&checker), 0));
+        assert!(!is_delivery_current(Some(&checker), -1));
+        assert!(!is_delivery_current(Some(&checker), 1));
+        assert!(is_delivery_current(Some(&checker), 2));
     }
 
     #[test]
@@ -68,8 +71,11 @@ mod tests {
                 panic!("payload destructor must not run across JNI");
             }
         }
-        assert!(!checked(Some(&|_| panic!("checker failed")), 1));
-        assert!(!checked(Some(&|_| std::panic::panic_any(PanicOnDrop)), 1));
+        assert!(!is_delivery_current(Some(&|_| panic!("checker failed")), 1));
+        assert!(!is_delivery_current(
+            Some(&|_| std::panic::panic_any(PanicOnDrop)),
+            1
+        ));
     }
 
     #[test]
@@ -81,9 +87,9 @@ mod tests {
         let active = Arc::new(AtomicBool::new(true));
         let snapshot = Arc::clone(&active);
         set_music_authority_checker(move |_| snapshot.load(Ordering::Acquire)).unwrap();
-        assert!(checked(CHECKER.get().map(Box::as_ref), 1));
+        assert!(is_delivery_current(CHECKER.get().map(Box::as_ref), 1));
         active.store(false, Ordering::Release);
-        assert!(!checked(CHECKER.get().map(Box::as_ref), 1));
+        assert!(!is_delivery_current(CHECKER.get().map(Box::as_ref), 1));
         assert!(set_music_authority_checker(|_| true).is_err());
     }
 }

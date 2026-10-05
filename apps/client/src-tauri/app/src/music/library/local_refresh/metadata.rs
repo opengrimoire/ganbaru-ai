@@ -17,24 +17,24 @@ pub(super) struct LocalTags {
 pub(super) fn read_tags(path: &Path, extension: &str) -> Result<LocalTags, String> {
     let mut header = [0_u8; 12];
     let mut file = File::open(path).map_err(|error| format!("tag open failed: {error}"))?;
-    let read = file
+    let header_len = file
         .read(&mut header)
         .map_err(|error| format!("tag header read failed: {error}"))?;
     file.seek(SeekFrom::Start(0))
         .map_err(|error| format!("tag seek failed: {error}"))?;
-    if read >= 10 && &header[..3] == b"ID3" {
+    if header_len >= 10 && &header[..3] == b"ID3" {
         return read_id3v2(&mut file);
     }
-    if read >= 4 && &header[..4] == b"fLaC" {
+    if header_len >= 4 && &header[..4] == b"fLaC" {
         return read_flac(&mut file);
     }
-    if read >= 12 && &header[..4] == b"RIFF" && &header[8..12] == b"WAVE" {
+    if header_len >= 12 && &header[..4] == b"RIFF" && &header[8..12] == b"WAVE" {
         return read_wav_info(&mut file);
     }
-    if read >= 8 && &header[4..8] == b"ftyp" {
+    if header_len >= 8 && &header[4..8] == b"ftyp" {
         return read_mp4(&mut file);
     }
-    if matches!(extension, "ogg" | "opus") || (read >= 4 && &header[..4] == b"OggS") {
+    if matches!(extension, "ogg" | "opus") || (header_len >= 4 && &header[..4] == b"OggS") {
         return read_ogg_comments(&mut file);
     }
     Ok(LocalTags::default())

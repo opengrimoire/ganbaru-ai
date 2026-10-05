@@ -1,5 +1,5 @@
 import type { NotesDateMentionReminder, NotesDateMentionValue, NotesRichText, NotesRichTextAnnotations } from "../contracts/core";
-import { normalizeRichTextEquationExpression, normalizeRichTextLinkUrl } from "../rich-text";
+import { normalizeRichTextEquationExpression, normalizeRichTextLinkUrl } from "$lib/notes/rich-text/core";
 import { readBoolean, readDateMentionBoundary, readLocalObjectMentionType, readMentionObjectId, readNotesColor, readNullableDateMentionBoundary, readNullableDisplayString, readNullableString, readRecord, readString, readUuidString } from "./readers";
 
 export function parseNotesRichTextArray(value: unknown, label: string): NotesRichText[] {

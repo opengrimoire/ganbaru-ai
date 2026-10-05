@@ -171,19 +171,19 @@ pub(super) fn extract_embedded_artwork(path: &Path) -> Result<Option<EmbeddedArt
     let mut file =
         File::open(path).map_err(|e| format!("failed to open media file for artwork: {e}"))?;
     let mut header = [0_u8; 12];
-    let read = file
+    let header_len = file
         .read(&mut header)
         .map_err(|e| format!("failed to read media header for artwork: {e}"))?;
     file.seek(SeekFrom::Start(0))
         .map_err(|e| format!("failed to seek media file for artwork: {e}"))?;
 
-    if read >= 10 && &header[..3] == b"ID3" {
+    if header_len >= 10 && &header[..3] == b"ID3" {
         return extract_id3_artwork(&mut file);
     }
-    if read >= 4 && &header[..4] == b"fLaC" {
+    if header_len >= 4 && &header[..4] == b"fLaC" {
         return extract_flac_artwork(&mut file);
     }
-    if read >= 8 && &header[4..8] == b"ftyp" {
+    if header_len >= 8 && &header[4..8] == b"ftyp" {
         return extract_mp4_artwork(&mut file);
     }
     Ok(None)

@@ -4,7 +4,8 @@ use std::ffi::{CStr, c_char, c_int, c_uint, c_void};
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::{Arc, Mutex};
 
-use crate::{db::run_migrations, notes, projects};
+use crate::{notes, projects};
+use ganbaru_db::run_migrations;
 
 const SQLITE_OK: c_int = 0;
 const SQLITE_TRACE_STMT: c_uint = 0x01;
@@ -62,10 +63,10 @@ impl FirstUseContractMetrics {
     }
 }
 
-// Test-only async owner for the SQLite trace registration. Callers must use
-// `finish` before dropping it. Cancellation intentionally leaves the raw Arc
-// reference live because SQLite may still hold the callback context; leaking in
-// that exceptional test path is safer than reclaiming a potentially live pointer.
+/// Test-only async owner for the SQLite trace registration. Callers must use
+/// `finish` before dropping it. Cancellation intentionally leaves the raw Arc
+/// reference live because SQLite may still hold the callback context; leaking in
+/// that exceptional test path is safer than reclaiming a potentially live pointer.
 struct SqlTrace {
     pool: SqlitePool,
     state: Arc<Mutex<SqlTraceState>>,

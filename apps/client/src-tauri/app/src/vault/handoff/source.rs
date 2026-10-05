@@ -1,7 +1,7 @@
 //! Source workflow for resumable uploads to the desktop coordinator.
 
+use super::pairing::{PairingManager, PendingAcknowledgement, StoredOutgoingTransfer};
 use super::protocol::{BundleMetadata, BundlePurpose, PROTOCOL_VERSION};
-use super::state::{PairingManager, PendingAcknowledgement, StoredOutgoingTransfer};
 use crate::vault::ownership::{TransferPhase, VaultOwnershipManager};
 use crate::vault::quiescence::{
     SnapshotQuiescence, SourceQuiescence, abort_source_preparation, begin_snapshot_quiescence,
@@ -120,7 +120,7 @@ async fn prepare(
     generation: u64,
 ) -> Result<StoredOutgoingTransfer, String> {
     prepare_local_state_for_snapshot(app).await?;
-    let transfer_id = super::state::random_token("transfer")?;
+    let transfer_id = super::pairing::random_token("transfer")?;
     let next_generation = match purpose {
         BundlePurpose::Ownership => generation
             .checked_add(1)
@@ -208,19 +208,19 @@ async fn prepare(
 
 #[cfg(target_os = "android")]
 async fn prepare_local_state_for_snapshot(app: &tauri::AppHandle) -> Result<(), String> {
-    crate::doomscrolling_mobile::synchronize_for_snapshot(app.clone()).await
+    crate::distractions::android::synchronize_for_snapshot(app.clone()).await
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 async fn prepare_local_state_for_snapshot(app: &tauri::AppHandle) -> Result<(), String> {
     let vault_id = crate::vault::active_vault_id(app)?;
     let (device_id, _) = app.state::<PairingManager>().identity()?;
-    let pool = crate::db_path::connect_sqlite(
+    let pool = crate::db::connect_sqlite(
         app.clone(),
         format!("sqlite:{}", crate::vault::APP_SQLITE_FILE),
     )
     .await?;
-    crate::doomscrolling_linked::drain_local_spool(app, &pool, &vault_id, &device_id)
+    crate::distractions::linked::drain_local_spool(app, &pool, &vault_id, &device_id)
         .await
         .map(|_| ())
 }

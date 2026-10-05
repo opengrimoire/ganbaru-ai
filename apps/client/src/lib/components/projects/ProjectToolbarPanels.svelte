@@ -27,17 +27,17 @@
     projectTagColorDotStyle,
     projectTagColorSwatchClass,
     projectPriorityDisplayLabel,
-  } from "$lib/projects/project-display";
+  } from "$lib/projects/display";
   import {
     PROJECT_SETTINGS_PANEL_MAX_HEIGHT,
     projectToolbarPanelGeometry,
     type ProjectListColumnControl,
     type ProjectToolbarPanel,
-  } from "$lib/projects/project-toolbar";
+  } from "$lib/projects/toolbar";
   import {
     customFieldIdFromCustomFieldReference,
     customFieldReference,
-  } from "$lib/projects/task-list-columns";
+  } from "$lib/projects/tasks/list-columns";
   import { projectCustomFieldUsesOptions } from "$lib/projects/custom-fields";
   import {
     PROJECT_TASK_GROUP_MODES,
@@ -69,9 +69,9 @@
   } from "$lib/utils";
   import { portal } from "$lib/utils/portal";
   import PriorityFlagIcon from "./PriorityFlagIcon.svelte";
-  import ProjectSettingsPanel from "./ProjectSettingsPanel.svelte";
-  import ProjectListPresentationControls from "./ProjectListPresentationControls.svelte";
-  import type { ProjectTaskQueryController } from "./project-task-query-controller.svelte";
+  import ProjectSettingsPanel from "$lib/components/projects/settings/ProjectSettingsPanel.svelte";
+  import ProjectListPresentationControls from "$lib/components/projects/list/ProjectListPresentationControls.svelte";
+  import type { ProjectTaskQueryController } from "./task-query-controller.svelte";
 
   const TASK_STATUS_FILTERS: ProjectTaskStatusFilter[] = ["all", "open", "blocked", "done"];
   const TASK_DUE_FILTERS: ProjectTaskDueFilter[] = ["all", "overdue", "today", "week", "none", "range"];
@@ -176,7 +176,7 @@
   let panelStyle = $state("");
   let panelGeometryFrame: number | null = null;
 
-  /** Resolve the toolbar configuration title. */
+  /** Return the localized heading for a toolbar panel. */
   function panelTitle(currentPanel: ProjectToolbarPanel): string {
     if (currentPanel === "settings") return t("projects.settings.title");
     if (currentPanel === "group") return t("projects.toolbar.group");
@@ -191,7 +191,7 @@
     return document.querySelector<HTMLElement>(`[data-project-toolbar-trigger="${currentPanel}"]`);
   }
 
-  /** Position the project draft editor independently from immediate view preferences. */
+  /** Position the project settings draft editor beside its toolbar trigger, or inset fullscreen on mobile. */
   function refreshPanelGeometry(): void {
     panelGeometryFrame = null;
     if (panel !== "settings") return;
@@ -492,7 +492,7 @@
   </div>
 {:else if panel && panel !== "settings"}
   {#key panel}
-    <CollectionSettings label={panelTitle(panel)} anchor={panelTriggerElement(panel)} onclose={onClose}>
+    <CollectionSettings label={panelTitle(panel)} anchor={panelTriggerElement(panel)} onClose={onClose}>
       {#if panel === "group"}
         {#each PROJECT_TASK_GROUP_MODES as mode}
           {@render optionRow(taskGroupModeLabel(mode), taskGroupBy === mode, () => { taskGroupBy = mode; })}

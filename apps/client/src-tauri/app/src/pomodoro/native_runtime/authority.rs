@@ -2,7 +2,7 @@
 
 use std::time::{Duration, Instant};
 
-use ganbaru_focus::{CommittedFocusEffect, FocusMode};
+use ganbaru_pomodoro::{CommittedFocusEffect, FocusMode};
 use tauri::{Manager, Runtime};
 
 use super::FocusRuntimeState;
@@ -175,7 +175,7 @@ fn same_revision(current: &CommittedFocusEffect, candidate: &CommittedFocusEffec
 }
 
 /// Monitor repair follows the same phase identity across heartbeat revisions.
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 pub(crate) fn overlay_context_is_current<R: Runtime>(
     app: &tauri::AppHandle<R>,
     context: &super::FocusNativeContext,
@@ -328,5 +328,4 @@ pub(crate) fn allows_existing_lease(
 }
 
 #[cfg(test)]
-#[path = "authority_tests.rs"]
 mod tests;

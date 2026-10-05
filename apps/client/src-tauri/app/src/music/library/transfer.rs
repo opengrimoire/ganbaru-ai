@@ -13,7 +13,7 @@ pub struct MusicTransferSource {
     pub contents: String,
     pub playlist_name: String,
     pub relative_root_id: Option<String>,
-    pub selected_at: i64,
+    pub selected_at_ms: i64,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -183,7 +183,7 @@ pub(super) async fn commit(
     let operation_id = codec::hash(request.action_id.as_bytes());
     let result =
         super::interchange::import_in_transaction(&mut transaction, &import, &operation_id).await?;
-    sqlx::query("INSERT INTO music_transfer_receipts (action_id, request_hash, result_json, committed_at) VALUES (?, ?, ?, ?)")
+    sqlx::query("INSERT INTO music_transfer_receipts (action_id, request_hash, result_json, committed_at_ms) VALUES (?, ?, ?, ?)")
         .bind(&request.action_id).bind(request_hash).bind(serialized(&result)?).bind(imported_at)
         .execute(&mut *transaction).await.map_err(|error| MusicLibraryError::database("record Music import receipt", error))?;
     transaction
@@ -226,7 +226,7 @@ async fn prepare(
     bindings: &[TransferBinding],
 ) -> MusicLibraryResult<(MusicTransferPreview, MusicInterchangeDocument)> {
     codec::check_contents(&source.contents)?;
-    if source.selected_at <= 0 {
+    if source.selected_at_ms <= 0 {
         return Err(validation("Music import selection time must be positive"));
     }
     if source.playlist_name.len() > 500 {
@@ -309,7 +309,7 @@ async fn prepare(
             super::transfer_export::snapshot_with_budget(
                 transaction,
                 &existing_ids,
-                source.selected_at,
+                source.selected_at_ms,
                 bindings,
                 &mut budget,
             )
@@ -644,7 +644,7 @@ async fn prepare_m3u(
     let document = MusicInterchangeDocument {
         format: codec::FORMAT.to_string(),
         version: 1,
-        exported_at: source.selected_at,
+        exported_at: source.selected_at_ms,
         roots: used_roots.into_values().collect(),
         playlists: vec![MusicInterchangePlaylist {
             id: format!("m3u:{}", codec::hash(serialized(source)?.as_bytes())),

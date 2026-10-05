@@ -15,7 +15,7 @@
   import FolderTree from "@lucide/svelte/icons/folder-tree";
   import GitBranch from "@lucide/svelte/icons/git-branch";
   import History from "@lucide/svelte/icons/history";
-  import { NOTES_COVER_DEFAULT_FOCAL_POINT } from "$lib/notes/page-cover";
+  import { NOTES_COVER_DEFAULT_FOCAL_POINT } from "$lib/notes/pages/cover";
   import type { NotesCoverFocalPoint, NotesPageCover as CoverValue } from "$lib/notes/contracts/assets";
   import ImagePlus from "@lucide/svelte/icons/image-plus";
   import Link2 from "@lucide/svelte/icons/link-2";
@@ -31,55 +31,55 @@
     notesPageIconAssetUrl,
     pickNotesPageIconImageFile,
     saveNotesPageIconImageDataUrl,
-  } from "$lib/api/notes-page-icons";
+  } from "$lib/api/notes/page-icons";
   import type {
     IconPickerAsset,
     IconPickerUploadAdapter,
   } from "$lib/components/icon-picker/types";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import { BUILD_PLATFORM_PROFILE, platformHasCapability } from "$lib/platform";
-  import { blockPlainText, isTextEditableBlock } from "$lib/notes/block-factory";
-  import { notesBlockAnchorId } from "$lib/notes/block-link";
-  import { notesEditorScrollTopForTarget } from "$lib/notes/editor-scroll";
+  import { blockPlainText, isTextEditableBlock } from "$lib/notes/blocks/factory";
+  import { notesBlockAnchorId } from "$lib/notes/links/block-link";
+  import { notesEditorScrollTopForTarget } from "$lib/notes/editor/scroll";
   import {
     notesBackgroundPointerTargetsDocumentEnd,
     notesDocumentEndFocusIsCurrent,
-  } from "$lib/notes/editor-focus";
-  import { notesTextSelectionFromEditableRoot } from "$lib/notes/editor-selection";
+  } from "$lib/notes/editor/focus";
+  import { notesTextSelectionFromEditableRoot } from "$lib/notes/editor/selection";
   import {
     formatNotesActivityDate,
     formatNotesActivityTime,
-  } from "$lib/notes/page-activity";
-  import { notesLocalUserDisplayName } from "$lib/notes/local-user";
-  import type { NotesPageOpenMode } from "$lib/notes/page-open-mode";
+  } from "$lib/notes/pages/activity";
+  import { notesLocalUserDisplayName } from "$lib/notes/collaboration/local-user";
+  import type { NotesPageOpenMode } from "$lib/notes/pages/open-mode";
   import {
     notesCommentParentKey,
     openNotesCommentThreadCount,
     unreadNotesCommentThreadCount,
-  } from "$lib/notes/comments";
-  import { notesPageMoveTargets } from "$lib/notes/page-move";
+  } from "$lib/notes/collaboration/comments";
+  import { notesPageMoveTargets } from "$lib/notes/pages/move";
   import {
     notesPageIconFromPickerValue,
     notesPageIconPickerValue,
-  } from "$lib/notes/page-icon-picker";
+  } from "$lib/notes/pages/icon-picker";
   import {
     createNotesExternalPageIcon,
     createNotesLocalFilePageIcon,
     type NotesPageIconAssetMetadata,
-  } from "$lib/notes/page-icon";
+  } from "$lib/notes/pages/icon";
   import {
     notesFoldersForProject,
     notesPageFolderMoveTargets,
-  } from "$lib/notes/navigation-tree";
-  import { addNotesWorkspaceBreadcrumb, buildNotesPageBreadcrumb } from "$lib/notes/page-breadcrumb";
-  import { notesPageTitle } from "$lib/notes/page-title";
-  import { notesFloatingPanelPlacement } from "$lib/notes/floating-panel";
+  } from "$lib/notes/navigation/tree";
+  import { addNotesWorkspaceBreadcrumb, buildNotesPageBreadcrumb } from "$lib/notes/pages/breadcrumb";
+  import { notesPageTitle } from "$lib/notes/pages/title";
+  import { notesFloatingPanelPlacement } from "$lib/notes/editor/floating-panel";
   import {
     notesPageProjectId,
     notesPagesForProject,
   } from "$lib/notes/project-membership";
-  import { openNotesSuggestionCount } from "$lib/notes/suggestions";
-  import { buildNotesTableOfContents } from "$lib/notes/table-of-contents";
+  import { openNotesSuggestionCount } from "$lib/notes/collaboration/suggestions";
+  import { buildNotesTableOfContents } from "$lib/notes/block-types/table-of-contents";
   import { getPreferences } from "$lib/stores/preferences.svelte";
   import { getProjects } from "$lib/stores/projects.svelte";
   import type {
@@ -90,26 +90,26 @@
     NotesParent,
   } from "$lib/notes/types";
   import { getNotes } from "$lib/stores/notes.svelte";
-  import type { NotesEditorStore } from "$lib/stores/notes-editor-store.svelte";
-  import { provideNotesEditor } from "./notes-editor-context";
+  import type { NotesEditorStore } from "$lib/stores/notes/editor-session.svelte";
+  import { provideNotesEditor } from "./editor-context";
   import { getMobileBackStack } from "$lib/stores/mobile-back-stack.svelte";
   import { cn } from "$lib/utils";
   import { dismissOnOutside } from "$lib/utils/dismiss-on-outside";
   import { portal } from "$lib/utils/portal";
-  import NotesBlockList from "./NotesBlockList.svelte";
-  import NotesPageIcon from "./NotesPageIcon.svelte";
-  import NotesPeekModeIcon from "./NotesPeekModeIcon.svelte";
+  import NotesBlockList from "$lib/components/notes/blocks/NotesBlockList.svelte";
+  import NotesPageIcon from "$lib/components/notes/pages/NotesPageIcon.svelte";
+  import NotesPeekModeIcon from "$lib/components/notes/pages/NotesPeekModeIcon.svelte";
   import {
     loadNotesEditorPanel,
     readNotesEditorPanel,
     retryNotesEditorPanel,
     type LoadedNotesEditorPanel,
     type NotesEditorPanelKind,
-  } from "./notes-editor-component-registry";
+  } from "./editor-component-registry";
   import {
     EMPTY_NOTES_MUSIC_MENTION_CONTEXT,
     type NotesMusicMentionContext,
-  } from "./notes-block-mention-targets";
+  } from "$lib/components/notes/blocks/mention-targets";
 
   type NotesEditorPanel = "links" | "comments" | "suggestions";
 
@@ -273,7 +273,7 @@
   const hasPanelMenuItems = $derived(
     linksBadgeCount > 0 || openCommentCount > 0 || openSuggestionCount > 0,
   );
-  const peekMode = $derived(openMode !== "full");
+  const isPeekMode = $derived(openMode !== "full");
   const activityPanelStyle = $derived.by(() => {
     void floatingLayoutVersion;
     return floatingPagePanelStyle(activityButton, ACTIVITY_PANEL_WIDTH_PX);
@@ -1033,7 +1033,7 @@
         <button type="button" class="shrink-0 rounded-md border px-2 py-1" onclick={() => void notes.retryEditorMutations().catch(() => undefined)}>{t("common.retry")}</button>
       </div>
     {/if}
-    {#if peekMode}
+    {#if isPeekMode}
       <div class="absolute right-3 top-2 z-40 flex items-center gap-0.5 rounded-md border border-border bg-popover/95 p-0.5 shadow-sm" data-notes-peek-controls>
         <button
           type="button"
@@ -1501,7 +1501,7 @@
         <div class="notes-page-title-surface min-w-0 pb-5">
           <div class={cn(
             "notes-page-title-actions -ml-1.5 flex min-h-8 flex-wrap items-center gap-1.5",
-            peekMode && !page.cover && "pr-28",
+            isPeekMode && !page.cover && "pr-28",
           )}>
             {#if panelLoadStates["icon-picker"]?.status === "ready" && panelLoadStates["icon-picker"].component.kind === "icon-picker"}
               {@const IconPicker = panelLoadStates["icon-picker"].component.component}

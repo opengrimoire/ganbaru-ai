@@ -2,7 +2,7 @@
   import { untrack, type Snippet } from "svelte";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import type { NotesDatabaseViewKind, NotesPage } from "$lib/notes/types";
-  import type { NotesPageOpenMode } from "$lib/notes/page-open-mode";
+  import type { NotesPageOpenMode } from "$lib/notes/pages/open-mode";
 
   let {
     kind = "page",
@@ -23,23 +23,23 @@
   const EMBEDDED_REVEAL_DELAY_MS = 120;
   const HANDOFF_DURATION_MS = 100;
   let revealed = $state(false);
-  let retainPlaceholder = $state(untrack(() => !ready));
+  let shouldRetainPlaceholder = $state(untrack(() => !ready));
 
   $effect(() => {
     if (!ready) {
-      retainPlaceholder = true;
+      shouldRetainPlaceholder = true;
       revealed = false;
-      const revealDelay = kind === "page" ? PAGE_REVEAL_DELAY_MS : EMBEDDED_REVEAL_DELAY_MS;
-      const timer = setTimeout(() => { revealed = true; }, revealDelay);
+      const revealDelayMs = kind === "page" ? PAGE_REVEAL_DELAY_MS : EMBEDDED_REVEAL_DELAY_MS;
+      const timer = setTimeout(() => { revealed = true; }, revealDelayMs);
       return () => clearTimeout(timer);
     }
     if (!untrack(() => revealed)) {
-      retainPlaceholder = false;
+      shouldRetainPlaceholder = false;
       return;
     }
     // Retire only the decorative overlay. Ready content is already mounted and interactive.
     const timer = setTimeout(() => {
-      retainPlaceholder = false;
+      shouldRetainPlaceholder = false;
       revealed = false;
     }, HANDOFF_DURATION_MS);
     return () => clearTimeout(timer);
@@ -64,7 +64,7 @@
       {@render children()}
     </div>
   {/if}
-  {#if retainPlaceholder}
+  {#if shouldRetainPlaceholder}
     <div
       class="notes-skeleton-placeholder {kind === 'page' ? 'h-full min-h-0 overflow-x-hidden overflow-y-scroll' : kind === 'cover' ? 'size-full' : kind === 'database' ? 'my-5' : 'overflow-hidden py-2'}"
       style:container-type={kind === "page" ? "inline-size" : undefined}

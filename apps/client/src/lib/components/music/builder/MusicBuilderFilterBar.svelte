@@ -11,7 +11,7 @@
     MusicItemSort,
     MusicLibrarySourceKind,
     MusicSortDirection,
-  } from "$lib/music/library-contracts";
+  } from "$lib/music/library/contracts";
 
   type MenuKind = "filters" | "sort";
   interface Option<T extends string | null> { value: T; label: string }

@@ -10,7 +10,7 @@
   import Dice5 from "@lucide/svelte/icons/dice-5";
   import Shuffle from "@lucide/svelte/icons/shuffle";
   import ListOrdered from "@lucide/svelte/icons/list-ordered";
-  import CustomSelect from "$lib/components/settings/CustomSelect.svelte";
+  import Select from "$lib/components/ui/Select.svelte";
   import {
     bulkEditMusicMemberships,
     bulkSnoozeMusicItems,
@@ -20,13 +20,13 @@
     removeMusicSnooze,
   } from "$lib/api/music-library";
   import { getLocalization } from "$lib/i18n/translator.svelte";
-  import type { MusicMembershipMatrixEntry, MusicPlaylistSummary, MusicSnooze, MusicWeight } from "$lib/music/library-contracts";
-  import { notifyMusicLibraryChanged } from "$lib/music/music-library-events";
-  import { musicSnoozeEndsAt, musicSnoozePreset, type MusicSnoozePreset } from "$lib/music/music-snooze";
-  import { MUSIC_WEIGHT_ORDER, musicMembershipsForScope, musicSnoozesForScope, musicWeightForScope } from "$lib/music/music-track-preferences";
-  import { MUSIC_MIX_WEIGHT_VALUES } from "$lib/music/music-playlist-playback";
-  import { pickMusicFrequencyTooltipPosition, type MusicFrequencyTooltipPosition } from "$lib/music/music-frequency-tooltip-position";
-  import { systemMusicPlaylistName } from "$lib/music/music-system-playlists";
+  import type { MusicMembershipMatrixEntry, MusicPlaylistSummary, MusicSnooze, MusicWeight } from "$lib/music/library/contracts";
+  import { notifyMusicLibraryChanged } from "$lib/music/library/events";
+  import { musicSnoozeEndsAt, musicSnoozePreset, type MusicSnoozePreset } from "$lib/music/session/snooze";
+  import { MUSIC_WEIGHT_ORDER, musicMembershipsForScope, musicSnoozesForScope, musicWeightForScope } from "$lib/music/library/track-preferences";
+  import { MUSIC_MIX_WEIGHT_VALUES } from "$lib/music/playlists/playback";
+  import { pickMusicFrequencyTooltipPosition, type MusicFrequencyTooltipPosition } from "$lib/music/library/frequency-tooltip-position";
+  import { systemMusicPlaylistName } from "$lib/music/playlists/system";
   import { getMusicPlayer } from "$lib/stores/music-player.svelte";
   import { portal } from "$lib/utils/portal";
 
@@ -63,12 +63,12 @@
   const itemId = $derived(queueIndex >= 0 ? player.activeQueueItemIds[queueIndex] ?? null : null);
   const targetMemberships = $derived(musicMembershipsForScope(memberships, scopePlaylistId));
   const currentWeight = $derived(musicWeightForScope(targetMemberships));
-  const scopeSnoozes = $derived(snoozes.filter((entry) => entry.startsAt <= Date.now()
-    && (entry.endsAt === null || entry.endsAt > Date.now())
+  const scopeSnoozes = $derived(snoozes.filter((entry) => entry.startsAtMs <= Date.now()
+    && (entry.endsAtMs === null || entry.endsAtMs > Date.now())
     && (scopePlaylistId === null ? entry.scope === "all-playlists"
       : entry.scope === "playlist" && entry.playlistId === scopePlaylistId)));
   const selectedSnooze = $derived(scopeSnoozes.length === 1
-    ? musicSnoozePreset(scopeSnoozes[0].startsAt, scopeSnoozes[0].endsAt, Intl.DateTimeFormat().resolvedOptions().timeZone)
+    ? musicSnoozePreset(scopeSnoozes[0].startsAtMs, scopeSnoozes[0].endsAtMs, Intl.DateTimeFormat().resolvedOptions().timeZone)
     : null);
   const scopeOptions = $derived([
     { value: "", label: t("music.preferences.everywhere") },
@@ -212,7 +212,7 @@
         removePlaylistIds: [],
         weightPlaylistIds: playlistIds,
         weight,
-        updatedAt: Date.now(),
+        updatedAtMs: Date.now(),
       });
       if (player.activePlaylistId && playlistIds.includes(player.activePlaylistId) && itemId === targetItemId) player.applyCurrentQueueWeight(weight);
       notifyMusicLibraryChanged();
@@ -233,7 +233,7 @@
     const activePlaylistId = player.activePlaylistId;
     const selectedPlaylistId = scopePlaylistId;
     const scope = selectedPlaylistId ? "playlist" : "all-playlists";
-    const endsAt = musicSnoozeEndsAt(duration, now, Intl.DateTimeFormat().resolvedOptions().timeZone);
+    const endsAtMs = musicSnoozeEndsAt(duration, now, Intl.DateTimeFormat().resolvedOptions().timeZone);
     const previousSnoozes = scopeSnoozes;
     const isTurningOff = selectedSnooze === duration;
     busy = true;
@@ -251,14 +251,14 @@
         itemIds: [targetItemId],
         scope,
         playlistId: selectedPlaylistId,
-        startsAt: now,
-        endsAt,
+        startsAtMs: now,
+        endsAtMs,
         reason: "",
-        createdAt: now,
+        createdAtMs: now,
       });
       if (itemId === targetItemId && player.activePlaylistId === activePlaylistId
         && (selectedPlaylistId === null || selectedPlaylistId === activePlaylistId)) {
-        player.applyCurrentQueueSnooze(endsAt);
+        player.applyCurrentQueueSnooze(endsAtMs);
       }
       notifyMusicLibraryChanged();
       close(false);
@@ -277,8 +277,8 @@
       .filter((entry) => player.activeSourceQueueId !== null
         || entry.scope === "all-playlists" || entry.playlistId === player.activePlaylistId);
     if (remaining.length === 0) player.clearCurrentQueueSnooze();
-    else player.applyCurrentQueueSnooze(remaining.some((entry) => entry.endsAt === null)
-      ? null : Math.max(...remaining.map((entry) => entry.endsAt ?? 0)));
+    else player.applyCurrentQueueSnooze(remaining.some((entry) => entry.endsAtMs === null)
+      ? null : Math.max(...remaining.map((entry) => entry.endsAtMs ?? 0)));
   }
 </script>
 
@@ -301,7 +301,7 @@
         {#if error}<p class="mb-2 text-xs text-destructive" role="alert">{error}</p>{/if}
         <div class="flex items-center justify-between gap-3">
           <span class="shrink-0 text-xs font-semibold">{t("music.preferences.applyTo")}</span>
-          <CustomSelect
+          <Select
             value={scopePlaylistId ?? ""}
             options={scopeOptions}
             onChange={(value) => scopePlaylistId = value || null}

@@ -13,10 +13,10 @@
     IconPickerAsset,
     IconPickerTriggerContext,
     IconPickerUploadAdapter,
-  } from "$lib/components/icon-picker/types";
-  import type { EventColor } from "$lib/components/calendar/types";
-  import { getEventColor } from "$lib/components/calendar/utils";
-  import { contrastRatio } from "$lib/components/ui/colorMath";
+  } from "./types";
+  import type { EventColor } from "$lib/calendar/types";
+  import { getEventColor } from "$lib/calendar/utils";
+  import { contrastRatio } from "$lib/color/math";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import {
     inspectManagedImageFile,
@@ -31,7 +31,7 @@
   import {
     PROJECT_EMOJI_ENTRIES,
     type ProjectEmojiCategoryId,
-  } from "$lib/projects/project-emoji-catalog";
+  } from "$lib/projects/icons/emoji-catalog.generated";
   import {
     cleanupProjectIconRecentValues,
     filterProjectEmojiEntries,
@@ -40,45 +40,45 @@
     projectIconLucideRecentValues,
     prependProjectIconRecentValue,
     projectEmojiSkinToneFromEmoji,
-    projectIconPickerAnchoredPanelPlacement,
-    projectIconPickerGroupVirtualWindow,
-    projectIconPickerIsPrimaryLucideCategory,
-    projectIconPickerLucideCategoryOptions,
-    projectIconPickerLucideGroups,
-    projectIconPickerLucideRecentPreviewValue,
-    projectIconPickerMenuPlacement,
-    projectIconPickerPanelPlacement,
-    projectIconPickerPointPlacement,
-    projectIconPickerPrimaryLucideCategoryOptions,
-    projectIconPickerRandomEmojiIcon,
-    projectIconPickerRandomLucideIcon,
-    projectIconPickerVisibleEmojiCategories,
-    projectIconPickerVisibleCustomEmojis,
+    iconPickerAnchoredPanelPlacement,
+    iconPickerGroupVirtualWindow,
+    iconPickerIsPrimaryLucideCategory,
+    iconPickerLucideCategoryOptions,
+    iconPickerLucideGroups,
+    iconPickerLucideRecentPreviewValue,
+    iconPickerMenuPlacement,
+    iconPickerPanelPlacement,
+    iconPickerPointPlacement,
+    iconPickerPrimaryLucideCategoryOptions,
+    iconPickerRandomEmojiIcon,
+    iconPickerRandomLucideIcon,
+    iconPickerVisibleEmojiCategories,
+    iconPickerVisibleCustomEmojis,
     readProjectIconAskEveryTime,
     readProjectIconDefaultColor,
     readProjectIconRecentValues,
     stripProjectEmojiSkinTone,
     type ProjectEmojiSkinTone,
-    type ProjectIconPickerAnchoredPanelPlacement,
-    type ProjectIconPickerColor,
-    type ProjectIconPickerPointPlacement,
-    type ProjectIconPickerRect,
-  } from "$lib/projects/project-icon-picker";
+    type IconPickerAnchoredPanelPlacement,
+    type IconPickerColor,
+    type IconPickerPointPlacement,
+    type IconPickerRect,
+  } from "$lib/projects/icons/picker";
   import {
     parseProjectIcon,
     projectIconDisplayLabel,
     serializeProjectIcon,
     type ProjectIconValue,
-  } from "$lib/projects/project-icons";
+  } from "$lib/projects/icons/values";
   import type {
     ProjectLucideCategory,
     ProjectLucideIconEntry,
     ProjectLucideIconNode,
-  } from "$lib/projects/project-lucide-catalog.generated";
+  } from "$lib/projects/icons/lucide-catalog.generated";
   import { getMobileBackStack } from "$lib/stores/mobile-back-stack.svelte";
   import { getProjects } from "$lib/stores/projects.svelte";
   import { getTheme } from "$lib/stores/theme.svelte";
-  import { resolveAppTokens, resolveCalendarTokens } from "$lib/stores/themes";
+  import { resolveAppTokens, resolveCalendarTokens } from "$lib/themes";
   import { cn } from "$lib/utils";
   import { portal } from "$lib/utils/portal";
   import {
@@ -94,14 +94,14 @@
   import IconPickerIconsTab from "./IconPickerIconsTab.svelte";
   import IconPickerUploadPanel from "./IconPickerUploadPanel.svelte";
 
-  type ProjectIconPickerTab = "emoji" | "icons" | "upload";
+  type IconPickerTab = "emoji" | "icons" | "upload";
   type PickerInteractionSource = "keyboard" | "pointer";
   type IconColorChoice = {
     slug: string;
     label: string;
     iconNode: readonly ProjectLucideIconNode[] | null;
     anchor: HTMLElement;
-    placement: ProjectIconPickerPointPlacement;
+    placement: IconPickerPointPlacement;
   };
 
   let {
@@ -169,7 +169,7 @@
   const gridGroupGapHeight = 12;
 
   let open = $state(false);
-  let activeTab = $state<ProjectIconPickerTab>("icons");
+  let activeTab = $state<IconPickerTab>("icons");
   let pickerInteractionSource: PickerInteractionSource = "pointer";
   let triggerElement = $state<HTMLElement | undefined>();
   let uploadFileInput = $state<HTMLInputElement | undefined>();
@@ -182,8 +182,8 @@
   let iconCategoryMenuTriggerElement = $state<HTMLButtonElement | undefined>();
   let gridScrollElement = $state<HTMLElement | undefined>();
   let panelPlacement = $state({ left: 0, top: 0, width: panelWidth, height: panelPreferredHeight });
-  let customPanelPlacement = $state<ProjectIconPickerAnchoredPanelPlacement>({ left: 0, top: 0, maxHeight: 360 });
-  let iconCategoryMenuPlacement = $state<ProjectIconPickerAnchoredPanelPlacement>({
+  let customPanelPlacement = $state<IconPickerAnchoredPanelPlacement>({ left: 0, top: 0, maxHeight: 360 });
+  let iconCategoryMenuPlacement = $state<IconPickerAnchoredPanelPlacement>({
     left: 0,
     top: 0,
     maxHeight: iconCategoryMenuMaxHeight,
@@ -196,7 +196,7 @@
   let uploadPreviewRequestId = 0;
   let uploadError = $state<string | null>(null);
   let uploading = $state(false);
-  let iconColor = $state<ProjectIconPickerColor>("default");
+  let iconColor = $state<IconPickerColor>("default");
   let emojiSkinTone = $state<ProjectEmojiSkinTone>("default");
   let emojiCategory = $state<ProjectEmojiCategoryId | "all">("all");
   let iconCategory = $state<ProjectLucideCategory | "all">("all");
@@ -224,8 +224,8 @@
   let gridScrollStateFrame: number | null = null;
 
   const parsedValue = $derived(parseProjectIcon(value));
-  const visibleTabs = $derived.by((): ProjectIconPickerTab[] => {
-    const tabs: ProjectIconPickerTab[] = [];
+  const visibleTabs = $derived.by((): IconPickerTab[] => {
+    const tabs: IconPickerTab[] = [];
     if (showIcons) tabs.push("icons");
     tabs.push("emoji");
     if (showUpload) tabs.push("upload");
@@ -252,9 +252,9 @@
     projectIconEmojiRecentValues(recentValues),
   );
   const lucideRecentValues = $derived(projectIconLucideRecentValues(recentValues));
-  const visibleCustomEmojis = $derived(projectIconPickerVisibleCustomEmojis(projects.customEmojis, emojiQuery));
+  const visibleCustomEmojis = $derived(iconPickerVisibleCustomEmojis(projects.customEmojis, emojiQuery));
   const visibleEmojiCategories = $derived(
-    projectIconPickerVisibleEmojiCategories(t("projects.iconPicker.symbolsAndFlags")),
+    iconPickerVisibleEmojiCategories(t("projects.iconPicker.symbolsAndFlags")),
   );
   const emojiGroups = $derived.by(() =>
     visibleEmojiCategories
@@ -271,15 +271,15 @@
   const filteredLucideEntries = $derived(
     filterProjectLucideIcons(lucideIcons, iconQuery, iconCategory),
   );
-  const lucideGroups = $derived(projectIconPickerLucideGroups(filteredLucideEntries, lucideCategories));
+  const lucideGroups = $derived(iconPickerLucideGroups(filteredLucideEntries, lucideCategories));
   const lucideCategoryOptions = $derived(
-    projectIconPickerLucideCategoryOptions(lucideCategories, lucideIcons),
+    iconPickerLucideCategoryOptions(lucideCategories, lucideIcons),
   );
   const primaryLucideCategoryOptions = $derived(
-    projectIconPickerPrimaryLucideCategoryOptions(lucideCategoryOptions),
+    iconPickerPrimaryLucideCategoryOptions(lucideCategoryOptions),
   );
   const iconCategoryOverflowActive = $derived(
-    iconCategory !== "all" && !projectIconPickerIsPrimaryLucideCategory(iconCategory),
+    iconCategory !== "all" && !iconPickerIsPrimaryLucideCategory(iconCategory),
   );
   const lucideRecentHeight = $derived.by(() => {
     if (lucideRecentValues.length === 0) return 0;
@@ -287,7 +287,7 @@
       + (Math.ceil(lucideRecentValues.length / Math.max(1, gridColumnCount)) * gridRowHeight)
       + gridGroupGapHeight;
   });
-  const lucideGroupVirtual = $derived(projectIconPickerGroupVirtualWindow({
+  const lucideGroupVirtual = $derived(iconPickerGroupVirtualWindow({
     groups: lucideGroups,
     columnCount: gridColumnCount,
     viewportHeight: gridViewportHeight,
@@ -323,13 +323,13 @@
     `left: ${iconCategoryMenuPlacement.left}px; top: ${iconCategoryMenuPlacement.top}px; width: ${iconCategoryMenuWidth}px; max-height: ${iconCategoryMenuPlacement.maxHeight}px; ${pickerSurfaceStyle}`,
   );
 
-  function tabLabel(tab: ProjectIconPickerTab): string {
+  function tabLabel(tab: IconPickerTab): string {
     if (tab === "icons") return t("projects.iconPicker.icons");
     if (tab === "upload") return t("projects.iconPicker.upload");
     return t("projects.iconPicker.emoji");
   }
 
-  function iconColorLabel(color: ProjectIconPickerColor): string {
+  function iconColorLabel(color: IconPickerColor): string {
     return color === "default"
       ? t("projects.iconPicker.automaticColor")
       : t("projects.iconPicker.selectIconColor", color + 1);
@@ -357,7 +357,7 @@
   }
 
   function lucideRecentPreviewValue(rawValue: string): string {
-    return projectIconPickerLucideRecentPreviewValue({ rawValue, iconColor });
+    return iconPickerLucideRecentPreviewValue({ rawValue, iconColor });
   }
 
   function iconColorChoiceStyle(choice: IconColorChoice): string {
@@ -453,7 +453,7 @@
     return uploadError ? baseHeight + uploadWarningHeight : baseHeight;
   }
 
-  function toPickerRect(rect: DOMRect): ProjectIconPickerRect {
+  function toPickerRect(rect: DOMRect): IconPickerRect {
     return {
       top: rect.top,
       right: rect.right,
@@ -464,7 +464,7 @@
     };
   }
 
-  function viewportBoundaryRect(): ProjectIconPickerRect {
+  function viewportBoundaryRect(): IconPickerRect {
     return {
       top: 0,
       right: window.innerWidth,
@@ -475,7 +475,7 @@
     };
   }
 
-  function panelBoundaryRect(trigger: HTMLElement): ProjectIconPickerRect {
+  function panelBoundaryRect(trigger: HTMLElement): IconPickerRect {
     const viewport = viewportBoundaryRect();
     const settingsContent = trigger.closest<HTMLElement>("[data-settings-content]");
     if (!settingsContent) return viewport;
@@ -500,7 +500,7 @@
   function placePanel(): void {
     const trigger = panelAnchor ?? triggerElement;
     if (!trigger) return;
-    panelPlacement = projectIconPickerPanelPlacement({
+    panelPlacement = iconPickerPanelPlacement({
       triggerRect: toPickerRect(trigger.getBoundingClientRect()),
       boundaryRect: panelBoundaryRect(trigger),
       preferredWidth: panelWidth,
@@ -512,7 +512,7 @@
   function placeCustomPanel(): void {
     const trigger = customEmojiTriggerElement;
     if (!trigger) return;
-    customPanelPlacement = projectIconPickerAnchoredPanelPlacement({
+    customPanelPlacement = iconPickerAnchoredPanelPlacement({
       anchorRect: toPickerRect(trigger.getBoundingClientRect()),
       viewportRect: viewportBoundaryRect(),
       panelWidth: customPanelWidth,
@@ -523,7 +523,7 @@
   function placeIconCategoryMenu(): void {
     const trigger = iconCategoryMenuTriggerElement;
     if (!trigger) return;
-    iconCategoryMenuPlacement = projectIconPickerMenuPlacement({
+    iconCategoryMenuPlacement = iconPickerMenuPlacement({
       anchorRect: toPickerRect(trigger.getBoundingClientRect()),
       viewportRect: viewportBoundaryRect(),
       menuWidth: iconCategoryMenuWidth,
@@ -547,9 +547,9 @@
     resetGridScroll();
   }
 
-  function placeIconColorChoice(anchor: HTMLElement): ProjectIconPickerPointPlacement {
+  function placeIconColorChoice(anchor: HTMLElement): IconPickerPointPlacement {
     const { width, height } = iconColorChoicePanelSize();
-    return projectIconPickerPointPlacement({
+    return iconPickerPointPlacement({
       anchorRect: toPickerRect(anchor.getBoundingClientRect()),
       viewportRect: viewportBoundaryRect(),
       panelWidth: width,
@@ -574,7 +574,7 @@
     if (lucideLoaded || lucideLoading) return;
     lucideLoading = true;
     try {
-      const catalog = await import("$lib/projects/project-lucide-catalog.generated");
+      const catalog = await import("$lib/projects/icons/lucide-catalog.generated");
       lucideCategories = catalog.PROJECT_LUCIDE_CATEGORIES;
       lucideIcons = catalog.PROJECT_LUCIDE_ICONS;
       lucideLoaded = true;
@@ -642,7 +642,7 @@
     }
   }
 
-  async function setTab(tab: ProjectIconPickerTab): Promise<void> {
+  async function setTab(tab: IconPickerTab): Promise<void> {
     activeTab = tab;
     skinTonePanelOpen = false;
     iconColorPanelOpen = false;
@@ -732,12 +732,12 @@
   }
 
   function chooseRandomEmoji(): void {
-    const icon = projectIconPickerRandomEmojiIcon(filteredEmojiEntries, emojiSkinTone);
+    const icon = iconPickerRandomEmojiIcon(filteredEmojiEntries, emojiSkinTone);
     if (icon) chooseIcon(icon);
   }
 
   function chooseRandomIcon(): void {
-    const icon = projectIconPickerRandomLucideIcon(filteredLucideEntries, { iconColor });
+    const icon = iconPickerRandomLucideIcon(filteredLucideEntries, { iconColor });
     if (icon) chooseIcon(icon);
   }
 
@@ -800,12 +800,12 @@
     });
   }
 
-  async function saveProjectIconPastedFile(file: File): Promise<ProjectIconAsset> {
+  async function saveFileAsProjectIcon(file: File): Promise<ProjectIconAsset> {
     const dataUrl = await fileToDataUrl(file);
     return saveProjectIconImageDataUrl(dataUrl);
   }
 
-  async function saveUploadPastedFile(file: File): Promise<IconPickerAsset> {
+  async function saveFileAsUploadAsset(file: File): Promise<IconPickerAsset> {
     const dataUrl = await fileToDataUrl(file);
     return uploadAdapter
       ? uploadAdapter.saveImageDataUrl(dataUrl, file.name)
@@ -841,7 +841,7 @@
     uploading = true;
     uploadError = null;
     try {
-      const asset = await saveUploadPastedFile(file);
+      const asset = await saveFileAsUploadAsset(file);
       if (uploadAdapter?.selectPickedAssetImmediately) {
         await uploadAdapter.selectAsset(asset);
         closePicker(pickerInteractionSource);
@@ -922,7 +922,7 @@
   async function saveCustomEmojiFile(file: File): Promise<void> {
     customEmojiError = null;
     try {
-      customEmojiDraft = await saveProjectIconPastedFile(file);
+      customEmojiDraft = await saveFileAsProjectIcon(file);
     } catch (error) {
       customEmojiError = error instanceof Error ? error.message : String(error);
     }
@@ -970,7 +970,7 @@
     closePicker(pickerInteractionSource);
   }
 
-  function selectIconColor(color: ProjectIconPickerColor): void {
+  function selectIconColor(color: IconPickerColor): void {
     iconColor = color;
     setConfigKey(defaultColorConfigKey, color === "default" ? undefined : color);
     if (parsedValue.kind === "lucide") {
@@ -978,7 +978,7 @@
     }
   }
 
-  function selectColorChoice(color: ProjectIconPickerColor): void {
+  function selectColorChoice(color: IconPickerColor): void {
     const choice = iconColorChoice;
     if (!choice) return;
     chooseIcon({ kind: "lucide", slug: choice.slug, color });

@@ -112,13 +112,13 @@ pub(crate) async fn apply_playlist_snapshot(
                 } else {
                     MusicYouTubeResolutionState::Resolving
                 },
-                resolved_at: request.resolved_at,
+                resolved_at_ms: request.resolved_at_ms,
             },
         )
         .await?;
         sqlx::query(
             "INSERT INTO music_source_collection_items
-                (collection_id, item_id, source_position, first_discovered_at,
+                (collection_id, item_id, source_position, first_discovered_at_ms,
                  last_seen_generation, missing_from_latest_snapshot)
              VALUES (?, ?, ?, ?, ?, 0)
              ON CONFLICT(collection_id, item_id) DO UPDATE SET
@@ -129,7 +129,7 @@ pub(crate) async fn apply_playlist_snapshot(
         .bind(&request.collection_id)
         .bind(&item_id)
         .bind(position as i64)
-        .bind(request.resolved_at)
+        .bind(request.resolved_at_ms)
         .bind(generation)
         .execute(&mut *transaction)
         .await
@@ -148,14 +148,14 @@ pub(crate) async fn apply_playlist_snapshot(
     .map_err(|error| MusicLibraryError::database("reconcile YouTube playlist snapshot", error))?;
     sqlx::query(
         "UPDATE music_source_collections
-         SET refresh_state = 'idle', last_successful_refresh_at = ?,
-             previous_successful_refresh_at = last_successful_refresh_at,
+         SET refresh_state = 'idle', last_successful_refresh_at_ms = ?,
+             previous_successful_refresh_at_ms = last_successful_refresh_at_ms,
              last_refresh_error_code = NULL, snapshot_generation = ?,
-             updated_at = ?, version = version + 1 WHERE id = ?",
+             updated_at_ms = ?, version = version + 1 WHERE id = ?",
     )
-    .bind(request.resolved_at)
+    .bind(request.resolved_at_ms)
     .bind(generation)
-    .bind(request.resolved_at)
+    .bind(request.resolved_at_ms)
     .bind(&request.collection_id)
     .execute(&mut *transaction)
     .await
@@ -163,7 +163,7 @@ pub(crate) async fn apply_playlist_snapshot(
     resolve_collection_failures(
         &mut transaction,
         &request.collection_id,
-        request.resolved_at,
+        request.resolved_at_ms,
     )
     .await?;
     transaction
@@ -194,13 +194,13 @@ pub(crate) async fn report_source_failure(
         name: request.name.clone(),
         video_ids: Vec::new(),
         videos: Vec::new(),
-        resolved_at: request.occurred_at,
+        resolved_at_ms: request.occurred_at,
     };
     ensure_collection(&mut transaction, &collection_request).await?;
     sqlx::query(
         "UPDATE music_source_collections
          SET refresh_state = 'failed', last_refresh_error_code = ?,
-             updated_at = ?, version = version + 1 WHERE id = ?",
+             updated_at_ms = ?, version = version + 1 WHERE id = ?",
     )
     .bind(&request.error_code)
     .bind(request.occurred_at)
@@ -221,7 +221,7 @@ pub(crate) async fn report_source_failure(
     sqlx::query(
         "INSERT INTO music_refresh_jobs
             (id, source_collection_id, kind, state, generation, issue_count,
-             status_message, requested_at, started_at, finished_at, updated_at)
+             status_message, requested_at_ms, started_at_ms, finished_at_ms, updated_at_ms)
          VALUES (?, ?, 'youtube-playlist', 'failed', ?, 1, ?, ?, ?, ?, ?)",
     )
     .bind(&job_id)
@@ -237,7 +237,7 @@ pub(crate) async fn report_source_failure(
     .map_err(|error| MusicLibraryError::database("save YouTube failure job", error))?;
     sqlx::query(
         "INSERT INTO music_refresh_job_issues
-            (id, job_id, issue_code, message, created_at) VALUES (?, ?, ?, ?, ?)",
+            (id, job_id, issue_code, message, created_at_ms) VALUES (?, ?, ?, ?, ?)",
     )
     .bind(stable_id("youtube-issue", &[&job_id, &request.error_code]))
     .bind(&job_id)
@@ -275,7 +275,7 @@ async fn upsert_video_row(
         "INSERT INTO music_library_items
             (id, identity_key, source_kind, media_kind, youtube_video_id,
              original_title, original_artist, duration_ms, availability,
-             youtube_resolution_state, discovered_at, updated_at)
+             youtube_resolution_state, discovered_at_ms, updated_at_ms)
          VALUES (?, ?, 'youtube-video', 'video', ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(youtube_video_id) DO UPDATE SET
             original_title = CASE WHEN ? = 1
@@ -293,7 +293,7 @@ async fn upsert_video_row(
                  AND music_library_items.youtube_resolution_state = 'ready'
                 THEN music_library_items.youtube_resolution_state
                 ELSE excluded.youtube_resolution_state END,
-            updated_at = excluded.updated_at,
+            updated_at_ms = excluded.updated_at_ms,
             version = music_library_items.version + 1",
     )
     .bind(item_id)
@@ -304,8 +304,8 @@ async fn upsert_video_row(
     .bind(request.duration_ms)
     .bind(availability)
     .bind(request.resolution_state.as_ref())
-    .bind(request.resolved_at)
-    .bind(request.resolved_at)
+    .bind(request.resolved_at_ms)
+    .bind(request.resolved_at_ms)
     .bind(!supplied_title.is_empty())
     .execute(&mut **transaction)
     .await
@@ -332,11 +332,11 @@ async fn ensure_collection(
     sqlx::query(
         "INSERT INTO music_source_collections
             (id, kind, identity_key, name, youtube_playlist_id, refresh_state,
-             created_at, updated_at)
+             created_at_ms, updated_at_ms)
          VALUES (?, 'youtube-playlist', ?, ?, ?, 'running', ?, ?)
          ON CONFLICT(id) DO UPDATE SET
             name = excluded.name, refresh_state = 'running',
-            last_refresh_error_code = NULL, updated_at = excluded.updated_at,
+            last_refresh_error_code = NULL, updated_at_ms = excluded.updated_at_ms,
             version = music_source_collections.version + 1
          WHERE music_source_collections.kind = 'youtube-playlist'
            AND music_source_collections.youtube_playlist_id = excluded.youtube_playlist_id",
@@ -345,8 +345,8 @@ async fn ensure_collection(
     .bind(format!("youtube-playlist:{}", request.playlist_id))
     .bind(request.name.trim())
     .bind(&request.playlist_id)
-    .bind(request.resolved_at)
-    .bind(request.resolved_at)
+    .bind(request.resolved_at_ms)
+    .bind(request.resolved_at_ms)
     .execute(&mut **transaction)
     .await
     .map_err(|error| MusicLibraryError::database("save YouTube source collection", error))?;
@@ -374,14 +374,14 @@ async fn ensure_collection(
 async fn resolve_collection_failures(
     transaction: &mut Transaction<'_, Sqlite>,
     collection_id: &str,
-    resolved_at: i64,
+    resolved_at_ms: i64,
 ) -> MusicLibraryResult<()> {
     sqlx::query(
         "UPDATE music_refresh_jobs SET status_message = 'A later refresh succeeded.',
-             updated_at = ?
+             updated_at_ms = ?
          WHERE source_collection_id = ? AND kind = 'youtube-playlist' AND state = 'failed'",
     )
-    .bind(resolved_at)
+    .bind(resolved_at_ms)
     .bind(collection_id)
     .execute(&mut **transaction)
     .await
@@ -393,7 +393,7 @@ fn validate_video_write(request: &MusicYouTubeVideoWrite) -> MusicLibraryResult<
     validate_video_id(&request.video_id, "videoId")?;
     validate_text(&request.title, "title", MAX_YOUTUBE_TITLE_CHARS)?;
     validate_text(&request.channel, "channel", MAX_YOUTUBE_CHANNEL_CHARS)?;
-    validate_time(request.resolved_at, "resolvedAt")?;
+    validate_time(request.resolved_at_ms, "resolvedAt")?;
     if request.duration_ms.is_some_and(|duration| duration < 0) {
         return Err(MusicLibraryError::validation(
             "durationMs",
@@ -410,7 +410,7 @@ fn validate_playlist_snapshot(
         &request.collection_id,
         &request.playlist_id,
         &request.name,
-        request.resolved_at,
+        request.resolved_at_ms,
     )?;
     if request.video_ids.len() > MAX_YOUTUBE_PLAYLIST_ITEMS {
         return Err(MusicLibraryError::validation(
@@ -599,7 +599,7 @@ mod tests {
             .execute(&pool)
             .await
             .unwrap();
-        crate::db::run_migrations(&pool).await.unwrap();
+        ganbaru_db::run_migrations(&pool).await.unwrap();
         pool
     }
 
@@ -610,7 +610,7 @@ mod tests {
             name: "Focus soundtrack".to_string(),
             video_ids: video_ids.into_iter().map(str::to_string).collect(),
             videos: Vec::new(),
-            resolved_at: 1_700_000_000_000,
+            resolved_at_ms: 1_700_000_000_000,
         }
     }
 
@@ -626,7 +626,7 @@ mod tests {
                     channel: String::new(),
                     duration_ms: None,
                     resolution_state: MusicYouTubeResolutionState::Ready,
-                    resolved_at: 1_700_000_000_000,
+                    resolved_at_ms: 1_700_000_000_000,
                 },
             )
             .await
@@ -659,7 +659,7 @@ mod tests {
                     channel: "Official channel".to_string(),
                     duration_ms: Some(95_000),
                     resolution_state: MusicYouTubeResolutionState::Ready,
-                    resolved_at: 1_700_000_000_000,
+                    resolved_at_ms: 1_700_000_000_000,
                 },
             )
             .await
@@ -677,7 +677,7 @@ mod tests {
                     channel: String::new(),
                     duration_ms: None,
                     resolution_state: MusicYouTubeResolutionState::EmbeddingBlocked,
-                    resolved_at: 1_700_000_100_000,
+                    resolved_at_ms: 1_700_000_100_000,
                 },
             )
             .await
@@ -712,7 +712,7 @@ mod tests {
             assert_eq!(first.newly_discovered_count, 2);
             assert_eq!(first.repeated_video_count, 1);
             let mut reordered = snapshot(vec!["xyzXYZ_5678", "abcDEF_1234"]);
-            reordered.resolved_at += 1;
+            reordered.resolved_at_ms += 1;
             let second = apply_playlist_snapshot(&pool, reordered).await.unwrap();
             assert_eq!(second.newly_discovered_count, 0);
             let order: Vec<String> = sqlx::query_scalar(
@@ -729,7 +729,7 @@ mod tests {
             assert_eq!(order, vec!["xyzXYZ_5678", "abcDEF_1234"]);
 
             let mut removed = snapshot(vec!["abcDEF_1234"]);
-            removed.resolved_at += 2;
+            removed.resolved_at_ms += 2;
             apply_playlist_snapshot(&pool, removed).await.unwrap();
             let removed_from_snapshot: i64 = sqlx::query_scalar(
                 "SELECT missing_from_latest_snapshot

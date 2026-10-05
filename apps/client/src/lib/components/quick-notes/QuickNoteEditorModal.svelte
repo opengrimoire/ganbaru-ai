@@ -17,12 +17,12 @@
     updateQuickNote,
     QuickNoteWriteError,
   } from "$lib/api/quick-notes";
-  import { FALLBACK_COLOR_INDEX } from "$lib/components/calendar/types";
+  import { FALLBACK_COLOR_INDEX } from "$lib/calendar/types";
   import {
     notesPlainTextFromEditableRoot,
     notesTextSelectionFromEditableRoot,
     restoreNotesEditableSelection,
-  } from "$lib/notes/editor-selection";
+  } from "$lib/notes/editor/selection";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import { getQuickNoteColor } from "$lib/quick-notes/colors";
   import { registerQuickNotesFlusher } from "$lib/quick-notes/persistence";
@@ -58,7 +58,7 @@
   } from "$lib/quick-notes/types";
   import { publishQuickNotesChanged } from "$lib/quick-notes/window-sync";
   import { getMobileBackStack } from "$lib/stores/mobile-back-stack.svelte";
-  import type { Theme } from "$lib/stores/themes";
+  import type { Theme } from "$lib/themes";
   import QuickNoteColorPicker from "./QuickNoteColorPicker.svelte";
   import QuickNoteRichText from "./QuickNoteRichText.svelte";
   import QuickNoteTagPicker from "./QuickNoteTagPicker.svelte";
@@ -68,13 +68,13 @@
     tags,
     defaultTagId,
     theme,
-    onclose,
-    onsaved,
-    onarchive,
-    onunarchive,
-    ontrash,
-    onrestore,
-    ondelete,
+    onClose,
+    onSaved,
+    onArchive,
+    onUnarchive,
+    onTrash,
+    onRestore,
+    onDelete,
     mobileLayout = false,
     obscured = false,
   }: {
@@ -82,13 +82,13 @@
     tags: readonly QuickNoteTag[];
     defaultTagId: string | null;
     theme: Theme;
-    onclose: () => void;
-    onsaved: (note: QuickNote) => void;
-    onarchive: (note: QuickNote) => void;
-    onunarchive: (note: QuickNote) => void;
-    ontrash: (note: QuickNote) => void;
-    onrestore: (note: QuickNote) => void;
-    ondelete: (note: QuickNote) => void;
+    onClose: () => void;
+    onSaved: (note: QuickNote) => void;
+    onArchive: (note: QuickNote) => void;
+    onUnarchive: (note: QuickNote) => void;
+    onTrash: (note: QuickNote) => void;
+    onRestore: (note: QuickNote) => void;
+    onDelete: (note: QuickNote) => void;
     mobileLayout?: boolean;
     obscured?: boolean;
   } = $props();
@@ -161,7 +161,7 @@
     persisted = saved;
     revision = saved.revision;
     id = saved.id;
-    onsaved(saved);
+    onSaved(saved);
     publishQuickNotesChanged();
   }
 
@@ -463,7 +463,7 @@
     transitionPending = true;
     try {
       await flush();
-      onclose();
+      onClose();
     } catch {
       // The visible save error keeps the editor open.
     } finally {
@@ -477,7 +477,7 @@
     try {
       await flush();
       if (persisted) action(persisted);
-      else onclose();
+      else onClose();
     } catch {
       // The visible save error keeps the editor open.
     } finally {
@@ -498,7 +498,7 @@
     dirtyVersion += 1;
     savedVersion = dirtyVersion;
     status = "saved";
-    onsaved(fresh);
+    onSaved(fresh);
   }
 
   async function saveAsCopy(): Promise<void> {
@@ -653,20 +653,20 @@
         <button class={`${toolbarButton} ${selectedFormatting.bold ? "bg-black/10 dark:bg-white/10" : ""}`} type="button" aria-label={t("quickNotes.formatting.bold")} title={t("quickNotes.formatting.bold")} aria-pressed={selectedFormatting.bold} onpointerdown={(event) => event.preventDefault()} onclick={() => toggleFormatting("bold")}><Bold class="size-4" strokeWidth={1.5} /></button>
         <button class={`${toolbarButton} ${selectedFormatting.italic ? "bg-black/10 dark:bg-white/10" : ""}`} type="button" aria-label={t("quickNotes.formatting.italic")} title={t("quickNotes.formatting.italic")} aria-pressed={selectedFormatting.italic} onpointerdown={(event) => event.preventDefault()} onclick={() => toggleFormatting("italic")}><Italic class="size-4" strokeWidth={1.5} /></button>
         <button class={`${toolbarButton} ${selectedFormatting.underline ? "bg-black/10 dark:bg-white/10" : ""}`} type="button" aria-label={t("quickNotes.formatting.underline")} title={t("quickNotes.formatting.underline")} aria-pressed={selectedFormatting.underline} onpointerdown={(event) => event.preventDefault()} onclick={() => toggleFormatting("underline")}><Underline class="size-4" strokeWidth={1.5} /></button>
-        <QuickNoteColorPicker {color} {theme} onselect={updateColor} buttonClass={toolbarButton} {mobileLayout} />
-        <QuickNoteTagPicker {tagId} {tags} onselect={updateTag} buttonClass={toolbarButton} {mobileLayout} />
+        <QuickNoteColorPicker {color} {theme} onSelect={updateColor} buttonClass={toolbarButton} {mobileLayout} />
+        <QuickNoteTagPicker {tagId} {tags} onSelect={updateTag} buttonClass={toolbarButton} {mobileLayout} />
         <button class={toolbarButton} type="button" disabled={history.undo.length === 0} aria-label={t("quickNotes.formatting.undo")} title={t("quickNotes.formatting.undo")} onclick={undo}><Undo2 class="size-4" strokeWidth={1.5} /></button>
         <button class={toolbarButton} type="button" disabled={history.redo.length === 0} aria-label={t("quickNotes.formatting.redo")} title={t("quickNotes.formatting.redo")} onclick={redo}><Redo2 class="size-4" strokeWidth={1.5} /></button>
         <span class="mx-1 h-5 w-px bg-current/15"></span>
         {#if persisted?.archived}
-          <button class={toolbarButton} type="button" disabled={transitionPending} aria-label={t("quickNotes.action.unarchive")} title={t("quickNotes.action.unarchive")} onclick={() => void requestLifecycle(onunarchive)}><ArchiveRestore class="size-4" strokeWidth={1.5} /></button>
+          <button class={toolbarButton} type="button" disabled={transitionPending} aria-label={t("quickNotes.action.unarchive")} title={t("quickNotes.action.unarchive")} onclick={() => void requestLifecycle(onUnarchive)}><ArchiveRestore class="size-4" strokeWidth={1.5} /></button>
         {:else}
-          <button class={toolbarButton} type="button" disabled={transitionPending} aria-label={t("quickNotes.action.archive")} title={t("quickNotes.action.archive")} onclick={() => void requestLifecycle(onarchive)}><Archive class="size-4" strokeWidth={1.5} /></button>
+          <button class={toolbarButton} type="button" disabled={transitionPending} aria-label={t("quickNotes.action.archive")} title={t("quickNotes.action.archive")} onclick={() => void requestLifecycle(onArchive)}><Archive class="size-4" strokeWidth={1.5} /></button>
         {/if}
-        <button class={toolbarButton} type="button" disabled={transitionPending} aria-label={t("quickNotes.action.trash")} title={t("quickNotes.action.trash")} onclick={() => void requestLifecycle(ontrash)}><Trash2 class="size-4" strokeWidth={1.5} /></button>
+        <button class={toolbarButton} type="button" disabled={transitionPending} aria-label={t("quickNotes.action.trash")} title={t("quickNotes.action.trash")} onclick={() => void requestLifecycle(onTrash)}><Trash2 class="size-4" strokeWidth={1.5} /></button>
       {:else if persisted}
-        <button class={toolbarButton} type="button" aria-label={t("quickNotes.action.restore")} title={t("quickNotes.action.restore")} onclick={() => onrestore(persisted!)}><RotateCcw class="size-4" strokeWidth={1.5} /></button>
-        <button class={toolbarButton} type="button" aria-label={t("quickNotes.action.deletePermanently")} title={t("quickNotes.action.deletePermanently")} onclick={() => ondelete(persisted!)}><Trash2 class="size-4" strokeWidth={1.5} /></button>
+        <button class={toolbarButton} type="button" aria-label={t("quickNotes.action.restore")} title={t("quickNotes.action.restore")} onclick={() => onRestore(persisted!)}><RotateCcw class="size-4" strokeWidth={1.5} /></button>
+        <button class={toolbarButton} type="button" aria-label={t("quickNotes.action.deletePermanently")} title={t("quickNotes.action.deletePermanently")} onclick={() => onDelete(persisted!)}><Trash2 class="size-4" strokeWidth={1.5} /></button>
       {/if}
       </div>
       <div class={mobileLayout ? "flex min-h-12 w-full items-center" : "contents"}>

@@ -4,7 +4,7 @@ import {
   invalidateAssetUrlKind,
   invalidateNotesAssetUrls,
 } from "$lib/api/asset-url-cache";
-import { invalidateNotesNotificationSchedule } from "$lib/notes/notification-schedule.svelte";
+import { invalidateNotesNotificationSchedule } from "$lib/notes/collaboration/notification-schedule.svelte";
 import {
   mapNotesBlockDto,
   mapNotesBlockListDto,
@@ -13,7 +13,7 @@ import {
   mapNotesBlockFrontierDto,
   mapNotesBlockOutlineDto,
   mapNotesPageDto,
-} from "$lib/notes/notion-mappers";
+} from "$lib/notes/validation/response-mappers";
 import type {
   NotesAppendBlockChildrenRequest,
   NotesBlock,
@@ -127,7 +127,7 @@ export async function getNotesBlockFrontier(
 ): Promise<NotesBlockFrontier> {
   const dbUrl = await ensureDbUrl();
   return mapNotesBlockFrontierDto(
-    await invoke<unknown>("notes_get_block_frontier", { dbUrl, parentIds: [...parentIds] }),
+    await invoke<unknown>("notes_block_frontier", { dbUrl, parentIds: [...parentIds] }),
   );
 }
 
@@ -136,12 +136,12 @@ export async function getNotesBlockOutlineFrontier(
   parentIds: readonly string[],
 ): Promise<NotesBlockOutline[]> {
   const dbUrl = await ensureDbUrl();
-  const value = await invoke<unknown>("notes_get_block_outline_frontier", {
+  const value = await invoke<unknown>("notes_block_outline_frontier", {
     dbUrl,
     pageId,
     parentIds: [...parentIds],
   });
-  if (!Array.isArray(value)) throw new Error("notes_get_block_outline_frontier returned a non-array payload");
+  if (!Array.isArray(value)) throw new Error("notes_block_outline_frontier returned a non-array payload");
   return value.map(mapNotesBlockOutlineDto);
 }
 
@@ -161,7 +161,7 @@ export async function getNotesBlockChildren(
 ): Promise<NotesPaginatedBlockList> {
   const dbUrl = await ensureDbUrl();
   return mapNotesBlockListDto(
-    await invoke<unknown>("notes_get_block_children", {
+    await invoke<unknown>("notes_block_children", {
       dbUrl,
       parentId,
       startCursor,

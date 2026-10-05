@@ -1,8 +1,8 @@
 import { NativeFocusClient, reportIdleOverlayVisible, type FocusControlScope } from "$lib/api/focus";
 import { BUILD_PLATFORM_PROFILE } from "$lib/platform";
 import { focusDisplayElapsedSeconds, focusDisplayRemainingSeconds, focusNeedsVisualClock, focusSegmentForRail, type FocusIntent, type FocusProjection } from "$lib/pomodoro/native-focus";
-import { DEFAULT_POMODORO_CONFIG, rhythmPositionCount, type PomodoroConfig } from "$lib/pomodoro/rhythm";
-import type { PersistedSegment } from "$lib/components/calendar/types";
+import { DEFAULT_POMODORO_CONFIG, type PomodoroConfig } from "$lib/pomodoro/rhythm";
+import type { PersistedSegment } from "$lib/calendar/types";
 
 const VISUAL_INTERVAL_MS = 180;
 const MAX_PRESENTATION_SEGMENTS = 128;
@@ -17,13 +17,13 @@ let presentationActive = false;
 let visualTimer: ReturnType<typeof setInterval> | null = null;
 let connectionError = $state<string | null>(null);
 
-function failure(error: unknown): void {
+function recordFailure(error: unknown): void {
   connectionError = error instanceof Error ? error.message
     : typeof error === "object" && error !== null && "message" in error && typeof error.message === "string"
       ? error.message : "Native Focus connection failed";
   console.error("Native Focus request failed:", error);
 }
-function accept(next: FocusProjection): void {
+function acceptProjection(next: FocusProjection): void {
   const previous = projection;
   projection = next;
   receivedAt = performance.now();
@@ -40,7 +40,7 @@ function accept(next: FocusProjection): void {
   if (previous?.vaultGeneration !== next.vaultGeneration || previous?.snapshot?.revision !== snapshot?.revision) segmentVersion += 1;
   syncVisualClock();
 }
-const client = new NativeFocusClient(accept, failure);
+const client = new NativeFocusClient(acceptProjection, recordFailure);
 /** Tick only while counters can change, so idle sessions do not invalidate dependents several times per second. */
 function syncVisualClock(): void {
   const needed = presentationActive && focusNeedsVisualClock(projection?.snapshot);
@@ -57,13 +57,13 @@ function beginPresentation(): void {
   presentationActive = true;
   visualNow = performance.now();
   syncVisualClock();
-  void client.initialize().catch(failure);
+  void client.initialize().catch(recordFailure);
 }
 function command(intent: FocusIntent): Promise<void> { return client.command(intent); }
-function dispatch(intent: FocusIntent): void { void command(intent).catch(failure); }
+function dispatch(intent: FocusIntent): void { void command(intent).catch(recordFailure); }
 function currentConfig(): PomodoroConfig { return projection?.snapshot?.run?.configuration ?? DEFAULT_POMODORO_CONFIG; }
-function running(): boolean { return projection?.snapshot?.mode === "running"; }
-function active(): boolean {
+function isRunning(): boolean { return projection?.snapshot?.mode === "running"; }
+function isActive(): boolean {
   const snapshot = projection?.snapshot;
   return Boolean(snapshot?.run && snapshot.run.endedAtMs === null && snapshot.mode !== "stopped" && snapshot.mode !== "expired");
 }
@@ -90,30 +90,22 @@ export function getPomodoro() {
     },
     get phaseWorkDurationSeconds() { return (projection?.snapshot?.segment?.chosenDurationMs ?? 0) / 1000; },
     get currentConfig() { return currentConfig(); },
-    get currentRhythmPosition() { return projection?.snapshot?.segment?.rhythmPosition ?? 1; },
-    get totalRhythmPositions() { return rhythmPositionCount(currentConfig()); },
-    get currentCycle() { return projection?.snapshot?.segment?.rhythmPosition ?? 1; },
-    get totalCycles() { return rhythmPositionCount(currentConfig()); },
-    get isRunning() { return running(); },
-    get isActive() { return active(); },
-    get completedPomodoros() { return projection?.snapshot?.completedFocusCount ?? 0; },
+    get isRunning() { return isRunning(); },
+    get isActive() { return isActive(); },
     get totalSecondsForPhase() { return (projection?.snapshot?.segment?.chosenDurationMs ?? 0) / 1000; },
     get canAddFocusTime() {
       const snapshot = projection?.snapshot;
-      return active() && snapshot?.segment?.phase === "focus" && !snapshot.focusExtensionUsed
+      return isActive() && snapshot?.segment?.phase === "focus" && !snapshot.focusExtensionUsed
         && (snapshot.mode === "running" || snapshot.mode === "manual_pause");
     },
     get canPauseResume() {
       const snapshot = projection?.snapshot;
-      return active() && snapshot?.segment?.phase === "focus" && (snapshot.mode === "running" || snapshot.mode === "manual_pause");
+      return isActive() && snapshot?.segment?.phase === "focus" && (snapshot.mode === "running" || snapshot.mode === "manual_pause");
     },
-    get pausedPulseFrame() { return projection?.snapshot?.mode === "manual_pause" ? Math.floor(visualNow / VISUAL_INTERVAL_MS) % PAUSE_PULSE.length : null; },
     get pausedPulseAmount() { return projection?.snapshot?.mode === "manual_pause" ? PAUSE_PULSE[Math.floor(visualNow / VISUAL_INTERVAL_MS) % PAUSE_PULSE.length] : 0; },
     get formattedTime() { const seconds = remainingSeconds(); return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`; },
-    get activeBlockId() { return active() ? projection?.snapshot?.run?.occurrenceId ?? null : null; },
-    get activeRunId() { return active() ? projection?.snapshot?.run?.id ?? null : null; },
-    get dismissedBlockId() { return projection?.snapshot?.dismissedOccurrenceId ?? null; },
-    get autoStartSuppressed() { return projection?.snapshot?.automaticAdmissionSuppressed ?? false; },
+    get activeOccurrenceId() { return isActive() ? projection?.snapshot?.run?.occurrenceId ?? null : null; },
+    get activeRunId() { return isActive() ? projection?.snapshot?.run?.id ?? null : null; },
     async setAutomaticAdmissionSuppressed(suppressed: boolean) {
       const generation = projection?.vaultGeneration;
       const vaultId = projection?.vaultId;
@@ -136,7 +128,6 @@ export function getPomodoro() {
     },
     get segments() { return segments; },
     get segmentVersion() { return segmentVersion; },
-    get blockExpired() { return projection?.snapshot?.mode === "expired"; },
     get suspendedAway() {
       const snapshot = projection?.snapshot;
       return snapshot?.mode === "suspended" ? { awaySeconds: Math.floor(Math.max(0, (snapshot.suspendReturnedAtMs ?? snapshot.observedAtMs) - (snapshot.suspendStartedAtMs ?? snapshot.observedAtMs)) / 1000) } : null;
@@ -176,7 +167,6 @@ export function getPomodoro() {
     async cleanupOrphans() { await client.initialize(); await client.refresh(); },
     async recoverMobileRun() { beginPresentation(); await client.initialize(); return client.refresh(); },
     prepareForMobileBackground() { presentationActive = false; syncVisualClock(); },
-    get nativeMode() { return projection?.snapshot?.mode ?? "stopped"; },
     get nativeSnapshot() { return projection?.snapshot ?? null; },
     async controlOverlay(intent: FocusIntent, scope: FocusControlScope) { await client.command(intent, scope); },
     get error() { return connectionError; },

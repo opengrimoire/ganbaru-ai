@@ -12,7 +12,7 @@ vi.mock("@tauri-apps/api/window", async (importOriginal) => {
   };
 });
 
-vi.mock("$lib/stores/themeEditor.svelte", () => ({
+vi.mock("$lib/stores/theme-editor.svelte", () => ({
   getThemeEditor: () => ({ editingId: null }),
 }));
 
@@ -20,13 +20,13 @@ vi.mock("$lib/stores/viewport.svelte", () => ({
   getViewport: () => ({ below: () => false }),
 }));
 
-vi.mock("$lib/buildInfo", () => ({
+vi.mock("$lib/build-info", () => ({
   BUILD_REF: "0.0.0+test",
   GITHUB_REPOSITORY: "opengrimoire/ganbaru-ai",
 }));
 
-vi.mock("$lib/components/settings/settings-detail-registry", async () => {
-  const { default: Stub } = await import("./SettingsSectionTestStub.test.svelte");
+vi.mock("$lib/components/settings/detail-registry", async () => {
+  const { default: Stub } = await import("./SettingsSectionStub.test.svelte");
   const load = async (kind: string) => ({ kind, component: Stub });
   return {
     loadSettingsDetail: load,
@@ -149,8 +149,8 @@ describe("SettingsModal remount state", () => {
       target,
       props: {
         presentation: "mobile",
-        initialSection: "doomscrolling",
-        initialDoomscrollingTab: "limits",
+        initialSection: "distractions",
+        initialDistractionsTab: "limits",
         onClose: () => undefined,
       },
     });

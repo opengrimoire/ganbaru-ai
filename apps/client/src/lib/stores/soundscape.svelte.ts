@@ -24,10 +24,10 @@ import type {
   MusicSoundscapeSnapshot,
   MusicSoundscapeState,
   MusicSoundscapeWrite,
-} from "$lib/music/soundscape-contracts";
-import { MAX_SOUNDSCAPE_LAYERS } from "$lib/music/soundscape-contracts";
-import { INITIAL_SOUNDSCAPE_VOLUME } from "$lib/music/soundscape-defaults";
-import { soundSelectionAction } from "$lib/music/soundscape-selection";
+} from "$lib/music/soundscape/contracts";
+import { MAX_SOUNDSCAPE_LAYERS } from "$lib/music/soundscape/contracts";
+import { INITIAL_SOUNDSCAPE_VOLUME } from "$lib/music/soundscape/defaults";
+import { soundSelectionAction } from "$lib/music/soundscape/selection";
 
 class SoundscapeStore {
   definitions = $state<MusicSoundscapeDefinition[]>([]);
@@ -150,7 +150,10 @@ class SoundscapeStore {
 
   private async startSelection(ids: string[], persist = true, multipleEnabled = this.persisted?.multipleEnabled ?? false): Promise<void> {
     if (this.playbackPending) return;
-    if (!multipleEnabled && ids.length > 1) throw new Error("Multiple background sounds are disabled.");
+    if (!multipleEnabled && ids.length > 1) {
+      this.error = "Multiple background sounds are disabled.";
+      return;
+    }
     const definitions = ids.map((id) => this.definitions.find((entry) => entry.id === id));
     if (definitions.some((entry) => !entry || entry.availability !== "available") || ids.length === 0) {
       this.error = "This background sound needs to be repaired before it can play.";
@@ -284,7 +287,7 @@ class SoundscapeStore {
     try {
       const saved = await upsertMusicSoundscape({ ...write, deviceId: this.deviceId });
       this.definitions = [...this.definitions.filter((entry) => entry.id !== saved.id), saved]
-        .sort((left, right) => left.createdAt - right.createdAt || left.name.localeCompare(right.name));
+        .sort((left, right) => left.createdAtMs - right.createdAtMs || left.name.localeCompare(right.name));
     } catch (error) { this.error = message(error); throw error; }
     finally { this.saving = false; }
   }
@@ -340,7 +343,7 @@ class SoundscapeStore {
         desiredPlaying,
         volume,
         expectedVersion: current.version,
-        updatedAt: Date.now(),
+        updatedAtMs: Date.now(),
       });
       if (generation === this.generation) this.persisted = saved;
     });

@@ -91,6 +91,7 @@ export const configuration = {
     selectStatusColor: (status: string) => `Seleccionar color para ${status}`,
     selectNewStatusColor: "Seleccionar color para el estado nuevo",
     statusName: "Nombre del estado",
+    statusCategory: "Categoría del estado",
     addStatus: "Agregar estado",
     deleteStatus: (status: string) => `Eliminar ${status}`,
     deleteStatusBlockedLast: "El proyecto debe conservar al menos un estado de tarea",

@@ -1,22 +1,22 @@
 import { invoke } from "@tauri-apps/api/core";
 import { ensureDbUrl } from "$lib/api/db";
-import { normalizeEventColor } from "$lib/components/calendar/utils";
-import { FALLBACK_COLOR_INDEX } from "$lib/components/calendar/types";
-import { localTimezone } from "$lib/stores/calendar-event-payloads";
-import { toCalendarDate } from "$lib/stores/map-row";
+import { normalizeEventColor } from "$lib/calendar/utils";
+import { FALLBACK_COLOR_INDEX } from "$lib/calendar/types";
+import { localTimezone } from "$lib/stores/calendar/event-payloads";
+import { toCalendarDate } from "$lib/calendar/db-rows";
 import {
   isNotesPageOpenMode,
   type NotesPageOpenMode,
-} from "$lib/notes/page-open-mode";
+} from "$lib/notes/pages/open-mode";
 import {
   isNotesHistoryRetentionDays,
   type NotesHistoryRetentionDays,
-} from "$lib/notes/history-retention";
+} from "$lib/notes/history/retention";
 import {
   DEFAULT_FOCUS_IDLE_THRESHOLD_MINUTES,
   FOCUS_IDLE_THRESHOLD_MINUTES_OPTIONS,
   type FocusIdleThresholdMinutes,
-} from "$lib/stores/preferences";
+} from "$lib/stores/preference-options";
 import type {
   Project,
   ProjectChecklistItem,
@@ -80,7 +80,7 @@ import { PROJECT_CUSTOM_FIELD_TYPES } from "$lib/projects/types";
 import {
   systemProjectGroupName,
   systemProjectName,
-} from "$lib/projects/project-system-defaults";
+} from "$lib/projects/system-defaults";
 
 interface ProjectGroupRow {
   id: string;
@@ -1134,7 +1134,7 @@ export interface ProjectTaskBulkRequest {
   change: ProjectTaskBulkChange;
 }
 
-/** Reuse the operation ID and payload to recover the committed result after a lost response. */
+/** Apply one bulk task change. Retrying with the same operation ID and payload recovers the committed result after a lost response. */
 export async function applyProjectTaskBulk(request: ProjectTaskBulkRequest): Promise<ProjectMutation> {
   const dbUrl = await ensureDbUrl();
   const response = await invoke<unknown>("projects_apply_task_bulk", { dbUrl, request });
@@ -1153,7 +1153,7 @@ export interface ProjectReorderRequest {
   item: ProjectReorderItem;
 }
 
-/** Move within native siblings and reconcile only the validated committed result. */
+/** Move one item among its siblings and return only the validated committed result. */
 export async function reorderProjectItem(request: ProjectReorderRequest): Promise<ProjectMutation> {
   const dbUrl = await ensureDbUrl();
   const response = await invoke<unknown>("projects_reorder_item", { dbUrl, request });
@@ -1173,103 +1173,103 @@ function parseCompoundProjectRows(
 ): ProjectsMutationRows {
   const taskLimit = 10_000;
   const historyPerTaskLimit = 32;
-  function object(value: unknown): Record<string, unknown> {
+  function readObject(value: unknown): Record<string, unknown> {
     if (typeof value !== "object" || value === null || Array.isArray(value)) {
       throw new Error("Invalid project bulk result object");
     }
     return Object.fromEntries(Object.entries(value));
   }
-  function text(row: Record<string, unknown>, key: string): string {
+  function readText(row: Record<string, unknown>, key: string): string {
     const value = row[key];
     if (typeof value !== "string") throw new Error(`Invalid project bulk result ${key}`);
     return value;
   }
-  function optionalText(row: Record<string, unknown>, key: string): string | null {
-    return row[key] === null ? null : text(row, key);
+  function readOptionalText(row: Record<string, unknown>, key: string): string | null {
+    return row[key] === null ? null : readText(row, key);
   }
-  function number(row: Record<string, unknown>, key: string): number {
+  function readNumber(row: Record<string, unknown>, key: string): number {
     const value = row[key];
     if (typeof value !== "number" || !Number.isFinite(value)) {
       throw new Error(`Invalid project bulk result ${key}`);
     }
     return value;
   }
-  function optionalNumber(row: Record<string, unknown>, key: string): number | null {
-    return row[key] === null ? null : number(row, key);
+  function readOptionalNumber(row: Record<string, unknown>, key: string): number | null {
+    return row[key] === null ? null : readNumber(row, key);
   }
-  function array(value: unknown, maximum: number): unknown[] {
+  function readArray(value: unknown, maximum: number): unknown[] {
     if (!Array.isArray(value) || value.length > maximum) throw new Error("Invalid project bulk result array");
     return value;
   }
-  const row = object(value);
-  const tasks = array(row.tasks, scope.kind === "task" ? taskLimit : 0).map((value): ProjectTaskRow => {
-    const task = object(value);
-    const revision = number(task, "revision");
-    const taskType = text(task, "task_type");
+  const row = readObject(value);
+  const tasks = readArray(row.tasks, scope.kind === "task" ? taskLimit : 0).map((value): ProjectTaskRow => {
+    const task = readObject(value);
+    const revision = readNumber(task, "revision");
+    const taskType = readText(task, "task_type");
     if (!Number.isSafeInteger(revision) || revision < 0
-      || ![0, 1].includes(number(task, "milestone"))
-      || text(task, "project_id") !== projectId
+      || ![0, 1].includes(readNumber(task, "milestone"))
+      || readText(task, "project_id") !== projectId
       || (taskType !== "task" && taskType !== "milestone" && taskType !== "bug" && taskType !== "habit")) {
       throw new Error("Invalid project bulk task identity, revision, or type");
     }
     return {
-      id: text(task, "id"), project_id: projectId, revision,
-      section_id: text(task, "section_id"), status_id: text(task, "status_id"),
-      parent_task_id: optionalText(task, "parent_task_id"), title: text(task, "title"),
-      description: text(task, "description"), priority: text(task, "priority"), task_type: taskType,
-      section_sort_order: number(task, "section_sort_order"), status_sort_order: number(task, "status_sort_order"),
-      estimate_minutes: optionalNumber(task, "estimate_minutes"), due_date: optionalText(task, "due_date"),
-      due_time: optionalText(task, "due_time"), start_date: optionalText(task, "start_date"),
-      start_time: optionalText(task, "start_time"), target_end_date: optionalText(task, "target_end_date"),
-      completed_at: optionalText(task, "completed_at"), archived_at: optionalText(task, "archived_at"),
-      blocker_reason: optionalText(task, "blocker_reason"), milestone: number(task, "milestone"),
-      created_at: text(task, "created_at"), updated_at: text(task, "updated_at"),
+      id: readText(task, "id"), project_id: projectId, revision,
+      section_id: readText(task, "section_id"), status_id: readText(task, "status_id"),
+      parent_task_id: readOptionalText(task, "parent_task_id"), title: readText(task, "title"),
+      description: readText(task, "description"), priority: readText(task, "priority"), task_type: taskType,
+      section_sort_order: readNumber(task, "section_sort_order"), status_sort_order: readNumber(task, "status_sort_order"),
+      estimate_minutes: readOptionalNumber(task, "estimate_minutes"), due_date: readOptionalText(task, "due_date"),
+      due_time: readOptionalText(task, "due_time"), start_date: readOptionalText(task, "start_date"),
+      start_time: readOptionalText(task, "start_time"), target_end_date: readOptionalText(task, "target_end_date"),
+      completed_at: readOptionalText(task, "completed_at"), archived_at: readOptionalText(task, "archived_at"),
+      blocker_reason: readOptionalText(task, "blocker_reason"), milestone: readNumber(task, "milestone"),
+      created_at: readText(task, "created_at"), updated_at: readText(task, "updated_at"),
     };
   });
   const taskIds = new Set(tasks.map((task) => task.id));
   if (taskIds.size !== tasks.length) throw new Error("Duplicate project bulk result task");
-  const taskChangeEvents = array(row.task_change_events, taskLimit * historyPerTaskLimit).map((value): ProjectTaskChangeEventRow => {
-    const event = object(value);
-    const eventType = text(event, "event_type");
+  const taskChangeEvents = readArray(row.task_change_events, taskLimit * historyPerTaskLimit).map((value): ProjectTaskChangeEventRow => {
+    const event = readObject(value);
+    const eventType = readText(event, "event_type");
     if (eventType !== "created" && eventType !== "updated" && eventType !== "status_changed"
       && eventType !== "scheduled" && eventType !== "completed" && eventType !== "reopened"
       && eventType !== "archived" && eventType !== "event_unlinked" && eventType !== "dependency_added"
       && eventType !== "dependency_removed") throw new Error("Invalid project bulk history event");
-    const taskId = text(event, "task_id");
+    const taskId = readText(event, "task_id");
     if (!taskIds.has(taskId)) throw new Error("Invalid project bulk history owner");
     return {
-      id: text(event, "id"), task_id: taskId, event_type: eventType,
-      field_name: optionalText(event, "field_name"), old_value: optionalText(event, "old_value"),
-      new_value: optionalText(event, "new_value"), reason: optionalText(event, "reason"),
-      occurred_at: text(event, "occurred_at"),
+      id: readText(event, "id"), task_id: taskId, event_type: eventType,
+      field_name: readOptionalText(event, "field_name"), old_value: readOptionalText(event, "old_value"),
+      new_value: readOptionalText(event, "new_value"), reason: readOptionalText(event, "reason"),
+      occurred_at: readText(event, "occurred_at"),
     };
   });
-  function revision(row: Record<string, unknown>): number {
-    const value = number(row, "revision");
+  function readRevision(row: Record<string, unknown>): number {
+    const value = readNumber(row, "revision");
     if (!Number.isSafeInteger(value) || value < 0) throw new Error("Invalid project schema revision");
     return value;
   }
-  function order(row: Record<string, unknown>): number {
-    const value = number(row, "sort_order");
+  function readSortOrder(row: Record<string, unknown>): number {
+    const value = readNumber(row, "sort_order");
     if (!Number.isSafeInteger(value)) throw new Error("Invalid project schema order");
     return value;
   }
-  const customFields = array(row.custom_fields, scope.kind === "custom_field" ? taskLimit : 0).map((value): ProjectCustomFieldRow => {
-    const field = object(value);
+  const customFields = readArray(row.custom_fields, scope.kind === "custom_field" ? taskLimit : 0).map((value): ProjectCustomFieldRow => {
+    const field = readObject(value);
     const fieldType = PROJECT_CUSTOM_FIELD_TYPES.find((type) => type === field.field_type);
-    if (!fieldType || text(field, "project_id") !== projectId) throw new Error("Invalid reordered custom field owner or type");
-    return { id: text(field, "id"), revision: revision(field), project_id: projectId,
-      name: text(field, "name"), field_type: fieldType, sort_order: order(field),
-      created_at: text(field, "created_at"), updated_at: text(field, "updated_at") };
+    if (!fieldType || readText(field, "project_id") !== projectId) throw new Error("Invalid reordered custom field owner or type");
+    return { id: readText(field, "id"), revision: readRevision(field), project_id: projectId,
+      name: readText(field, "name"), field_type: fieldType, sort_order: readSortOrder(field),
+      created_at: readText(field, "created_at"), updated_at: readText(field, "updated_at") };
   });
-  const customFieldOptions = array(row.custom_field_options, scope.kind === "custom_field_option" ? taskLimit : 0).map((value): ProjectCustomFieldOptionRow => {
-    const option = object(value);
-    if (scope.kind !== "custom_field_option" || text(option, "field_id") !== scope.fieldId) {
+  const customFieldOptions = readArray(row.custom_field_options, scope.kind === "custom_field_option" ? taskLimit : 0).map((value): ProjectCustomFieldOptionRow => {
+    const option = readObject(value);
+    if (scope.kind !== "custom_field_option" || readText(option, "field_id") !== scope.fieldId) {
       throw new Error("Invalid reordered option owner");
     }
-    return { id: text(option, "id"), revision: revision(option), field_id: scope.fieldId,
-      name: text(option, "name"), sort_order: order(option),
-      created_at: text(option, "created_at"), updated_at: text(option, "updated_at") };
+    return { id: readText(option, "id"), revision: readRevision(option), field_id: scope.fieldId,
+      name: readText(option, "name"), sort_order: readSortOrder(option),
+      created_at: readText(option, "created_at"), updated_at: readText(option, "updated_at") };
   });
   for (const rows of [customFields, customFieldOptions]) {
     if (new Set(rows.map((entry) => entry.id)).size !== rows.length) throw new Error("Duplicate reordered schema identity");
@@ -1280,7 +1280,7 @@ function parseCompoundProjectRows(
     custom_field_option_values: [], dependencies: [], event_links: [], view_preferences: [], custom_emojis: [],
     removals: [], calendar_event_project_assignments: [],
   };
-  for (const key of Object.keys(emptyCollections)) array(row[key], 0);
+  for (const key of Object.keys(emptyCollections)) readArray(row[key], 0);
   return { ...emptyCollections, tasks, task_change_events: taskChangeEvents, custom_fields: customFields, custom_field_options: customFieldOptions };
 }
 

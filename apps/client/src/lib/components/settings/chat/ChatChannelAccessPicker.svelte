@@ -8,7 +8,7 @@
   import {
     isPointerAimingAtSubmenu,
     type MenuAimPoint,
-  } from "$lib/projects/menu-aim";
+  } from "$lib/utils/menu-aim";
   import {
     projectPickerBridgeFrameStyle,
     projectPickerMenuAimRect,
@@ -17,13 +17,13 @@
     projectPickerSubpanelAimOrigin,
     projectPickerSubpanelGeometry,
     projectPickerSubpanelSide,
-  } from "$lib/projects/project-picker-panels";
-  import { PROJECT_NAVIGATOR_PANEL_WIDTH } from "$lib/projects/project-toolbar";
+  } from "$lib/projects/picker-panels";
+  import { PROJECT_NAVIGATOR_PANEL_WIDTH } from "$lib/projects/toolbar";
   import type { Project, ProjectGroup } from "$lib/projects/types";
   import { getProjects } from "$lib/stores/projects.svelte";
   import { portal } from "$lib/utils/portal";
   import CalendarScrollbar from "$lib/components/calendar/CalendarScrollbar.svelte";
-  import SettingsCheckbox from "../SettingsCheckbox.svelte";
+  import SettingsCheckbox from "$lib/components/settings/SettingsCheckbox.svelte";
 
   type CompactStage = "groups" | "projects" | "channels";
 
@@ -51,12 +51,12 @@
 
   const projects = getProjects();
   const { t } = getLocalization();
-  const panelGap = 4;
-  const panelWidth = PROJECT_NAVIGATOR_PANEL_WIDTH;
-  const panelRowHeight = 32;
-  const panelListPadding = 8;
-  const channelPanelChromeHeight = 42;
-  const viewportMargin = 8;
+  const PANEL_GAP = 4;
+  const PANEL_WIDTH = PROJECT_NAVIGATOR_PANEL_WIDTH;
+  const PANEL_ROW_HEIGHT = 32;
+  const PANEL_LIST_PADDING = 8;
+  const CHANNEL_PANEL_CHROME_HEIGHT = 42;
+  const VIEWPORT_MARGIN = 8;
 
   let query = $state("");
   let channelQuery = $state("");
@@ -133,10 +133,10 @@
 
   function viewportBounds() {
     return {
-      left: viewportMargin,
-      right: window.innerWidth - viewportMargin,
-      top: viewportMargin,
-      bottom: window.innerHeight - viewportMargin,
+      left: VIEWPORT_MARGIN,
+      right: window.innerWidth - VIEWPORT_MARGIN,
+      top: VIEWPORT_MARGIN,
+      bottom: window.innerHeight - VIEWPORT_MARGIN,
     };
   }
 
@@ -160,7 +160,7 @@
     const trigger = anchor.getBoundingClientRect();
     const bounds = viewportBounds();
     const usableWidth = Math.max(0, bounds.right - bounds.left);
-    const width = Math.min(compact ? 320 : panelWidth, usableWidth);
+    const width = Math.min(compact ? 320 : PANEL_WIDTH, usableWidth);
     const maxHeight = Math.max(0, bounds.bottom - bounds.top);
     const naturalHeight = outerHeight(mainSearchElement)
       + outerHeight(compactBackElement)
@@ -168,10 +168,10 @@
       + verticalPadding(mainScrollElement);
     const height = Math.min(naturalHeight, maxHeight);
     const left = Math.min(Math.max(bounds.left, trigger.left), Math.max(bounds.left, bounds.right - width));
-    const belowTop = trigger.bottom + panelGap;
+    const belowTop = trigger.bottom + PANEL_GAP;
     const top = belowTop + height <= bounds.bottom
       ? belowTop
-      : Math.max(bounds.top, trigger.top - panelGap - height);
+      : Math.max(bounds.top, trigger.top - PANEL_GAP - height);
     mainPanelStyle = [
       "visibility:visible",
       `left:${Math.round(left)}px`,
@@ -208,12 +208,12 @@
       anchorRect: groupAnchorElement.getBoundingClientRect(),
       panelRect: mainPanelElement.getBoundingClientRect(),
       bounds: viewportBounds(),
-      gap: panelGap,
+      gap: PANEL_GAP,
       footerHeight: 0,
       projectCount: visibleProjects.length,
       visibleRows: null,
-      listPadding: panelListPadding,
-      rowHeight: panelRowHeight,
+      listPadding: PANEL_LIST_PADDING,
+      rowHeight: PANEL_ROW_HEIGHT,
     });
     projectBridgeStyle = projectPickerBridgeFrameStyle(geometry.bridge);
     projectPanelStyle = projectPickerPanelFrameStyle(geometry.panel);
@@ -225,12 +225,12 @@
       anchorRect: projectAnchorElement.getBoundingClientRect(),
       panelRect: projectPanelElement.getBoundingClientRect(),
       bounds: viewportBounds(),
-      gap: panelGap,
-      footerHeight: channelPanelChromeHeight,
+      gap: PANEL_GAP,
+      footerHeight: CHANNEL_PANEL_CHROME_HEIGHT,
       projectCount: Math.max(1, filteredChannels.length),
       visibleRows: null,
-      listPadding: panelListPadding,
-      rowHeight: panelRowHeight,
+      listPadding: PANEL_LIST_PADDING,
+      rowHeight: PANEL_ROW_HEIGHT,
     });
     channelBridgeStyle = projectPickerBridgeFrameStyle(geometry.bridge);
     channelPanelStyle = projectPickerPanelFrameStyle(geometry.panel);

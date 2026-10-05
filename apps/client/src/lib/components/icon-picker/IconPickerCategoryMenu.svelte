@@ -4,10 +4,10 @@
   import type {
     ProjectLucideCategory,
     ProjectLucideIconEntry,
-  } from "$lib/projects/project-lucide-catalog.generated";
+  } from "$lib/projects/icons/lucide-catalog.generated";
   import { cn } from "$lib/utils";
   import { portal } from "$lib/utils/portal";
-  import LucideNodeIcon from "$lib/components/projects/LucideNodeIcon.svelte";
+  import LucideNodeIcon from "./LucideNodeIcon.svelte";
 
   let {
     rootElement = $bindable<HTMLElement | undefined>(),

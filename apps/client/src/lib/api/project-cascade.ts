@@ -109,7 +109,7 @@ export async function previewProjectDependencyCascade(projectId: string): Promis
   return parseProjectCascadePreview(value, projectId);
 }
 
-/** Retry the identical reviewed digest and operation identity after an uncertain response. */
+/** Apply a reviewed cascade. After an uncertain response, retry with the same digest and operation ID. */
 export async function applyProjectDependencyCascade(request: ProjectDependencyCascadeApply): Promise<ProjectMutation> {
   const value = await invoke<unknown>("projects_apply_dependency_cascade", { dbUrl: await ensureDbUrl(), request });
   return parseProjectTaskMutation(value, request.projectId);

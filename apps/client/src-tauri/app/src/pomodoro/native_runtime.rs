@@ -9,21 +9,21 @@ mod delivery;
 mod effects;
 use crate::vault::runtime_lifecycle as lifecycle;
 mod local_time;
-#[cfg(any(target_os = "android", target_os = "ios", test))]
+#[cfg(any(mobile, test))]
 mod mobile;
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 mod presentation;
 mod subscriptions;
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 pub(crate) use authority::overlay_context_is_current;
 pub(crate) use authority::{
     allows_existing_lease, current_effect, effect_is_current, presentation_is_current,
 };
 #[cfg(not(target_os = "ios"))]
 pub(crate) use authority::{capture_music_delivery, music_delivery_is_current};
-#[cfg(any(target_os = "android", target_os = "ios"))]
+#[cfg(mobile)]
 use mobile::FocusNotificationCopy as NotificationCopy;
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 use presentation::DesktopNotificationCopy as NotificationCopy;
 pub(crate) use subscriptions::FocusNotice;
 
@@ -33,7 +33,7 @@ use std::sync::{
 };
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use ganbaru_focus::*;
+use ganbaru_pomodoro::*;
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
 use tauri::{Manager, Runtime, ipc::Channel};
@@ -104,13 +104,13 @@ struct FocusRuntimeState {
     lifecycle: lifecycle::LifecycleControl,
     foreground: watch::Sender<ForegroundObservation>,
     authority: watch::Sender<Option<authority::EffectAuthority>>,
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(desktop)]
     controls: watch::Sender<Option<FocusNativeContext>>,
 }
 
 /// Native controls retain the accepted context that was displayed to the user.
 #[derive(Clone, Debug)]
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 pub(crate) struct FocusNativeContext {
     vault_id: String,
     pub(crate) vault_generation: u64,
@@ -122,7 +122,7 @@ pub(crate) struct FocusNativeContext {
     pub(crate) idle_detected_at_ms: Option<i64>,
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 impl FocusNativeContext {
     /// Bind publication to the exact snapshot supplying the visible tray state.
     pub(crate) fn matches_snapshot(
@@ -144,12 +144,11 @@ impl FocusNativeContext {
     }
 }
 
-#[cfg(all(test, not(any(target_os = "android", target_os = "ios"))))]
-#[path = "native_runtime/native_context_tests.rs"]
-mod native_context_tests;
+#[cfg(all(test, desktop))]
+mod tests;
 
 /// Paint acknowledgement is scoped to one native idle episode, without a caller clock.
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct IdleOverlayScope {
@@ -167,23 +166,23 @@ enum Request {
         delete_command_id: String,
     },
     CalendarEdit {
-        request: Box<crate::calendar_events::commit::CommitRequest>,
+        request: Box<crate::calendar::events::commit::CommitRequest>,
         response: oneshot::Sender<
             Result<
-                crate::calendar_events::commit::CommitReply,
-                crate::calendar_events::commit::CommitFailure,
+                crate::calendar::events::commit::CommitReply,
+                crate::calendar::events::commit::CommitFailure,
             >,
         >,
     },
     #[cfg(not(target_os = "ios"))]
     NotificationCopy(NotificationCopy),
     Command(FocusRequest),
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(desktop)]
     IdleOverlayVisible {
         scope: IdleOverlayScope,
         window_label: String,
     },
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(desktop)]
     Native {
         intent: FocusIntent,
         context: FocusNativeContext,
@@ -248,7 +247,7 @@ struct Owner {
     last_clock: Option<clock::ClockObservation>,
     calendar_undo: Option<calendar_edit::UndoSlot>,
     idle_grace: clock::IdleGraceClock,
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(desktop)]
     native_command_sequence: u64,
     effects: delivery::DeliveryHandle,
     subscriptions: subscriptions::Subscriptions<Channel<FocusNotice>>,
@@ -276,7 +275,7 @@ fn now_ms() -> Result<i64, FocusExecutionError> {
 }
 
 fn platform() -> FocusPlatform {
-    if cfg!(any(target_os = "android", target_os = "ios")) {
+    if cfg!(mobile) {
         FocusPlatform::Android
     } else {
         FocusPlatform::Desktop
@@ -306,7 +305,7 @@ pub(crate) fn setup(app: &tauri::AppHandle) {
         lifecycle,
         foreground,
         authority: watch::channel(None).0,
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        #[cfg(desktop)]
         controls: watch::channel(None).0,
     });
     #[cfg(target_os = "android")]
@@ -356,13 +355,13 @@ pub(crate) fn setup(app: &tauri::AppHandle) {
             last_clock: None,
             calendar_undo: None,
             idle_grace: clock::IdleGraceClock::default(),
-            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            #[cfg(desktop)]
             native_command_sequence: 0,
             effects: delivery,
             subscriptions: subscriptions::Subscriptions::default(),
         };
         if let Err(error) = owner.attach_platform_lifecycle().await {
-            owner.failed(error);
+            owner.record_failure(error);
         }
         let mut next_wake = tokio::time::Instant::now();
         let mut delivery_feedback_open = true;
@@ -384,11 +383,11 @@ pub(crate) fn setup(app: &tauri::AppHandle) {
                     if lifecycle_request.intent == lifecycle::LifecycleIntent::Resume
                         && let Err(error) = owner.handle(Request::Resume { revision: lifecycle_request.revision }).await
                     {
-                        owner.failed(error);
+                        owner.record_failure(error);
                     }
                 }
                 _ = tokio::time::sleep_until(next_wake) => {
-                    if let Err(error) = owner.tick(calendar_dirty.swap(false, Ordering::AcqRel)).await { owner.failed(error); }
+                    if let Err(error) = owner.tick(calendar_dirty.swap(false, Ordering::AcqRel)).await { owner.record_failure(error); }
                     next_wake = tokio::time::Instant::now() + owner.next_delay();
                 }
                 Some(message) = receiver.recv() => {
@@ -396,7 +395,7 @@ pub(crate) fn setup(app: &tauri::AppHandle) {
                     let result = owner.handle(message.request).await;
                     if !presentation && let Err(error) = &result
                         && matches!(error.code, FocusErrorCode::Persistence | FocusErrorCode::Unavailable | FocusErrorCode::ReadOnly) {
-                        owner.failed(error.clone());
+                        owner.record_failure(error.clone());
                     }
                     if let Some(response) = message.response { let _ = response.send(result); }
                 }
@@ -411,7 +410,7 @@ pub(crate) fn setup(app: &tauri::AppHandle) {
                     if changed.is_err() { break; }
                     let observation = *foreground_receiver.borrow_and_update();
                     owner.foreground = observation.foreground;
-                    if let Err(error) = owner.observe(FocusObservation::ForegroundChanged { foreground: observation.foreground }, observation.observed_at_ms).await { owner.failed(error); }
+                    if let Err(error) = owner.observe(FocusObservation::ForegroundChanged { foreground: observation.foreground }, observation.observed_at_ms).await { owner.record_failure(error); }
                 }
                 _ = invalidation.notified() => {
                     if !owner.frozen
@@ -420,7 +419,7 @@ pub(crate) fn setup(app: &tauri::AppHandle) {
                     {
                         owner.effects.invalidate_preferences();
                         let result = async { owner.ensure_context(true).await?; owner.observe(FocusObservation::CalendarChanged, now_ms()?).await }.await;
-                        if let Err(error) = result { owner.failed(error); }
+                        if let Err(error) = result { owner.record_failure(error); }
                     }
                 }
                 else => break,
@@ -498,7 +497,7 @@ pub(crate) async fn focus_snapshot(
 }
 
 /// The native overlay and its main-window fallback can report a painted warning.
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 #[tauri::command]
 pub(crate) async fn focus_idle_overlay_visible(
     app: tauri::AppHandle,
@@ -507,7 +506,7 @@ pub(crate) async fn focus_idle_overlay_visible(
 ) -> Result<(), FocusExecutionError> {
     if !matches!(
         window.label(),
-        crate::notification::POMODORO_OVERLAY_MAIN_LABEL | "main"
+        crate::pomodoro::overlay::POMODORO_OVERLAY_MAIN_LABEL | "main"
     ) || scope.vault_generation == 0
         || scope.run_id.is_empty()
         || scope.run_id.len() > 128
@@ -611,7 +610,7 @@ pub(crate) async fn focus_unsubscribe(
 }
 
 /// Capture the displayed native revision before creating a control or notification.
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 pub(crate) fn capture_native_context<R: Runtime>(
     app: &tauri::AppHandle<R>,
 ) -> Result<FocusNativeContext, String> {
@@ -629,7 +628,7 @@ pub(crate) fn capture_native_context<R: Runtime>(
 }
 
 /// Stale native button actions use the same revision and generation gates as IPC.
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 pub(crate) fn native_control_in_context<R: Runtime>(
     app: &tauri::AppHandle<R>,
     intent: FocusIntent,
@@ -679,7 +678,7 @@ pub(crate) async fn stop_for_vault_handoff<R: Runtime>(
 
 fn revoke_requested_authority(state: &FocusRuntimeState) {
     state.authority.send_replace(None);
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(desktop)]
     state.controls.send_replace(None);
 }
 
@@ -777,7 +776,7 @@ impl Owner {
                 self.pool = None;
                 self.projection.vault_generation = NEXT_GENERATION.fetch_add(1, Ordering::Relaxed);
                 self.projection.snapshot = None;
-                #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                #[cfg(desktop)]
                 self.app
                     .state::<FocusRuntimeState>()
                     .controls
@@ -813,7 +812,7 @@ impl Owner {
                     self.projection.vault_generation =
                         NEXT_GENERATION.fetch_add(1, Ordering::Relaxed);
                     self.projection.snapshot = None;
-                    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                    #[cfg(desktop)]
                     self.app
                         .state::<FocusRuntimeState>()
                         .controls
@@ -851,7 +850,7 @@ impl Owner {
         let observed_now = now_ms().map(|now| self.logical_now(now));
         self.refresh_foreground();
         match request {
-            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            #[cfg(desktop)]
             Request::IdleOverlayVisible {
                 scope,
                 window_label,
@@ -897,7 +896,7 @@ impl Owner {
                     receipt: Some(receipt),
                 });
             }
-            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            #[cfg(desktop)]
             Request::Native { intent, context } => {
                 if self.projection.vault_id.as_ref() != Some(&context.vault_id) {
                     return Err(error(
@@ -991,7 +990,7 @@ impl Owner {
             self.projection.vault_generation = NEXT_GENERATION.fetch_add(1, Ordering::Relaxed);
             self.projection.vault_id = Some(vault_id.clone());
             self.projection.snapshot = None;
-            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            #[cfg(desktop)]
             self.app
                 .state::<FocusRuntimeState>()
                 .controls
@@ -1000,7 +999,7 @@ impl Owner {
             self.subscriptions.publish(&self.projection, Instant::now());
             self.ownership_generation = Some(generation);
             self.pool = Some(
-                crate::db_path::connect_sqlite(
+                crate::db::connect_sqlite(
                     self.app.clone(),
                     format!("sqlite:{}", crate::vault::APP_SQLITE_FILE),
                 )
@@ -1164,7 +1163,7 @@ impl Owner {
             .map_err(|error| format!("Commit native Focus action: {error}"))?;
         self.next_boundary_ms = calendar.next_boundary_ms;
         self.calendar_commitment = calendar_commitment;
-        self.committed(snapshot.clone(), now).await?;
+        self.publish_committed(snapshot.clone(), now).await?;
         Ok(snapshot)
     }
 
@@ -1184,8 +1183,8 @@ impl Owner {
         match current {
             Ok(snapshot) if recovered => {
                 let now = snapshot.observed_at_ms;
-                if let Err(error) = self.committed(snapshot, now).await {
-                    self.failed(error);
+                if let Err(error) = self.publish_committed(snapshot, now).await {
+                    self.record_failure(error);
                 }
             }
             Ok(snapshot) => {
@@ -1195,12 +1194,12 @@ impl Owner {
             }
             Err(error) => {
                 self.projection.snapshot = None;
-                #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                #[cfg(desktop)]
                 self.app
                     .state::<FocusRuntimeState>()
                     .controls
                     .send_replace(None);
-                self.failed(error);
+                self.record_failure(error);
             }
         }
     }
@@ -1254,10 +1253,10 @@ impl Owner {
             .map_err(|error| format!("Commit native Focus observation: {error}"))?;
         self.next_boundary_ms = calendar.next_boundary_ms;
         self.calendar_commitment = calendar_commitment;
-        self.committed(snapshot, now).await
+        self.publish_committed(snapshot, now).await
     }
 
-    async fn committed(
+    async fn publish_committed(
         &mut self,
         snapshot: FocusExecutionSnapshot,
         now: i64,
@@ -1296,7 +1295,7 @@ impl Owner {
             },
             Instant::now(),
         );
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        #[cfg(desktop)]
         self.app.state::<FocusRuntimeState>().controls.send_replace(
             (!self.freeze_requested())
                 .then_some(&self.projection)
@@ -1353,7 +1352,7 @@ impl Owner {
         }
     }
 
-    fn failed(&mut self, failure: FocusExecutionError) {
+    fn record_failure(&mut self, failure: FocusExecutionError) {
         self.clear_effect_authority();
         self.projection.error = Some(failure.to_string());
         self.next_retry_ms = now_ms().ok().map(|now| now + ERROR_RETRY_INTERVAL_MS);
@@ -1554,7 +1553,7 @@ impl Owner {
                 self.deliver_effects(now);
                 return Ok(());
             }
-            let activity = self.activity().await?;
+            let activity = self.read_activity().await?;
             self.observe(
                 if active {
                     FocusObservation::Activity(activity)
@@ -1570,11 +1569,11 @@ impl Owner {
         Ok(())
     }
 
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    async fn activity(&self) -> Result<FocusActivityObservation, FocusExecutionError> {
+    #[cfg(desktop)]
+    async fn read_activity(&self) -> Result<FocusActivityObservation, FocusExecutionError> {
         tauri::async_runtime::spawn_blocking(|| {
             let observed_at_ms = now_ms()?;
-            let status = crate::notification::idle::get_idle_status();
+            let status = crate::pomodoro::idle::focus_idle_status();
             Ok(FocusActivityObservation {
                 observed_at_ms,
                 idle_ms: status.idle_ms.and_then(|value| i64::try_from(value).ok()),
@@ -1585,8 +1584,8 @@ impl Owner {
         .map_err(|error| error.to_string())?
     }
 
-    #[cfg(any(target_os = "android", target_os = "ios"))]
-    async fn activity(&self) -> Result<FocusActivityObservation, FocusExecutionError> {
+    #[cfg(mobile)]
+    async fn read_activity(&self) -> Result<FocusActivityObservation, FocusExecutionError> {
         Ok(FocusActivityObservation {
             observed_at_ms: now_ms()?,
             idle_ms: None,

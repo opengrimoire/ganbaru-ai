@@ -3,7 +3,7 @@ import * as chatApi from "$lib/api/chat";
 import * as workingFolderApi from "$lib/api/project-working-folders";
 import type { ChatChannelRead, ChatMessageRead, ChatSettingsRead } from "$lib/chat/contracts";
 import { getChat } from "./chat.svelte";
-import { ChatConfigurationController } from "./chat-configuration-controller.svelte";
+import { ChatConfigurationController } from "$lib/stores/chat/configuration-controller.svelte";
 
 const projects = vi.hoisted(() => ({
   selectedProjectId: "project",

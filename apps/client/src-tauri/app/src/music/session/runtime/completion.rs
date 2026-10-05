@@ -1,7 +1,7 @@
 //! Temporary completion attenuation belongs to the serialized Music owner, never user settings.
 
 use super::*;
-use crate::notification::{AppSound, AppSoundState};
+use crate::sound_effects::{AppSound, AppSoundState};
 use std::time::Instant;
 
 const COMPLETION_ATTENUATION: f64 = 0.0;
@@ -61,7 +61,7 @@ impl Owner {
             self.state.status,
             SessionStatus::Playing | SessionStatus::Loading
         ) && !self.state.muted
-            && self.state.entry().is_some();
+            && self.state.current_entry().is_some();
         if should_duck {
             let (reply, response) = oneshot::channel();
             // Retain restoration before the first backend call. A lost or partially

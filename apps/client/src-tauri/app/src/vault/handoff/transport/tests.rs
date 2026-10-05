@@ -1,6 +1,6 @@
 use super::*;
+use crate::vault::handoff::pairing::random_token;
 use crate::vault::handoff::protocol::{DeviceKind, MAX_ARCHIVE_BYTES, PROTOCOL_VERSION};
-use crate::vault::handoff::state::random_token;
 use std::fs;
 use tokio::net::TcpListener;
 
@@ -223,7 +223,7 @@ async fn revoked_phone_clears_its_stale_link_after_authenticated_reconnect() {
 #[tokio::test]
 async fn authenticated_control_flow_prepares_commits_and_acknowledges() {
     use super::super::coordinator::{CoordinatorOperation, CoordinatorResponse};
-    use super::super::state::PendingAcknowledgement;
+    use super::super::pairing::PendingAcknowledgement;
 
     let (pair, mut requests) = LocalPair::start_with_coordinator().await;
     pair.enroll().await;
@@ -325,29 +325,29 @@ async fn authenticated_control_flow_prepares_commits_and_acknowledges() {
 }
 
 #[tokio::test]
-async fn authenticated_doomscrolling_exchange_returns_acknowledged_and_combined_samples() {
+async fn authenticated_distractions_exchange_returns_acknowledged_and_combined_samples() {
     use super::super::coordinator::{CoordinatorOperation, CoordinatorResponse};
-    use super::super::protocol::DoomscrollingSampleMessage;
+    use super::super::protocol::DistractionsSampleMessage;
 
     let (pair, mut requests) = LocalPair::start_with_coordinator().await;
     pair.enroll().await;
-    let sample = DoomscrollingSampleMessage {
+    let sample = DistractionsSampleMessage {
         sample_id: "phone-sample".to_string(),
         device_id: "device-phone".to_string(),
         source_type: "mobile-app".to_string(),
         source_key: "com.example.video".to_string(),
         display_name: Some("Video".to_string()),
-        started_at_unix_ms: 1_700_000_000_000,
+        started_at_ms: 1_700_000_000_000,
         elapsed_seconds: 30,
         local_date: "2026-09-13".to_string(),
-        created_at_unix_ms: 1_700_000_030_000,
+        created_at_ms: 1_700_000_030_000,
     };
     let expected = sample.clone();
     let response_sample = sample.clone();
     let coordinator = tokio::spawn(async move {
-        let request = requests.recv().await.expect("Doomscrolling request");
+        let request = requests.recv().await.expect("Distractions request");
         match request.operation {
-            CoordinatorOperation::DoomscrollingExchange {
+            CoordinatorOperation::DistractionsExchange {
                 vault_id,
                 device_id,
                 samples,
@@ -364,18 +364,18 @@ async fn authenticated_doomscrolling_exchange_returns_acknowledged_and_combined_
         }
         request
             .response
-            .send(Ok(CoordinatorResponse::DoomscrollingAcknowledged {
+            .send(Ok(CoordinatorResponse::DistractionsAcknowledged {
                 acknowledged_sample_ids: vec!["phone-sample".to_string()],
                 peer_samples: Vec::new(),
                 combined_samples: vec![response_sample],
             }))
-            .expect("send Doomscrolling response");
+            .expect("send Distractions response");
     });
 
     let (acknowledged, peer, combined) =
-        exchange_doomscrolling(&pair.phone, vec![sample.clone()], Vec::new(), Vec::new())
+        exchange_distractions(&pair.phone, vec![sample.clone()], Vec::new(), Vec::new())
             .await
-            .expect("exchange Doomscrolling usage");
+            .expect("exchange Distractions usage");
     assert_eq!(acknowledged, vec![sample.sample_id]);
     assert!(peer.is_empty());
     assert_eq!(combined.len(), 1);
@@ -385,7 +385,7 @@ async fn authenticated_doomscrolling_exchange_returns_acknowledged_and_combined_
 #[tokio::test]
 async fn android_upload_resumes_from_durable_desktop_staging() {
     use super::super::coordinator::{CoordinatorOperation, CoordinatorResponse};
-    use super::super::state::StoredOutgoingTransfer;
+    use super::super::pairing::StoredOutgoingTransfer;
 
     let (pair, mut requests) = LocalPair::start_with_coordinator().await;
     pair.enroll().await;

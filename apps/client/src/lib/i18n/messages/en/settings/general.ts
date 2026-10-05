@@ -10,7 +10,7 @@ export const general = {
     chat: "Chat",
     focus: "Focus",
     music: "Music",
-    doomscrolling: "Doomscrolling",
+    distractions: "Distractions",
     data: "Data",
     updates: "Updates",
     shortcuts: "Shortcuts",

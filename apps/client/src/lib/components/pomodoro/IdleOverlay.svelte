@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { getCurrentWindow } from "@tauri-apps/api/window";
-  import { elapsedSecondsSince } from "./blocked-screen";
+  import { elapsedSecondsSince } from "$lib/pomodoro/blocked-screen";
   import PomodoroBlockedScreen from "./PomodoroBlockedScreen.svelte";
 
   let {
@@ -25,24 +25,24 @@
   const VISIBILITY_RETRY_MS = 5000;
 
   async function enterFullscreen() {
-    const win = getCurrentWindow();
+    const appWindow = getCurrentWindow();
     try {
-      wasFullscreen = await win.isFullscreen();
-      await win.setAlwaysOnTop(true);
-      await win.setFullscreen(true);
-      await win.setFocus();
+      wasFullscreen = await appWindow.isFullscreen();
+      await appWindow.setAlwaysOnTop(true);
+      await appWindow.setFullscreen(true);
+      await appWindow.setFocus();
     } catch (e) {
       console.warn("Failed to enter fullscreen for idle overlay:", e);
     }
   }
 
   async function exitFullscreen() {
-    const win = getCurrentWindow();
+    const appWindow = getCurrentWindow();
     try {
       if (!wasFullscreen) {
-        await win.setFullscreen(false);
+        await appWindow.setFullscreen(false);
       }
-      await win.setAlwaysOnTop(false);
+      await appWindow.setAlwaysOnTop(false);
     } catch (e) {
       console.warn("Failed to exit fullscreen:", e);
     }

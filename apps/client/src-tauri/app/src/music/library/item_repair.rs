@@ -122,7 +122,7 @@ pub(crate) async fn apply(
         .await
         .map_err(|error| MusicLibraryError::database("begin item location repair", error))?;
     sqlx::query(
-        "INSERT INTO music_local_roots (id, name, created_at, updated_at)
+        "INSERT INTO music_local_roots (id, name, created_at_ms, updated_at_ms)
          VALUES (?, ?, ?, ?)",
     )
     .bind(&request.root_id)
@@ -135,7 +135,7 @@ pub(crate) async fn apply(
     sqlx::query(
         "INSERT INTO music_local_locations
             (id, item_id, root_id, relative_path, file_size_bytes, modified_at_ms,
-             lightweight_fingerprint, strong_fingerprint, availability, first_seen_at, updated_at)
+             lightweight_fingerprint, strong_fingerprint, availability, first_seen_at_ms, updated_at_ms)
          VALUES (?, ?, ?, ?, ?, NULL, ?, ?, 'available', ?, ?)",
     )
     .bind(&request.location_id)

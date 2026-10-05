@@ -1,25 +1,25 @@
 import { tick } from "svelte";
-import type { MusicPlaybackMode, MusicRepeatMode, MusicWeight } from "$lib/music/library-contracts";
-import type { MusicActivityPhase, MusicAssignmentBehavior, MusicAssignmentSource } from "$lib/music/music-context-assignment";
-import { emptyMusicSkipBreakdown, type MusicPlaylistSkipReason, type MusicSavedQueueEntry } from "$lib/music/music-playlist-playback";
+import type { MusicPlaybackMode, MusicRepeatMode, MusicWeight } from "$lib/music/library/contracts";
+import type { MusicActivityPhase, MusicAssignmentBehavior, MusicAssignmentSource } from "$lib/music/context-assignment";
+import { emptyMusicSkipBreakdown, type MusicPlaylistSkipReason, type MusicSavedQueueEntry } from "$lib/music/playlists/playback";
 import { probeLocalMedia, type LocalBackendKind } from "$lib/api/media-player";
 import { pickMediaFolder, registerEmbeddedArtwork, registerMediaFile } from "$lib/api/music";
 import { clampRate, clampVolume, formatVolumePercent, MAX_VOLUME, type PlaybackSnapshot } from "$lib/music/playback";
 import { formatSourceKind, isYouTubeSource, localFileSourceFromPath, parseMusicSourceInput, sourceDisplayLabel, type MusicSource } from "$lib/music/sources";
-import { NativeMusicSessionClient } from "$lib/music/native-session-client";
-import type { NativeMusicEffect, NativeMusicIntent, NativeMusicQueueEntry, NativeMusicQueueIntent, NativeMusicSnapshot } from "$lib/music/native-session";
+import { NativeMusicSessionClient } from "$lib/music/session/native-session-client";
+import type { NativeMusicEffect, NativeMusicIntent, NativeMusicQueueEntry, NativeMusicQueueIntent, NativeMusicSnapshot } from "$lib/music/session/native-session";
 import { onActiveVaultIdentityChange } from "$lib/vault/active-vault";
-import { focusMusicWindow } from "$lib/music/music-platform-controls";
+import { focusMusicWindow } from "$lib/music/session/platform-controls";
 import { getLocalization } from "$lib/i18n/translator.svelte";
-import { MusicSurfaceClaims } from "./music-surface-claims";
-import { initialMusicSnapshot, loadMusicPlayerSettings, persistMusicPlayerSettings } from "./music-player-settings";
-import { MusicLoadRuntime } from "./music-load-runtime";
-import { createMusicHostedMediaController, type MusicStaleVisual } from "./music-hosted-media-controller";
-import { createMusicExternalControls } from "$lib/stores/music-external-controls";
-import { createMusicYouTubeAdapter } from "./music-youtube-adapter";
-import { createMusicWebviewLocalAdapter } from "./music-webview-local-adapter";
+import { MusicSurfaceClaims } from "$lib/stores/music-player/surface-claims";
+import { initialMusicSnapshot, loadMusicPlayerSettings, persistMusicPlayerSettings } from "$lib/stores/music-player/settings";
+import { MusicLoadRuntime } from "$lib/stores/music-player/load-runtime";
+import { createMusicHostedMediaController, type MusicStaleVisual } from "$lib/stores/music-player/hosted-media-controller";
+import { createMusicExternalControls } from "$lib/stores/music-player/external-controls";
+import { createMusicYouTubeAdapter } from "$lib/stores/music-player/youtube-adapter";
+import { createMusicWebviewLocalAdapter } from "$lib/stores/music-player/webview-local-adapter";
 
-export type { MusicStaleVisual } from "./music-hosted-media-controller";
+export type { MusicStaleVisual } from "$lib/stores/music-player/hosted-media-controller";
 export type MusicPlaybackContextOwner = "manual" | "review" | "calendar-event" | "pomodoro" | "soundscape";
 
 export type MusicPlaybackActionOrigin = "manual" | "context" | "pomodoro-pause" | "system";
@@ -65,11 +65,11 @@ export interface LoadSourceOptions {
 
 export interface MusicReviewPlaybackCheckpoint { checkpointId: string }
 
-const progressMaxFallback = 1;
+const PROGRESS_MAX_FALLBACK = 1;
 const BROWSER_OBSERVATION_MS = 1_000;
 const initialPlayerSettings = loadMusicPlayerSettings();
 
-/** Presentation and browser mechanisms above one native session owner. */
+/** Presents the native Music session and runs the browser playback it delegates. */
 class MusicPlayerStore {
   sourceInput = $state("");
   currentSource = $state<MusicSource | null>(null);
@@ -124,13 +124,13 @@ class MusicPlayerStore {
   get soundscapeVersion(): number | null { return this.native?.soundscapeVersion ?? null; }
   private entries = $state<NativeMusicQueueEntry[]>([]);
   private initialized = false;
-  private heartbeatRunning = false;
+  private isHeartbeatRunning = false;
   private observationTimer: ReturnType<typeof setInterval> | null = null;
   private unsubscribeVault: (() => void) | null = null;
   private browserSessionId: string | null = null;
   private browserGeneration = -1;
   private browserSequence = 0;
-  private observing = false;
+  private isObserving = false;
   private nativeArtworkGeneration = -1;
   private readonly loadRuntime = new MusicLoadRuntime();
   private readonly surfaceClaims = new MusicSurfaceClaims((element) => { this.surfaceElement = element; });
@@ -189,7 +189,7 @@ class MusicPlayerStore {
   }
 
   get progressMax(): number {
-    return this.durationMs > 0 ? this.durationMs : progressMaxFallback;
+    return this.durationMs > 0 ? this.durationMs : PROGRESS_MAX_FALLBACK;
   }
 
   get progressValue(): number {
@@ -259,9 +259,9 @@ class MusicPlayerStore {
     if (this.initialized) return;
     this.initialized = true;
     this.externalControls.init();
-    window.addEventListener("online", this.connectivity);
-    window.addEventListener("offline", this.connectivity);
-    document.addEventListener("visibilitychange", this.visibility);
+    window.addEventListener("online", this.handleConnectivityChange);
+    window.addEventListener("offline", this.handleConnectivityChange);
+    document.addEventListener("visibilitychange", this.handleVisibilityChange);
     this.unsubscribeVault = onActiveVaultIdentityChange((previous, next) => {
       if (previous !== next && next) {
         this.stopBrowser(); this.client.reset();
@@ -286,21 +286,21 @@ class MusicPlayerStore {
     this.observationTimer = null;
     this.client.disconnect(); this.stopBrowser(); this.externalControls.destroy(); this.hostedMediaController.destroy();
     this.unsubscribeVault?.(); this.unsubscribeVault = null;
-    window.removeEventListener("online", this.connectivity); window.removeEventListener("offline", this.connectivity);
-    document.removeEventListener("visibilitychange", this.visibility);
+    window.removeEventListener("online", this.handleConnectivityChange); window.removeEventListener("offline", this.handleConnectivityChange);
+    document.removeEventListener("visibilitychange", this.handleVisibilityChange);
   }
 
-  private readonly connectivity = (): void => {
+  private readonly handleConnectivityChange = (): void => {
     this.online = navigator.onLine;
     void this.command({ kind: "online", online: this.online }, "system").catch((error: unknown) => this.reportError(error));
   };
-  private readonly visibility = (): void => { void this.heartbeat(); };
+  private readonly handleVisibilityChange = (): void => { void this.heartbeat(); };
   private async heartbeat(): Promise<void> {
-    if (!this.initialized || this.heartbeatRunning) return;
-    this.heartbeatRunning = true;
+    if (!this.initialized || this.isHeartbeatRunning) return;
+    this.isHeartbeatRunning = true;
     try { await this.client.host(document.visibilityState !== "hidden"); }
     catch (error) { this.reportError(error); }
-    finally { this.heartbeatRunning = false; }
+    finally { this.isHeartbeatRunning = false; }
   }
   private reportError(error: unknown): void {
     this.playerError = error instanceof Error ? error.message
@@ -428,14 +428,14 @@ class MusicPlayerStore {
   }
 
   private async observeBrowser(): Promise<void> {
-    if (!this.browserSessionId || !this.currentSource || this.observing) return;
-    this.observing = true;
+    if (!this.browserSessionId || !this.currentSource || this.isObserving) return;
+    this.isObserving = true;
     try {
       await this.client.observe({ sessionId: this.browserSessionId, generation: this.browserGeneration, sequence: ++this.browserSequence,
         sourceIdentity: this.currentSource.identity, status: this.snapshot.status, positionMs: Math.max(0, Math.round(this.snapshot.positionMs)),
         durationMs: this.snapshot.durationMs === null ? null : Math.max(0, Math.round(this.snapshot.durationMs)), error: this.snapshot.error });
     } catch (error) { this.reportError(error); }
-    finally { this.observing = false; }
+    finally { this.isObserving = false; }
   }
 
   private async command(intent: NativeMusicIntent, origin: MusicPlaybackActionOrigin = "manual"): Promise<NativeMusicSnapshot> {

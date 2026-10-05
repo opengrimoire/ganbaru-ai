@@ -51,7 +51,7 @@ pub(crate) struct ScheduleSnapshot {
     pub(crate) project_id: String,
     pub(crate) defaults: ScheduleDefaults,
     pub(crate) tasks: Vec<ScheduleTask>,
-    pub(crate) music: Vec<crate::music_context::MusicContextAssignmentDraft>,
+    pub(crate) music: Vec<crate::music::assignments::MusicContextAssignmentDraft>,
 }
 
 /// Bound canonical selection reads independently of the Calendar command adapter.
@@ -59,14 +59,14 @@ pub(crate) fn validate_selection(
     project_id: &str,
     selected: &[ScheduleTaskSelection],
 ) -> Result<(), String> {
-    let valid_id =
+    let is_valid_id =
         |id: &str| !id.trim().is_empty() && id.len() <= 1_024 && !id.chars().any(char::is_control);
     let mut ids = BTreeSet::new();
     if selected.is_empty()
         || selected.len() > MAX_SCHEDULE_TASKS
-        || !valid_id(project_id)
+        || !is_valid_id(project_id)
         || selected.iter().any(|task| {
-            !valid_id(&task.id)
+            !is_valid_id(&task.id)
                 || !(0..=9_007_199_254_740_991).contains(&task.revision)
                 || !ids.insert(&task.id)
         })

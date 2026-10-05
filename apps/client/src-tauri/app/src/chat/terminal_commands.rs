@@ -1,16 +1,16 @@
 //! Authorized commands for runtime terminals.
 
-use super::models::{
-    ChatError, ChatErrorCode, ChatResult, ChatThreadId, ProjectWorkingFolderId, UtcTimestamp,
-};
 use super::terminal::{
     ChatTerminalCloseResult, ChatTerminalCreateInput, ChatTerminalRead, ChatTerminalRegistry,
     ChatTerminalSnapshotRead,
 };
+use super::workspace::commands::authorize_working_folder;
 use super::workspace::{AuthorizedWorkingFolder, WorkingFolderAuthorizationOperation};
-use super::workspace_commands::authorize_working_folder;
-use crate::db_path;
+use crate::db;
 use chrono::{SecondsFormat, Utc};
+use ganbaru_chat_contracts::models::{
+    ChatError, ChatErrorCode, ChatResult, ChatThreadId, ProjectWorkingFolderId, UtcTimestamp,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sqlx::{Row, SqlitePool};
@@ -381,7 +381,7 @@ fn now_timestamp() -> ChatResult<UtcTimestamp> {
 }
 
 async fn chat_pool(app: tauri::AppHandle, db_url: String) -> ChatResult<SqlitePool> {
-    db_path::connect_sqlite(app, db_url)
+    db::connect_sqlite(app, db_url)
         .await
         .map_err(|_| ChatError::new(ChatErrorCode::Persistence, "open Chat database", true))
 }

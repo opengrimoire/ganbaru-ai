@@ -41,15 +41,15 @@ pub(crate) async fn record_listening_in_transaction(
     };
     sqlx::query(
         "INSERT INTO music_listening_statistics
-            (item_id, last_played_at, play_count, completion_count, skip_count, updated_at)
+            (item_id, last_played_at_ms, play_count, completion_count, skip_count, updated_at_ms)
          VALUES (?, ?, ?, ?, ?, ?)
          ON CONFLICT(item_id) DO UPDATE SET
-            last_played_at = CASE WHEN excluded.play_count > 0
-                THEN excluded.last_played_at ELSE music_listening_statistics.last_played_at END,
+            last_played_at_ms = CASE WHEN excluded.play_count > 0
+                THEN excluded.last_played_at_ms ELSE music_listening_statistics.last_played_at_ms END,
             play_count = music_listening_statistics.play_count + excluded.play_count,
             completion_count = music_listening_statistics.completion_count + excluded.completion_count,
             skip_count = music_listening_statistics.skip_count + excluded.skip_count,
-            updated_at = excluded.updated_at",
+            updated_at_ms = excluded.updated_at_ms",
     )
     .bind(&request.item_id)
     .bind((play_increment > 0).then_some(request.occurred_at))
@@ -64,7 +64,7 @@ pub(crate) async fn record_listening_in_transaction(
     if request.outcome == MusicListeningOutcome::Started {
         sqlx::query(
             "INSERT INTO music_recent_selections
-                (playlist_id, item_id, selection_kind, selected_at)
+                (playlist_id, item_id, selection_kind, selected_at_ms)
              VALUES (?, ?, ?, ?)",
         )
         .bind(&request.playlist_id)
@@ -79,7 +79,7 @@ pub(crate) async fn record_listening_in_transaction(
              WHERE playlist_id IS ? AND id NOT IN (
                 SELECT id FROM music_recent_selections
                 WHERE playlist_id IS ?
-                ORDER BY selected_at DESC, id DESC LIMIT ?
+                ORDER BY selected_at_ms DESC, id DESC LIMIT ?
              )",
         )
         .bind(&request.playlist_id)
@@ -91,7 +91,7 @@ pub(crate) async fn record_listening_in_transaction(
         sqlx::query(
             "DELETE FROM music_recent_selections WHERE id NOT IN (
                 SELECT id FROM music_recent_selections
-                ORDER BY selected_at DESC, id DESC LIMIT ?
+                ORDER BY selected_at_ms DESC, id DESC LIMIT ?
              )",
         )
         .bind(RECENT_SELECTIONS_GLOBAL)
@@ -118,9 +118,9 @@ pub(crate) async fn recent_selections(
         ));
     }
     let rows = sqlx::query_as::<_, (String, i64)>(
-        "SELECT item_id, selected_at FROM music_recent_selections
+        "SELECT item_id, selected_at_ms FROM music_recent_selections
          WHERE playlist_id IS ?
-         ORDER BY selected_at DESC, id DESC LIMIT ?",
+         ORDER BY selected_at_ms DESC, id DESC LIMIT ?",
     )
     .bind(playlist_id)
     .bind(limit)
@@ -129,9 +129,9 @@ pub(crate) async fn recent_selections(
     .map_err(|error| MusicLibraryError::database("load recent music selections", error))?;
     Ok(rows
         .into_iter()
-        .map(|(item_id, selected_at)| MusicRecentSelection {
+        .map(|(item_id, selected_at_ms)| MusicRecentSelection {
             item_id,
-            selected_at,
+            selected_at_ms,
         })
         .collect())
 }

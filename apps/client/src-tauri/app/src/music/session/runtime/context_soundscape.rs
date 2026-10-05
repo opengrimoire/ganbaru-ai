@@ -2,7 +2,7 @@
 
 use super::context::ContextActivation;
 use super::*;
-use crate::soundscape::{GeneratedNoiseKind, SoundscapeStartRequest};
+use crate::music::soundscape::{GeneratedNoiseKind, SoundscapeStartRequest};
 use std::sync::{Arc, LazyLock, atomic::AtomicBool};
 use std::time::Instant;
 
@@ -34,7 +34,7 @@ pub(super) async fn prepare(
     behavior: &str,
     soundscape_id: Option<&str>,
 ) -> MusicLibraryResult<PreparedSoundscape> {
-    use crate::music_context::MusicSoundscapeBehavior;
+    use crate::music::assignments::MusicSoundscapeBehavior;
     let behavior = MusicSoundscapeBehavior::try_from(behavior)
         .map_err(|error| MusicLibraryError::validation("assignment.soundscapeBehavior", error))?;
     let empty = |missing| PreparedSoundscape {
@@ -55,7 +55,7 @@ pub(super) async fn prepare(
         let source: Option<AcceptedSoundscapeSource> = sqlx::query_as(
             "SELECT s.generated_kind, l.absolute_path, st.volume, st.generated_level, st.local_level
              FROM music_soundscapes s
-             JOIN music_soundscape_state st ON st.singleton_id = 1
+             JOIN music_soundscape_state st ON st.singleton = 1
              LEFT JOIN music_soundscape_locations l ON l.soundscape_id = s.id AND l.device_id = ?
              WHERE s.id = ? AND length(CAST(s.id AS BLOB)) <= ?
                AND (l.absolute_path IS NULL OR length(CAST(l.absolute_path AS BLOB)) <= ?)
@@ -111,8 +111,8 @@ pub(super) async fn prepare(
     let version: i64 = sqlx::query_scalar(
         "UPDATE music_soundscape_state
          SET active_soundscape_id = CASE WHEN ? THEN ? ELSE active_soundscape_id END,
-             desired_playing = ?, automatic_intent = 1, version = version + 1, updated_at = MAX(updated_at + 1, ?)
-         WHERE singleton_id = 1 RETURNING version",
+             desired_playing = ?, automatic_intent = 1, version = version + 1, updated_at_ms = MAX(updated_at_ms + 1, ?)
+         WHERE singleton = 1 RETURNING version",
     )
     .bind(request.is_some())
     .bind(request.as_ref().map(|request| &request.source_id))
@@ -137,8 +137,8 @@ impl Owner {
         let app = self.app.clone();
         let worker = tauri::async_runtime::spawn_blocking(move || {
             let _delivery_permit = delivery_permit;
-            crate::soundscape::soundscape_stop(
-                app.state::<crate::soundscape::SoundscapeEngineState>(),
+            crate::music::soundscape::music_soundscape_stop(
+                app.state::<crate::music::soundscape::SoundscapeEngineState>(),
             )
             .map(|_| ())
             .map_err(|error| {
@@ -192,9 +192,9 @@ impl Owner {
             // Keep both permits through actual engine acknowledgement, even after a timeout.
             let _write_permit = permit;
             let _delivery_permit = delivery_permit;
-            let engine = app.state::<crate::soundscape::SoundscapeEngineState>();
+            let engine = app.state::<crate::music::soundscape::SoundscapeEngineState>();
             let guard_app = app.clone();
-            crate::soundscape::apply_automatic(
+            crate::music::soundscape::apply_automatic(
                 engine,
                 request,
                 Box::new(move || {
@@ -222,7 +222,7 @@ impl Owner {
                     // A later explicit background-layer choice supersedes the prepared effect.
                     match tauri::async_runtime::block_on(async {
                         sqlx::query_scalar::<_, i64>(
-                            "SELECT version FROM music_soundscape_state WHERE singleton_id = 1",
+                            "SELECT version FROM music_soundscape_state WHERE singleton = 1",
                         )
                         .fetch_optional(&pool)
                         .await
@@ -256,7 +256,7 @@ impl Owner {
         };
         if result.is_err() {
             let _permit = self.write_permit().await?;
-            sqlx::query("UPDATE music_soundscape_state SET desired_playing = 0, version = version + 1, updated_at = MAX(updated_at + 1, ?) WHERE singleton_id = 1 AND version = ?")
+            sqlx::query("UPDATE music_soundscape_state SET desired_playing = 0, version = version + 1, updated_at_ms = MAX(updated_at_ms + 1, ?) WHERE singleton = 1 AND version = ?")
                 .bind(now_ms()).bind(accepted_version).execute(self.pool.as_ref().expect("initialized music pool")).await
                 .map_err(|error| MusicLibraryError::database("revoke failed automatic background sound", error))?;
         }
@@ -265,5 +265,4 @@ impl Owner {
 }
 
 #[cfg(test)]
-#[path = "context_soundscape_tests.rs"]
 mod tests;

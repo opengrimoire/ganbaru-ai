@@ -3,7 +3,7 @@
 import { mount, tick, unmount } from "svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { localFileSourceFromPath } from "$lib/music/sources";
-import { musicSnoozeEndsAt } from "$lib/music/music-snooze";
+import { musicSnoozeEndsAt } from "$lib/music/session/snooze";
 import { getMusicPlayer } from "$lib/stores/music-player.svelte";
 
 const api = vi.hoisted(() => ({
@@ -209,11 +209,11 @@ describe("MusicTrackPreferences", () => {
     player.currentSource = source;
     player.queue = [source];
     player.activeQueueItemIds = ["snoozed"];
-    const startsAt = Date.now() - 1_000;
+    const startsAtMs = Date.now() - 1_000;
     api.getMusicInspectorDetail.mockResolvedValueOnce({ snoozes: [{
       id: "snooze-1", itemId: "snoozed", scope: "all-playlists", playlistId: null,
-      startsAt, endsAt: musicSnoozeEndsAt("week", startsAt, Intl.DateTimeFormat().resolvedOptions().timeZone),
-      reason: "", createdAt: startsAt,
+      startsAtMs, endsAtMs: musicSnoozeEndsAt("week", startsAtMs, Intl.DateTimeFormat().resolvedOptions().timeZone),
+      reason: "", createdAtMs: startsAtMs,
     }] });
     target = document.createElement("div");
     document.body.append(target);

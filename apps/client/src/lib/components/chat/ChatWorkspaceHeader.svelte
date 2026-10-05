@@ -10,18 +10,18 @@
     COMPACT_IDENTITY_ICON_STROKE_WIDTH,
   } from "$lib/icon-sizing";
   import { getLocalization } from "$lib/i18n/translator.svelte";
-  import { projectLifecycleBadgeClass, projectLifecycleLabel } from "$lib/projects/project-display";
-  import { projectNavigatorPanelGeometry, type ProjectNavigatorPanelMode } from "$lib/projects/project-toolbar";
+  import { projectLifecycleBadgeClass, projectLifecycleLabel } from "$lib/projects/display";
+  import { projectNavigatorPanelGeometry, type ProjectNavigatorPanelMode } from "$lib/projects/toolbar";
   import { getChat } from "$lib/stores/chat.svelte";
   import { getProjects } from "$lib/stores/projects.svelte";
   import { getViewport } from "$lib/stores/viewport.svelte";
   import { cn } from "$lib/utils";
   import ProjectIcon from "$lib/components/projects/ProjectIcon.svelte";
-  import ProjectPickerMobileDialog from "$lib/components/projects/ProjectPickerMobileDialog.svelte";
-  import WorkspaceBreadcrumbTerminalIcon from "$lib/components/WorkspaceBreadcrumbTerminalIcon.svelte";
-  import ChatChannelPickerPanel from "./ChatChannelPickerPanel.svelte";
-  import ChatChannelRoster from "./ChatChannelRoster.svelte";
-  import ChatProjectNavigator from "./ChatProjectNavigator.svelte";
+  import ProjectPickerMobileDialog from "$lib/components/projects/pickers/ProjectPickerMobileDialog.svelte";
+  import WorkspaceBreadcrumbTerminalIcon from "$lib/components/ui/WorkspaceBreadcrumbTerminalIcon.svelte";
+  import ChatChannelPickerPanel from "$lib/components/chat/channels/ChatChannelPickerPanel.svelte";
+  import ChatChannelRoster from "$lib/components/chat/channels/ChatChannelRoster.svelte";
+  import ChatProjectNavigator from "$lib/components/chat/channels/ChatProjectNavigator.svelte";
   import ChatTitleEditor from "./ChatTitleEditor.svelte";
 
   type ChatNavigatorMode = ProjectNavigatorPanelMode | "channels";

@@ -5,8 +5,8 @@
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import SettingsIcon from "@lucide/svelte/icons/settings";
   import X from "@lucide/svelte/icons/x";
-  import CalendarScrollbar from "../calendar/CalendarScrollbar.svelte";
-  import { getThemeEditor } from "$lib/stores/themeEditor.svelte";
+  import CalendarScrollbar from "$lib/components/calendar/CalendarScrollbar.svelte";
+  import { getThemeEditor } from "$lib/stores/theme-editor.svelte";
   import { getViewport } from "$lib/stores/viewport.svelte";
   import { hasOnlyShortcutModifier } from "$lib/keyboard-shortcuts";
   import { getLocalization } from "$lib/i18n/translator.svelte";
@@ -22,34 +22,34 @@
     loadSettingsDetail,
     retrySettingsDetail,
     type LoadedSettingsDetail,
-  } from "$lib/components/settings/settings-detail-registry";
+  } from "$lib/components/settings/detail-registry";
   import {
     loadMobileThemeEditor,
     retryMobileThemeEditor,
-  } from "$lib/components/settings/mobile-theme-editor-loader";
-  import type { MobileThemeEditorComponent } from "$lib/components/settings/mobile-theme-editor-loader-contract";
+  } from "$lib/components/themes/editor/mobile-editor-loader";
+  import type { MobileThemeEditorComponent } from "$lib/components/themes/editor/mobile-editor-loader-contracts";
   import type {
-    DoomscrollingLimitEditorTarget,
-    DoomscrollingSettingsTab,
+    DistractionsLimitEditorTarget,
+    DistractionsSettingsTab,
     NotesTransferOperation,
     ChatProviderSetupTarget,
     ChatSettingsSubsection,
     SectionId,
     SettingsDetailKind,
-  } from "./types";
-  import { settingsSectionsForShell } from "./settings-sections";
+  } from "$lib/settings/types";
+  import { settingsSectionsForShell } from "./section-catalog";
   import SettingsSectionRenderer from "$lib/components/settings/SettingsSectionRenderer.svelte";
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
 
   type SettingsDetailView =
-    | { kind: "doomscrolling-limit"; target: DoomscrollingLimitEditorTarget }
+    | { kind: "distractions-limit"; target: DistractionsLimitEditorTarget }
     | { kind: "notes-transfer"; operation: NotesTransferOperation }
     | { kind: "chat-provider"; target: ChatProviderSetupTarget };
 
   let {
     onClose,
     initialSection,
-    initialDoomscrollingTab,
+    initialDistractionsTab,
     initialChatSubsection,
     initialChatTeammateId,
     initialChatChannelId,
@@ -58,7 +58,7 @@
   }: {
     onClose: () => void;
     initialSection?: SectionId;
-    initialDoomscrollingTab?: DoomscrollingSettingsTab;
+    initialDistractionsTab?: DistractionsSettingsTab;
     initialChatSubsection?: ChatSettingsSubsection;
     initialChatTeammateId?: string;
     initialChatChannelId?: string;
@@ -75,13 +75,13 @@
       === "mobile",
   );
 
-  // When the user opens a theme in the floating editor, step out of the way
-  // so the modal backdrop does not block clicking through to the app.
+  // Close Settings while a theme is open in the floating editor so the modal
+  // backdrop does not block interaction with the app.
   $effect(() => {
     if (!mobilePresentation && themeEditor.editingId) requestSettingsClose();
   });
 
-  const SECTIONS = $derived(settingsSectionsForShell(mobilePresentation ? "mobile" : "desktop"));
+  const sections = $derived(settingsSectionsForShell(mobilePresentation ? "mobile" : "desktop"));
 
   const initialActiveSection = untrack(() => initialSection ?? "appearance");
   const initialActiveChatSubsection = untrack(() => initialChatSubsection ?? "teammates");
@@ -217,7 +217,7 @@
   }
 
   function activeSectionLabel(): string {
-    const section = SECTIONS.find((candidate) => candidate.id === activeSection);
+    const section = sections.find((candidate) => candidate.id === activeSection);
     return section ? t(section.labelKey) : t("settings.title");
   }
 
@@ -286,13 +286,13 @@
     scrollSettingsToTop();
   }
 
-  function openDoomscrollingLimitEditor(target: DoomscrollingLimitEditorTarget): void {
-    activeSection = "doomscrolling";
-    detailView = { kind: "doomscrolling-limit", target };
+  function openDistractionsLimitEditor(target: DistractionsLimitEditorTarget): void {
+    activeSection = "distractions";
+    detailView = { kind: "distractions-limit", target };
     detailScrollEl = undefined;
     detailScrollbarInsetTop = 0;
     detailScrollbarInsetBottom = 0;
-    requestSettingsDetail("doomscrolling-limit");
+    requestSettingsDetail("distractions-limit");
     scrollSettingsToTop();
   }
 
@@ -369,7 +369,7 @@
         requestSettingsClose();
         return;
       }
-      // Keep the modal from leaking shortcuts to underlying panels
+      // Keep the modal from leaking shortcuts to underlying panels.
       e.stopPropagation();
     }
     window.addEventListener("keydown", handleKeydown, true);
@@ -430,7 +430,7 @@
         {#if detailView}
           {#if activeDetailLoadState?.status === "ready"}
             {@const loadedDetail = activeDetailLoadState.component}
-            {#if loadedDetail.kind === "doomscrolling-limit" && detailView.kind === "doomscrolling-limit"}
+            {#if loadedDetail.kind === "distractions-limit" && detailView.kind === "distractions-limit"}
               {@const DetailComponent = loadedDetail.component}
               <DetailComponent
                 target={detailView.target}
@@ -466,12 +466,12 @@
           <div class="mx-auto w-full max-w-xl">
             <SettingsSectionRenderer
               {activeSection}
-              {initialDoomscrollingTab}
+              {initialDistractionsTab}
               {activeChatSubsection}
               {initialChatTeammateId}
               {initialChatChannelId}
               {initialChatCreateTeammate}
-              onOpenDoomscrollingLimitEditor={openDoomscrollingLimitEditor}
+              onOpenDistractionsLimitEditor={openDistractionsLimitEditor}
               onOpenNotesTransferPanel={openNotesTransferPanel}
               onOpenChatProviderSetup={openChatProviderSetup}
               onChatSubsectionChange={(subsection: ChatSettingsSubsection) => {
@@ -504,7 +504,7 @@
         class="min-h-0 flex-1 overflow-y-auto px-3 py-3"
       >
         <div class="mx-auto flex w-full max-w-xl flex-col gap-1">
-          {#each SECTIONS as section}
+          {#each sections as section}
             {@const Icon = section.icon}
             <button
               type="button"
@@ -557,7 +557,7 @@
     {#if useTopNav}
       <header class="flex shrink-0 items-center gap-2 border-b border-border/70 bg-background/40 px-2 py-2 dark:bg-black/20">
         <nav class="flex min-w-0 flex-1 gap-1 overflow-x-auto rounded-md bg-card/60 p-0.5 dark:bg-background/60">
-          {#each SECTIONS as section}
+          {#each sections as section}
             {@const Icon = section.icon}
             <button
               onclick={() => {
@@ -586,7 +586,6 @@
         </button>
       </header>
     {:else}
-      <!-- Sidebar -->
       <aside
         class={cn(
           "flex shrink-0 flex-col gap-3 bg-background/40 dark:bg-black/20",
@@ -611,7 +610,7 @@
           </button>
         </div>
         <nav class="flex flex-col">
-          {#each SECTIONS as section}
+          {#each sections as section}
             {@const Icon = section.icon}
             <button
               onclick={() => {
@@ -638,7 +637,6 @@
     {/if}
 
     <div class="relative min-h-0 flex-1">
-      <!-- Content -->
       <section
         bind:this={settingsScrollEl}
         data-settings-content
@@ -653,7 +651,7 @@
         {#if detailView}
           {#if activeDetailLoadState?.status === "ready"}
             {@const loadedDetail = activeDetailLoadState.component}
-            {#if loadedDetail.kind === "doomscrolling-limit" && detailView.kind === "doomscrolling-limit"}
+            {#if loadedDetail.kind === "distractions-limit" && detailView.kind === "distractions-limit"}
               {@const DetailComponent = loadedDetail.component}
               <DetailComponent
                 target={detailView.target}
@@ -726,12 +724,12 @@
         {:else}
           <SettingsSectionRenderer
             {activeSection}
-            {initialDoomscrollingTab}
+            {initialDistractionsTab}
             {activeChatSubsection}
             {initialChatTeammateId}
             {initialChatChannelId}
             {initialChatCreateTeammate}
-            onOpenDoomscrollingLimitEditor={openDoomscrollingLimitEditor}
+            onOpenDistractionsLimitEditor={openDistractionsLimitEditor}
             onOpenNotesTransferPanel={openNotesTransferPanel}
             onOpenChatProviderSetup={openChatProviderSetup}
             onChatSubsectionChange={(subsection: ChatSettingsSubsection) => {

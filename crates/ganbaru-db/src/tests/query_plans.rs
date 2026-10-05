@@ -31,9 +31,9 @@ fn hot_domain_queries_use_expected_indexes() {
                 "sqlite_autoindex_music_session_checkpoints_1",
             ),
             (
-                "Doomscrolling usage window",
-                "SELECT id FROM doomscrolling_usage_samples WHERE local_date >= '2026-07-01' AND local_date <= '2026-07-11' ORDER BY local_date, source_type, source_key",
-                "idx_doomscrolling_usage_samples_date_source",
+                "Distractions usage window",
+                "SELECT id FROM distractions_usage_samples WHERE local_date >= '2026-07-01' AND local_date <= '2026-07-11' ORDER BY local_date, source_type, source_key",
+                "idx_distractions_usage_samples_date_source",
             ),
             (
                 "open Pomodoro run",

@@ -6,7 +6,7 @@ import {
   mapNotesPageAliasDto,
   mapNotesSearchResultDto,
   mapNotesUnresolvedLinkDto,
-} from "$lib/notes/notion-mappers";
+} from "$lib/notes/validation/response-mappers";
 import type {
   NotesBacklink,
   NotesPageAlias,
@@ -95,9 +95,9 @@ export async function resolveNotesUnresolvedLink(
 
 export async function getNotesPageBreadcrumb(pageId: string): Promise<NotesPageBreadcrumbItem[]> {
   const dbUrl = await ensureDbUrl();
-  const rows = await invoke<unknown>("notes_get_page_breadcrumb", { dbUrl, pageId });
+  const rows = await invoke<unknown>("notes_page_breadcrumb", { dbUrl, pageId });
   if (!Array.isArray(rows)) {
-    throw new Error("notes_get_page_breadcrumb returned a non-array payload");
+    throw new Error("notes_page_breadcrumb returned a non-array payload");
   }
   return rows.map(mapNotesPageBreadcrumbItemDto);
 }
@@ -116,11 +116,11 @@ export async function searchNotes(
     includeResolvedComments,
     cursor,
   });
-  const record = notesWorkspaceShellRecord(rows);
+  const record = notesWorkspaceShellRecord(rows, "notes_search response");
   if (!Array.isArray(record.results)) throw new Error("notes_search returned invalid results");
   return {
     results: record.results.map((value) => {
-    const record = notesWorkspaceShellRecord(value);
+    const record = notesWorkspaceShellRecord(value, "notes_search result");
     return mapNotesSearchResultDto({ ...record, page: mapPageSummary(record.page) });
     }),
     next_cursor: shellNullableString(record.next_cursor, "notes_search.next_cursor"),

@@ -8,9 +8,9 @@
     resolveLazyComponentLoad,
     type LazyComponentLoadState,
   } from "$lib/lazy-component-loader";
-  import { parseNotesLinkHash } from "$lib/notes/block-link";
-  import { notesPageContainingFolderId } from "$lib/notes/hierarchy-navigation";
-  import { notesUndoShortcutAction } from "$lib/notes/undo-history";
+  import { parseNotesLinkHash } from "$lib/notes/links/block-link";
+  import { notesPageContainingFolderId } from "$lib/notes/navigation/hierarchy-menu";
+  import { notesUndoShortcutAction } from "$lib/notes/history/undo-history";
   import type { NotesWorkingMarkdownFileRef } from "$lib/notes/types";
   import { getNotes } from "$lib/stores/notes.svelte";
   import { getProjects } from "$lib/stores/projects.svelte";
@@ -26,18 +26,18 @@
     type LoadedNotesSurface,
     type NotesOptionalComponentKind,
     type NotesSurfaceKind,
-  } from "./notes-component-registry";
+  } from "./component-registry";
   import NotesEditor from "./NotesEditor.svelte";
-  import NotesDatabasePage from "./NotesDatabasePage.svelte";
+  import NotesDatabasePage from "$lib/components/notes/database/NotesDatabasePage.svelte";
   import NotesLoadingSkeleton from "./NotesLoadingSkeleton.svelte";
   import NotesProjectHome from "./NotesProjectHome.svelte";
   import NotesProjectSettingsPanel from "$lib/components/notes/NotesProjectSettingsPanel.svelte";
   import NotesWorkspaceHeader from "./NotesWorkspaceHeader.svelte";
-  import NotesWorkingMarkdownEditor from "$lib/components/notes/NotesWorkingMarkdownEditor.svelte";
+  import NotesWorkingMarkdownEditor from "$lib/components/notes/working-markdown/NotesWorkingMarkdownEditor.svelte";
   import {
     EMPTY_NOTES_MUSIC_MENTION_CONTEXT,
     type NotesMusicMentionContext,
-  } from "./notes-block-mention-targets";
+  } from "$lib/components/notes/blocks/mention-targets";
 
   let {
     mobileLayout = false,
@@ -83,7 +83,7 @@
   >>>({});
   let databaseDeletionDialogLoadState = $state<LazyComponentLoadState<
     "database-deletion",
-    typeof import("./NotesDatabaseDeletionDialog.svelte").default
+    typeof import("$lib/components/notes/database/NotesDatabaseDeletionDialog.svelte").default
   > | null>(null);
   const selectedProject = $derived(projects.selectedProject);
   const selectedGroup = $derived(projects.selectedGroup);
@@ -211,7 +211,7 @@
     if (!retry && databaseDeletionDialogLoadState) return;
     const loading = beginLazyComponentLoad(databaseDeletionDialogLoadState, "database-deletion");
     databaseDeletionDialogLoadState = loading;
-    void import("./NotesDatabaseDeletionDialog.svelte").then((module) => {
+    void import("$lib/components/notes/database/NotesDatabaseDeletionDialog.svelte").then((module) => {
       if (!databaseDeletionDialogLoadState) return;
       databaseDeletionDialogLoadState = resolveLazyComponentLoad(
         databaseDeletionDialogLoadState, "database-deletion", loading.requestId, module.default,
@@ -280,14 +280,14 @@
     void projects.ensureLoaded().catch((error) => {
       console.error("load projects failed", error);
     });
-    const onHashChange = () => {
+    const handleHashChange = () => {
       void openHashTarget().catch((error) => {
         console.error("open notes block link failed", error);
       });
     };
-    window.addEventListener("hashchange", onHashChange);
+    window.addEventListener("hashchange", handleHashChange);
     return () => {
-      window.removeEventListener("hashchange", onHashChange);
+      window.removeEventListener("hashchange", handleHashChange);
     };
   });
 

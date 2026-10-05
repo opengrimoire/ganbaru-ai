@@ -2,11 +2,11 @@ import {
   createWindowSyncEnvelope,
   isForeignWindowSyncEnvelope,
   isWindowSyncEnvelope,
-} from "$lib/window-sync";
+} from "$lib/windows/sync";
 import {
   emitWindowSync,
   listenWindowSync,
-} from "$lib/window-sync-transport";
+} from "$lib/windows/sync-transport";
 import { invalidateQuickNotesInitialSnapshot } from "$lib/quick-notes/initial-snapshot";
 
 const QUICK_NOTES_SYNC_EVENT = "quick-notes-window-sync";

@@ -2,9 +2,9 @@
   import LoaderCircle from "@lucide/svelte/icons/loader-circle";
   import { untrack } from "svelte";
   import { getLocalization } from "$lib/i18n/translator.svelte";
-  import type { MusicAddSourceKind, MusicLocalSourceSelection } from "$lib/music/music-source-drafts";
-  import type { MusicSourcesController } from "$lib/music/music-sources-controller.svelte";
-  import type { MusicYouTubeSourcePreview } from "$lib/music/music-youtube-source-resolver";
+  import type { MusicAddSourceKind, MusicLocalSourceSelection } from "$lib/music/sources/drafts";
+  import type { MusicSourcesController } from "$lib/music/sources/controller.svelte";
+  import type { MusicYouTubeSourcePreview } from "$lib/music/sources/youtube-source-resolver";
   import MusicBuilderDialog from "./MusicBuilderDialog.svelte";
   import MusicYouTubeSourcePreviewPanel from "./MusicYouTubeSourcePreview.svelte";
 

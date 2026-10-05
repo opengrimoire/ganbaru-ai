@@ -14,8 +14,8 @@
   import { BUILD_PLATFORM_PROFILE, platformHasCapability } from "$lib/platform";
   import { revealLocalFile } from "$lib/api/music";
   import { bulkEditMusicMemberships, bulkSnoozeMusicItems, getMusicInspectorDetail, removeMusicSnooze, reorderMusicPlaylists } from "$lib/api/music-library";
-  import { createMusicBuilderInspectorController } from "$lib/music/music-builder-inspector.svelte";
-  import { projectMusicBuilderLayout } from "$lib/music/music-builder-layout";
+  import { createMusicBuilderInspectorController } from "$lib/music/builder/inspector.svelte";
+  import { projectMusicBuilderLayout } from "$lib/music/builder/layout";
   import {
     backMusicBuilderRoute,
     initialMusicBuilderRoute,
@@ -23,64 +23,64 @@
     pushMusicBuilderRoute,
     type MusicBuilderDestination,
     type MusicBuilderHistory,
-  } from "$lib/music/music-builder-routing";
-  import { createMusicLibraryController, type MusicDestinationState } from "$lib/music/music-library-controller.svelte";
-  import { getMusicSourcesController } from "$lib/music/music-sources-controller.svelte";
-  import { createMusicReviewAuditionController, MUSIC_CONTEXT_BOUNDARY_EVENT } from "$lib/music/music-review-audition.svelte";
-  import { createMusicReviewController } from "$lib/music/music-review-controller.svelte";
-  import { createMusicPlaylistController } from "$lib/music/music-playlist-controller.svelte";
-  import { createMusicBulkEditController } from "$lib/music/music-bulk-edit-controller.svelte";
-  import { createMusicInterchangeController } from "$lib/music/music-interchange-controller.svelte";
+  } from "$lib/music/builder/routing";
+  import { createMusicLibraryController, type MusicDestinationState } from "$lib/music/library/controller.svelte";
+  import { getMusicSourcesController } from "$lib/music/sources/controller.svelte";
+  import { createMusicReviewAuditionController, MUSIC_CONTEXT_BOUNDARY_EVENT } from "$lib/music/review/audition.svelte";
+  import { createMusicReviewController } from "$lib/music/review/controller.svelte";
+  import { createMusicPlaylistController } from "$lib/music/playlists/controller.svelte";
+  import { createMusicBulkEditController } from "$lib/music/builder/bulk-edit-controller.svelte";
+  import { createMusicInterchangeController } from "$lib/music/library/interchange-controller.svelte";
   import {
     musicReviewArtworkDataUrl,
     parseMusicReviewAutoplay,
-  } from "$lib/music/music-review";
+  } from "$lib/music/review";
   import {
     firstMusicReviewTreeItemId,
     musicUnreviewedItemCount,
     musicReviewTreeItemIds,
-  } from "$lib/music/music-review-tree";
-  import type { MusicItemListEntry, MusicWeight } from "$lib/music/library-contracts";
-  import type { MusicIssue, MusicSourceCollection } from "$lib/music/library-contracts";
-  import type { MusicSourceRefreshPlan } from "$lib/music/music-source-refresh";
-  import { musicBuilderPlaybackDecision } from "$lib/music/music-builder-playback-transition";
-  import type { MusicAddSourceKind, MusicLocalSourceSelection } from "$lib/music/music-source-drafts";
-  import { musicSnoozeEndsAt, musicSnoozePreset, type MusicSnoozePreset } from "$lib/music/music-snooze";
+  } from "$lib/music/review/tree";
+  import type { MusicItemListEntry, MusicWeight } from "$lib/music/library/contracts";
+  import type { MusicIssue, MusicSourceCollection } from "$lib/music/library/contracts";
+  import type { MusicSourceRefreshPlan } from "$lib/music/sources/refresh";
+  import { musicBuilderPlaybackDecision } from "$lib/music/builder/playback-transition";
+  import type { MusicAddSourceKind, MusicLocalSourceSelection } from "$lib/music/sources/drafts";
+  import { musicSnoozeEndsAt, musicSnoozePreset, type MusicSnoozePreset } from "$lib/music/session/snooze";
   import {
     createMusicBuilderContextViewState,
     createMusicReviewTreeViewState,
     createMusicReviewWorkspaceViewState,
-  } from "$lib/music/music-builder-view-state";
-  import { notifyMusicLibraryChanged, onMusicLibraryChanged } from "$lib/music/music-library-events";
+  } from "$lib/music/builder/view-state";
+  import { notifyMusicLibraryChanged, onMusicLibraryChanged } from "$lib/music/library/events";
   import { onActiveVaultIdentityChange, requireActiveVaultIdentity } from "$lib/vault/active-vault";
   import { getConfigKey, setConfigKey } from "$lib/vault/config";
-  import MusicBuilderAsyncState from "./builder/MusicBuilderAsyncState.svelte";
-  import MusicBuilderFilterBar from "./builder/MusicBuilderFilterBar.svelte";
-  import MusicPreparationActivity from "./builder/MusicPreparationActivity.svelte";
-  import MusicBuilderOverview from "./builder/MusicBuilderOverview.svelte";
-  import MusicDetectedFolderCard from "./builder/MusicDetectedFolderCard.svelte";
-  import MusicVirtualItemList from "./builder/MusicVirtualItemList.svelte";
-  import MusicAddSourceDialog from "./builder/MusicAddSourceDialog.svelte";
-  import MusicReviewIssuesPanel from "./builder/MusicReviewIssuesPanel.svelte";
+  import MusicBuilderAsyncState from "$lib/components/music/builder/MusicBuilderAsyncState.svelte";
+  import MusicBuilderFilterBar from "$lib/components/music/builder/MusicBuilderFilterBar.svelte";
+  import MusicPreparationActivity from "$lib/components/music/builder/MusicPreparationActivity.svelte";
+  import MusicBuilderOverview from "$lib/components/music/builder/MusicBuilderOverview.svelte";
+  import MusicDetectedFolderCard from "$lib/components/music/builder/MusicDetectedFolderCard.svelte";
+  import MusicVirtualItemList from "$lib/components/music/builder/MusicVirtualItemList.svelte";
+  import MusicAddSourceDialog from "$lib/components/music/builder/MusicAddSourceDialog.svelte";
+  import MusicReviewIssuesPanel from "$lib/components/music/builder/MusicReviewIssuesPanel.svelte";
   import MusicItemRepairDialog from "$lib/components/music/builder/MusicItemRepairDialog.svelte";
-  import MusicNetworkRefreshDialog from "./builder/MusicNetworkRefreshDialog.svelte";
+  import MusicNetworkRefreshDialog from "$lib/components/music/builder/MusicNetworkRefreshDialog.svelte";
   import MusicRelinkWizard from "$lib/components/music/builder/MusicRelinkWizard.svelte";
-  import MusicSourceRemovalDialog from "./builder/MusicSourceRemovalDialog.svelte";
-  import MusicSourcesBrowser from "./builder/MusicSourcesBrowser.svelte";
-  import MusicSourcesTree from "./builder/MusicSourcesTree.svelte";
-  import MusicSourceNameDialog from "./builder/MusicSourceNameDialog.svelte";
-  import MusicReviewWorkspace from "./builder/MusicReviewWorkspace.svelte";
-  import MusicReviewTree from "./builder/MusicReviewTree.svelte";
-  import MusicBuilderContextPanel from "./builder/MusicBuilderContextPanel.svelte";
-  import MusicBuilderDock from "./builder/MusicBuilderDock.svelte";
-  import MusicBuilderToolbar from "./builder/MusicBuilderToolbar.svelte";
-  import MusicPlaylistManager from "./builder/MusicPlaylistManager.svelte";
-  import MusicSoundscapeBuilder from "$lib/components/music/MusicSoundscapeBuilder.svelte";
-  import MusicPlaylistDialog from "./builder/MusicPlaylistDialog.svelte";
-  import MusicInterchangeDialog from "./builder/MusicInterchangeDialog.svelte";
-  import type { MusicBuilderInitialAction } from "$lib/music/music-builder-loader";
-  import { musicIssueGroup } from "$lib/music/music-issue-presentation";
-  import { isSystemMusicPlaylistId, orderMusicPlaylists, systemMusicPlaylistName } from "$lib/music/music-system-playlists";
+  import MusicSourceRemovalDialog from "$lib/components/music/builder/MusicSourceRemovalDialog.svelte";
+  import MusicSourcesBrowser from "$lib/components/music/builder/MusicSourcesBrowser.svelte";
+  import MusicSourcesTree from "$lib/components/music/builder/MusicSourcesTree.svelte";
+  import MusicSourceNameDialog from "$lib/components/music/builder/MusicSourceNameDialog.svelte";
+  import MusicReviewWorkspace from "$lib/components/music/builder/MusicReviewWorkspace.svelte";
+  import MusicReviewTree from "$lib/components/music/builder/MusicReviewTree.svelte";
+  import MusicBuilderContextPanel from "$lib/components/music/builder/MusicBuilderContextPanel.svelte";
+  import MusicBuilderDock from "$lib/components/music/builder/MusicBuilderDock.svelte";
+  import MusicBuilderToolbar from "$lib/components/music/builder/MusicBuilderToolbar.svelte";
+  import MusicPlaylistManager from "$lib/components/music/builder/MusicPlaylistManager.svelte";
+  import MusicSoundscapeBuilder from "$lib/components/music/soundscape/MusicSoundscapeBuilder.svelte";
+  import MusicPlaylistDialog from "$lib/components/music/builder/MusicPlaylistDialog.svelte";
+  import MusicInterchangeDialog from "$lib/components/music/builder/MusicInterchangeDialog.svelte";
+  import type { MusicBuilderInitialAction } from "$lib/music/builder/loader";
+  import { musicIssueGroup } from "$lib/music/library/issue-presentation";
+  import { isSystemMusicPlaylistId, orderMusicPlaylists, systemMusicPlaylistName } from "$lib/music/playlists/system";
   import {
     buildMusicSourceBrowser,
     allMusicSourceBrowserItems,
@@ -89,8 +89,8 @@
     musicSourceBrowserItems,
     musicSourceBrowserPath,
     YOUTUBE_MUSIC_SOURCE_ID,
-  } from "$lib/music/music-source-browser";
-  import { projectMusicSourceQueue } from "$lib/music/music-source-playback";
+  } from "$lib/music/sources/browser";
+  import { projectMusicSourceQueue } from "$lib/music/sources/playback";
 
   let {
     onOpenPlayer,
@@ -176,7 +176,7 @@
   const playlistManagementActive = $derived(
     playlistManagementOpen || (destination.kind === "review" && reviewWorkspaceViewState.managingPlaylists),
   );
-  const hasList = $derived(destination.kind === "playlist");
+  const isPlaylistDestination = $derived(destination.kind === "playlist");
   const reviewItems = $derived(library.currentWindow.items.filter((item) =>
     showIgnoredReviewItems || item.reviewState !== "ignored"));
   const issueCount = $derived(library.issues.length);
@@ -723,7 +723,7 @@
     try {
       const receipts = await reorderMusicPlaylists({
         playlists: next.map((entry) => ({ playlistId: entry.id, expectedVersion: entry.version })),
-        updatedAt: Date.now(),
+        updatedAtMs: Date.now(),
       });
       const versions = new Map(receipts.map((receipt) => [receipt.id, receipt.version]));
       library.playlistSummaries = next.map((entry) => ({ ...entry, version: versions.get(entry.id) ?? entry.version }));
@@ -842,7 +842,7 @@
       removePlaylistIds: [destination.playlistId],
       weightPlaylistIds: [],
       weight: null,
-      updatedAt: Date.now(),
+      updatedAtMs: Date.now(),
     });
     await library.refreshAfterMutation();
     await playlist.refreshActivePlayback(sources.bindings);
@@ -857,7 +857,7 @@
       removePlaylistIds: [],
       weightPlaylistIds: [destination.playlistId],
       weight,
-      updatedAt: Date.now(),
+      updatedAtMs: Date.now(),
     });
     await library.refreshAfterMutation();
     await playlist.refreshActivePlayback(sources.bindings);
@@ -867,35 +867,35 @@
     const now = Date.now();
     const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
     const existing = (await getMusicInspectorDetail(item.id)).snoozes;
-    const scoped = existing.filter((entry) => entry.startsAt <= now && (entry.endsAt === null || entry.endsAt > now)
+    const scoped = existing.filter((entry) => entry.startsAtMs <= now && (entry.endsAtMs === null || entry.endsAtMs > now)
       && (playlistId === null ? entry.scope === "all-playlists" : entry.scope === "playlist" && entry.playlistId === playlistId));
-    const turningOff = scoped.length === 1 && musicSnoozePreset(scoped[0].startsAt, scoped[0].endsAt, timeZone) === duration;
+    const turningOff = scoped.length === 1 && musicSnoozePreset(scoped[0].startsAtMs, scoped[0].endsAtMs, timeZone) === duration;
     await Promise.all(scoped.map((entry) => removeMusicSnooze(entry.id)));
-    const endsAt = musicSnoozeEndsAt(duration, now, timeZone);
+    const endsAtMs = musicSnoozeEndsAt(duration, now, timeZone);
     if (!turningOff) {
       await bulkSnoozeMusicItems({
         actionId: crypto.randomUUID(),
         itemIds: [item.id],
         scope: playlistId === null ? "all-playlists" : "playlist",
         playlistId,
-        startsAt: now,
-        endsAt,
+        startsAtMs: now,
+        endsAtMs,
         reason: "",
-        createdAt: now,
+        createdAtMs: now,
       });
     }
     const queueIndex = audition.musicPlayer.activeQueueItemIds.indexOf(item.id);
     if (queueIndex >= 0 && (playlistId === null || playlistId === audition.musicPlayer.activePlaylistId)) {
       if (turningOff) {
         const remaining = existing.filter((entry) => !scoped.some((removed) => removed.id === entry.id)
-          && entry.startsAt <= now && (entry.endsAt === null || entry.endsAt > now)
+          && entry.startsAtMs <= now && (entry.endsAtMs === null || entry.endsAtMs > now)
           && (audition.musicPlayer.activeSourceQueueId !== null
             || entry.scope === "all-playlists" || entry.playlistId === audition.musicPlayer.activePlaylistId));
         if (remaining.length === 0) audition.musicPlayer.clearQueueItemSnooze(queueIndex);
-        else audition.musicPlayer.applyQueueItemSnooze(queueIndex, remaining.some((entry) => entry.endsAt === null)
-          ? null : Math.max(...remaining.map((entry) => entry.endsAt ?? 0)));
+        else audition.musicPlayer.applyQueueItemSnooze(queueIndex, remaining.some((entry) => entry.endsAtMs === null)
+          ? null : Math.max(...remaining.map((entry) => entry.endsAtMs ?? 0)));
       } else {
-        audition.musicPlayer.applyQueueItemSnooze(queueIndex, endsAt);
+        audition.musicPlayer.applyQueueItemSnooze(queueIndex, endsAtMs);
       }
     }
     await library.refreshAfterMutation();
@@ -914,7 +914,7 @@
   async function removeItemSnoozes(item: MusicItemListEntry, playlistId: string | null): Promise<void> {
     const now = Date.now();
     const active = (await getMusicInspectorDetail(item.id)).snoozes.filter((entry) =>
-      entry.startsAt <= now && (entry.endsAt === null || entry.endsAt > now)
+      entry.startsAtMs <= now && (entry.endsAtMs === null || entry.endsAtMs > now)
       && (playlistId === null || entry.scope === "all-playlists" || entry.playlistId === playlistId));
     await Promise.all(active.map((entry) => removeMusicSnooze(entry.id)));
     const queueIndex = audition.musicPlayer.activeQueueItemIds.indexOf(item.id);
@@ -962,7 +962,7 @@
     }
     if (event.key === "/" && !(event.target instanceof HTMLInputElement) && !(event.target instanceof HTMLTextAreaElement)) {
       if (destination.kind === "review") return;
-      if (!hasList) return;
+      if (!isPlaylistDestination) return;
       event.preventDefault();
       if (layout.contextPanelPresentation === "sheet") contextViewState.contextPanelOpen = true;
       void tick().then(() => root?.querySelector<HTMLInputElement>("[data-builder-context-search]")?.focus());
@@ -1185,7 +1185,7 @@
         {/if}
       {:else if playlistManagementOpen && (destination.kind === "playlists" || destination.kind === "playlist")}
         <div class="min-h-0 flex-1 overflow-y-auto p-3" data-music-scrollable="true"><MusicPlaylistManager bind:this={playlistManager} bind:actionsDisabled={playlistManagerActionsDisabled} playlists={library.playlistSummaries} onEdit={(playlistId) => { void openPlaylistManagementSurface(playlistId, "edit"); }} onDelete={(playlistId) => { void openPlaylistManagementSurface(playlistId, "delete"); }} onReorder={reorderPlaylistSummaries} onDone={() => playlistManagementOpen = false} showHeader={false} /></div>
-      {:else if hasList}
+      {:else if isPlaylistDestination}
         {#if destination.kind === "playlist" && playlist.detail && playlist.playbackIssue === "no-eligible-items"}
               <div class="mx-3 mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-warning/30 bg-warning/8 px-3 py-2 text-[0.68rem] text-warning" role="status">
                 <span class="min-w-0 flex-1">{t("music.builder.noEligiblePlaylistItems")}</span>

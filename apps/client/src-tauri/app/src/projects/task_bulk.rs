@@ -6,9 +6,9 @@ use serde::{Deserialize, Serialize};
 use sqlx::{Sqlite, SqlitePool, Transaction};
 use tauri::{AppHandle, Runtime};
 
-use crate::db_path::connect_sqlite;
+use crate::db::connect_sqlite;
 
-use super::history::{current_timestamp, insert_task_change_event_owned, status_is_terminal};
+use super::history::{current_timestamp, insert_task_field_change_event, status_is_terminal};
 use super::models::{ProjectTaskChangeEventRow, ProjectTaskRow, ProjectsMutationRows};
 use super::mutations::{ensure_priority_matches_project, next_task_sort_order};
 use super::validation::require_non_empty;
@@ -451,5 +451,5 @@ async fn apply_field_change(
         .fetch_one(&mut **tx)
         .await
         .map_err(|e| format!("read bulk task revision: {e}"))?;
-    insert_task_change_event_owned(tx, &row.id, event_type, field, old, new, None).await
+    insert_task_field_change_event(tx, &row.id, event_type, field, old, new, None).await
 }

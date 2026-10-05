@@ -2,8 +2,8 @@
 
 import { mount, tick, unmount } from "svelte";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { MusicSourceCollection } from "$lib/music/library-contracts";
-import type { MusicSourcesController } from "$lib/music/music-sources-controller.svelte";
+import type { MusicSourceCollection } from "$lib/music/library/contracts";
+import type { MusicSourcesController } from "$lib/music/sources/controller.svelte";
 import MusicAddSourceDialog from "./MusicAddSourceDialog.svelte";
 import MusicNetworkRefreshDialog from "./MusicNetworkRefreshDialog.svelte";
 import MusicSourceRemovalDialog from "./MusicSourceRemovalDialog.svelte";
@@ -125,15 +125,15 @@ describe("MusicBuilderDialog", () => {
       localRootId: "root-1",
       youtubePlaylistId: null,
       refreshState: "idle",
-      lastSuccessfulRefreshAt: null,
-      previousSuccessfulRefreshAt: null,
+      lastSuccessfulRefreshAtMs: null,
+      previousSuccessfulRefreshAtMs: null,
       lastRefreshErrorCode: null,
       snapshotGeneration: 1,
-      createdAt: 1,
-      updatedAt: 1,
+      createdAtMs: 1,
+      updatedAtMs: 1,
       version: 1,
       discoveryEnabled: true,
-      removedAt: null,
+      removedAtMs: null,
     };
     component = mount(MusicSourceRemovalDialog, {
       target,

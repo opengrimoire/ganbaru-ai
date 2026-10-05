@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { CalendarEvent } from "$lib/components/calendar/types";
+import type { CalendarEvent } from "$lib/calendar/types";
 import type { Translate } from "$lib/i18n/translator.svelte";
 import {
   buildNativeCalendarNotifications,
@@ -7,9 +7,9 @@ import {
   calendarNativeNotificationId,
   loadNotificationSchedulerEvents,
 } from "./mobile-calendar-notifications";
-import { loadNativeCalendarWindow } from "$lib/stores/calendar-native-window";
+import { loadNativeCalendarWindow } from "$lib/stores/calendar/native-window";
 
-vi.mock("$lib/stores/calendar-native-window", () => ({ loadNativeCalendarWindow: vi.fn() }));
+vi.mock("$lib/stores/calendar/native-window", () => ({ loadNativeCalendarWindow: vi.fn() }));
 
 const t = ((key: string) => key) as Translate;
 
@@ -29,7 +29,7 @@ function event(overrides: Partial<CalendarEvent> = {}): CalendarEvent {
 describe("mobile Calendar notification delivery", () => {
   it("uses the native reminder projection as its only occurrence source", async () => {
     const nativeEvent = event({ id: "series::2024-03-11", recurringParentId: "series", recurrenceDate: "2024-03-11" });
-    vi.mocked(loadNativeCalendarWindow).mockResolvedValueOnce({ rawBlocks: [], windowEvents: [nativeEvent], totalEventCount: null, diagnostics: [] });
+    vi.mocked(loadNativeCalendarWindow).mockResolvedValueOnce({ sourceEvents: [], windowEvents: [nativeEvent], totalEventCount: null, diagnostics: [] });
     expect(await loadNotificationSchedulerEvents()).toEqual([nativeEvent]);
     expect(loadNativeCalendarWindow).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ includeTotalEventCount: false }), "notifications");
   });

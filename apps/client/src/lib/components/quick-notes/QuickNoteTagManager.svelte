@@ -10,11 +10,11 @@
 
   let {
     tagCount,
-    oncreate,
+    onCreate,
     mobileLayout = false,
   }: {
     tagCount: number;
-    oncreate: (name: string) => Promise<void>;
+    onCreate: (name: string) => Promise<void>;
     mobileLayout?: boolean;
   } = $props();
 
@@ -42,7 +42,7 @@
     busy = true;
     error = "";
     try {
-      await oncreate(value);
+      await onCreate(value);
       name = "";
       creating = false;
     } catch {

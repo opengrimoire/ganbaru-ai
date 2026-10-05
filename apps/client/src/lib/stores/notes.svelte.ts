@@ -1,9 +1,9 @@
 import { untrack } from "svelte";
-import { createNotesEditorStore, type NotesEditorStore, type NotesSelectPageOptions } from "./notes-editor-store.svelte";
-import { saveNotesSelectedPageId } from "./notes-store-page-state";
+import { createNotesEditorStore, type NotesEditorStore, type NotesSelectPageOptions } from "$lib/stores/notes/editor-session.svelte";
+import { saveNotesSelectedPageId } from "$lib/stores/notes/page-state";
 import { getProjects } from "./projects.svelte";
 import { notesPageProjectId } from "$lib/notes/project-membership";
-import type { NotesPageOpenMode } from "$lib/notes/page-open-mode";
+import type { NotesPageOpenMode } from "$lib/notes/pages/open-mode";
 import type { NotesLoadedPage } from "$lib/notes/types";
 import type { NotesSidebarMetadataImpact } from "$lib/notes/post-mutation";
 

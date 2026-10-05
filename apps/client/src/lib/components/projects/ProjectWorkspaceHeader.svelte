@@ -16,12 +16,12 @@
   import {
     projectLifecycleBadgeClass,
     projectLifecycleLabel,
-  } from "$lib/projects/project-display";
+  } from "$lib/projects/display";
   import {
     projectNavigatorPanelGeometry,
     type ProjectToolbarPanel,
     type ProjectNavigatorPanelMode,
-  } from "$lib/projects/project-toolbar";
+  } from "$lib/projects/toolbar";
   import {
     PROJECT_VIEW_IDS,
     type Project,
@@ -34,9 +34,9 @@
   import { getViewport } from "$lib/stores/viewport.svelte";
   import { cn } from "$lib/utils";
   import ProjectIcon from "./ProjectIcon.svelte";
-  import WorkspaceBreadcrumbTerminalIcon from "$lib/components/WorkspaceBreadcrumbTerminalIcon.svelte";
+  import WorkspaceBreadcrumbTerminalIcon from "$lib/components/ui/WorkspaceBreadcrumbTerminalIcon.svelte";
   import ProjectNavigator from "./ProjectNavigator.svelte";
-  import ProjectPickerMobileDialog from "./ProjectPickerMobileDialog.svelte";
+  import ProjectPickerMobileDialog from "$lib/components/projects/pickers/ProjectPickerMobileDialog.svelte";
 
   let {
     selectedProject,
@@ -83,7 +83,7 @@
   let projectHeaderElement = $state<HTMLDivElement | null>(null);
   let projectNavigatorAnchorElement = $state<HTMLButtonElement | null>(null);
   let projectGroupTriggerElement = $state<HTMLButtonElement | null>(null);
-  let projectProjectTriggerElement = $state<HTMLButtonElement | null>(null);
+  let projectTriggerElement = $state<HTMLButtonElement | null>(null);
   let projectNavigatorPanelElement = $state<HTMLDivElement | null>(null);
   let projectNavigatorPanelStyle = $state("");
   let projectNavigatorPanelMaxHeight = $state(0);
@@ -223,7 +223,7 @@
     projectNavigatorMode = mode;
     projectNavigatorAnchorElement = mode === "groups"
       ? projectGroupTriggerElement
-      : projectProjectTriggerElement;
+      : projectTriggerElement;
     projectNavigatorOpen = true;
     refreshProjectNavigatorPanelGeometry();
     requestAnimationFrame(refreshProjectNavigatorPanelGeometry);
@@ -255,7 +255,7 @@
     if (
       projectNavigatorOpen
       && !projectGroupTriggerElement?.contains(target)
-      && !projectProjectTriggerElement?.contains(target)
+      && !projectTriggerElement?.contains(target)
       && !projectNavigatorPanelElement?.contains(target)
     ) {
       projectNavigatorOpen = false;
@@ -321,7 +321,7 @@
       </button>
       <span class="shrink-0 px-0.5 text-muted-foreground">/</span>
       <button
-        bind:this={projectProjectTriggerElement}
+        bind:this={projectTriggerElement}
         type="button"
         class={cn(
           "flex min-w-0 items-center gap-1.5 rounded-md px-1.5 text-left hover:bg-accent",

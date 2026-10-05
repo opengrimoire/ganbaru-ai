@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { Temporal } from "@js-temporal/polyfill";
-import type { CalendarEvent } from "./types";
+import type { CalendarEvent } from "$lib/calendar/types";
 import {
   closedDisplay,
   buildCreateDisplay,

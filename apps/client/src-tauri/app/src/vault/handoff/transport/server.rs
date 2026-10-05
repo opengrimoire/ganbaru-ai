@@ -4,11 +4,11 @@ use super::{
     CHUNK_TIMEOUT, MEMBERSHIP_REVOKED_CODE, TLS_HANDSHAKE_TIMEOUT, prepare_partial, stream_file,
     timeout_control,
 };
+use crate::vault::handoff::pairing::{Enrollment, PairingManager};
 use crate::vault::handoff::protocol::{
     BundleMetadata, BundlePurpose, ControlMessage, PROTOCOL_VERSION, TRANSFER_CHUNK_BYTES,
     read_control, unix_time_ms, write_control,
 };
-use crate::vault::handoff::state::{Enrollment, PairingManager};
 use crate::vault::handoff::{coordinator, protocol, suggested_device_label};
 use rustls::RootCertStore;
 use std::fs;
@@ -269,7 +269,7 @@ async fn handle_connection(
             )
             .await
         }
-        ControlMessage::DoomscrollingExchange {
+        ControlMessage::DistractionsExchange {
             vault_id,
             device_id,
             samples,
@@ -281,7 +281,7 @@ async fn handle_connection(
             send_coordinator_response(
                 &mut stream,
                 coordinator.as_ref(),
-                coordinator::CoordinatorOperation::DoomscrollingExchange {
+                coordinator::CoordinatorOperation::DistractionsExchange {
                     vault_id,
                     device_id,
                     samples,
@@ -421,11 +421,11 @@ async fn send_coordinator_response_value(
         coordinator::CoordinatorResponse::UploadAuthorized { .. } => {
             return Err("upload authorization cannot be sent as a control response".to_string());
         }
-        coordinator::CoordinatorResponse::DoomscrollingAcknowledged {
+        coordinator::CoordinatorResponse::DistractionsAcknowledged {
             acknowledged_sample_ids,
             peer_samples,
             combined_samples,
-        } => ControlMessage::DoomscrollingAcknowledged {
+        } => ControlMessage::DistractionsAcknowledged {
             acknowledged_sample_ids,
             peer_samples,
             combined_samples,

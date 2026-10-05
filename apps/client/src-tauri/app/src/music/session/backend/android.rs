@@ -154,7 +154,8 @@ pub(in super::super) async fn attach(app: &tauri::AppHandle) -> Result<(), Strin
                     let loader = env
                         .call_method(activity, "getClassLoader", "()Ljava/lang/ClassLoader;", &[])?
                         .l()?;
-                    let name = env.new_string("app.ganbaru.mobile_media.NativeMusicSession")?;
+                    let name = env
+                        .new_string("org.opengrimoire.ganbaruai.mobile.media.NativeMusicSession")?;
                     let class = env
                         .call_method(
                             &loader,

@@ -18,26 +18,26 @@
   import IconPicker from "$lib/components/icon-picker/IconPicker.svelte";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import { formatList } from "$lib/i18n/formatters";
-  import type { MusicBuilderInspectorController } from "$lib/music/music-builder-inspector.svelte";
-  import type { MusicBulkEditController } from "$lib/music/music-bulk-edit-controller.svelte";
-  import type { MusicLibraryController } from "$lib/music/music-library-controller.svelte";
-  import type { MusicReviewAuditionController } from "$lib/music/music-review-audition.svelte";
-  import type { MusicReviewController } from "$lib/music/music-review-controller.svelte";
-  import type { MusicReviewWorkspaceViewState } from "$lib/music/music-builder-view-state";
-  import type { MusicSourcesController } from "$lib/music/music-sources-controller.svelte";
-  import type { MusicIssue, MusicItemListEntry } from "$lib/music/library-contracts";
+  import type { MusicBuilderInspectorController } from "$lib/music/builder/inspector.svelte";
+  import type { MusicBulkEditController } from "$lib/music/builder/bulk-edit-controller.svelte";
+  import type { MusicLibraryController } from "$lib/music/library/controller.svelte";
+  import type { MusicReviewAuditionController } from "$lib/music/review/audition.svelte";
+  import type { MusicReviewController } from "$lib/music/review/controller.svelte";
+  import type { MusicReviewWorkspaceViewState } from "$lib/music/builder/view-state";
+  import type { MusicSourcesController } from "$lib/music/sources/controller.svelte";
+  import type { MusicIssue, MusicItemListEntry } from "$lib/music/library/contracts";
   import {
     isMusicReviewEditableTarget,
     musicReviewArtworkDataUrl,
     musicReviewDurationMs,
-  } from "$lib/music/music-review";
+  } from "$lib/music/review";
   import {
     buildMusicReviewTree,
     firstMusicReviewTreeItemId,
     nextPendingMusicReviewSelectionItemId,
     nextPendingMusicReviewTreeItemId,
     summarizeMusicReviewTreeSelection,
-  } from "$lib/music/music-review-tree";
+  } from "$lib/music/review/tree";
   import { clampRate, formatPlaybackTime } from "$lib/music/playback";
   import { formatShortcut } from "$lib/keyboard-shortcuts";
   import MusicPlaylistIcon from "./MusicPlaylistIcon.svelte";
@@ -463,7 +463,7 @@
     lastSelectedId = null;
   }
 
-  /** Gives YouTube previews immediate feedback while the review queue is prepared. */
+  /** Toggle review playback, marking YouTube items as starting so the preview gives feedback while the review queue is prepared. */
   async function toggleReviewPlayback(): Promise<void> {
     if (!detail || reviewStartItemId === detail.item.id || (reviewPlayerReady && player.youtubePlaybackStarting)) return;
     if (reviewPlayerReady) {

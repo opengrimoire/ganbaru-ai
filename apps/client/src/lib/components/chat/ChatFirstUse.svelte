@@ -11,9 +11,9 @@
   import { getChat } from "$lib/stores/chat.svelte";
   import { getNavigation } from "$lib/stores/navigation.svelte";
   import { getProjects } from "$lib/stores/projects.svelte";
-  import { getSettingsLauncher } from "$lib/stores/settingsLauncher.svelte";
-  import ChatComposer from "./ChatComposer.svelte";
-  import ChatTimeline from "./ChatTimeline.svelte";
+  import { getSettingsLauncher } from "$lib/stores/settings-launcher.svelte";
+  import ChatComposer from "$lib/components/chat/composer/ChatComposer.svelte";
+  import ChatTimeline from "$lib/components/chat/timeline/ChatTimeline.svelte";
 
   const { t } = getLocalization();
   const chat = getChat();

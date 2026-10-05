@@ -88,6 +88,7 @@ export const configuration = {
     selectStatusColor: (status: string) => `Select color for ${status}`,
     selectNewStatusColor: "Select color for new status",
     statusName: "Status name",
+    statusCategory: "Status category",
     addStatus: "Add status",
     deleteStatus: (status: string) => `Delete ${status}`,
     deleteStatusBlockedLast: "Project must keep at least one task status",

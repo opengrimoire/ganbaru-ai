@@ -1,7 +1,7 @@
 //! Whole-vault receive, activation, acknowledgement, and refresh lifecycle.
 
+use super::pairing::{PairingManager, PendingAcknowledgement};
 use super::protocol::BundlePurpose;
-use super::state::{PairingManager, PendingAcknowledgement};
 use super::transport::TransferCancellation;
 use crate::vault::ownership::{TransferPhase, VaultOwnershipManager};
 use serde::{Deserialize, Serialize};
@@ -434,7 +434,7 @@ fn handoff_staging_path(
     crate::vault::backup::android_handoff_staging_path(app, transfer_id)
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 fn handoff_staging_path(
     app: &tauri::AppHandle,
     transfer_id: &str,
@@ -468,7 +468,7 @@ async fn activate_handoff(
     .await
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 async fn activate_handoff(
     app: &tauri::AppHandle,
     staging: &std::path::Path,

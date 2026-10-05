@@ -777,7 +777,7 @@ describe("Chat read and error contracts", () => {
       preferences: { captureEnabled: false, retentionDays: 7 },
       capturedFields: ["event type"], excludedFields: ["credentials"], storageLocation: "SQLite",
       projectionHealthy: true, inconsistentProjectionCount: 0, credentialStoreAvailable: true,
-      providerProbeHealthy: 1, providerProbeUnhealthy: 0, providerProbeUnknown: 1,
+      healthyProviderProbes: 1, unhealthyProviderProbes: 0, unknownProviderProbes: 1,
       liveProviderProcesses: 1, activeTurns: 0, liveTerminals: 0,
       counts: {
         retainedEvents: 0, retainedBytes: 0, attachmentCount: 1, attachmentBytes: 12,

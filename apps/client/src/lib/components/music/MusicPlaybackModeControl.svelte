@@ -5,7 +5,7 @@
   import Dice5 from "@lucide/svelte/icons/dice-5";
   import Check from "@lucide/svelte/icons/check";
   import { getLocalization } from "$lib/i18n/translator.svelte";
-  import type { MusicPlaybackMode } from "$lib/music/library-contracts";
+  import type { MusicPlaybackMode } from "$lib/music/library/contracts";
   import { getMusicPlayer } from "$lib/stores/music-player.svelte";
   import { cn } from "$lib/utils";
 

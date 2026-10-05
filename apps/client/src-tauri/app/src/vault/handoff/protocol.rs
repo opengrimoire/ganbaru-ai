@@ -10,7 +10,7 @@ pub(crate) const MAX_ARCHIVE_BYTES: u64 = 100 * 1024 * 1024 * 1024;
 pub(crate) const MAX_IDENTIFIER_BYTES: usize = 160;
 pub(crate) const MAX_DEVICE_LABEL_BYTES: usize = 128;
 const MAX_APP_VERSION_BYTES: usize = 64;
-pub(crate) const MAX_DOOMSCROLLING_SAMPLES: usize = 1_024;
+pub(crate) const MAX_DISTRACTIONS_SAMPLES: usize = 1_024;
 pub(crate) const TRANSFER_CHUNK_BYTES: usize = 64 * 1024;
 const PAIRING_QR_MAGIC: &[u8; 4] = b"GBQ\x01";
 
@@ -70,11 +70,11 @@ pub(crate) struct PairingInvitation {
     pub coordinator_device_id: String,
     pub vault_id: String,
     pub generation: u64,
-    pub expires_at_unix_ms: i64,
+    pub expires_at_ms: i64,
 }
 
 impl PairingInvitation {
-    pub(crate) fn validate(&self, now_unix_ms: i64) -> Result<(), String> {
+    pub(crate) fn validate(&self, now_ms: i64) -> Result<(), String> {
         validate_protocol(self.protocol_version)?;
         self.compatibility.validate()?;
         validate_identifier("invitation id", &self.invitation_id)?;
@@ -85,7 +85,7 @@ impl PairingInvitation {
         self.endpoint
             .parse::<std::net::SocketAddr>()
             .map_err(|_| "pairing invitation endpoint is invalid".to_string())?;
-        if self.expires_at_unix_ms <= now_unix_ms {
+        if self.expires_at_ms <= now_ms {
             return Err("pairing invitation has expired".to_string());
         }
         Ok(())
@@ -131,16 +131,16 @@ impl BundleMetadata {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct DoomscrollingSampleMessage {
+pub(crate) struct DistractionsSampleMessage {
     pub sample_id: String,
     pub device_id: String,
     pub source_type: String,
     pub source_key: String,
     pub display_name: Option<String>,
-    pub started_at_unix_ms: i64,
+    pub started_at_ms: i64,
     pub elapsed_seconds: i64,
     pub local_date: String,
-    pub created_at_unix_ms: i64,
+    pub created_at_ms: i64,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
@@ -243,18 +243,18 @@ pub(crate) enum ControlMessage {
         transfer_id: Option<String>,
         requested_upload: Option<BundlePurpose>,
     },
-    DoomscrollingExchange {
+    DistractionsExchange {
         protocol_version: u16,
         vault_id: String,
         device_id: String,
-        samples: Vec<DoomscrollingSampleMessage>,
+        samples: Vec<DistractionsSampleMessage>,
         acknowledged_peer_sample_ids: Vec<String>,
-        owner_snapshot: Vec<DoomscrollingSampleMessage>,
+        owner_snapshot: Vec<DistractionsSampleMessage>,
     },
-    DoomscrollingAcknowledged {
+    DistractionsAcknowledged {
         acknowledged_sample_ids: Vec<String>,
-        peer_samples: Vec<DoomscrollingSampleMessage>,
-        combined_samples: Vec<DoomscrollingSampleMessage>,
+        peer_samples: Vec<DistractionsSampleMessage>,
+        combined_samples: Vec<DistractionsSampleMessage>,
     },
     Error {
         code: String,
@@ -404,7 +404,7 @@ impl ControlMessage {
                     validate_identifier("transfer id", transfer_id)?;
                 }
             }
-            Self::DoomscrollingExchange {
+            Self::DistractionsExchange {
                 protocol_version,
                 vault_id,
                 device_id,
@@ -415,31 +415,31 @@ impl ControlMessage {
                 validate_protocol(*protocol_version)?;
                 validate_identifier("vault id", vault_id)?;
                 validate_identifier("device id", device_id)?;
-                if samples.len() > MAX_DOOMSCROLLING_SAMPLES {
-                    return Err("too many Doomscrolling samples".to_string());
+                if samples.len() > MAX_DISTRACTIONS_SAMPLES {
+                    return Err("too many Distractions samples".to_string());
                 }
                 for sample in samples {
-                    validate_doomscrolling_sample(sample)?;
+                    validate_distractions_sample(sample)?;
                     if sample.device_id != *device_id {
-                        return Err("Doomscrolling sample metadata is invalid".to_string());
+                        return Err("Distractions sample metadata is invalid".to_string());
                     }
                 }
-                validate_doomscrolling_sample_ids(acknowledged_peer_sample_ids)?;
-                validate_doomscrolling_samples(owner_snapshot)?;
-                if samples.len() + owner_snapshot.len() > MAX_DOOMSCROLLING_SAMPLES {
-                    return Err("Doomscrolling exchange exceeds the sample limit".to_string());
+                validate_distractions_sample_ids(acknowledged_peer_sample_ids)?;
+                validate_distractions_samples(owner_snapshot)?;
+                if samples.len() + owner_snapshot.len() > MAX_DISTRACTIONS_SAMPLES {
+                    return Err("Distractions exchange exceeds the sample limit".to_string());
                 }
             }
-            Self::DoomscrollingAcknowledged {
+            Self::DistractionsAcknowledged {
                 acknowledged_sample_ids,
                 peer_samples,
                 combined_samples,
             } => {
-                validate_doomscrolling_sample_ids(acknowledged_sample_ids)?;
-                validate_doomscrolling_samples(peer_samples)?;
-                validate_doomscrolling_samples(combined_samples)?;
-                if peer_samples.len() + combined_samples.len() > MAX_DOOMSCROLLING_SAMPLES {
-                    return Err("Doomscrolling response exceeds the sample limit".to_string());
+                validate_distractions_sample_ids(acknowledged_sample_ids)?;
+                validate_distractions_samples(peer_samples)?;
+                validate_distractions_samples(combined_samples)?;
+                if peer_samples.len() + combined_samples.len() > MAX_DISTRACTIONS_SAMPLES {
+                    return Err("Distractions response exceeds the sample limit".to_string());
                 }
             }
             Self::Error { code, message, .. } => {
@@ -453,9 +453,9 @@ impl ControlMessage {
     }
 }
 
-fn validate_doomscrolling_sample_ids(sample_ids: &[String]) -> Result<(), String> {
-    if sample_ids.len() > MAX_DOOMSCROLLING_SAMPLES {
-        return Err("too many acknowledged Doomscrolling samples".to_string());
+fn validate_distractions_sample_ids(sample_ids: &[String]) -> Result<(), String> {
+    if sample_ids.len() > MAX_DISTRACTIONS_SAMPLES {
+        return Err("too many acknowledged Distractions samples".to_string());
     }
     for sample_id in sample_ids {
         validate_identifier("sample id", sample_id)?;
@@ -463,17 +463,17 @@ fn validate_doomscrolling_sample_ids(sample_ids: &[String]) -> Result<(), String
     Ok(())
 }
 
-fn validate_doomscrolling_samples(samples: &[DoomscrollingSampleMessage]) -> Result<(), String> {
-    if samples.len() > MAX_DOOMSCROLLING_SAMPLES {
-        return Err("too many Doomscrolling samples".to_string());
+fn validate_distractions_samples(samples: &[DistractionsSampleMessage]) -> Result<(), String> {
+    if samples.len() > MAX_DISTRACTIONS_SAMPLES {
+        return Err("too many Distractions samples".to_string());
     }
     for sample in samples {
-        validate_doomscrolling_sample(sample)?;
+        validate_distractions_sample(sample)?;
     }
     Ok(())
 }
 
-fn validate_doomscrolling_sample(sample: &DoomscrollingSampleMessage) -> Result<(), String> {
+fn validate_distractions_sample(sample: &DistractionsSampleMessage) -> Result<(), String> {
     validate_identifier("sample id", &sample.sample_id)?;
     validate_identifier("sample device id", &sample.device_id)?;
     if !matches!(
@@ -485,17 +485,17 @@ fn validate_doomscrolling_sample(sample: &DoomscrollingSampleMessage) -> Result<
             .display_name
             .as_ref()
             .is_some_and(|name| name.len() > 120)
-        || sample.started_at_unix_ms < 0
+        || sample.started_at_ms < 0
         || !(1..=86_400).contains(&sample.elapsed_seconds)
-        || !valid_local_date(&sample.local_date)
-        || sample.created_at_unix_ms < 0
+        || !is_valid_local_date(&sample.local_date)
+        || sample.created_at_ms < 0
     {
-        return Err("Doomscrolling sample metadata is invalid".to_string());
+        return Err("Distractions sample metadata is invalid".to_string());
     }
     Ok(())
 }
 
-fn valid_local_date(value: &str) -> bool {
+fn is_valid_local_date(value: &str) -> bool {
     chrono::NaiveDate::parse_from_str(value, "%Y-%m-%d").is_ok()
 }
 
@@ -559,29 +559,26 @@ pub(crate) fn encode_invitation(invitation: &PairingInvitation) -> Result<String
     ))
 }
 
-pub(crate) fn decode_invitation(
-    encoded: &str,
-    now_unix_ms: i64,
-) -> Result<PairingInvitation, String> {
+pub(crate) fn decode_invitation(encoded: &str, now_ms: i64) -> Result<PairingInvitation, String> {
     if encoded.is_empty() || encoded.len() > 8 * 1024 {
         return Err("pairing invitation has an invalid size".to_string());
     }
     let json = base64::Engine::decode(&base64::engine::general_purpose::URL_SAFE_NO_PAD, encoded)
         .map_err(|error| format!("decode pairing invitation: {error}"))?;
     let invitation: PairingInvitation = decode_bounded_json(&json, "pairing invitation")?;
-    invitation.validate(now_unix_ms)?;
+    invitation.validate(now_ms)?;
     Ok(invitation)
 }
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 pub(crate) struct QrMatrix {
     pub width: usize,
     pub modules: Vec<bool>,
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 pub(crate) fn invitation_qr_matrix(invitation: &PairingInvitation) -> Result<QrMatrix, String> {
     let payload = encode_pairing_qr_payload(invitation)?;
     let code = qrcode::QrCode::with_error_correction_level(&payload, qrcode::EcLevel::M)
@@ -618,13 +615,13 @@ pub(crate) fn decode_pairing_qr_luma(
     width: usize,
     height: usize,
     luma: &[u8],
-    now_unix_ms: i64,
+    now_ms: i64,
 ) -> Result<PairingInvitation, String> {
     let payload = decode_qr_luma(width, height, luma)?;
-    decode_pairing_qr_payload(&payload, now_unix_ms)
+    decode_pairing_qr_payload(&payload, now_ms)
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 fn encode_pairing_qr_payload(invitation: &PairingInvitation) -> Result<Vec<u8>, String> {
     invitation.validate(unix_time_ms().saturating_sub(1))?;
     let mut payload = Vec::with_capacity(256);
@@ -645,14 +642,11 @@ fn encode_pairing_qr_payload(invitation: &PairingInvitation) -> Result<Vec<u8>, 
     push_qr_string(&mut payload, &invitation.coordinator_device_id)?;
     push_qr_string(&mut payload, &invitation.vault_id)?;
     payload.extend_from_slice(&invitation.generation.to_be_bytes());
-    payload.extend_from_slice(&invitation.expires_at_unix_ms.to_be_bytes());
+    payload.extend_from_slice(&invitation.expires_at_ms.to_be_bytes());
     Ok(payload)
 }
 
-fn decode_pairing_qr_payload(
-    payload: &[u8],
-    now_unix_ms: i64,
-) -> Result<PairingInvitation, String> {
+fn decode_pairing_qr_payload(payload: &[u8], now_ms: i64) -> Result<PairingInvitation, String> {
     if !payload.starts_with(PAIRING_QR_MAGIC) {
         return Err("pairing QR code has an unsupported format".to_string());
     }
@@ -668,7 +662,7 @@ fn decode_pairing_qr_payload(
     let coordinator_device_id = take_qr_string(payload, &mut position)?;
     let vault_id = take_qr_string(payload, &mut position)?;
     let generation = u64::from_be_bytes(take_qr_array(payload, &mut position)?);
-    let expires_at_unix_ms = i64::from_be_bytes(take_qr_array(payload, &mut position)?);
+    let expires_at_ms = i64::from_be_bytes(take_qr_array(payload, &mut position)?);
     if position != payload.len() {
         return Err("pairing QR code contains unexpected data".to_string());
     }
@@ -686,13 +680,13 @@ fn decode_pairing_qr_payload(
         coordinator_device_id,
         vault_id,
         generation,
-        expires_at_unix_ms,
+        expires_at_ms,
     };
-    invitation.validate(now_unix_ms)?;
+    invitation.validate(now_ms)?;
     Ok(invitation)
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 fn push_qr_string(payload: &mut Vec<u8>, value: &str) -> Result<(), String> {
     let length =
         u8::try_from(value.len()).map_err(|_| "pairing QR field is too long".to_string())?;
@@ -733,7 +727,7 @@ fn take_qr_bytes<'a>(
     Ok(value)
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 fn decode_qr_digest(value: &str, label: &str) -> Result<[u8; 32], String> {
     validate_sha256(value).map_err(|_| format!("{label} is invalid"))?;
     let mut digest = [0_u8; 32];
@@ -805,7 +799,7 @@ pub(crate) fn test_compatibility() -> HandoffCompatibility {
     }
 }
 
-#[cfg(all(test, not(any(target_os = "android", target_os = "ios"))))]
+#[cfg(all(test, desktop))]
 mod tests {
     use super::*;
 
@@ -820,7 +814,7 @@ mod tests {
             coordinator_device_id: "device-abcdefghijklmnopqrstuv".to_string(),
             vault_id: "vault-abcdefghijklmnopqrstuv".to_string(),
             generation: 7,
-            expires_at_unix_ms: i64::MAX,
+            expires_at_ms: i64::MAX,
         }
     }
 

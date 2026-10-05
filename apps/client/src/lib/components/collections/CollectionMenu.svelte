@@ -140,7 +140,7 @@
         : event.key === "ArrowDown" ? (index + 1) % buttons.length : (index + buttons.length - 1) % buttons.length;
       buttons[next]?.focus({ preventScroll: true });
     };
-    const action = (event: MouseEvent) => {
+    const closeAfterAction = (event: MouseEvent) => {
       if ((kind !== "actions" && !dismissOnAction) || !(event.target instanceof Element)) return;
       if (event.target.closest("[data-app-floating-surface]") !== node) return;
       const button = event.target.closest("button");
@@ -162,7 +162,7 @@
     window.addEventListener("resize", place);
     window.addEventListener("scroll", scroll, true);
     document.addEventListener("focusin", focusin);
-    node.addEventListener("click", action);
+    node.addEventListener("click", closeAfterAction);
     void tick().then(() => {
       if (disposed) return;
       place();
@@ -178,7 +178,7 @@
         window.removeEventListener("resize", place);
         window.removeEventListener("scroll", scroll, true);
         document.removeEventListener("focusin", focusin);
-        node.removeEventListener("click", action);
+        node.removeEventListener("click", closeAfterAction);
         if (restoreFocus && node.contains(document.activeElement) && trigger?.isConnected) trigger.focus({ preventScroll: true });
         moved.destroy();
       },

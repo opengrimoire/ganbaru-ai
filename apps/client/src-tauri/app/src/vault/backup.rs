@@ -6,9 +6,9 @@ use super::select_quiesced_vault;
 use super::{APP_SQLITE_FILE, CONFIG_LOCK, VaultInfo};
 use super::{database_path, vault_info_from_path};
 #[cfg(target_os = "android")]
-use super::{default_data_folder_path, ensure_vault_skeleton, path_to_string};
+use super::{default_vault_path, ensure_vault_skeleton, path_to_string};
 #[cfg(target_os = "android")]
-use crate::db_path;
+use crate::db;
 #[cfg(target_os = "android")]
 use chrono::{SecondsFormat, Utc};
 #[cfg(target_os = "android")]
@@ -32,7 +32,7 @@ const BACKUP_MAX_BYTES: u64 = 100 * 1024 * 1024 * 1024;
 const BACKUP_MAX_DEPTH: usize = 64;
 const COPY_BUFFER_BYTES: usize = 64 * 1024;
 
-#[cfg(any(test, target_os = "android", target_os = "ios"))]
+#[cfg(any(test, mobile))]
 #[derive(Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct VaultBackupOutcome {
@@ -78,7 +78,7 @@ async fn create_database_snapshot<R: Runtime>(
     app: &tauri::AppHandle<R>,
     destination: &Path,
 ) -> Result<(), String> {
-    let pool = db_path::connect_sqlite(app.clone(), format!("sqlite:{APP_SQLITE_FILE}")).await?;
+    let pool = db::connect_sqlite(app.clone(), format!("sqlite:{APP_SQLITE_FILE}")).await?;
     vacuum_database(&pool, destination).await
 }
 
@@ -442,14 +442,14 @@ pub(crate) fn android_handoff_staging_path(
     app: &tauri::AppHandle,
     transfer_id: &str,
 ) -> Result<PathBuf, String> {
-    let target = default_data_folder_path(app)?;
+    let target = default_vault_path(app)?;
     let parent = target
         .parent()
         .ok_or_else(|| "Ganbaru AI folder has no parent directory".to_string())?;
     Ok(parent.join(format!(".ganbaru-ai.handoff-{transfer_id}.staging")))
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 pub(crate) fn active_handoff_staging_path<R: Runtime>(
     app: &tauri::AppHandle<R>,
     transfer_id: &str,
@@ -469,7 +469,7 @@ pub(crate) async fn activate_android_handoff(
     expected_vault_id: &str,
     preserve_previous: bool,
 ) -> Result<VaultInfo, String> {
-    let target = default_data_folder_path(app)?;
+    let target = default_vault_path(app)?;
     activate_handoff_at_path(
         app,
         staging,
@@ -481,7 +481,7 @@ pub(crate) async fn activate_android_handoff(
     .await
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 pub(crate) async fn activate_active_handoff<R: Runtime>(
     app: &tauri::AppHandle<R>,
     staging: &Path,
@@ -527,7 +527,7 @@ async fn activate_handoff_at_path<R: Runtime>(
     let target = target.to_path_buf();
     let expected_vault_id = expected_vault_id.to_owned();
     tauri::async_runtime::spawn_blocking(move || {
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        #[cfg(desktop)]
         if super::active_vault_path(&activation_app)? != target {
             return Err("active vault changed while preparing handoff activation".to_string());
         }
@@ -551,7 +551,7 @@ async fn activate_handoff_at_path<R: Runtime>(
 }
 
 fn preserved_handoff_path(parent: &Path, target: &Path, transfer_id: &str) -> PathBuf {
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(desktop)]
     {
         let folder_name = target
             .file_name()
@@ -560,7 +560,7 @@ fn preserved_handoff_path(parent: &Path, target: &Path, transfer_id: &str) -> Pa
             .unwrap_or("Ganbaru AI");
         parent.join(format!("{folder_name} before linking {transfer_id}"))
     }
-    #[cfg(any(target_os = "android", target_os = "ios"))]
+    #[cfg(mobile)]
     {
         let _ = target;
         parent.join(format!(".ganbaru-ai.handoff-previous-{transfer_id}"))
@@ -601,7 +601,7 @@ fn recover_interrupted_restore(target: &Path, rollback: &Path) -> Result<(), Str
 
 #[cfg(target_os = "android")]
 pub(crate) fn recover_interrupted_restore_for_app(app: &tauri::AppHandle) -> Result<(), String> {
-    let target = default_data_folder_path(app)?;
+    let target = default_vault_path(app)?;
     let parent = target
         .parent()
         .ok_or_else(|| "Ganbaru AI folder has no parent directory".to_string())?;
@@ -656,7 +656,7 @@ pub async fn vault_pick_and_restore_backup(
     let transfer = unique_transfer_directory(&app, "restore")?;
     let archive_path = transfer.join("selected.ganbaru-backup");
     let result = async {
-        let target = default_data_folder_path(&app)?;
+        let target = default_vault_path(&app)?;
         let preparation_app = app.clone();
         let preparation_target = target.clone();
         let preparation_transition = transition.clone();
@@ -725,7 +725,7 @@ pub async fn vault_pick_and_restore_backup(
     .await;
     let cleanup = tauri::async_runtime::spawn_blocking(move || {
         let _transition = transition;
-        let target = default_data_folder_path(&app)?;
+        let target = default_vault_path(&app)?;
         let parent = target
             .parent()
             .ok_or_else(|| "Ganbaru AI folder has no parent directory".to_string())?;
@@ -789,7 +789,7 @@ mod tests {
         assert!(safe_archive_path(Path::new(".")).is_err());
     }
 
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(desktop)]
     #[test]
     fn first_link_preserves_desktop_data_in_a_visible_sibling_folder() {
         let parent = Path::new("/documents");
@@ -943,18 +943,18 @@ mod tests {
         for statement in [
             "INSERT INTO calendar_events (id, title, start_time, end_time) VALUES ('handoff-calendar', 'Portable calendar', '2026-09-14T09:00:00Z', '2026-09-14T10:00:00Z')",
             "INSERT INTO calendar_event_alarms (id, event_id, trigger_value) VALUES ('handoff-alarm', 'handoff-calendar', '-PT10M')",
-            "INSERT INTO pomodoro_configs (event_id, rhythm_kind, rhythm_source, preset_key) VALUES ('handoff-calendar', 'count', 'preset', 'balanced')",
+            "INSERT INTO calendar_event_pomodoro_configs (event_id, rhythm_kind, rhythm_source, preset_key) VALUES ('handoff-calendar', 'count', 'preset', 'balanced')",
             "INSERT INTO pomodoro_runs (id, event_id, original_event_id, event_date, planned_start, planned_end, started_at, ended_at, end_reason, rhythm_kind, rhythm_source, preset_key, last_heartbeat) VALUES ('handoff-run', 'handoff-calendar', 'handoff-calendar', '2026-09-14', '2026-09-14T09:00:00Z', '2026-09-14T10:00:00Z', '2026-09-14T09:00:00Z', '2026-09-14T09:45:00Z', 'completed', 'count', 'preset', 'balanced', '2026-09-14T09:45:00Z')",
             "INSERT INTO project_tasks (id, project_id, section_id, status_id, title) VALUES ('handoff-task', 'project-routine-learning', 'section-routine-learning-general', 'status-routine-learning-todo', 'Portable project task')",
             "INSERT INTO notes_pages (id, parent_type, title) VALUES ('handoff-note', 'workspace', 'Portable note')",
             "INSERT INTO chat_conversations (id, project_id, conversation_kind, last_activity_at, created_at, updated_at) VALUES ('handoff-conversation', 'project-routine-learning', 'channel', '2026-09-14T09:00:00Z', '2026-09-14T09:00:00Z', '2026-09-14T09:00:00Z')",
             "INSERT INTO chat_channels (id, project_id, conversation_id, name, created_at, updated_at) VALUES ('handoff-channel', 'project-routine-learning', 'handoff-conversation', 'Portable chat', '2026-09-14T09:00:00Z', '2026-09-14T09:00:00Z')",
             "INSERT INTO quick_notes (id, title, body_plain_text) VALUES ('handoff-quick-note', 'Portable quick note', 'Portable quick-note body')",
-            "INSERT INTO themes (id, display_name, blend_canvas, seed_blend_canvas, derivation_engine_version, created_at, updated_at, icon_label, seed_icon_label) VALUES ('handoff-theme', 'Portable theme', '{}', '{}', 1, 1, 1, 'dark', 'dark')",
-            "INSERT INTO doomscrolling_usage_samples (id, source_type, source_key, display_name, started_at, elapsed_seconds, local_date, created_at) VALUES ('handoff-usage', 'mobile-app', 'app.example', 'Portable usage', 1, 45, '2026-09-14', 1)",
-            "INSERT INTO music_playlists (id, name, created_at, updated_at) VALUES ('handoff-playlist', 'Portable playlist', 1, 1)",
-            "INSERT INTO music_library_items (id, identity_key, source_kind, original_title, discovered_at, updated_at) VALUES ('handoff-track', 'local:portable-track', 'local-file', 'Portable track', 1, 1)",
-            "INSERT INTO music_playlist_memberships (id, playlist_id, item_id, position, created_at, updated_at) VALUES ('handoff-membership', 'handoff-playlist', 'handoff-track', 0, 1, 1)",
+            "INSERT INTO themes (id, display_name, blend_canvas, seed_blend_canvas, derivation_engine_version, created_at_ms, updated_at_ms, icon_label, seed_icon_label) VALUES ('handoff-theme', 'Portable theme', '{}', '{}', 1, 1, 1, 'dark', 'dark')",
+            "INSERT INTO distractions_usage_samples (id, source_type, source_key, display_name, started_at_ms, elapsed_seconds, local_date, created_at_ms) VALUES ('handoff-usage', 'mobile-app', 'app.example', 'Portable usage', 1, 45, '2026-09-14', 1)",
+            "INSERT INTO music_playlists (id, name, created_at_ms, updated_at_ms) VALUES ('handoff-playlist', 'Portable playlist', 1, 1)",
+            "INSERT INTO music_library_items (id, identity_key, source_kind, original_title, discovered_at_ms, updated_at_ms) VALUES ('handoff-track', 'local:portable-track', 'local-file', 'Portable track', 1, 1)",
+            "INSERT INTO music_playlist_memberships (id, playlist_id, item_id, position, created_at_ms, updated_at_ms) VALUES ('handoff-membership', 'handoff-playlist', 'handoff-track', 0, 1, 1)",
         ] {
             sqlx::query(statement).execute(&source_pool).await.unwrap();
         }
@@ -1014,14 +1014,18 @@ mod tests {
         for (table, key, identifier) in [
             ("calendar_events", "id", "handoff-calendar"),
             ("calendar_event_alarms", "id", "handoff-alarm"),
-            ("pomodoro_configs", "event_id", "handoff-calendar"),
+            (
+                "calendar_event_pomodoro_configs",
+                "event_id",
+                "handoff-calendar",
+            ),
             ("pomodoro_runs", "id", "handoff-run"),
             ("project_tasks", "id", "handoff-task"),
             ("notes_pages", "id", "handoff-note"),
             ("chat_channels", "id", "handoff-channel"),
             ("quick_notes", "id", "handoff-quick-note"),
             ("themes", "id", "handoff-theme"),
-            ("doomscrolling_usage_samples", "id", "handoff-usage"),
+            ("distractions_usage_samples", "id", "handoff-usage"),
             ("music_playlists", "id", "handoff-playlist"),
             ("music_library_items", "id", "handoff-track"),
             ("music_playlist_memberships", "id", "handoff-membership"),

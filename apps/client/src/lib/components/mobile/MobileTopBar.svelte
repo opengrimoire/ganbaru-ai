@@ -3,14 +3,14 @@
   import Music from "@lucide/svelte/icons/music";
   import StickyNote from "@lucide/svelte/icons/sticky-note";
   import type { View } from "$lib/navigation";
-  import { mobileCenteredPanelGeometry } from "$lib/mobile-layout";
-  import MobileNavigation from "$lib/components/mobile/MobileNavigation.svelte";
+  import { mobileCenteredPanelGeometry } from "$lib/mobile/layout";
+  import MobileNavigation from "./MobileNavigation.svelte";
   import PomodoroProgressRing from "$lib/components/pomodoro/PomodoroProgressRing.svelte";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import { cn } from "$lib/utils";
 
   type PomodoroMenuComponent = typeof import("$lib/components/pomodoro/PomodoroMenuContent.svelte").default;
-  type LinkedDeviceControlComponent = typeof import("$lib/components/vault/LinkedDeviceControl.svelte").default;
+  type LinkedDeviceControlComponent = typeof import("$lib/components/vault/handoff/LinkedDeviceControl.svelte").default;
 
   let {
     current,

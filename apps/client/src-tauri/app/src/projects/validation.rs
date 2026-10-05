@@ -14,7 +14,7 @@ const PROJECT_IDLE_SETTINGS_SOURCES: &[&str] = &["global", "custom"];
 const PROJECT_IDLE_THRESHOLD_MINUTES: &[i64] = &[1, 2, 3, 4, 5, 10, 15];
 pub(super) const MAX_TASK_CHANGE_REASON_LENGTH: usize = 1000;
 
-fn valid_lucide_slug(value: &str) -> bool {
+fn is_valid_lucide_slug(value: &str) -> bool {
     let mut characters = value.chars();
     let Some(first) = characters.next() else {
         return false;
@@ -25,7 +25,7 @@ fn valid_lucide_slug(value: &str) -> bool {
         })
 }
 
-fn valid_project_icon_asset_path(value: &str) -> bool {
+fn is_valid_project_icon_asset_path(value: &str) -> bool {
     let Some(file_name) = value.strip_prefix("project-icons/") else {
         return false;
     };
@@ -51,12 +51,12 @@ pub(crate) fn validate_project_icon(value: &str) -> Result<(), String> {
             .is_some_and(|id| !id.trim().is_empty())
         || value
             .strip_prefix("asset:")
-            .is_some_and(valid_project_icon_asset_path)
+            .is_some_and(is_valid_project_icon_asset_path)
         || value.strip_prefix("lucide:").is_some_and(|icon| {
             let mut parts = icon.split(':');
             let slug = parts.next().unwrap_or_default();
             let color = parts.next();
-            if parts.next().is_some() || !valid_lucide_slug(slug) {
+            if parts.next().is_some() || !is_valid_lucide_slug(slug) {
                 return false;
             }
             color.is_none_or(|value| {

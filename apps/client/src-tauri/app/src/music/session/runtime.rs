@@ -18,14 +18,14 @@ use std::{
 };
 use tauri::{Manager, Runtime, ipc::Channel};
 use tokio::sync::{mpsc, oneshot};
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 mod completion;
 mod context;
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 mod context_soundscape;
 mod focus;
 #[cfg(test)]
-mod lifecycle_tests;
+mod tests;
 
 const MESSAGE_CAPACITY: usize = 64;
 const OBSERVATION_INTERVAL: Duration = Duration::from_millis(250);
@@ -73,17 +73,17 @@ enum Request {
         available: bool,
     },
     Control(SessionIntent),
-    Focus(ganbaru_focus::CommittedFocusEffect),
+    Focus(ganbaru_pomodoro::CommittedFocusEffect),
     #[cfg(target_os = "android")]
     BackendUnavailable {
         session_id: String,
         generation: u64,
         reason: AndroidInterruption,
     },
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(desktop)]
     Completion {
         scope: (u64, i64),
-        sound: crate::notification::AppSound,
+        sound: crate::sound_effects::AppSound,
     },
     ResumeVault {
         revision: u64,
@@ -114,10 +114,10 @@ struct Owner {
     #[cfg(not(target_os = "ios"))]
     native_drain_generation: Option<u64>,
     focus: Option<focus::FocusLease>,
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(desktop)]
     calendar: context::CalendarActivationState,
     lifecycle: LifecycleControl,
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(desktop)]
     completion_duck: Option<completion::CompletionDuck>,
 }
 
@@ -130,7 +130,7 @@ fn now_ms() -> i64 {
 }
 
 /// Fence manual background starts and recovery against the current native vault lifecycle.
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 pub(crate) fn background_output_guard(
     app: &tauri::AppHandle,
 ) -> Result<Box<dyn Fn() -> bool + Send>, String> {
@@ -196,10 +196,10 @@ pub(crate) fn setup(app: &tauri::AppHandle) {
             #[cfg(not(target_os = "ios"))]
             native_drain_generation: None,
             focus: None,
-            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            #[cfg(desktop)]
             calendar: context::CalendarActivationState::default(),
             lifecycle,
-            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            #[cfg(desktop)]
             completion_duck: None,
         };
         let mut interval = tokio::time::interval(OBSERVATION_INTERVAL);
@@ -340,7 +340,7 @@ pub(crate) fn resume_after_vault_handoff<R: Runtime>(
 /// Enqueues accepted Focus state; duplicate revisions only renew its bounded lease.
 pub(crate) fn reconcile_committed_focus(
     app: &tauri::AppHandle,
-    effect: ganbaru_focus::CommittedFocusEffect,
+    effect: ganbaru_pomodoro::CommittedFocusEffect,
 ) -> Result<(), String> {
     let runtime = app
         .try_state::<MusicSessionState>()
@@ -381,11 +381,11 @@ pub(crate) fn native_backend_unavailable(
 }
 
 /// Attenuates the current Music generation and queues a scoped native completion sound.
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 pub(crate) async fn play_focus_completion(
     app: &tauri::AppHandle,
     scope: (u64, i64),
-    sound: crate::notification::AppSound,
+    sound: crate::sound_effects::AppSound,
 ) -> Result<(), String> {
     tokio::time::timeout(
         Duration::from_secs(5),
@@ -642,7 +642,7 @@ impl Owner {
         }
         self.subscriptions.invalidate_context();
         self.pool = Some(
-            crate::db_path::connect_sqlite(
+            crate::db::connect_sqlite(
                 self.app.clone(),
                 format!("sqlite:{}", crate::vault::APP_SQLITE_FILE),
             )
@@ -657,11 +657,11 @@ impl Owner {
         self.state = new_policy();
         self.state.generation = generation;
         self.focus = None;
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        #[cfg(desktop)]
         {
             self.calendar = context::CalendarActivationState::default();
         }
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        #[cfg(desktop)]
         {
             self.completion_duck = None;
         }
@@ -771,11 +771,11 @@ impl Owner {
                 .await
                 .map_err(|error| MusicLibraryError::runtime("stop handoff music", error))?;
             }
-            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            #[cfg(desktop)]
             self.stop_context_soundscape().await?;
             self.pool = None;
             self.frozen = true;
-            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            #[cfg(desktop)]
             {
                 self.completion_duck = None;
             }
@@ -876,7 +876,7 @@ impl Owner {
                     && self.state.generation == generation
                     && self
                         .state
-                        .entry()
+                        .current_entry()
                         .is_some_and(|entry| entry.backend == SessionBackend::NativeAudio)
                 {
                     let mut next = self.state.clone();
@@ -885,7 +885,7 @@ impl Owner {
                     self.commit(next, transition, None, true).await?;
                 }
             }
-            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            #[cfg(desktop)]
             Request::Completion { scope, sound } => self.begin_completion(scope, sound).await?,
             Request::Observe {
                 observation,
@@ -894,7 +894,7 @@ impl Owner {
                 if browser.is_some()
                     && self
                         .state
-                        .entry()
+                        .current_entry()
                         .is_none_or(|entry| entry.backend != SessionBackend::Browser)
                 {
                     return Ok(self.state.projection(false, now_ms()));
@@ -1058,14 +1058,14 @@ impl Owner {
                 )))
             && self
                 .state
-                .entry()
+                .current_entry()
                 .is_some_and(|entry| entry.backend == SessionBackend::NativeAudio)
             && backend::restart_for_play(&self.app)
                 .await
                 .map_err(|error| {
                     MusicLibraryError::runtime("restart Android Music service", error)
                 })?;
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        #[cfg(desktop)]
         let reconnect = false;
         #[cfg(not(target_os = "ios"))]
         let mut prepared = if reconnect
@@ -1073,7 +1073,7 @@ impl Owner {
                 && matches!(intent, SessionIntent::Play | SessionIntent::Toggle)
                 && self
                     .state
-                    .entry()
+                    .current_entry()
                     .is_some_and(|entry| entry.backend == SessionBackend::NativeAudio))
         {
             next.reconnect_backend()
@@ -1120,7 +1120,7 @@ impl Owner {
         .await
         {
             if matches!(definition, SessionQueueIntent::SavedPlaylist { .. })
-                && error.code == crate::music_error::MusicLibraryErrorCode::NotFound
+                && error.code == crate::music::error::MusicLibraryErrorCode::NotFound
             {
                 let detached = SessionQueueIntent::LibraryItems {
                     item_ids: self
@@ -1129,7 +1129,10 @@ impl Owner {
                         .iter()
                         .filter_map(|entry| entry.item_id.clone())
                         .collect(),
-                    selected_item_id: self.state.entry().and_then(|entry| entry.item_id.clone()),
+                    selected_item_id: self
+                        .state
+                        .current_entry()
+                        .and_then(|entry| entry.item_id.clone()),
                     name: self.state.queue_name.clone(),
                 };
                 queue::load_queue(
@@ -1217,7 +1220,7 @@ impl Owner {
         let queue_changed = next.queue_revision != self.state.queue_revision
             || next.session_id != self.state.session_id;
         self.state = next;
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        #[cfg(desktop)]
         if self
             .completion_duck
             .as_ref()
@@ -1233,7 +1236,7 @@ impl Owner {
                 self.state.error = Some(error.to_string());
                 if self
                     .state
-                    .entry()
+                    .current_entry()
                     .is_some_and(|entry| entry.backend == SessionBackend::Browser)
                 {
                     self.state.browser_host = false;
@@ -1258,11 +1261,11 @@ impl Owner {
                     }
                     break;
                 }
-                #[cfg(not(any(target_os = "android", target_os = "ios")))]
+                #[cfg(desktop)]
                 {
                     if source_failure {
                         self.backend_error_pending =
-                            self.state.entry().map(|entry| SessionObservation {
+                            self.state.current_entry().map(|entry| SessionObservation {
                                 session_id: self.state.session_id.clone(),
                                 generation: self.state.generation,
                                 sequence: self.state.last_sequence.saturating_add(1),
@@ -1327,7 +1330,7 @@ impl Owner {
     }
 
     async fn apply_effect(&mut self, effect: SessionEffect) -> Result<(), backend::Failure> {
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        #[cfg(desktop)]
         let effect = self.attenuate_completion(effect);
         if self.lifecycle.is_revoked()
             && !matches!(
@@ -1341,7 +1344,7 @@ impl Owner {
         self.drain_native_delivery().await?;
         let browser = self
             .state
-            .entry()
+            .current_entry()
             .is_some_and(|entry| entry.backend == SessionBackend::Browser);
         #[cfg(not(target_os = "ios"))]
         let authority = if browser && matches!(effect, SessionEffect::Load { .. }) {
@@ -1388,7 +1391,7 @@ impl Owner {
             }
             backend::apply(
                 &self.app,
-                self.state.entry().map(|entry| entry.backend),
+                self.state.current_entry().map(|entry| entry.backend),
                 effect,
                 #[cfg(not(target_os = "ios"))]
                 authority,
@@ -1486,9 +1489,9 @@ impl Owner {
 
     fn publish(&mut self, include_queue: bool) -> MusicLibraryResult<()> {
         let snapshot = self.state.projection(include_queue, now_ms());
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        #[cfg(desktop)]
         {
-            crate::media_controls::publish_session(&snapshot).map_err(|error| {
+            crate::music::media_controls::publish_session(&snapshot).map_err(|error| {
                 MusicLibraryError::runtime("publish native media controls", error)
             })?;
             crate::tray::publish_music_session(&self.app, &snapshot)
@@ -1513,9 +1516,9 @@ impl Owner {
             return Ok(());
         }
         if self.pool.is_none() {
-            #[cfg(any(target_os = "android", target_os = "ios"))]
+            #[cfg(mobile)]
             return Ok(());
-            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            #[cfg(desktop)]
             {
                 if !self.calendar.admit_context_load() {
                     return Ok(());
@@ -1523,10 +1526,10 @@ impl Owner {
                 self.ensure_context().await?;
             }
         }
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        #[cfg(desktop)]
         self.poll_completion().await?;
         self.expire_focus().await?;
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        #[cfg(desktop)]
         {
             match self.reconcile_calendar_assignment(None).await {
                 Ok(()) => {}
@@ -1540,7 +1543,7 @@ impl Owner {
         #[cfg(target_os = "android")]
         if self
             .state
-            .entry()
+            .current_entry()
             .is_some_and(|entry| entry.backend == SessionBackend::NativeAudio)
             && matches!(
                 self.state.status,
@@ -1571,7 +1574,7 @@ impl Owner {
         }
         if self
             .state
-            .entry()
+            .current_entry()
             .is_some_and(|entry| entry.backend == SessionBackend::NativeAudio)
             && matches!(
                 self.state.status,

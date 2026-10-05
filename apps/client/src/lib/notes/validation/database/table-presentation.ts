@@ -1,26 +1,26 @@
 import type { NotesDatabaseTableCalculation, NotesDatabaseTableColorRule, NotesDatabaseTableColumnPresentation, NotesDatabaseTablePresentation } from "../../contracts/database/table";
-import { notesDatabaseParseFilters } from "../../database-filters";
+import { notesDatabaseParseFilters } from "$lib/notes/database/filters";
 
 const DATE_FORMATS = new Set(["locale", "iso", "relative"]);
 const TIME_FORMATS = new Set(["locale", "12_hour", "24_hour", "hidden"]);
 export const NOTES_TABLE_CALCULATIONS = ["count_all", "count_values", "empty", "unique", "sum", "average", "min", "max", "percent_checked"] as const satisfies readonly NotesDatabaseTableCalculation[];
 
-function record(value: unknown): value is Record<string, unknown> {
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 /** Validate unknown saved presentation without dropping invalid configuration. */
 export function parseNotesTablePresentation(value: unknown): NotesDatabaseTablePresentation {
   if (value === undefined) return { frozen_property_id: null, columns: {} };
-  if (!record(value)) throw new Error("Table presentation must be an object");
+  if (!isPlainRecord(value)) throw new Error("Table presentation must be an object");
   if (Object.keys(value).some((key) => !["columns", "frozen_property_id", "color_rules"].includes(key))) throw new Error("Unknown table presentation setting");
   const frozen = value.frozen_property_id ?? null;
   if (frozen !== null && typeof frozen !== "string") throw new Error("Frozen property identity must be a string");
   const rawColumns = value.columns ?? {};
-  if (!record(rawColumns)) throw new Error("Column presentation must be an object");
+  if (!isPlainRecord(rawColumns)) throw new Error("Column presentation must be an object");
   const columns: Record<string, NotesDatabaseTableColumnPresentation> = {};
   for (const [id, settings] of Object.entries(rawColumns)) {
-    if (!id || !record(settings)) throw new Error("Invalid column presentation");
+    if (!id || !isPlainRecord(settings)) throw new Error("Invalid column presentation");
     if (Object.keys(settings).some((key) => !["wrap", "date_format", "time_format", "calculation"].includes(key))) throw new Error("Unknown column presentation setting");
     const wrap = settings.wrap ?? false;
     const dateFormat = settings.date_format ?? "locale";
@@ -44,7 +44,7 @@ export function parseNotesTablePresentation(value: unknown): NotesDatabaseTableP
   const colors: readonly NotesDatabaseTableColorRule["color"][] = ["gray", "brown", "orange", "yellow", "green", "blue", "purple", "pink", "red"];
   const identities = new Set<string>();
   const rules = rawRules.map((rule: unknown): NotesDatabaseTableColorRule => {
-    if (!record(rule) || typeof rule.id !== "string" || !rule.id || rule.id.length > 64 || identities.has(rule.id)
+    if (!isPlainRecord(rule) || typeof rule.id !== "string" || !rule.id || rule.id.length > 64 || identities.has(rule.id)
       || (rule.property_id !== null && typeof rule.property_id !== "string")
       || !colors.includes(rule.color as NotesDatabaseTableColorRule["color"])) throw new Error("Invalid conditional color rule");
     if (Object.keys(rule).some((key) => !["id", "property_id", "color", "filters"].includes(key))) throw new Error("Unknown conditional color setting");

@@ -51,7 +51,7 @@ pub enum SessionStatus {
 
 impl SessionStatus {
     /// Returns the stable transport label shared with operating-system adapters.
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(desktop)]
     pub(crate) fn as_ref(self) -> &'static str {
         match self {
             Self::Idle => "idle",
@@ -326,8 +326,8 @@ pub struct SessionContext {
     pub activation_key: String,
     pub event_id: String,
     pub event_title: String,
-    pub phase: crate::music_context::MusicActivityPhase,
-    pub behavior: crate::music_context::MusicAssignmentBehavior,
+    pub phase: crate::music::assignments::MusicActivityPhase,
+    pub behavior: crate::music::assignments::MusicAssignmentBehavior,
     pub assignment_source: String,
     pub playlist_id: Option<String>,
     pub state: String,

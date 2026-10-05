@@ -1,8 +1,8 @@
 //! Soundtrack activation uses canonical Calendar geometry or a committed Focus effect.
 
 use super::*;
-use crate::music_context::{MusicActivityPhase, MusicAssignmentBehavior};
-use ganbaru_focus::CommittedFocusEffect;
+use crate::music::assignments::{MusicActivityPhase, MusicAssignmentBehavior};
+use ganbaru_pomodoro::CommittedFocusEffect;
 use sqlx::{Sqlite, Transaction};
 
 const MAX_CONTEXT_REFERENCE_BYTES: i64 = 200;
@@ -68,14 +68,14 @@ pub(super) async fn test_pool() -> SqlitePool {
         .connect("sqlite::memory:")
         .await
         .unwrap();
-    crate::db::run_migrations(&pool).await.unwrap();
+    ganbaru_db::run_migrations(&pool).await.unwrap();
     pool
 }
 
 #[derive(Clone)]
 pub(super) enum AssignmentAuthority {
     Focus(Box<CommittedFocusEffect>),
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(desktop)]
     Calendar {
         start_ms: i64,
         end_ms: i64,
@@ -95,7 +95,7 @@ impl ContextActivation {
     pub(super) fn owner(&self) -> SessionOwner {
         match self.authority {
             AssignmentAuthority::Focus(_) => SessionOwner::Pomodoro,
-            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            #[cfg(desktop)]
             AssignmentAuthority::Calendar { .. } => SessionOwner::CalendarEvent,
         }
     }
@@ -111,7 +111,7 @@ impl ContextActivation {
                     |error| MusicLibraryError::runtime("check soundtrack Focus authority", error),
                 )
             }
-            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            #[cfg(desktop)]
             AssignmentAuthority::Calendar { start_ms, end_ms } => {
                 let now = now_ms();
                 let focus =
@@ -124,8 +124,8 @@ impl ContextActivation {
                         effect.run_id.is_none()
                             || matches!(
                                 effect.mode,
-                                ganbaru_focus::FocusMode::Stopped
-                                    | ganbaru_focus::FocusMode::Expired
+                                ganbaru_pomodoro::FocusMode::Stopped
+                                    | ganbaru_pomodoro::FocusMode::Expired
                             )
                     }))
             }
@@ -157,7 +157,7 @@ impl Owner {
                 .map_err(|error| {
                     MusicLibraryError::runtime("resolve soundtrack retry authority", error)
                 })?
-                .filter(|effect| effect.mode == ganbaru_focus::FocusMode::Running)
+                .filter(|effect| effect.mode == ganbaru_pomodoro::FocusMode::Running)
                 .ok_or_else(|| MusicLibraryError::conflict("Focus is no longer running"))?;
                 let key = format!(
                     "{}:{}:{}",
@@ -172,7 +172,7 @@ impl Owner {
                 }
                 self.apply_focus_assignment(&effect, &key, action).await?;
             }
-            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            #[cfg(desktop)]
             SessionOwner::CalendarEvent => {
                 self.calendar.retry();
                 self.reconcile_calendar_assignment(action).await?;
@@ -266,7 +266,7 @@ impl Owner {
         let behavior = MusicAssignmentBehavior::try_from(behavior.as_str())
             .map_err(|error| MusicLibraryError::validation("assignment.behavior", error))?;
         let mut next = self.state.clone();
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        #[cfg(desktop)]
         {
             next.context_error = None;
         }
@@ -298,7 +298,10 @@ impl Owner {
                 let definition = SessionQueueIntent::SavedPlaylist {
                     playlist_id,
                     explicit_item_id: None,
-                    avoid_item_id: self.state.entry().and_then(|entry| entry.item_id.clone()),
+                    avoid_item_id: self
+                        .state
+                        .current_entry()
+                        .and_then(|entry| entry.item_id.clone()),
                 };
                 queue::load_queue(
                     &mut transaction,
@@ -320,7 +323,7 @@ impl Owner {
                     next.shuffle.clear();
                     let avoid = self
                         .state
-                        .entry()
+                        .current_entry()
                         .and_then(|entry| entry.item_id.as_deref());
                     let autoplay = behavior == MusicAssignmentBehavior::PlayAutomatically;
                     if let Some(context) = &mut next.context {
@@ -338,8 +341,8 @@ impl Owner {
                 Err(error)
                     if matches!(
                         error.code,
-                        crate::music_error::MusicLibraryErrorCode::NotFound
-                            | crate::music_error::MusicLibraryErrorCode::Validation
+                        crate::music::error::MusicLibraryErrorCode::NotFound
+                            | crate::music::error::MusicLibraryErrorCode::Validation
                     ) =>
                 {
                     // Queue reads can fail after changing the draft. Retain the actual prior queue.
@@ -387,7 +390,7 @@ impl Owner {
                 .listening
                 .extend(prior.apply(SessionIntent::Stop, now_ms()).listening);
         }
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        #[cfg(desktop)]
         let soundscape = super::context_soundscape::prepare(
             &mut transaction,
             &self.device_id,
@@ -395,9 +398,9 @@ impl Owner {
             soundscape_id.as_deref(),
         )
         .await?;
-        #[cfg(any(target_os = "android", target_os = "ios"))]
+        #[cfg(mobile)]
         let _ = (soundscape_behavior, soundscape_id);
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        #[cfg(desktop)]
         if soundscape.missing
             && let Some(context) = &mut next.context
             && context.issue.is_none()
@@ -426,7 +429,7 @@ impl Owner {
             .await
             .map_err(|error| MusicLibraryError::database("commit accepted soundtrack", error))?;
         self.install(next, transition).await?;
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        #[cfg(desktop)]
         if let Err(error) = self
             .deliver_context_soundscape(soundscape, activation, permit)
             .await
@@ -436,10 +439,10 @@ impl Owner {
             ));
             self.publish(false)?;
         }
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        #[cfg(desktop)]
         {
             let version: i64 = sqlx::query_scalar(
-                "SELECT version FROM music_soundscape_state WHERE singleton_id = 1",
+                "SELECT version FROM music_soundscape_state WHERE singleton = 1",
             )
             .fetch_one(self.pool.as_ref().expect("initialized music pool"))
             .await
@@ -449,18 +452,16 @@ impl Owner {
             self.state.soundscape_version = Some(version);
             self.publish(false)?;
         }
-        #[cfg(any(target_os = "android", target_os = "ios"))]
+        #[cfg(mobile)]
         drop(permit);
         Ok(true)
     }
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
-#[path = "context_calendar.rs"]
+#[cfg(desktop)]
 mod calendar;
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 pub(super) use calendar::CalendarActivationState;
 
 #[cfg(test)]
-#[path = "context_tests.rs"]
 mod tests;

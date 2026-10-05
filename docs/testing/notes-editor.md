@@ -1,277 +1,121 @@
 # Notes editor testing
 
-Notes testing covers pure editing plans, canonical Rust commands, persistence ordering, imports, assets, databases, and manual interaction that cannot be proven by unit tests alone.
+**Status: Reference.** Manual acceptance for Notes in the real desktop and Android app. Behavior contracts live in [Notes](../features/notes/README.md) and the [editor specification](../features/notes/editor.md).
 
-Compound persistence tests exercise transaction rollback after each prefix, stale and foreign-page preconditions, retry receipt identity, canonical hidden descendants and parent revisions, typed preimages, explicitly scoped moves between pages, and reconstruction after reopening storage. Template and button regressions cover unloaded roots and descendants, stable identities on retry, rejection of hidden child pages with prior-write rollback, and canonical child-count limits. Copy-admission tests cover oversized source graphs, excessive nesting, cycles, and cumulative rollback across separately valid copies. Frontend tests cover delayed acknowledgements, newer typing before and during dispatch, stale receipt replay after a canonical refresh, queued undo/redo, hidden layout preimages, large pages with unchanged siblings, selective undo projection preserving unrelated later text, retained failed plans, and mixed paste order. Native tests prove SQLite atomicity; frontend delayed-storage adapters exercise interaction and reconciliation only.
+## Automated coverage
 
-In the real desktop and Android app, delay saving while splitting, merging, replacing a document range, adding table columns, removing columns or tabs with hidden content, and undoing/redoing each action. Keep typing before the acknowledgement. Confirm text and caret stay in the intended place, then reopen the note and verify the complete operation persisted. Retry an interrupted response and verify no duplicate paragraphs, copied notes, databases, columns, or tabs appear. Edit the same loaded block in another window and verify a stale compound action reports a conflict without changing any of its targets.
+Native Rust tests own SQLite atomicity: compound edits roll back after any failed prefix, reject stale or foreign preconditions, reuse retry receipts, and reconstruct correctly after reopening storage. Template, button, and database copies are bounded and keep stable identities on retry.
 
-Select prose and paste a web, email, or local Notes URL. Confirm the words and formatting remain, the link is saved, and undo removes only the new link. Repeat with a backward selection across multiple paragraphs and a database. Confirm code and explicit paste as plain text remain literal. Hover a link to open its compact actions without moving the caret. Move into the preview across its gap, leave it, and confirm it closes. Plain click and Ctrl/Cmd-click must open the destination directly; touch and text dragging must not open hover actions. Verify copied database references navigate to the correct block in the owning note. Edit the URL and title, move the pointer away and confirm the form stays open, apply from the bottom action area, remove the link, cancel with Escape, and dismiss by clicking or tabbing outside. Confirm panel text is visibly smaller than paragraphs and follows the font preference without changing paragraph typography, with a light shadow and no extra field focus contour. Preview and Edit must have no scrollbars when they fit, while constrained screens still allow scrolling. Confirm the panel floats without moving note content, stays within the viewport while scrolling or resizing, and leaves normal text selection and app shortcuts available. Test unavailable targets and clipboard failures for visible feedback. Repeat on desktop and Android with light and dark themes.
+Frontend tests connect the real action, persistence, tree projection, and undo controllers with delayed storage (for example `apps/client/src/lib/stores/notes/editor-transactions.test.ts`). They cover typing during pending saves, stale receipt replay, queued undo and redo, selections spanning unloaded content, clipboard parsing and serialization, and slash menu behavior.
 
-For a note containing text, a database, and more text, move down from the first text block through the database title into the following text, then reverse with Up. Confirm title editing, title selection, IME composition, and database cell navigation retain their own behavior. Select the whole body and copy it as both rich content and plain text. Confirm the database contributes its name and local block reference between the text blocks, including when nested in a layout or unnamed. Paste back into Notes and follow the link to the original database. Confirm this text copy does not duplicate the database or its rows.
+These tests do not measure real WebView input, clipboard output, layout, or software keyboards. The cases below cover that gap.
 
-## Loading acceptance
+## How to run
 
-- Switch between existing empty notes and notes with covers. Confirm the title and initial body skeleton appears only after half a second of loading, correctly aligned and with no visible Loading text or temporary Close button. Faster reads must display their content immediately without a skeleton or fade. Embedded database and cover placeholders must keep their existing shorter reveal delay. Repeat in full, side, and center views, at narrow sizes, with scaled text, light and dark themes, and reduced motion enabled.
-- Load managed and external cover images slowly. The placeholder must retain the banner height through renderer loading, asset resolution, and image loading. Unavailable content must appear only for an actual failure or unsupported source.
-- Open a database with a cold view renderer and row read. Table, list, Kanban, gallery, calendar, and timeline each show a matching placeholder until ready. Cached database rows remain visible during background refreshes, without another skeleton. Switch notes before a read completes and confirm late results cannot replace the active note.
-- Delay a database's renderer, saved-view metadata, and row reads independently. The inline placeholder must persist across all three stages without showing the title and tabs early or starting another reveal delay. Its initial title must never briefly show a different value. Delay only templates and confirm ready table rows appear while the existing creation readiness rules remain intact. Create a database with `/database` and confirm its requested title focus arrives after the surface becomes ready.
-- Type `/datab` and press Enter on the database command. Its surface must be reserved immediately, with the same placeholder spanning pending text saves, creation, and initial reads. The title must be empty with the Database name placeholder, including after reopening the note. Check insertion from the block menu, ordinary text conversion, failed creation and retry, and clearing an existing database title.
-- For a slow page, database, or cover read, confirm the visible skeleton fades over ready content without blocking pointer or keyboard input. Delay the database renderer, metadata, and rows independently, with several blocks below it: the placeholder must not stretch or alter scroll overflow while hidden content mounts, and its shapes must retain their spacing and height during the fade. Fast reads must skip both placeholder paint and fading. Repeat navigation during the fade and with reduced motion; overlays must not create another layout row or leave delayed timers after disposal.
-- Fail a page read. Confirm Retry opens the selected page again, sidebar navigation remains usable, and a failed preview can be closed. Repeat switching notes after typing to ensure pending edits are saved before their document is released.
+Run each group on desktop (Linux and Windows) and Android, in light and dark themes, with at least one long note that is partly unloaded or virtualized. Where a case mentions delay or failure, repeat it while storage is slow and after an injected save failure. The common acceptance rule for every edit is:
 
-For child-note previews, create two sibling notes and collapse the sidebar. Viewing the main note must show group / project / main note. Opening either child appends only that child; switching siblings replaces the last segment. In side view, edit both panes and check that the header and undo target follow the pane receiving input. Create another child from the main pane while a sibling is open and confirm its parent remains the main note. Center previews block interaction with the main pane. Closing either preview keeps the same main editor and scroll position without reloading its content. Failed saves keep the preview draft open. Repeat with `/Note`, an existing child, further preview navigation, and promotion to full page. Check a long virtualized note and a note with a cover, columns, and nested blocks in the real Tauri app.
+- Text, caret, and selection stay where the user put them while saves are pending.
+- Reopening the note shows exactly the completed operation, with no duplicates or lost blocks.
+- A failed save is visible, the draft stays editable, and Retry persists it without overwriting newer edits.
+- Late responses from an earlier note, view, or vault never replace current state.
+- Undo and redo restore text, structure, and selection in one step per user action.
 
-Open the group/project/note selector and choose a note in another project and another group. Confirm the header names, sidebar roots, selected row, creation location, and project settings all follow the destination. Repeat with a nested note and with the sidebar collapsed. Open a note from another project in a side preview, switch focus between panes, and close the preview: each active pane must restore its owning context without reloading its document. Delay sidebar reads while switching projects and confirm late results cannot restore old pagination or roots.
+## Loading and navigation
 
-Hover a note containing only a database, a note with sub-pages and databases, and a note with a database inside a collapsed toggle. Confirm their hierarchy branches list the appropriate databases. Hover a database row and the database breadcrumb to reveal saved views; selecting one must open or update that database with the chosen view without adding a view breadcrumb. A linked shell must use its own view names and configuration. Database view panels and the database breadcrumb must have no creation button. Repeat the drilldown on touch layouts, and check a failed view read can be retried without loading database rows for the picker.
+- Slow page, cover, and database reads show an aligned skeleton only after the reveal delay; fast reads show content immediately. Skeletons never shift layout or block input, and reduced motion is respected.
+- A database placeholder spans renderer, view metadata, and row reads without flashing the title or tabs early. Returning to a cached database shows rows immediately.
+- A failed page read offers Retry while sidebar navigation stays usable. Switching notes saves pending edits first.
+- Side and center child previews keep the correct breadcrumb, undo target, and parent. Closing a preview restores the main editor and scroll without reloading.
+- The group, project, and note selector moves header, sidebar, creation location, and settings to the destination, including from side previews. Hierarchy hover panels list child databases and saved views.
+- Rename and move pages from the editor and the sidebar; both surfaces update without switching pages. Invalid destinations (self, descendant, cross-project, inactive) are rejected.
+- Favorite, archive, Trash, restore, and permanently delete pages and subtrees. A restore with an invalid parent lands at the root with an explanation.
 
-Open each top-bar level directly and confirm only its main panel has search. Cascade through group, project, folder, note, database, and views; subsequent panels must omit search. Repeat the group, project, and channel hierarchy in Chat. Check equal padding around short lists, including views without creation actions, empty and filtered states, larger font settings, and panels near the bottom of the window. Tall panels must scroll within the available height while keeping their controls visible.
+## Rich text and blocks
 
-## Rich-text acceptance
+- Typing, inline formatting, colors, links, mentions, and equations persist after reload.
+- Enter, Shift+Enter, and Backspace behave per block type: split preserves annotations, soft breaks stay soft, empty list and quote items return to paragraphs, Backspace at offset zero converts a styled block to a paragraph before merging, and the final block is protected.
+- Toggles and callouts: Enter at the start of a label inserts before it, elsewhere creates a child; Enter on an empty child leaves the container; collapsed toggles hide children completely and reopen intact.
+- Tab and Shift+Tab indent and outdent once per selected row, keep descendants' relative depths, open collapsed parents, and work in the Linux WebKitGTK event format. Code blocks receive whitespace instead.
+- Numbered lists count correctly beyond 9 and 99, across unmounted regions, and restart after nesting or an intervening paragraph.
+- H1 through H6 can be created by slash, conversion, and Markdown shortcut, appear in the table of contents, and round-trip through Markdown and HTML.
+- Insert, convert, duplicate, move, nest, Trash, restore, and delete each block family. Internal table rows, columns, and tab labels never appear as document rows; removing a column or tab relocates its content.
+- Template and button blocks insert ordinary children, explain disabled child-page cases, and return the same identities on retry.
+- Unsupported imported blocks stay visible, searchable, and deliberately convertible.
+- `/Note` creates exactly one child page even when repeated during a delayed save, and Undo does not replay the old paragraph over it.
+- Deleting every block leaves one focused paragraph that participates in undo. Unloaded content is never treated as an empty page.
 
-Using a scratch page with other pages and relevant project objects available, verify:
+## Selection
 
-- Typing, selection replacement, bold, italic, underline, strike, code, colors, links, mentions, and equations persist after reload.
-- Selecting text alone leaves the editor unobstructed. Right-click selected text and confirm its highlight stays visible while the menu and its submenus are open; format it without losing the range. Right-click at a caret to convert or insert a block. Check the Format, Paragraph, Insert, color, link, and clipboard actions near viewport edges and with Escape.
-- Enter splits at start, middle, end, and selected range while preserving rich annotations on the correct side.
-- Shift+Enter inserts a soft break, and code-block Enter behavior remains distinct.
-- Empty list, to-do, and quote blocks return to paragraph appropriately. Enter on an empty toggle or callout creates an empty paragraph child.
-- Create a callout, type on its first line, then press Enter at its start, middle, and end. Confirm only start inserts a paragraph before the callout. Repeat at the start of the first heading child of an empty-label callout. Other positions create children and preserve split text. Add paragraphs and a nested callout, and check the icon size, first-line vertical centering, equal edge and text gaps, shared background, color choices, and save/reopen in light and dark themes. Check the spacing again at a larger font scale. Press Enter on an empty child to leave the callout; later children must stay inside. Change, remove, and upload the icon with the shared picker. Choose a background from Format > Text color and confirm it colors the whole callout, while a text color affects only selected text.
-- Create a toggle with `>` and Space, through the slash menu, and by conversion. Press Enter at the start of a nonempty label and verify an empty toggle appears immediately before it with focus, while the original label, open state, and children stay attached. Repeat with a nested and collapsed toggle, then type into the new toggle before its save completes. Press Enter in the middle and at the end of a label, including a selected range. Verify the label keeps the prefix, the new paragraph child receives the suffix and focus, a collapsed toggle opens, and undo/redo and save/reopen retain the hierarchy. Press Ctrl/Cmd+Enter to open and close it.
-- Expand an empty toggle with its chevron. Confirm there is no placeholder row. Enter in its label should create an editable child. Backspace at the beginning of a new empty child should move that paragraph out of the toggle and leave no placeholder behind. At the page margin, Backspace at the beginning of an empty toggle label should convert it to a paragraph. Collapse a populated toggle and confirm its child rows and loading placeholders disappear completely, including after scrolling it out of view and back on a long page. Reopen it without losing children. Shift+Enter in the label should remain a soft break.
-- Backspace removes an empty block, protects the final block, and merges compatible text without losing children.
-- Tab and Shift+Tab accept valid nesting and reject invalid parent combinations.
-- Multi-block paste, rapid Enter, and immediate deletion of an empty to-do or paragraph while saving is pending persist in order. The deleted block stays removed after reopening the page, without duplicate rows or a block-not-found error.
-- Undo and redo restore text, structure, focus, selection, template use, and button actions at expected boundaries.
-- A failed or delayed save never overwrites a newer local revision. Verify the save error is visible, the draft remains editable, and Retry persists retained writes before newer dependent edits.
-- Merge two paragraphs, immediately press Enter at the join, type, undo several times, and redo. Confirm there are no temporary duplicate rows and the caret stays at the intended boundary.
-- Split a middle paragraph repeatedly before storage responds, then undo and redo. Confirm following paragraphs and unloaded outline entries retain their positions.
-- Press Ctrl/Cmd+A directly in a paragraph on pages shorter and longer than 200 blocks. Confirm the complete body is selected on the first press; copy includes the final offscreen block, and selecting alone does not render the entire long page.
-- With Ctrl/Cmd+A active, confirm every visible text block is highlighted even when focus stays in the middle block. Scroll through a long page, resize the window, dismiss the range, and check that highlights follow the text and disappear. Confirm that the active block has the same highlight intensity as the other selected blocks in both light and dark themes. Clear the document range, then select within one block and confirm native highlighting returns. Repeat on a webview without CSS custom highlights.
-- Extend selection in both directions with Shift+Arrow, Ctrl/Cmd+Shift+Home/End, Shift-click, and dragging. Start and end in the middle of words across wrapped lines, empty paragraphs, headings, and lists. Confirm endpoint offsets remain precise and reversing direction shrinks the selection. In a long note, hold Shift+Up/Down across many blocks, then release both keys. Movement and highlighting should remain responsive and stop as soon as the keys are released; the selection must not mount or load the entire selected span.
-- Start in the middle of a wrapped line and hold Shift while pressing Up and Down repeatedly. Each key must reach the character on the immediately adjacent visual line at the same horizontal position, including the first key across a block edge. Reverse direction across several blocks and back into the starting block; the anchor must stay at its original character, including when the focus returns at another character. Repeat across the boundary between text above a callout and its first child, and through a shorter intervening line. Plain Up and Down must cross directly. At the first block's first line, Shift+Up may select to the line start. Confirm the explicit range shows no blinking caret at the original block, and that releasing Shift returns a same-block range to normal native selection. The caret must remain visible during IME composition.
-- In four single-line rows, start at row 2's first character and press Shift+Down twice. Tab and Shift+Tab must affect only rows 2 and 3. Copy must include their text and the trailing line break without row 4's text; formatting must leave row 4 unchanged. Shift+Left first removes the selected line break, then its next press removes row 3's last character from the selection. Repeat with backward selections, paragraphs, numbered lists, bullets, and tasks. Cut, paste, and undo must preserve the unselected endpoint text.
-- Replace a cross-block selection by typing, Enter, multiline paste, and rich HTML paste. Check retained prefix/suffix formatting, descendants outside the range, one-step undo, redo, and reopen after persistence.
-- Repeat full-page replacement with delayed hydration while typing several characters. Confirm none are dropped. Navigate away before loading completes and confirm the old action cannot modify the new page.
-- Click text-row padding, indentation space, bullet/number markers, and blank space after wrapped text. Confirm a caret appears on the clicked visual line without a full-row highlight or outline. Repeat with an empty row, nested text inside columns or tabs, and a previously selected non-text block. Shift-click and dragging from these areas must select text, including within the same row; subsequent Shift+Arrow must keep text selection. Check that buttons, task checkboxes, links, and embedded fields retain their normal interactions.
-- In a long note, click text near the viewport's top and bottom edges, then click its row padding and markers. The viewport must stay at the same scroll position, including partially visible rows and blocks taller than the viewport. Repeat inside columns and tabs. Arrow-key navigation and explicit navigation to offscreen blocks must still reveal their targets as needed without centering every newly focused row.
-- Add and remove enough text to make the note scroll. The title, blocks, and Notes navigation rows must keep the same horizontal positions as their content begins or stops overflowing.
-- Select text and non-text blocks without opening any toolbar. Right-click to copy, cut, paste, delete, or format a text range; check duplicate and movement for non-text block selections. Confirm menu dismissal, keyboard navigation, and focus restoration.
-- Check Ctrl/Cmd+A in the title, database fields, table cells, and dialogs remains scoped to those controls. Verify IME composition, emoji, and soft line breaks at cross-block selection boundaries on each supported webview.
+- Ctrl/Cmd+A in the body selects the complete document on the first press, including unloaded blocks, without rendering the whole page. Inside the title, fields, cells, and dialogs it stays scoped to that control.
+- Shift+Arrow, Shift+Home/End, Shift-click, and dragging extend precisely across wrapped lines and block edges, keep the original anchor when reversing, and stay responsive across long spans.
+- Clicking row padding, markers, or blank space after text places a caret on that visual line without scrolling the viewport.
+- Typing, Enter, and plain or rich paste over a cross-block selection keep prefix and suffix text and unselected descendants, and undo as one step.
+- After undoing a range replacement, the original range is reselected with its direction.
+- IME composition, emoji, and soft breaks work at selection boundaries on each supported WebView.
 
-Automated delayed-storage coverage connects the actual action, persistence, tree projection, and undo controllers in `notes-editor-transactions.test.ts`. It checks local results before storage is released and persisted results afterward, including range replacement, formatting, surviving descendants, and undo. Document-selection DOM tests cover independent editing hosts and keyboard/clipboard routing; hydration tests cover selections spanning multiple backend batches. These checks do not measure real Tauri input latency or replace the manual acceptance above.
+## Links, menus, and slash commands
 
-## Block acceptance
+- Pasting a URL over selected text creates a link without changing the words; code and plain-text paste stay literal.
+- Link hover actions open without moving the caret, stay within the viewport, and do not open on touch or text drag. Click opens the destination.
+- Right-click on text opens the text menu with the range still visible; right-click on a non-text block opens block actions.
+- `/` opens the slash menu immediately on shifted and unshifted layouts, software keyboards, and after IME commit. Filtering accepts localized labels, the active item stays in view, and Escape or outside click keeps the literal text. Code blocks keep `/` literal.
+- Floating panels and menus near viewport edges, in narrow previews, and with the software keyboard stay fully visible and return focus on Escape.
+- App shortcuts (Alt+number, Ctrl+Tab, settings, theme, zoom) never type, indent, or format text as a side effect.
 
-- Create `/Note` while a full page is open, edit the child in center and side previews, and close it. Confirm the parent is selected again and its pending edits remain saved. Repeat with navigation to another child inside the preview and with promotion to full page. The sidebar must retain only folders and root notes, with the containing root highlighted; top-bar hover subpanels must still show child notes.
-- Repeat `/Note` immediately after inserting a row and while storage is delayed. The source must become a note item immediately, repeated commands must create only one child, and a late paragraph event must not poison the save queue. Confirm an empty child title, retry after a failed creation, closing the preview, reopening the parent, and creating another note. After conversion, Undo must not replay the old paragraph over the child-page identity. Automated controller coverage lives in `notes-store-child-page-creation.test.ts`.
-- Put note rows first, last, between paragraphs, and alone in the body. Navigate across them in both directions. On a focused note, Enter creates a paragraph below and Shift+Enter creates one above; Space opens the note. Type immediately into the inserted paragraph, then verify save/reopen and undo/redo.
-- Drag a selection onto, across, and from a note row, including dragging across a single note title. Selection must not open the note. Repeat with Shift+Arrow and Ctrl/Cmd+A. Copy and paste into text, another note, and the source note itself. Confirm the copy has independent content and nested notes. Repeat with cut, range deletion, replacement, undo/redo, and a selection ending immediately before a note. Check plain-text output and paste its Markdown reference back into Notes as a link to the original.
-- Check that the title action row sits evenly between the top edge of the note content and the title, with and without a cover, in full and side views.
-- Verify Add cover appears above the title only without a cover. With a cover, check the top-right Change toolbar on hover, keyboard focus, and touch; uploaded images also offer Reposition, enabling drag repositioning directly in the banner. Verify mouse and touch dragging, pointer release outside the banner, edge clamping, keyboard movement, Save position, Cancel, Escape, and Android Back. Cancel and page navigation must discard unsaved positions; failed saves must retain the draft for retry. Check Escape restores the clicked toolbar button, switching actions, and removal restores Add cover.
-- Open Add icon, Add cover, and Add comment near each viewport edge in full, side, and center views. Confirm each panel aligns with the left edge of its title action when space permits and stays visible after scrolling or resizing. Clicking each title action again should close its panel. Check the cover tabs, upload, URL, removal, and comment composer and thread scrolling in light and dark themes. The discussion panel should show no comment count or divider lines, and Show resolved should use the standard Notes checkbox. Comment fields should gain a subtle fill without an added focus outline. Open the actions with a keyboard, then confirm focus enters each panel and Escape returns focus to its trigger.
-- On a page with open and resolved threads, toggle Show resolved repeatedly by clicking both the square and the text. Each click should change the filter once without another loading state, including after marking a thread read or resolving a thread. Switching pages must not reuse the earlier page's threads.
-- Confirm the page title and the first plain text block start at the same left edge in full and side page views, without shifting the title right.
-- Confirm block rows have no left-side add or drag buttons. Right-click a non-text block surface to open block actions, while right-clicking editable text opens the text menu. Existing comment counts remain visible without shifting block content.
-- Insert, convert, duplicate, move, nest, Trash, restore, and delete each supported block family.
-- Verify internal table rows, columns, and tab labels never appear as stray document rows.
-- Remove columns and tabs and confirm their child content relocates safely.
-- Use template and button blocks with ordinary child content, including unloaded children, and verify prohibited child-page cases remain disabled with an explanation. Retry an interrupted insertion and confirm the same copied identities return without another insertion.
-- Verify unsupported imported blocks remain visible, searchable, duplicable, and deliberately convertible.
-- Verify block colors and compatible payload fields survive edit, conversion, duplication, history copy, and reload.
+## Page chrome, covers, and comments
+
+- Add icon, Add cover, and Add comment open aligned panels that stay visible on scroll and resize, toggle on a second click, and return focus on Escape.
+- Every cover design renders in light, dark, and custom themes, on wide banners and narrow phones, keeping the subject recognizable. Selections apply immediately; repositioning persists only after Save position, and Cancel, Escape, or navigation discards it.
+- Closing the picker or switching pages during a selection never updates another page.
+- Show resolved toggles comment threads once per click, and switching pages does not reuse another page's threads.
 
 ## Media and assets
 
-- Attach supported local image, video, audio, PDF, and generic files.
-- Reject oversized, mismatched, unsafe, missing, and unmanaged paths.
-- Reload previews, remove and replace references, and verify ownership prevents premature asset deletion.
-- Confirm external references never auto-fetch where content policy forbids it.
-- Simulate a missing managed file and verify a recoverable unavailable state.
+- Attach supported images, video, audio, PDF, and generic files. Oversized, mismatched, unsafe, missing, and unmanaged paths are rejected.
+- Removing and replacing references never deletes an asset still owned elsewhere. A missing managed file shows a recoverable unavailable state.
+- External references never auto-fetch where content policy forbids it.
 
-## Page and navigation acceptance
+## Databases
 
-- Use Left and Right at text boundaries, and Up and Down through wrapped text and adjacent blocks. Confirm the caret moves one visual line at a time and the viewport does not jump a visible block to the top; then jump to an unloaded block and confirm it scrolls into view.
-- Open a page in full, side, and center modes. Confirm the editor has no separate header row, last edited, favorite, and page actions appear before project Notes settings in the workspace header, and preview close/view-mode controls stay reachable without covering title actions.
-- Create root, folder, nested, and database-row pages with empty and authored titles.
-- Rename a selected page in the editor and in the sidebar. Confirm the header and sidebar follow an editor draft, and both rename paths update the other visible title after saving without switching pages or projects. Repeat with a delayed save, and check that an active editor draft is not overwritten.
-- Move pages among project root, folders, and parent pages through the sidebar and editor. Confirm the visible navigation and selected page path update after each save without switching pages or projects, while paired child blocks remain correct.
-- Reject self, descendant, cross-project, inactive, and block-parent destinations where invalid.
-- Favorite, reopen, archive, Trash, restore, and permanently delete pages and subtrees.
-- Verify invalid restored parents produce safe root placement and an explanation.
-- Verify favorites and recents change navigation only, not content or canonical placement.
+Run for table, board, gallery, list, calendar, and timeline layouts.
+
+- `/database` shows an empty-titled table immediately, before creation completes. Clicking inside the table never selects the whole document block.
+- Add, switch, rename, duplicate, and delete views. Duplicates have independent settings over shared rows; the last view and last table view are protected.
+- View settings, filters (up to ten), sorts (up to five), grouping, collapse, and calculations persist, match the full filtered source, and reconcile after schema changes without dropping compatible settings.
+- New page shows an editable row immediately, keeps typed titles through delayed creation, and reuses the same page ID on retry.
+- Resize, reorder, hide, wrap, and freeze columns; widths stay visible during delayed saves and revert on cancel. Board cards move by drag and menu.
+- Linked views share rows and schema but keep their own view settings and title.
+- Copying a database creates an independent copy by default; Paste and sync replaces it with a linked view. Pasting a database URL offers mention, linked view, or URL.
+- Deleting an owned database, a linked view, or a selection containing several asks with owned-source counts, and Undo or Trash restore recovers the owned graph.
+- Relations validate targets and maintain inverse links. Rollups and formulas recompute after source, schema, Trash, and restore changes.
+- Templates, typed buttons (with stale-schema rejection), multiple sources, locked shells, and nested sub-items behave correctly after reopening.
+- Edits from previews, another window, imports, or history restore refresh affected databases without blanking rows. Switching vaults during a read restores nothing from the old vault.
+- A write slower than the threshold shows one indicator beside that database's title.
 
 ## Working-folder Markdown
 
-- Open an authorized Markdown file, edit, save atomically, refresh, copy its relative path, and open externally.
-- Change the file externally during a dirty local edit and confirm Save refuses the stale revision.
-- Verify unsafe paths, symbolic links, oversized files, generated directories, and unsupported encodings are excluded or diagnosed.
+- Open, edit, atomically save, refresh, and open externally an authorized Markdown file.
+- An external change during a dirty edit makes Save refuse the stale revision.
+- Unsafe paths, symbolic links, oversized files, generated directories, and unsupported encodings are excluded or diagnosed.
 
-## Database acceptance
+## History and transfer
 
-For table, board, gallery, list, calendar, and timeline:
+- Page history restores text-only versions and rejects snapshots containing local database graphs; project history restores the complete graph, including pages since moved to another project.
+- A safety version exists before every destructive restore or import.
+- Markdown, HTML, Notion, export-folder, CSV, graph, and agent-bridge transfers handle supported and unsupported data, with diagnostics that name approximations and never expose tokens or inaccessible content.
 
-- Compare shared cells, view buttons, menus, cards, and inline creation against Projects in the same theme. Resize a Notes column by dragging and keyboard, cancel a drag, and reopen the saved view. Check Projects automatic width fitting and task selection still work.
-- In both boards, move a card by drag and menu, try a failed write, and create within a group. In Projects, check manual ordering separately from sorted status moves and scroll through cards with wrapped titles and extra metadata.
-- Open Notes Calendar creation from a single day, cancel a draft, and check the month grid at narrow widths. Check settings in all six layouts stay outside document content.
-- Create `/database` and confirm the table is visible immediately beneath its title and saved-view bar. Click blank table space, the title, header, cells, New page, and menus; none should select or highlight the whole document block. Verify the same in light and dark themes and narrow page previews.
-- Add table, board, gallery, list, calendar, and timeline views from the picker. Switch, rename, duplicate, and delete views; confirm deletion asks first and duplicated filters, sorts, and layout remain independent while rows stay shared. Check the active tab stays visible when views overflow. The last view and last table view must remain protected.
-- Open view settings near each viewport edge, inside a narrow page preview, after horizontal scrolling, and after resizing. It must float beside its toolbar control while leaving the collection interactive. Open Layout, Property visibility, Filter, Sort, applicable Group, Templates, and More as detail pages. Back and Escape must retain parent drafts and restore the invoking row's focus. A nested dropdown consumes the first Escape; clicking or focusing outside must dismiss without taking focus away. Repeat with keyboard row navigation, touch targets, light and dark themes, and Projects view controls.
-- Compare database More, view options, row actions, Add view, New's dropdown, property headers, and nested selectors with the sidebar's page and folder action menus. Check the light shadow, inset row highlights, compact text and icons, and zero gaps between action rows. Plain actions, checkbox rows, and submenu triggers must have equal heights. Short menus must have no scrollbar; long menus and property-type pickers must retain working scrolling near viewport edges. Open the same property menu repeatedly and hover Calculate: row heights must stay stable and the scrollbar must not appear and disappear. Repeat after searching, switching from a long settings page to a short one, resizing, scaling text, and using touch. Desktop menus must stay compact with an available mouse; mobile and touch-only menus must enlarge all action rows equally. Property-type pickers should have one scroll area, and a nested dropdown must remain visible outside its parent content's clipping region.
-- Open each table property header. Edit property must select that property even during delayed schema loading. Filter conditions must match checkbox/non-checkbox types. Sort direction must update a property's existing sort without duplicating it or dropping other priorities. Move columns around hidden properties, hide one, resize another, then reopen the view. Title must remain visible and first. Edit source properties in the separate floating editor and add one from the header. Create from New and New page, apply a template from New's dropdown, and use New in another layout. Reopen the note to confirm titles, views, schema, rows, and settings persist.
-- Click New page and table toolbar New. A blank editable row and the next New page control must appear immediately, without waiting for storage or showing a separate draft form. Add several unnamed pages, type while creation is delayed, and press Enter on the last row. Verify the title survives creation, Enter saves it, and focus reaches New page. Delay a refresh across creation, fail creation and a title write, then retry. The draft must remain visible and the same page ID must be reused without duplicates. Repeat with a default template and after switching away before creation finishes. Projects must continue to require task names.
-- Click New page without moving the mouse. Its old hover highlight must not move down to the replacement New page line. Verify the new row receives the hover highlight in place, then move between rows to check normal hover feedback. Press Enter after editing the last title and verify focus stays on New page when the title save and table refresh finish.
-- Rename a local database, then a linked database. The linked title must change without renaming its source or original block.
-- In each database layout, switch to Calendar and return to Notes without editing. Rows and the selected view must return immediately without a loading placeholder or database query. Check the note's vertical scroll and table, board, calendar, and timeline horizontal scroll. Repeat with several databases and linked views.
-- Edit a row title or body through a preview or another desktop window, change schema or view settings, import rows, and restore history. The affected databases must refresh while keeping their previous rows visible. Delay a read across a write to verify the earlier response cannot restore old data. Switch vaults during a delayed read and verify no rows or presentation state from the old vault are restored. Exceed the session's resource or byte budget and verify evicted views load normally.
-- Navigate custom dropdowns with arrows, Enter, Tab, and Escape. Opening a table status or relation cell must retain its grid position. Relation targets must remain selectable while options load.
-- Open a dropdown inside a settings panel. First Escape closes the dropdown; second closes the panel. Verify clicking an option keeps the settings panel open, clicking elsewhere dismisses it, and focus returns appropriately.
-- Open panels near viewport edges and inside horizontally scrolled tables. Add filters and sorts while open; confirm the panel resizes, scrolls, and never clips nested menus.
-- Check schema, button, rollup, export, page-link, code-language, and tab-icon selectors use the shared dropdown and remain labelled and keyboard accessible.
-- In each layout, edit applied filter and sort controls below the toolbar and confirm view settings show the same query. Reach the ten-filter and five-sort bounds; changing an existing sort direction must still work, and adding another must stay disabled.
-- Type a view name or scalar filter value, then click nonfocusable background outside its panel. The edit must save before dismissal. Delay a write and check Escape after its focused control becomes disabled. Try switching saved views during the delay, including external breadcrumb preselection: old drafts and late save feedback must never replace the new view's state.
-- Leave unsaved property edits, dismiss the source editor, and add a property from the table header. Reopen the source editor and confirm both the draft and new property remain. Repeat failed creation and delayed saves. Change independent canonical and linked view layouts after opening a source draft, then save the draft: surviving column order, visibility, widths, query, and opening mode must remain intact.
+## Clipboard export interoperability
 
-- Create rows, edit supported properties, filter, sort, paginate, and open row pages.
-- Confirm linked views share rows and schema but retain independent view settings.
-- Copy an embedded database between notes, with text before and after it. Confirm the default paste owns an independent schema, views, rows, row bodies, nested notes, and templates. Dismiss keeps that copy. Paste and sync replaces it in the same document position and shares row edits with the original. Repeat a failed paste or replacement through Retry and confirm it creates no duplicate shell or trailing text. Paste the same copy into another application and check its readable title and local hyperlink.
-- Paste a copied database URL at a caret and between words. Check Mention, Linked database view, and URL, including Cancel or outside dismissal, undo, and redo. Mention previews must show a title and path without reading row data. Selecting mention text must not navigate. Database activation and the linked source arrow must open the appropriate full-width database surface and extend the workspace breadcrumb; returning through the containing note must retain its editor and scroll. Repeat from side and center previews.
-- Delete an owned database, a linked view, a selection containing several databases, and a collapsed parent containing one. Confirm owned-source counts and Trash copy, preserve content and selection on Cancel, and retain shared data when removing a linked view. Fail the ownership read and verify it prevents confirmation until retried. Undo and Trash restore must recover the owned graph, preserve earlier individual Trash items, and retain independent deletion made after an individual item was restored.
-- Exercise relation target validation and inverse links.
-- Recompute rollups and formulas after source, target, schema, Trash, and restore changes.
-- Create, apply, update, duplicate, default, and delete database templates.
-- Run typed database buttons with and without confirmation and reject stale schemas.
-- Verify late page or view responses cannot replace newer state.
+The portable contract is in [Notes clipboard interoperability](../interop/notes-clipboard.md). Record application and OS versions, WebView, and both clipboard representations; synthetic fixtures do not count as external-app acceptance.
 
-### Saved database interactions
-
-For the database interaction batch, verify saved grouping, collapse, group order, empty groups, and contextual row creation with more rows than one loaded window. Compare each count and calculation with the complete filtered source, including multiselect rows, zero, false, empty values, and computed properties. Wrap a text column and edit multiple lines; freeze through a column and narrow the viewport until the prefix shrinks, then widen it and confirm the saved boundary returns. Repeat date ranges, time zones, locale and ISO display, and raw number editing after formatted display.
-
-Build nested AND/OR queries with numeric and date comparisons through both applied controls and settings. Change the schema and confirm incompatible predicates, calculations, and color targets reconcile without deleting compatible settings. Insert a property beside a selected header and duplicate a select property; option identities must be fresh and existing row values must remain untouched. Verify rejected writes keep the entered draft and display a retryable error.
-
-Create a second source, attach an existing shared source, and switch between their views while reads and saves are delayed. Schema, templates, row creation, and property actions must follow the selected source; late responses must not replace the active source. Lock an owned shell and a linked shell independently. Layout, property, source, and query controls must stop structural edits, while cell edits, row creation, and sub-item creation remain usable. Creation under collapsed groups or parents must reveal and focus the new row without persisting a collapse change on a locked shell.
-
-Create several levels of row sub-items, move a child to another valid parent, collapse and reopen it, and repeat with filtering and multiselect grouping. Keyboard navigation must follow actual rendered row occurrences. Copy the database and restore a project history version, checking fresh copied identities, same-source edges, hierarchy, saved presentation, and rollback after malformed hierarchy input.
-
-## History and transfer acceptance
-
-- Restore text-only page versions and copy page versions without moving current page placement. Page-history restore must reject a page or snapshot containing local database graphs without changing canonical content. Use a project version for complete graph recovery; copying a database from page history creates an independent copy of its currently available graph.
-- Preview and restore a project version, including pages now moved to another project.
-- Confirm a safety version exists before destructive restore or import.
-- Exercise Markdown, HTML, Notion, export-folder, CSV, graph, and agent-bridge transfers with supported and unsupported data.
-- Confirm diagnostics identify approximations and never expose tokens or inaccessible content.
+- Copy and cut single ranges, partial cross-block ranges, whole blocks, and a whole long page. Paste into Notion, Obsidian, and a plain-text editor. Headings, inline marks, links, nested mixed lists, quotes, tasks, tables, and code whitespace survive where the receiver supports them, with no editor chrome or unselected text.
+- Plain text uses Markdown heading markers and list indentation. Toggles become nested bullets; callouts use an `<aside>` wrapper.
+- Paste from Obsidian, Notion, and plain Markdown into Notes: list hierarchy, heading levels, tables, toggles, and callouts are restored, and pasting into a table cell stays inside that cell.
+- Page and database mentions keep local identities through in-app paste. Databases copy through the dedicated source-copy flow, not plain text.
+- Stale internal clipboard content is never pasted after the user copies something else in another app. A denied clipboard write keeps cut text in place.
 
 ## Accessibility and responsive behavior
 
-- Complete primary editing, navigation, comments, movement, block insertion, database interaction, history, and recovery with keyboard only.
-- Verify focus returns predictably after menus, dialogs, deletion, movement, and responsive presentation changes.
-- Confirm narrow layouts keep Archive, Trash, restore, and permanent-delete actions reachable.
-
-### Document selection undo restoration
-
-- Select the complete body with Ctrl+A, delete or type replacement text, then undo. All original text must return highlighted across blocks, and typing again must replace that complete range.
-- Redo must restore the replacement and its collapsed caret; another undo must restore the complete range again.
-- Repeat with a backward partial selection and with formatting. Both endpoints and the selection direction must survive undo and redo.
-
-## Slash menu acceptance
-
-- Focus an empty text row and confirm it has no placeholder. Type `/` using both an unshifted key and a keyboard layout that requires Shift. Repeat with a software keyboard and compose a query with an IME. The menu should pause during composition and resume after the query commits. The command panel must appear immediately, with a visible loading or retry state if its optional component is unavailable.
-- Type `/h2`, `/##`, a localized command label, and a query with no matches. Confirm the command list updates and clearing or extending the query stays responsive.
-- Navigate past the visible options using arrows. The active option must stay in view; Enter and Tab must apply that option and remove the command text. Pointer selection must retain editor focus.
-- Escape, Close menu, outside click, and blur dismiss the menu while retaining literal text. After Escape, verify the caret remains in the editor with no full-row fill or outline, and repeat Escape before continuing to type. Escape without a menu must preserve ordinary text selection. Continuing that dismissed query must not reopen it. Remove and retype the slash to reopen it. Slash input in code blocks must stay literal.
-- Open near each viewport edge, within narrow or nested Notes views, and with the software keyboard showing. Confirm the menu is not clipped, remains inside the viewport, and follows scrolling and resizing.
-- Confirm the insertion menu search accepts localized labels, preserves supported commands, and reports no matches clearly. Check both light and dark themes.
-
-Automated coverage includes shifted slash and input-driven opening, dismissed sessions, localized filtering, pointer focus preservation, portal cleanup, viewport placement, and scrolling the active command into view. Real webview layout and software-keyboard behavior still need manual acceptance.
-
-## Empty body recovery
-
-- Create a note, insert `/database`, delete its only block through selection and its block menu, and immediately type. A focused paragraph must replace the database without waiting for storage.
-- Delete all blocks, undo, redo, and type again. The replacement paragraph must participate in the same undo step, and the original database identity must survive undo.
-- Reopen a previously emptied note and enter body text. There must be one editable paragraph, with no duplicate after another reopen.
-- Press Enter in the title to enter the body. Confirm IME Enter still commits composition. Delete the first block of a multi-block note and confirm focus moves to a surviving block.
-- Repeat with delayed or failed persistence and with unloaded root outlines. New typing must survive delayed append responses, save failures must remain visible and retryable, and unloaded content must not be treated as an empty page.
-
-## List numbering and exit behavior
-
-- Create consecutive numbered items with Enter and verify 1, 2, 3, including sequences beyond 9 and 99. Scroll a long list so its beginning is unmounted and verify later numbers do not restart.
-- Nest a numbered or bulleted list inside an item. Verify nested numbering starts at 1 and the next outer sibling continues the outer count. Insert a paragraph between ordered siblings and verify the next sequence starts at 1. Repeat inside columns, tabs, and a historical page preview.
-- Insert, delete, reorder, indent, outdent, or convert an item, then undo and redo. Verify numbers update immediately in document order.
-- Compare number and bullet baselines with the first editable line, including wrapped text and different app font scales. Multi-digit markers must remain fully visible.
-- Backspace at the beginning of a populated or empty numbered item, bullet, to-do, toggle, quote, callout, and heading. Verify it becomes a paragraph, retains its rich text and children, and keeps the caret at offset zero. It must not merge with the previous item on that first press.
-- Undo and redo that conversion, then continue typing while saving is pending. Reopen the note and verify content is retained. Repeat Backspace with a software keyboard, a selected text range, and a caret inside the text. Ordinary character/range deletion must retain list formatting.
-
-## Six heading levels
-
-- Create H1 through H6 with slash search (`/h5`, `/h6`, `/#####`, `/######`), context-menu conversion, and hash-plus-Space shortcuts. Verify all six appear in the table of contents and focus the correct row.
-- Compare all six with the page title and body text. Sizes must decrease through H6 without going below body size; inspect wrapped headings and both app font-scale extremes. Check historical previews use the same hierarchy.
-- Exercise Enter, Backspace at offset zero, rich-text formatting, colors, toggle children, undo/redo, save/reopen, templates, duplication, Markdown paste, and rich HTML paste for H5 and H6.
-- Import and export all six levels as Markdown and HTML. Verify levels are retained, without depth-approximation warnings or invalid h7 output. Check an existing vault upgrades with content, descendants, and template blocks intact.
-
-### Nested clipboard lists
-
-- Copy a note from Obsidian containing bullets, nested numbered items, a third list level, and following paragraphs. Paste into an empty Notes row and across an existing selection. Verify separate item text, inline formatting, indentation, and sibling numbering.
-- Repeat with plain Markdown using spaces and tabs, blank lines, continuation text, and checked tasks. Verify dedentation returns to the intended parent.
-- Undo and redo the paste, then reopen the note. Verify the complete hierarchy and text survive each step.
-
-Automated coverage exercises both clipboard parsers and the real editor projection, delayed persistence, and undo controllers. Actual clipboard output and rendering require manual app acceptance.
-
-### Keyboard indentation
-
-- Use Tab and Shift+Tab on paragraphs and mixed lists, including items with descendants. Verify immediate indentation, stable caret/selection, and unchanged text.
-- Repeat while saves are delayed, then type and undo/redo. Verify ordered persistence and no focus jumps when saves finish.
-- Indent under a collapsed toggle or toggle heading. Verify it opens and the child remains focused; undo restores the original structure and open state.
-- Start with a new note and empty first body row. Press Tab more than eight times, type text, press Enter, and verify the new row keeps the same indentation. Repeat for bullets, numbers, and tasks.
-- Use Shift+Tab and Backspace at offset zero to return to the left margin one level at a time. At the left margin, Backspace removes a list marker while keeping text. Shift+Tab at the left margin is a no-op.
-- Select several rows, including both a parent and a child, and press Tab or Shift+Tab. Verify each selected text row changes once, unselected descendants retain their depths, selection remains, and one undo restores the operation.
-- Use Tab and Shift+Tab within code, including a multiline selection. Verify whitespace changes and no block movement.
-- Repeat Shift+Tab in the Linux Tauri app on both indented text and text at the left margin. Focus must remain in the same editor. Automated DOM regressions cover WebKitGTK events with `key: "Unidentified"` and `code: "Tab"`, including document selections and code whitespace; table navigation also recognizes that event format.
-
-- Start with ABC at depth 0, DEF at depth 1, and GHI at depth 0. Indent ABC repeatedly and verify DEF remains at depth 1 and GHI at depth 0. Repeat with numbered lists, paragraphs, tasks, deeper descendants, and embedded blocks; verify numbering, undo/redo, and saved positions after reopening.
-- Outdent a parent that already has several indentation levels. Its children and following nested siblings must retain their original depths and document order. Repeat when affected neighbours are outside the rendered window.
-- Press Tab repeatedly immediately after opening a page while nested rows are still loading. Once loaded, only the requested row should change depth. Switching pages before loading finishes must cancel those pending indentation edits.
-
-### Clipboard export interoperability
-
-- Copy and cut a single text range, a cross-block range with partial endpoints, and a whole-block selection using keyboard shortcuts and context menus. Paste into Notion, Obsidian with HTML-to-Markdown conversion enabled, and a plain-text editor.
-- Verify headings, bold, italic, underline, strikethrough, links, nested mixed lists, quotes, code whitespace, and multiline text. Check tasks and tables where the receiving app supports their HTML representations. Confirm no block handles, comments, editor controls, or unselected endpoint text appear.
-- Copy an entire long page with offscreen content, then paste into another app. Confirm content is complete. Deny clipboard writes and verify a failed cut retains its source text.
-- Copy text, a toggle with three child paragraphs, and following text, first with the toggle expanded and then collapsed. Use Ctrl/Cmd+A, a full-range drag selection, and a whole-block selection. In a plain-text editor, expect an indented bullet with all three child paragraphs in both states. In Notion, check that rich paste retains the toggle and its complete body when copied closed. In Obsidian, check whether it chooses HTML or the plain-text bullet and whether paragraphs or adjacent titles merge. Also test a page containing only one collapsed toggle, copying before and after its children are hydrated. Paste back into Notes with HTML and plain-text-only clipboard data; HTML should restore a closed toggle, while plain text should remain a nested list. The surrounding words must stay outside the pasted structure. Record any external-app difference rather than assuming syntax guarantees acceptance.
-- Copy a callout with an emoji, a heading, paragraphs, and another callout inside it. Confirm HTML uses `<aside>` and plain text uses an `<aside>` wrapper, without quote markers. Paste back into Notes from both representations and from the Notion-style raw example, checking icon, child hierarchy, and surrounding paragraphs. Paste into Notion and record how that version reads each clipboard representation.
-- Delete a closed toggle with its row Delete action and check that its hidden children become siblings. Delete it through a whole-block selection or a full text-range selection and check that its body is removed too. Repeat immediately after editing the toggle and before its save completes. Confirm there is no save error, stray child outline, or reappearing block after save and reopen.
-- Paste copied headings, formatted text, links, and nested lists back into Notes. Page and database mentions retain their local identities through rich in-app paste; embedded databases use the dedicated source-copy flow. Other app-specific objects and media bytes remain outside the portable text-copy contract.
-
-Automated coverage verifies model serialization, standard clipboard MIME types, semantic HTML paste, partial ranges, and native single-editor copy/cut events. Cross-application behavior still requires manual desktop acceptance.
-
-- In a plain-text editor, copied headings must contain the matching number of `#` markers. Check Markdown emphasis, links, quotes, task state, escaped literal syntax, variable-length code fences, and list indentation.
-- Copy the same H1/H2/H3 sequence from Notion into an empty paragraph and over a selected existing heading. Verify levels remain H1/H2/H3. Compare keyboard paste and context-menu paste, including a document range. Ordinary website H2 headings must remain H2 when no matching Markdown says otherwise.
-
-- Repeat table transfer through HTML and Markdown-only clipboard data. Check headered and headerless tables, merged cells, literal pipes, cell line breaks, surrounding paragraph text, undo/redo, and reopen.
-- Select formatted text inside a table cell and copy/cut/paste it in both directions. Pasting multiple blocks into one cell must retain readable text without creating unrelated table rows.
-- Verify repeated spaces, tabs, Unicode, empty paragraphs, empty code blocks, and quotes containing multiple paragraphs. Compare Markdown-only rendering separately from HTML.
-- Copy internal blocks, then copy different content in another app. Pasting on a block margin must not insert stale internal blocks; paste into the returned text editor to import the external content.
-- Record real application and OS versions and both clipboard representations. Synthetic regression fixtures do not count as confirmed Notion or Obsidian acceptance. See the [interoperability contract](../interop/notes-clipboard.md).
-
-## Page cover redesign acceptance
-
-Automated coverage validates all design and palette combinations, focal crop geometry, invalid metadata, immediate selection, shared color controls, save retries, dismissal, late picker completion, duplication, templates, history, and export preservation or loss diagnostics.
-
-Manual desktop and Android acceptance remains required:
-
-- Compare all fourteen designs in light, dark, and custom themes, including gallery cards and historical previews.
-- Check full pages, side previews, narrow phones, tablets, landscape, enlarged text, safe areas, and the software keyboard. Covers must leave room for the page title and content. On shallow desktop banners around 7:1, confirm Observatory, Nature, Atlas, Studio, Study, Mathematics, Programming, and Finance retain recognizable, proportionate subjects without vertical cropping. Check that narrow views and picker thumbnails retain the main subject and its connection to surrounding details. Nature and Studio should retain illustrated background details at both edges on wide screens. Nature should show sky, terrain, and water across the whole banner with no gradient wash. Verify referenced shapes and textures render correctly when several cover thumbnails are present. Contours should retain its fine linework with the solid wave filling the area below its curved upper edge.
-- Confirm Simple appears before Illustrations, with illustrations ordered Study, Finance, Nature, Studio, Mathematics, Programming, Atlas, and Observatory. Check the original two-column thumbnail size and cropping. Scroll to the top, middle, and bottom; check the same conditional edge fades as Add icon. Filter to a single result and resize the panel to verify that unnecessary fades disappear.
-- Select designs, colors, and uploads. Confirm each applies immediately and persists after reopening the page and app. Dragged positions must persist only after Save position. Compare the header, color controls, Ask every time, upload, and removal with Add icon.
-- Position subjects near image edges using pointer, touch, and keyboard. Verify that changing container size retains the subject where image bounds permit it.
-- Exercise native selection, mobile file selection, paste, invalid images, and failed saves. Closing a picker or switching pages during selection must not update another page.
-- Verify Escape, Android Back, outside dismissal, keyboard focus return, and color panels near viewport edges.
-
-## Shared collection regression checks
-
-- Drag and keyboard-resize Notes and Projects columns. The released width must remain visible during a delayed save; cancellation restores the previous width, and a rejected save reports an error.
-- In Projects, grow columns past the viewport, shrink them again, toggle columns, and change groups. The horizontal thumb must appear, update, and disappear without a wheel gesture. Shrinking the content clamps its position and the pinned leading controls together.
-- In Notes, cross the horizontal overflow threshold in both directions. The table must not briefly show a nested vertical scrollbar.
-- Projects view tabs retain text labels without icons, including when the header becomes narrow.
-- With focus in a note title, text block, database input, or an open slash menu, exercise Alt+number, Ctrl+Tab, Ctrl+Shift+Tab, settings, music, theme, and zoom commands. On Apple platforms use the primary Command modifier. App commands must not type, indent, select a slash command, or format text as a side effect. Verify ordinary Tab indentation, formatting, undo, and composition still work.
-
-- In each database layout, save a cell, resize a column, rename the database, and change view settings. Fast writes must not add a saving row or dim controls. Delay a write beyond 600 ms and verify one spinner beside the database title, then verify it disappears on completion or failure. Multiple databases must keep separate indicators.
+- Primary editing, navigation, comments, movement, block insertion, database interaction, history, and recovery work with the keyboard only.
+- Focus returns predictably after menus, dialogs, deletion, movement, and layout changes.
+- Narrow layouts keep Archive, Trash, restore, and permanent-delete actions reachable, and scaled text does not clip controls.

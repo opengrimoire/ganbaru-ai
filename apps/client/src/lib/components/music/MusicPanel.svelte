@@ -11,22 +11,22 @@
   import Volume2 from "@lucide/svelte/icons/volume-2";
   import VolumeX from "@lucide/svelte/icons/volume-x";
   import CalendarScrollbar from "$lib/components/calendar/CalendarScrollbar.svelte";
-  import MusicPlaylistLauncher from "$lib/components/music/MusicPlaylistLauncher.svelte";
-  import MusicCurrentItemMenu from "$lib/components/music/MusicCurrentItemMenu.svelte";
-  import MusicTrackPreferences from "$lib/components/music/MusicTrackPreferences.svelte";
-  import MusicSnoozeButton from "$lib/components/music/MusicSnoozeButton.svelte";
-  import MusicPlaybackModeControl from "$lib/components/music/MusicPlaybackModeControl.svelte";
-  import MusicSoundscapeControl from "$lib/components/music/MusicSoundscapeControl.svelte";
+  import MusicPlaylistLauncher from "./MusicPlaylistLauncher.svelte";
+  import MusicCurrentItemMenu from "./MusicCurrentItemMenu.svelte";
+  import MusicTrackPreferences from "./MusicTrackPreferences.svelte";
+  import MusicSnoozeButton from "./MusicSnoozeButton.svelte";
+  import MusicPlaybackModeControl from "./MusicPlaybackModeControl.svelte";
+  import MusicSoundscapeControl from "$lib/components/music/soundscape/MusicSoundscapeControl.svelte";
   import MusicPreparationActivity from "$lib/components/music/builder/MusicPreparationActivity.svelte";
   import { revealLocalFile } from "$lib/api/music";
   import { getMusicInspectorDetail, removeMusicSnooze } from "$lib/api/music-library";
-  import { notifyMusicLibraryChanged } from "$lib/music/music-library-events";
+  import { notifyMusicLibraryChanged } from "$lib/music/library/events";
   import { formatPlaybackTime } from "$lib/music/playback";
   import { fittedSidePlaylistPanelHeight } from "$lib/music/panel-layout";
   import {
     MUSIC_PLAYLIST_ROW_HEIGHT_PX,
     musicPlaylistWindow,
-  } from "$lib/music/playlist-window";
+  } from "$lib/music/playlists/window";
   import { getMusicPlayer } from "$lib/stores/music-player.svelte";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import { BUILD_PLATFORM_PROFILE, platformHasCapability } from "$lib/platform";
@@ -36,17 +36,17 @@
     musicBuilderLoader,
     type MusicBuilderComponent,
     type MusicBuilderInitialAction,
-  } from "$lib/music/music-builder-loader";
-  import { getMusicSourcesController } from "$lib/music/music-sources-controller.svelte";
+  } from "$lib/music/builder/loader";
+  import { getMusicSourcesController } from "$lib/music/sources/controller.svelte";
 
   let {
-    onclose,
+    onClose,
     visible = true,
     presentation = "desktop",
     mobilePlayerPanelStyle = "",
     mobilePlaylistPanelStyle = "",
   }: {
-    onclose: () => void;
+    onClose: () => void;
     visible?: boolean;
     presentation?: "desktop" | "mobile";
     mobilePlayerPanelStyle?: string;
@@ -376,10 +376,10 @@
     if (!itemId) return;
     const playlistId = player.activePlaylistId;
     const now = Date.now();
-    const active = (await getMusicInspectorDetail(itemId)).snoozes.filter((entry) =>
-      entry.startsAt <= now && (entry.endsAt === null || entry.endsAt > now)
+    const activeSnoozes = (await getMusicInspectorDetail(itemId)).snoozes.filter((entry) =>
+      entry.startsAtMs <= now && (entry.endsAtMs === null || entry.endsAtMs > now)
       && (playlistId === null || entry.scope === "all-playlists" || entry.playlistId === playlistId));
-    await Promise.all(active.map((entry) => removeMusicSnooze(entry.id)));
+    await Promise.all(activeSnoozes.map((entry) => removeMusicSnooze(entry.id)));
     if (player.activeQueueItemIds[index] === itemId && player.activePlaylistId === playlistId) {
       player.clearQueueItemSnooze(index);
     }
@@ -450,7 +450,7 @@
       if (musicPage === "playlist-builder") return;
       if (typeof document !== "undefined" && document.querySelector("[data-app-floating-surface], [data-music-track-preferences-open]")) return;
       claimKeyboardShortcut(event);
-      onclose();
+      onClose();
       return;
     }
     if (event.key === "Tab") {
@@ -711,7 +711,7 @@
   hidden={!visible}
   class={cn("fixed z-40", mobileBuilderPresentation ? "bg-background" : !mobilePresentation && "inset-0")}
   style={mobilePresentation ? "left: var(--visual-viewport-offset-left); top: var(--visual-viewport-offset-top); width: var(--visual-viewport-width); height: var(--visual-viewport-height);" : undefined}
-  onclick={(event) => { if (!mobileBuilderPresentation && event.target === event.currentTarget) onclose(); }}
+  onclick={(event) => { if (!mobileBuilderPresentation && event.target === event.currentTarget) onClose(); }}
 ></div>
 {#if !mobilePresentation}
   <div

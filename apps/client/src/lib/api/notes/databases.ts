@@ -16,7 +16,7 @@ import {
   mapNotesDataSourceTimelineViewDto,
   mapNotesLoadedPageDto,
   mapNotesPageDto,
-} from "$lib/notes/notion-mappers";
+} from "$lib/notes/validation/response-mappers";
 import type {
   NotesCreatedDatabase,
   NotesDatabaseCreateRequest,
@@ -59,7 +59,7 @@ import type {
   NotesPage,
 } from "$lib/notes/types";
 import { invokeNotesMutation } from "./mutation";
-import { isNotesUuid } from "$lib/notes/block-link";
+import { isNotesUuid } from "$lib/notes/links/block-link";
 import type { NotesDatabaseReference } from "$lib/notes/types";
 
 /** Read a database reference's destination and ownership without fetching its rows. */
@@ -69,7 +69,7 @@ export async function getNotesDatabaseReference(blockId: string): Promise<NotesD
   return parseDatabaseReference(value);
 }
 
-/** Persist shell-local protection from accidental structural changes. */
+/** Lock or unlock structural edits for one database shell. */
 export async function setNotesDatabaseEditingLock(databaseId: string, locked: boolean): Promise<NotesDatabaseReference> {
   const dbUrl = await ensureDbUrl();
   return parseDatabaseReference(await invokeNotesMutation("notes_set_database_editing_lock", { dbUrl, databaseId, locked }));
@@ -194,7 +194,7 @@ export async function getNotesDataSourceSchema(
 ): Promise<NotesDataSourceSchema> {
   const dbUrl = await ensureDbUrl();
   return mapNotesDataSourceSchemaDto(
-    await invoke<unknown>("notes_get_data_source_schema", {
+    await invoke<unknown>("notes_data_source_schema", {
       dbUrl,
       dataSourceId,
       ...databaseViewScopeArgs(scope),
@@ -339,7 +339,7 @@ export async function getNotesDataSourceTableView(
 ): Promise<NotesDataSourceTableView> {
   const dbUrl = await ensureDbUrl();
   return mapNotesDataSourceTableViewDto(
-    await invoke<unknown>("notes_get_data_source_table_view", {
+    await invoke<unknown>("notes_data_source_table_view", {
       dbUrl,
       dataSourceId,
       ...databaseViewScopeArgs(scope),
@@ -370,7 +370,7 @@ export async function getNotesDataSourceBoardView(
 ): Promise<NotesDataSourceBoardView> {
   const dbUrl = await ensureDbUrl();
   return mapNotesDataSourceBoardViewDto(
-    await invoke<unknown>("notes_get_data_source_board_view", {
+    await invoke<unknown>("notes_data_source_board_view", {
       dbUrl,
       dataSourceId,
       ...databaseViewScopeArgs(scope),
@@ -418,7 +418,7 @@ export async function getNotesDataSourceGalleryView(
 ): Promise<NotesDataSourceGalleryView> {
   const dbUrl = await ensureDbUrl();
   return mapNotesDataSourceGalleryViewDto(
-    await invoke<unknown>("notes_get_data_source_gallery_view", {
+    await invoke<unknown>("notes_data_source_gallery_view", {
       dbUrl,
       dataSourceId,
       ...databaseViewScopeArgs(scope),
@@ -482,7 +482,7 @@ export async function getNotesDataSourceListView(
 ): Promise<NotesDataSourceListView> {
   const dbUrl = await ensureDbUrl();
   return mapNotesDataSourceListViewDto(
-    await invoke<unknown>("notes_get_data_source_list_view", {
+    await invoke<unknown>("notes_data_source_list_view", {
       dbUrl,
       dataSourceId,
       ...databaseViewScopeArgs(scope),
@@ -514,7 +514,7 @@ export async function getNotesDataSourceCalendarView(
 ): Promise<NotesDataSourceCalendarView> {
   const dbUrl = await ensureDbUrl();
   return mapNotesDataSourceCalendarViewDto(
-    await invoke<unknown>("notes_get_data_source_calendar_view", {
+    await invoke<unknown>("notes_data_source_calendar_view", {
       dbUrl,
       dataSourceId,
       ...databaseViewScopeArgs(scope),
@@ -546,7 +546,7 @@ export async function getNotesDataSourceTimelineView(
 ): Promise<NotesDataSourceTimelineView> {
   const dbUrl = await ensureDbUrl();
   return mapNotesDataSourceTimelineViewDto(
-    await invoke<unknown>("notes_get_data_source_timeline_view", {
+    await invoke<unknown>("notes_data_source_timeline_view", {
       dbUrl,
       dataSourceId,
       ...databaseViewScopeArgs(scope),

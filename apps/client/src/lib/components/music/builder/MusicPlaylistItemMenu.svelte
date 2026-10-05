@@ -12,10 +12,10 @@
   import type { Component } from "svelte";
   import { getMusicInspectorDetail } from "$lib/api/music-library";
   import { getLocalization } from "$lib/i18n/translator.svelte";
-  import type { MusicItemListEntry, MusicSnooze, MusicWeight } from "$lib/music/library-contracts";
-  import { formatMusicDuration } from "$lib/music/music-builder-presentation";
-  import { projectMusicItemMenuLayout } from "$lib/music/music-item-menu-layout";
-  import { musicSnoozePreset, type MusicSnoozePreset } from "$lib/music/music-snooze";
+  import type { MusicItemListEntry, MusicSnooze, MusicWeight } from "$lib/music/library/contracts";
+  import { formatMusicDuration } from "$lib/music/builder/presentation";
+  import { projectMusicItemMenuLayout } from "$lib/music/builder/item-menu-layout";
+  import { musicSnoozePreset, type MusicSnoozePreset } from "$lib/music/session/snooze";
   import { portal } from "$lib/utils/portal";
 
   type Subpanel = "details" | "snooze" | "weight";
@@ -56,10 +56,10 @@
   const duration = $derived(formatMusicDuration(item.durationMs));
   const selectedSnooze = $derived.by(() => {
     const now = Date.now();
-    const scoped = snoozes.filter((entry) => entry.startsAt <= now && (entry.endsAt === null || entry.endsAt > now)
+    const scoped = snoozes.filter((entry) => entry.startsAtMs <= now && (entry.endsAtMs === null || entry.endsAtMs > now)
       && (context === "source" ? entry.scope === "all-playlists" : entry.scope === "playlist" && entry.playlistId === snoozePlaylistId));
     return scoped.length === 1
-      ? musicSnoozePreset(scoped[0].startsAt, scoped[0].endsAt, Intl.DateTimeFormat().resolvedOptions().timeZone)
+      ? musicSnoozePreset(scoped[0].startsAtMs, scoped[0].endsAtMs, Intl.DateTimeFormat().resolvedOptions().timeZone)
       : null;
   });
 

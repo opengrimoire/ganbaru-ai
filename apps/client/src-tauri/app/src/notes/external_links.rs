@@ -12,7 +12,7 @@ pub fn notes_open_external_url<R: Runtime>(app: AppHandle<R>, url: String) -> Re
 
 /// Reuse rich-text bounds and scheme validation without admitting local links or URL credentials.
 fn validated_external_notes_url(value: &str) -> Result<reqwest::Url, String> {
-    ganbaru_notes::notes::validation::validate_rich_text_url(value, "Notes link")?;
+    ganbaru_notes::validation::validate_rich_text_url(value, "Notes link")?;
     let parsed = reqwest::Url::parse(value)
         .map_err(|_| "External Notes links require a web or email URL".to_string())?;
     if !matches!(parsed.scheme(), "http" | "https" | "mailto")

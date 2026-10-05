@@ -1,7 +1,7 @@
 //! Source-side write exclusion and blocker checks for vault handoff.
 
 use super::ownership::VaultOwnershipManager;
-use crate::db_path;
+use crate::db;
 use std::sync::{Arc, LazyLock};
 use tauri::{Manager, Runtime};
 
@@ -59,10 +59,10 @@ async fn freeze_runtimes<R: Runtime>(
     };
     crate::pomodoro::stop_for_vault_handoff(app).await?;
     crate::music::session::stop_for_vault_handoff(app).await?;
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    crate::doomscrolling::runtime::stop_for_vault_handoff(app).await?;
+    #[cfg(desktop)]
+    crate::distractions::runtime::stop_for_vault_handoff(app).await?;
     #[cfg(target_os = "android")]
-    crate::doomscrolling_mobile::runtime::stop_for_vault_handoff(app).await?;
+    crate::distractions::android::runtime::stop_for_vault_handoff(app).await?;
     Ok(resume)
 }
 
@@ -101,7 +101,7 @@ pub(crate) struct SourceQuiescence {
 /// Cleanup retains the transition and fences until durable rollback finishes.
 struct SourceQuiescenceState {
     rollback: Option<Box<dyn FnOnce() -> Result<(), String> + Send>>,
-    database_guard: Option<db_path::VaultExclusiveGuard>,
+    database_guard: Option<db::VaultExclusiveGuard>,
     frozen: FrozenWrites,
 }
 
@@ -142,7 +142,7 @@ impl Drop for SourceQuiescence {
 
 /// Holds the central write boundaries while creating an ownership-neutral snapshot.
 pub(crate) struct SnapshotQuiescence {
-    _database_guard: db_path::VaultExclusiveGuard,
+    _database_guard: db::VaultExclusiveGuard,
     _managed_write_fence: super::ownership::ManagedVaultWriteFence,
     _resume_runtimes: ResumeRuntimes,
 }
@@ -240,11 +240,11 @@ pub(crate) async fn begin_source_quiescence<R: Runtime>(
         .state
         .as_mut()
         .expect("source preparation retains its cleanup")
-        .database_guard = Some(db_path::begin_vault_exclusive().await);
+        .database_guard = Some(db::begin_vault_exclusive().await);
 
     let result = async {
         check_chat_blocker(app)?;
-        db_path::close_all_sqlite_pools_for_restore(app).await?;
+        db::close_all_sqlite_pools_for_restore(app).await?;
         check_drained_pomodoro_blocker(app).await?;
         check_chat_blocker(app)
     }
@@ -274,8 +274,8 @@ pub(crate) async fn begin_reserved_quiescence<R: Runtime>(
     transition: VaultTransition,
 ) -> Result<SnapshotQuiescence, String> {
     let frozen = freeze_and_fence(app, transition).await?;
-    let database_guard = db_path::begin_vault_exclusive().await;
-    db_path::close_all_sqlite_pools_for_restore(app).await?;
+    let database_guard = db::begin_vault_exclusive().await;
+    db::close_all_sqlite_pools_for_restore(app).await?;
     Ok(SnapshotQuiescence {
         _database_guard: database_guard,
         _managed_write_fence: frozen.managed_write_fence,
@@ -296,7 +296,7 @@ async fn check_drained_pomodoro_blocker<R: Runtime>(
 
 async fn check_pomodoro_blocker<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(), String> {
     let pool =
-        db_path::connect_sqlite(app.clone(), format!("sqlite:{}", super::APP_SQLITE_FILE)).await?;
+        db::connect_sqlite(app.clone(), format!("sqlite:{}", super::APP_SQLITE_FILE)).await?;
     require_no_active_pomodoro(&pool).await
 }
 
@@ -314,10 +314,10 @@ async fn require_no_active_pomodoro(pool: &sqlx::SqlitePool) -> Result<(), Strin
     }
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 fn check_chat_blocker<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(), String> {
     let (_, active_turns) = app
-        .state::<crate::chat::runtime::ChatRuntimeRegistry>()
+        .state::<ganbaru_chat::runtime::ChatRuntimeRegistry>()
         .process_counts()
         .map_err(|error| format!("check active Chat work: {}", error.message))?;
     if active_turns > 0 {
@@ -327,7 +327,7 @@ fn check_chat_blocker<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(), Strin
     }
 }
 
-#[cfg(any(target_os = "android", target_os = "ios"))]
+#[cfg(mobile)]
 fn check_chat_blocker<R: Runtime>(_app: &tauri::AppHandle<R>) -> Result<(), String> {
     Ok(())
 }

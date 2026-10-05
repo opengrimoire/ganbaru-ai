@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { ensureDbUrl } from "$lib/api/db";
-import { normalizeEventColor } from "$lib/components/calendar/utils";
+import { normalizeEventColor } from "$lib/calendar/utils";
 import type {
   QuickNote,
   QuickNoteCreate,
@@ -116,7 +116,7 @@ async function invokeNote(command: string, args: Record<string, unknown>): Promi
 }
 
 export function getQuickNote(id: string): Promise<QuickNote> {
-  return invokeNote("quick_notes_get", { id });
+  return invokeNote("quick_notes_load", { id });
 }
 
 export function createQuickNote(note: QuickNoteCreate): Promise<QuickNote> {
@@ -181,13 +181,13 @@ export function mapQuickNoteTag(value: unknown): QuickNoteTag {
 }
 
 export async function listQuickNoteTags(): Promise<QuickNoteTag[]> {
-  const value = await invoke<unknown>("quick_note_tags_list", { dbUrl: await ensureDbUrl() });
+  const value = await invoke<unknown>("quick_notes_list_tags", { dbUrl: await ensureDbUrl() });
   if (!Array.isArray(value)) throw new Error("quick note tags must be an array");
   return value.map(mapQuickNoteTag);
 }
 
 export async function createQuickNoteTag(id: string, name: string): Promise<QuickNoteTag> {
-  return mapQuickNoteTag(await invoke<unknown>("quick_note_tags_create", {
+  return mapQuickNoteTag(await invoke<unknown>("quick_notes_create_tag", {
     dbUrl: await ensureDbUrl(),
     tag: { id, name },
   }));

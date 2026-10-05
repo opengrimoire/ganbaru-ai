@@ -4,8 +4,8 @@ use std::collections::BTreeSet;
 use std::future::Future;
 use std::pin::Pin;
 
-use ganbaru_focus::adaptive::models::LocalTimeFacts;
-use ganbaru_focus::{
+use ganbaru_pomodoro::adaptive::models::LocalTimeFacts;
+use ganbaru_pomodoro::{
     FocusExecutionError, FocusLocalTimeResolver, PomodoroAdaptivePlannedBlockWrite,
 };
 
@@ -30,14 +30,14 @@ impl FocusLocalTimeResolver for NativeLocalTime {
 
 #[cfg(not(target_os = "android"))]
 fn resolve(_app: &tauri::AppHandle, instants: &[i64]) -> Result<LocalTimeFacts, String> {
-    use crate::recurrence::time;
-    time::local_time_facts(instants, &time::system_zone()?)
+    use crate::civil_time;
+    civil_time::local_time_facts(instants, &civil_time::system_zone()?)
 }
 
 #[cfg(target_os = "android")]
 fn resolve(app: &tauri::AppHandle, instants: &[i64]) -> Result<LocalTimeFacts, String> {
-    use ganbaru_focus::adaptive::models::LocalTimeFact;
     use ganbaru_mobile_notifications::MobileNotificationsExt;
+    use ganbaru_pomodoro::adaptive::models::LocalTimeFact;
     let values = app
         .mobile_notifications()
         .device_local_time_facts(instants)?;
@@ -60,7 +60,7 @@ fn resolve(app: &tauri::AppHandle, instants: &[i64]) -> Result<LocalTimeFacts, S
 }
 
 pub(super) fn planned_block(
-    value: crate::calendar_reads::focus_context::FocusPlannedBlock,
+    value: crate::calendar::reads::focus_context::FocusPlannedBlock,
 ) -> PomodoroAdaptivePlannedBlockWrite {
     PomodoroAdaptivePlannedBlockWrite {
         event_date: value.event_date,

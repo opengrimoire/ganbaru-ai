@@ -5,7 +5,7 @@
   import { readChatProviderFiles, saveChatProviderFile } from "$lib/api/chat";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import { getChat } from "$lib/stores/chat.svelte";
-  import CustomSelect from "../CustomSelect.svelte";
+  import Select from "$lib/components/ui/Select.svelte";
 
   const { t } = getLocalization();
   const chat = getChat();
@@ -137,7 +137,7 @@
       {t("settings.chat.permissions.empty")}
     </p>
   {:else}
-    <CustomSelect
+    <Select
       label={t("settings.chat.permissions.providerLabel")}
       description={t("settings.chat.permissions.providerDescription")}
       value={selectedInstanceId ?? ""}
@@ -156,7 +156,7 @@
       <div class="flex min-h-0 flex-col gap-3">
         <div class="flex flex-wrap items-end justify-between gap-3 px-1">
           <div class="min-w-48 flex-1">
-            <CustomSelect
+            <Select
               inline
               class="w-full"
               value={selectedFileId ?? ""}

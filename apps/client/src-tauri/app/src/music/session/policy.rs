@@ -9,7 +9,7 @@ use std::collections::HashSet;
 use std::sync::Arc;
 
 /// Activation failures remain visible without pausing unrelated accepted playback.
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 #[derive(Clone, Debug)]
 pub(super) enum ContextFailure {
     Calendar(String),
@@ -50,7 +50,7 @@ pub(super) struct SessionPolicy {
     pub browser_host: bool,
     pub issue: Option<SessionIssue>,
     pub error: Option<String>,
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(desktop)]
     pub context_error: Option<ContextFailure>,
     pub history: Vec<usize>,
     pub recent: Vec<String>,
@@ -71,7 +71,7 @@ pub(super) struct SessionPolicy {
 
 impl SessionPolicy {
     fn project_error(&self) -> Option<String> {
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        #[cfg(desktop)]
         if self.error.is_none()
             && let Some(error) = &self.context_error
         {
@@ -110,7 +110,7 @@ impl SessionPolicy {
             browser_host: false,
             issue: None,
             error: None,
-            #[cfg(not(any(target_os = "android", target_os = "ios")))]
+            #[cfg(desktop)]
             context_error: None,
             history: Vec::new(),
             recent: Vec::new(),
@@ -130,11 +130,11 @@ impl SessionPolicy {
         }
     }
 
-    pub fn entry(&self) -> Option<&SessionQueueEntry> {
+    pub fn current_entry(&self) -> Option<&SessionQueueEntry> {
         self.current.and_then(|index| self.queue.get(index))
     }
 
-    pub fn reason(&self, index: usize, explicit: bool, now_ms: i64) -> Option<SkipReason> {
+    pub fn skip_reason(&self, index: usize, explicit: bool, now_ms: i64) -> Option<SkipReason> {
         let Some(entry) = self.queue.get(index) else {
             return Some(SkipReason::InvalidSource);
         };
@@ -167,7 +167,7 @@ impl SessionPolicy {
 
     pub fn eligible(&self, now_ms: i64) -> Vec<usize> {
         (0..self.queue.len())
-            .filter(|index| self.reason(*index, false, now_ms).is_none())
+            .filter(|index| self.skip_reason(*index, false, now_ms).is_none())
             .collect()
     }
 
@@ -196,8 +196,8 @@ impl SessionPolicy {
             generation: self.generation,
             queue_revision: self.queue_revision,
             current_index: self.current,
-            current_source: self.entry().map(|entry| entry.source.clone()),
-            backend: self.entry().map(|entry| entry.backend),
+            current_source: self.current_entry().map(|entry| entry.source.clone()),
+            backend: self.current_entry().map(|entry| entry.backend),
             status: self.status,
             position_ms: self.position_ms,
             duration_ms: self.duration_ms,
@@ -265,7 +265,7 @@ impl SessionPolicy {
                 .position(|entry| entry.item_id.as_deref() == Some(id))
         });
         let selected = if let Some(index) =
-            explicit.filter(|index| self.reason(*index, true, now_ms).is_none())
+            explicit.filter(|index| self.skip_reason(*index, true, now_ms).is_none())
         {
             Some(index)
         } else if self.order == PlaybackOrder::Mix {
@@ -323,7 +323,7 @@ impl SessionPolicy {
         now_ms: i64,
         transition: &mut Transition,
     ) {
-        if self.reason(index, explicit, now_ms).is_some() {
+        if self.skip_reason(index, explicit, now_ms).is_some() {
             return;
         }
         if remember_current && let Some(current) = self.current.filter(|current| *current != index)
@@ -356,7 +356,7 @@ impl SessionPolicy {
     }
 
     fn load_effect(&mut self, autoplay: bool, transition: &mut Transition) {
-        let Some(entry) = self.entry() else {
+        let Some(entry) = self.current_entry() else {
             return;
         };
         let source = entry.source.clone();
@@ -407,7 +407,7 @@ impl SessionPolicy {
         if !self.selection_open {
             return;
         }
-        if let Some(item_id) = self.entry().and_then(|entry| entry.item_id.clone()) {
+        if let Some(item_id) = self.current_entry().and_then(|entry| entry.item_id.clone()) {
             transition.listening.push(MusicListeningUpdate {
                 playlist_id: self.playlist_id.clone(),
                 item_id,
@@ -495,7 +495,7 @@ impl SessionPolicy {
             || observation.sequence <= self.last_sequence
             || self.selection_finished
             || self
-                .entry()
+                .current_entry()
                 .is_none_or(|entry| entry.source.identity != observation.source_identity)
         {
             return;
@@ -528,7 +528,7 @@ impl SessionPolicy {
             self.advance(true, now_ms, transition);
             return;
         }
-        let Some(entry) = self.entry() else {
+        let Some(entry) = self.current_entry() else {
             return;
         };
         let end = entry.source.end_ms;
@@ -574,7 +574,7 @@ impl SessionPolicy {
                 self.advance(false, now_ms, &mut transition);
             }
             SessionIntent::Select { index } => {
-                if self.reason(index, true, now_ms).is_none() {
+                if self.skip_reason(index, true, now_ms).is_none() {
                     self.outcome(MusicListeningOutcome::Skipped, now_ms, &mut transition);
                     self.select(index, true, true, true, now_ms, &mut transition);
                 }
@@ -661,7 +661,7 @@ impl SessionPolicy {
             SessionIntent::BrowserHost { available } => {
                 self.browser_host = available;
                 if self
-                    .entry()
+                    .current_entry()
                     .is_some_and(|entry| entry.backend == SessionBackend::Browser)
                 {
                     if !available {
@@ -775,10 +775,10 @@ impl SessionPolicy {
         self.failed = prior.failed.iter().filter_map(remap).collect();
         let newly_blocked = self
             .current
-            .is_some_and(|index| self.reason(index, false, now_ms).is_some())
+            .is_some_and(|index| self.skip_reason(index, false, now_ms).is_some())
             && prior
                 .current
-                .is_none_or(|index| prior.reason(index, false, now_ms).is_none());
+                .is_none_or(|index| prior.skip_reason(index, false, now_ms).is_none());
         let mut transition = Transition {
             changed: true,
             ..Transition::default()
@@ -790,17 +790,19 @@ impl SessionPolicy {
             if !prior.autoplay_requested {
                 self.pause(&mut transition);
             }
-        } else if let (Some(current), Some(previous)) = (self.entry(), prior.entry()) {
+        } else if let (Some(current), Some(previous)) =
+            (self.current_entry(), prior.current_entry())
+        {
             let changed_path =
                 current.source.path != previous.source.path || current.backend != previous.backend;
             if current.volume != previous.volume {
                 self.selection_volume = current.volume;
             }
             if self
-                .entry()
+                .current_entry()
                 .is_some_and(|entry| entry.rate != previous.rate)
             {
-                self.selection_rate = self.entry().and_then(|entry| entry.rate);
+                self.selection_rate = self.current_entry().and_then(|entry| entry.rate);
             }
             if changed_path {
                 self.generation += 1;
@@ -829,7 +831,7 @@ impl SessionPolicy {
     fn play(&mut self, now_ms: i64, transition: &mut Transition) {
         self.autoplay_requested = true;
         if self
-            .entry()
+            .current_entry()
             .is_some_and(|entry| entry.backend == SessionBackend::Browser)
             && !self.browser_host
         {
@@ -857,7 +859,7 @@ impl SessionPolicy {
     }
 
     fn seek(&mut self, target: u64, transition: &mut Transition) {
-        let Some(entry) = self.entry() else {
+        let Some(entry) = self.current_entry() else {
             return;
         };
         let minimum = entry.source.start_ms.unwrap_or(0);

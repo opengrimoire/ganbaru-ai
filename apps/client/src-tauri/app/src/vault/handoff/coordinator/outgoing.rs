@@ -1,8 +1,10 @@
 //! Coordinator snapshot preparation, ownership grant, and receiver acknowledgement.
 
 use super::{CompletedActivation, CoordinatorResponse, CoordinatorState, PreparedTransfer};
+use crate::vault::handoff::pairing::{
+    PendingAcknowledgement, StoredOutgoingTransfer, random_token,
+};
 use crate::vault::handoff::protocol::{BundleMetadata, BundlePurpose, PROTOCOL_VERSION};
-use crate::vault::handoff::state::{PendingAcknowledgement, StoredOutgoingTransfer, random_token};
 use crate::vault::handoff::{current_compatibility, sha256_file};
 use crate::vault::ownership::VaultOwnershipManager;
 use crate::vault::quiescence::{
@@ -73,12 +75,12 @@ impl<R: Runtime> CoordinatorState<R> {
             }
         }
         if status.can_write {
-            let pool = crate::db_path::connect_sqlite(
+            let pool = crate::db::connect_sqlite(
                 self.app.clone(),
                 format!("sqlite:{}", crate::vault::APP_SQLITE_FILE),
             )
             .await?;
-            crate::doomscrolling_linked::drain_local_spool(
+            crate::distractions::linked::drain_local_spool(
                 &self.app,
                 &pool,
                 &vault_id,

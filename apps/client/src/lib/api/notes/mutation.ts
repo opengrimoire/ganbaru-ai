@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
-import { publishNotesDatabaseChange } from "$lib/notes/database-window-sync";
-import { applyNotesProjectHistoryMutationDeadline } from "$lib/notes/project-history-scheduler";
+import { publishNotesDatabaseChange } from "$lib/notes/database/window-sync";
+import { applyNotesProjectHistoryMutationDeadline } from "$lib/notes/history/project-history-scheduler";
 
 /** Invoke a Notes mutation and apply its project-history checkpoint envelope. */
 export async function invokeNotesMutation(

@@ -5,7 +5,7 @@ use super::{
     write_text_file_atomically,
 };
 use std::fs;
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 use std::io::Read;
 use tauri::Runtime;
 
@@ -25,7 +25,7 @@ pub struct VaultConfigPatch {
     pub value: serde_json::Value,
 }
 
-/// Read active Ganbaru AI folder `config.json` as a string. Returns `"{}"` if
+/// Read the active vault's `config.json` as a string. Returns `"{}"` if
 /// the file is missing so the frontend can treat a reset config as defaults.
 #[tauri::command]
 pub fn vault_read_config(app: tauri::AppHandle) -> Result<String, String> {
@@ -40,7 +40,7 @@ pub fn vault_read_config(app: tauri::AppHandle) -> Result<String, String> {
 }
 
 /// Read native runtime preferences with a limit that also covers concurrent growth.
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 pub(crate) fn read_active_config_bounded(
     app: &tauri::AppHandle,
     max_bytes: usize,
@@ -87,23 +87,23 @@ pub(crate) fn mutate_active_vault_config<R: Runtime, T, E>(
         ));
     }
     #[cfg(not(target_os = "ios"))]
-    let previous_doomscrolling = root.get("doomscrolling").cloned();
+    let previous_distractions = root.get("distractions").cloned();
     let previous_preferences = root.get("preferences").cloned();
     let result = mutate(&mut root)?;
-    crate::chat::config::parse_chat_config_branch(&root)
+    ganbaru_chat_contracts::config::parse_chat_config_branch(&root)
         .map_err(|error| map_storage_error(format!("config Chat branch is invalid: {error}")))?;
     let serialized = serde_json::to_string_pretty(&root)
         .map_err(|error| map_storage_error(error.to_string()))?;
     let write = || write_text_file_atomically(&path, &serialized);
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    let write_result = if previous_doomscrolling.as_ref() != root.get("doomscrolling") {
-        crate::doomscrolling::runtime::commit_configuration(app, write)
+    #[cfg(desktop)]
+    let write_result = if previous_distractions.as_ref() != root.get("distractions") {
+        crate::distractions::runtime::commit_configuration(app, write)
     } else {
         write()
     };
     #[cfg(target_os = "android")]
-    let write_result = if previous_doomscrolling.as_ref() != root.get("doomscrolling") {
-        crate::doomscrolling_mobile::runtime::commit_configuration(app, write)
+    let write_result = if previous_distractions.as_ref() != root.get("distractions") {
+        crate::distractions::android::runtime::commit_configuration(app, write)
     } else {
         write()
     };

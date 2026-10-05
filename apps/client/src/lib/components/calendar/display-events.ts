@@ -3,10 +3,10 @@
  * Pending IDs belong only to immediate draft interaction, never to persisted commands.
  */
 
-import type { CalendarEvent } from "./types";
+import type { CalendarEvent } from "$lib/calendar/types";
 import type { Temporal } from "@js-temporal/polyfill";
 import type { CreatePreview } from "./edit-session.svelte";
-import { minuteOffsetToDateStr } from "./utils";
+import { minuteOffsetToDateStr } from "$lib/calendar/utils";
 
 const PENDING_CREATE_ID = "__pending_create__";
 
@@ -63,8 +63,8 @@ export function buildCreateDisplay(
     };
   }
 
-  // Use changes.end if available (panel provides correct cross-midnight end date),
-  // otherwise fall back to the drag preview's same-day end
+  // Prefer changes.end, which carries the panel's cross-midnight end date, over
+  // the drag preview's same-day end.
   const isAllDay = hasChange(changes, "allDay")
     ? changes.allDay === true
     : preview.allDay === true;

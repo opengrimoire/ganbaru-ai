@@ -1,8 +1,7 @@
-//! Ganbaru AI folder filesystem layer.
+//! Vault filesystem layer.
 //!
-//! The Ganbaru AI folder holds portable user data. The Tauri app config
-//! directory stores only the active folder pointer and device-local runtime
-//! files.
+//! The vault holds portable user data. The Tauri app config directory stores
+//! only the active vault pointer and device-local runtime files.
 //!
 //! Writes are atomic: serialize to `.tmp`, fsync, rename. A crash mid-write
 //! leaves either the previous good file or the temp file, which is ignored
@@ -17,18 +16,18 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tauri::{Manager, Runtime};
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 use tauri_plugin_dialog::{DialogExt, FilePath};
 
 static APP_STATE: std::sync::Mutex<Option<CachedAppState>> = std::sync::Mutex::new(None);
 static CONFIG_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 mod config;
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 pub(crate) use config::read_active_config_bounded;
 mod documents;
 
-// Keep Tauri commands and their generated wrappers at the existing vault facade.
+// Keep Tauri commands and their generated wrappers at the vault facade.
 pub use config::*;
 pub use documents::*;
 
@@ -39,8 +38,8 @@ pub(crate) mod quiescence;
 pub(crate) mod runtime_lifecycle;
 
 pub const APP_SQLITE_FILE: &str = "ganbaru-ai.sqlite";
-const PRODUCTION_DATA_FOLDER_NAME: &str = "Ganbaru AI";
-const DEVELOPMENT_DATA_FOLDER_NAME: &str = "Ganbaru AI Dev";
+const PRODUCTION_VAULT_NAME: &str = "Ganbaru AI";
+const DEVELOPMENT_VAULT_NAME: &str = "Ganbaru AI Dev";
 const APP_STATE_FILE: &str = "app-state.json";
 const VAULT_MANIFEST_FILE: &str = "vault.json";
 const CONFIG_FILE: &str = "config.json";
@@ -266,7 +265,7 @@ fn display_name_from_path(path: &Path) -> String {
     path.file_name()
         .and_then(|name| name.to_str())
         .filter(|name| !name.trim().is_empty())
-        .unwrap_or(default_data_folder_name())
+        .unwrap_or(default_vault_name())
         .to_string()
 }
 
@@ -274,11 +273,11 @@ fn is_development_build() -> bool {
     cfg!(debug_assertions)
 }
 
-fn default_data_folder_name() -> &'static str {
+fn default_vault_name() -> &'static str {
     if is_development_build() {
-        DEVELOPMENT_DATA_FOLDER_NAME
+        DEVELOPMENT_VAULT_NAME
     } else {
-        PRODUCTION_DATA_FOLDER_NAME
+        PRODUCTION_VAULT_NAME
     }
 }
 
@@ -418,7 +417,7 @@ fn initialize_vault(path: &Path) -> Result<VaultInfo, String> {
 }
 
 /// Changes the active folder only after every native owner has drained.
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 async fn select_vault<R: Runtime>(
     app: &tauri::AppHandle<R>,
     info: &VaultInfo,
@@ -504,16 +503,16 @@ fn retain_vault_scopes(state: &mut VaultAppState, known_vault_ids: &BTreeSet<Str
 pub(crate) fn resume_native_runtimes<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(), String> {
     let focus = crate::pomodoro::resume_after_vault_handoff(app);
     let music = crate::music::session::resume_after_vault_handoff(app);
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    let doomscrolling = crate::doomscrolling::runtime::resume_after_vault_handoff(app);
+    #[cfg(desktop)]
+    let distractions = crate::distractions::runtime::resume_after_vault_handoff(app);
     #[cfg(target_os = "android")]
-    let doomscrolling = crate::doomscrolling_mobile::runtime::resume_after_vault_handoff(app);
+    let distractions = crate::distractions::android::runtime::resume_after_vault_handoff(app);
     #[cfg(target_os = "ios")]
-    let doomscrolling = Ok(());
-    focus.and(music).and(doomscrolling)
+    let distractions = Ok(());
+    focus.and(music).and(distractions)
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 async fn pick_folder(
     app: &tauri::AppHandle,
     title: &str,
@@ -533,27 +532,27 @@ async fn pick_folder(
         .ok_or_else(|| "folder picker closed without returning a result".to_string())?
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 fn existing_documents_directory(app: &tauri::AppHandle) -> Option<PathBuf> {
     app.path().document_dir().ok().filter(|path| path.is_dir())
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 fn default_data_parent(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     app.path()
         .document_dir()
         .map_err(|e| format!("find Documents folder: {e}"))
 }
 
-#[cfg(any(target_os = "android", target_os = "ios"))]
+#[cfg(mobile)]
 fn default_data_parent(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     app.path()
         .app_data_dir()
         .map_err(|e| format!("find private application data folder: {e}"))
 }
 
-fn default_data_folder_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
-    Ok(default_data_parent(app)?.join(default_data_folder_name()))
+fn default_vault_path(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+    Ok(default_data_parent(app)?.join(default_vault_name()))
 }
 
 fn default_location_from_path(path: PathBuf) -> Result<VaultDefaultLocation, String> {
@@ -563,7 +562,7 @@ fn default_location_from_path(path: PathBuf) -> Result<VaultDefaultLocation, Str
     Ok(VaultDefaultLocation {
         path: path_to_string(&path, "Ganbaru AI folder")?,
         parent_path: path_to_string(parent, "Ganbaru AI folder parent")?,
-        folder_name: default_data_folder_name().to_string(),
+        folder_name: default_vault_name().to_string(),
         development_build: is_development_build(),
     })
 }
@@ -605,12 +604,12 @@ pub fn vault_read_app_state(app: tauri::AppHandle) -> Result<VaultAppStateSummar
 
 #[tauri::command]
 pub fn vault_default_location(app: tauri::AppHandle) -> Result<VaultDefaultLocation, String> {
-    default_location_from_path(default_data_folder_path(&app)?)
+    default_location_from_path(default_vault_path(&app)?)
 }
 
 #[tauri::command]
-pub async fn vault_use_default_folder(app: tauri::AppHandle) -> Result<VaultInfo, String> {
-    let path = default_data_folder_path(&app)?;
+pub async fn vault_use_default(app: tauri::AppHandle) -> Result<VaultInfo, String> {
+    let path = default_vault_path(&app)?;
     create_and_select_vault(&app, path).await
 }
 
@@ -622,7 +621,7 @@ pub fn vault_active_info(app: tauri::AppHandle) -> Result<Option<VaultInfo>, Str
     vault_info_from_path(&PathBuf::from(path)).map(Some)
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 #[tauri::command]
 pub async fn vault_pick_create(app: tauri::AppHandle) -> Result<Option<VaultInfo>, String> {
     let Some(path) =
@@ -634,7 +633,7 @@ pub async fn vault_pick_create(app: tauri::AppHandle) -> Result<Option<VaultInfo
     Ok(Some(info))
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 #[tauri::command]
 pub async fn vault_pick_open(app: tauri::AppHandle) -> Result<Option<VaultInfo>, String> {
     let Some(path) = pick_folder(
@@ -672,12 +671,12 @@ pub async fn vault_pick_open(app: tauri::AppHandle) -> Result<Option<VaultInfo>,
 
 #[cfg(target_os = "android")]
 fn pick_mobile_vault(app: &tauri::AppHandle) -> Result<Option<VaultInfo>, String> {
-    let target = default_data_folder_path(app)?;
+    let target = default_vault_path(app)?;
     let parent = target
         .parent()
         .ok_or_else(|| "Ganbaru AI folder has no parent directory".to_string())?;
     fs::create_dir_all(parent).map_err(|error| format!("create app data directory: {error}"))?;
-    let staging = parent.join(format!(".{}.import", default_data_folder_name()));
+    let staging = parent.join(format!(".{}.import", default_vault_name()));
     if staging.exists() {
         fs::remove_dir_all(&staging)
             .map_err(|error| format!("remove stale folder import: {error}"))?;
@@ -718,7 +717,7 @@ fn pick_mobile_vault(app: &tauri::AppHandle) -> Result<Option<VaultInfo>, String
     result
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 #[tauri::command]
 pub fn vault_reveal_active(app: tauri::AppHandle) -> Result<(), String> {
     let path = active_vault_path(&app)?;
@@ -741,7 +740,7 @@ fn active_vault<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(PathBuf, Vault
 
 /// Background observation waits during onboarding or after a selected folder was deleted.
 /// Invalid manifests and filesystem access errors remain explicit failures.
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 pub(crate) fn available_active_vault_path<R: Runtime>(
     app: &tauri::AppHandle<R>,
 ) -> Result<Option<PathBuf>, String> {
@@ -753,7 +752,7 @@ pub(crate) fn available_active_vault_path<R: Runtime>(
     )
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 fn available_vault_path(path: Option<PathBuf>) -> Result<Option<PathBuf>, String> {
     let Some(path) = path else { return Ok(None) };
     if !path
@@ -811,7 +810,7 @@ pub(crate) fn active_vault_id<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<S
     active_vault(app).map(|(_, manifest)| manifest.vault_id)
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 pub fn active_database_path<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<PathBuf, String> {
     Ok(database_path(&active_vault_path(app)?))
 }
@@ -824,7 +823,7 @@ fn require_absolute_path(path: &Path) -> Result<(), String> {
     }
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 fn dialog_path(path: FilePath) -> Result<PathBuf, String> {
     path.into_path()
         .map_err(|e| format!("selected path is not a local file: {e}"))
@@ -844,42 +843,42 @@ fn write_text_file_atomically(path: &Path, contents: &str) -> Result<(), String>
         .ok_or_else(|| "target has no file name".to_string())?
         .to_string_lossy()
         .into_owned();
-    let tmp_path = parent.join(format!("{file_name}.tmp"));
+    let temporary_path = parent.join(format!("{file_name}.tmp"));
     {
-        let mut file = fs::File::create(&tmp_path).map_err(|e| e.to_string())?;
+        let mut file = fs::File::create(&temporary_path).map_err(|e| e.to_string())?;
         file.write_all(contents.as_bytes())
             .map_err(|e| e.to_string())?;
         file.sync_all().map_err(|e| e.to_string())?;
     }
-    fs::rename(&tmp_path, target).map_err(|e| e.to_string())?;
+    fs::rename(&temporary_path, target).map_err(|e| e.to_string())?;
     Ok(())
 }
 
 #[cfg(target_os = "linux")]
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 fn reveal_vault_folder(path: &Path) -> Result<(), String> {
     spawn_file_manager_command("xdg-open", [path.as_os_str()])
 }
 
 #[cfg(target_os = "macos")]
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 fn reveal_vault_folder(path: &Path) -> Result<(), String> {
     spawn_file_manager_command("open", [path.as_os_str()])
 }
 
 #[cfg(windows)]
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 fn reveal_vault_folder(path: &Path) -> Result<(), String> {
     spawn_file_manager_command("explorer.exe", [path.as_os_str()])
 }
 
 #[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 fn reveal_vault_folder(_path: &Path) -> Result<(), String> {
     Err("opening Ganbaru AI folders is not implemented for this platform".to_string())
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 fn spawn_file_manager_command<I, S>(program: &str, args: I) -> Result<(), String>
 where
     I: IntoIterator<Item = S>,
@@ -930,7 +929,7 @@ mod tests {
         let path = unique_path("write.txt");
         let parent = path.parent().unwrap().to_path_buf();
         let file_name = path.file_name().unwrap().to_string_lossy().into_owned();
-        let tmp_sibling = parent.join(format!("{file_name}.tmp"));
+        let temporary_sibling = parent.join(format!("{file_name}.tmp"));
 
         write_text_file_atomically(&path, "payload").expect("write should succeed");
 
@@ -938,7 +937,7 @@ mod tests {
         assert_eq!(on_disk, "payload");
         // The .tmp sibling must not survive a successful write.
         assert!(
-            !tmp_sibling.exists(),
+            !temporary_sibling.exists(),
             "tmp file should have been renamed away"
         );
 
@@ -967,7 +966,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(desktop)]
     fn background_vault_resolution_waits_for_selection_but_rejects_invalid_manifests() {
         let path = unique_path("background-vault");
         assert_eq!(available_vault_path(None).unwrap(), None);
@@ -1000,11 +999,11 @@ mod tests {
     }
 
     #[test]
-    fn default_data_folder_name_tracks_build_mode() {
+    fn default_vault_name_tracks_build_mode() {
         if cfg!(debug_assertions) {
-            assert_eq!(default_data_folder_name(), DEVELOPMENT_DATA_FOLDER_NAME);
+            assert_eq!(default_vault_name(), DEVELOPMENT_VAULT_NAME);
         } else {
-            assert_eq!(default_data_folder_name(), PRODUCTION_DATA_FOLDER_NAME);
+            assert_eq!(default_vault_name(), PRODUCTION_VAULT_NAME);
         }
     }
 
@@ -1205,7 +1204,6 @@ mod tests {
           },
           "fullAccessTrust": {},
           "preferences": {
-            "restoreLastSelectedThread": false,
             "lastSelectedThreadId": null
           },
           "diagnostics": { "captureEnabled": false, "retentionDays": 7 },

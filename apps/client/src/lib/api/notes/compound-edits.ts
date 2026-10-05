@@ -1,7 +1,7 @@
 import { ensureDbUrl } from "$lib/api/db";
 import { invalidateAssetUrlKind } from "$lib/api/asset-url-cache";
-import { invalidateNotesNotificationSchedule } from "$lib/notes/notification-schedule.svelte";
-import { mapNotesBlockDto, mapNotesCreatedDatabaseDto } from "$lib/notes/notion-mappers";
+import { invalidateNotesNotificationSchedule } from "$lib/notes/collaboration/notification-schedule.svelte";
+import { mapNotesBlockDto, mapNotesCreatedDatabaseDto } from "$lib/notes/validation/response-mappers";
 import type { NotesAppendBlockChildrenRequest, NotesBlock, NotesBlockUpdate, NotesCreatedDatabase, NotesDatabaseCreateRequest, NotesDatabaseDuplicateRequest, NotesDuplicateBlocksRequest, NotesLinkedDatabaseCreateRequest, NotesMoveBlockRequest, NotesParent } from "$lib/notes/types";
 import { invokeNotesMutation } from "./mutation";
 import type { NotesBlockPlacement } from "$lib/notes/post-mutation";

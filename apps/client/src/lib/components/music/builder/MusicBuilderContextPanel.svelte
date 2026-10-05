@@ -6,15 +6,15 @@
   import Search from "@lucide/svelte/icons/search";
   import X from "@lucide/svelte/icons/x";
   import { getLocalization } from "$lib/i18n/translator.svelte";
-  import type { MusicDestinationState } from "$lib/music/music-library-controller.svelte";
-  import type { MusicPlaylistSummary } from "$lib/music/library-contracts";
-  import type { MusicBuilderDestination } from "$lib/music/music-builder-routing";
-  import { orderMusicPlaylists, systemMusicPlaylistName } from "$lib/music/music-system-playlists";
+  import type { MusicDestinationState } from "$lib/music/library/controller.svelte";
+  import type { MusicPlaylistSummary } from "$lib/music/library/contracts";
+  import type { MusicBuilderDestination } from "$lib/music/builder/routing";
+  import { orderMusicPlaylists, systemMusicPlaylistName } from "$lib/music/playlists/system";
   import { getSoundscapeStore } from "$lib/stores/soundscape.svelte";
   import MusicPlaylistIcon from "./MusicPlaylistIcon.svelte";
 
-  import type { SoundscapeFilter } from "$lib/music/music-builder-view-state";
-  import MusicSoundscapeGroupIcon from "../MusicSoundscapeGroupIcon.svelte";
+  import type { SoundscapeFilter } from "$lib/music/builder/view-state";
+  import MusicSoundscapeGroupIcon from "$lib/components/music/soundscape/MusicSoundscapeGroupIcon.svelte";
 
   let {
     destination,

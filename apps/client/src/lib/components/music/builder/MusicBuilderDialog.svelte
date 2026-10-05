@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
-  import { containMusicDialogFocus } from "$lib/music/music-dialog-focus";
+  import { containMusicDialogFocus } from "$lib/music/builder/dialog-focus";
   import { portal } from "$lib/utils/portal";
 
   type DialogSize = "small" | "medium" | "large";

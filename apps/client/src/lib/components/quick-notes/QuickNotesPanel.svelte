@@ -4,7 +4,7 @@
   import Search from "@lucide/svelte/icons/search";
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import X from "@lucide/svelte/icons/x";
-  import { FALLBACK_COLOR_INDEX } from "$lib/components/calendar/types";
+  import { FALLBACK_COLOR_INDEX } from "$lib/calendar/types";
   import {
     archiveQuickNote,
     createQuickNoteTag,
@@ -42,11 +42,11 @@
   import QuickNotesMasonry from "./QuickNotesMasonry.svelte";
 
   let {
-    onclose,
+    onClose,
     mobileLayout = false,
     mobilePanelStyle = "",
   }: {
-    onclose: () => void;
+    onClose: () => void;
     mobileLayout?: boolean;
     mobilePanelStyle?: string;
   } = $props();
@@ -128,7 +128,7 @@
       loadingMore = true;
     }
     try {
-      const window = await listQuickNotes(
+      const noteWindow = await listQuickNotes(
         requestedCollection,
         requestedSearchText,
         requestedTagId,
@@ -136,14 +136,14 @@
       );
       if (generation !== loadGeneration) return;
       notes = reset
-        ? window.notes
-        : [...notes, ...window.notes.filter((note) => !notes.some((current) => current.id === note.id))];
+        ? noteWindow.notes
+        : [...notes, ...noteWindow.notes.filter((note) => !notes.some((current) => current.id === note.id))];
       if (reset) renderedCollection = requestedCollection;
-      nextCursor = window.nextCursor;
+      nextCursor = noteWindow.nextCursor;
       if (reset && requestedCollection === "active" && requestedTagId === null && requestedSearchText === "") {
-        cacheQuickNotesAllWindow(window);
+        cacheQuickNotesAllWindow(noteWindow);
       } else if (reset && requestedSearchText === "") {
-        cacheQuickNotesViewWindow(requestedCollection, requestedTagId, window);
+        cacheQuickNotesViewWindow(requestedCollection, requestedTagId, noteWindow);
       }
     } catch (error: unknown) {
       if (generation !== loadGeneration) return;
@@ -414,7 +414,7 @@
         closeSearch();
         return;
       }
-      onclose();
+      onClose();
       return;
     }
     const shortcutIndex = quickNoteViewIndexForKey(event.key);
@@ -521,7 +521,7 @@
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <!-- svelte-ignore a11y_click_events_have_key_events -->
-<div class="fixed inset-0 z-40" onclick={(event) => { if (event.target === event.currentTarget) onclose(); }}></div>
+<div class="fixed inset-0 z-40" onclick={(event) => { if (event.target === event.currentTarget) onClose(); }}></div>
 <div
   bind:this={panel}
   class={panelClass}
@@ -553,7 +553,7 @@
             onclick={() => selectTag(tag.id)}
           ><span class="truncate">{tag.name}</span></button>
         {/each}
-        <QuickNoteTagManager tagCount={tags.length} oncreate={createTag} {mobileLayout} />
+        <QuickNoteTagManager tagCount={tags.length} onCreate={createTag} {mobileLayout} />
       </div>
       <div class={mobileLayout ? "flex min-h-12 w-full min-w-0 items-center gap-1" : "ml-auto flex shrink-0 items-center gap-1"} role="group" aria-label={t("quickNotes.title")}>
         {#if mobileLayout && !searchOpen}<h2 class="min-w-0 flex-1 truncate px-2 text-base font-semibold">{t("quickNotes.title")}</h2>{/if}
@@ -602,7 +602,7 @@
           class={compactHeaderButton}
           aria-label={t("common.close")}
           title={t("common.close")}
-          onclick={onclose}
+          onclick={onClose}
         ><X class={mobileLayout ? "size-5" : "size-4"} strokeWidth={1.5} /></button>
       </div>
     </div>
@@ -633,11 +633,11 @@
     {:else}
       {#if pinnedNotes.length > 0}
         <h3 class="mb-2 px-1 text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-muted-foreground">{t("quickNotes.pinned")}</h3>
-        <QuickNotesMasonry notes={pinnedNotes} collection={renderedCollection} {animateLayout} {reorderable} theme={theme.current} {tags} {mobileLayout} onopen={(note) => void openNote(note)} onreorder={(ids, id, position) => reorderNoteGroup(ids, id, position, true)} onpin={pinNote} oncolor={colorNote} ontag={tagNote} onarchive={archiveNote} onunarchive={unarchiveNote} ontrash={trashNote} onrestore={restoreNote} ondelete={(note) => { deleteTarget = note; }} />
+        <QuickNotesMasonry notes={pinnedNotes} collection={renderedCollection} {animateLayout} {reorderable} theme={theme.current} {tags} {mobileLayout} onOpen={(note) => void openNote(note)} onReorder={(ids, id, position) => reorderNoteGroup(ids, id, position, true)} onPin={pinNote} onColor={colorNote} onTag={tagNote} onArchive={archiveNote} onUnarchive={unarchiveNote} onTrash={trashNote} onRestore={restoreNote} onDelete={(note) => { deleteTarget = note; }} />
       {/if}
       {#if otherNotes.length > 0}
         {#if pinnedNotes.length > 0}<h3 class="mb-2 mt-5 px-1 text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-muted-foreground">{t("quickNotes.others")}</h3>{/if}
-        <QuickNotesMasonry notes={otherNotes} collection={renderedCollection} {animateLayout} {reorderable} theme={theme.current} {tags} {mobileLayout} onopen={(note) => void openNote(note)} onreorder={(ids, id, position) => reorderNoteGroup(ids, id, position, false)} onpin={pinNote} oncolor={colorNote} ontag={tagNote} onarchive={archiveNote} onunarchive={unarchiveNote} ontrash={trashNote} onrestore={restoreNote} ondelete={(note) => { deleteTarget = note; }} />
+        <QuickNotesMasonry notes={otherNotes} collection={renderedCollection} {animateLayout} {reorderable} theme={theme.current} {tags} {mobileLayout} onOpen={(note) => void openNote(note)} onReorder={(ids, id, position) => reorderNoteGroup(ids, id, position, false)} onPin={pinNote} onColor={colorNote} onTag={tagNote} onArchive={archiveNote} onUnarchive={unarchiveNote} onTrash={trashNote} onRestore={restoreNote} onDelete={(note) => { deleteTarget = note; }} />
       {/if}
       {#if nextCursor}
         <button use:observeMore type="button" class={mobileLayout ? "mt-4 min-h-12 w-full rounded-xl px-3 text-xs text-muted-foreground active:bg-accent" : "mt-4 w-full rounded-md py-2 text-xs text-muted-foreground hover:bg-accent"} disabled={loadingMore} onclick={() => { animateLayout = true; void load(false); }}>{loadingMore ? t("common.loading") : t("quickNotes.action.loadMore")}</button>
@@ -663,13 +663,13 @@
     theme={theme.current}
     {mobileLayout}
     obscured={deleteTarget !== null}
-    onclose={() => { editorNote = undefined; void load(); }}
-    onsaved={noteSaved}
-    onarchive={(note) => closeEditorAnd(archiveNote, note)}
-    onunarchive={(note) => closeEditorAnd(unarchiveNote, note)}
-    ontrash={(note) => closeEditorAnd(trashNote, note)}
-    onrestore={(note) => closeEditorAnd(restoreNote, note)}
-    ondelete={(note) => { deleteTarget = note; }}
+    onClose={() => { editorNote = undefined; void load(); }}
+    onSaved={noteSaved}
+    onArchive={(note) => closeEditorAnd(archiveNote, note)}
+    onUnarchive={(note) => closeEditorAnd(unarchiveNote, note)}
+    onTrash={(note) => closeEditorAnd(trashNote, note)}
+    onRestore={(note) => closeEditorAnd(restoreNote, note)}
+    onDelete={(note) => { deleteTarget = note; }}
   />
 {/if}
 

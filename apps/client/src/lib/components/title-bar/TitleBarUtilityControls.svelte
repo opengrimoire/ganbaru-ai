@@ -6,7 +6,7 @@
   import Sun from "@lucide/svelte/icons/sun";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import { formatShortcut } from "$lib/keyboard-shortcuts";
-  import type { TitleBarControlId } from "$lib/stores/preferences";
+  import type { TitleBarControlId } from "$lib/stores/preference-options";
   import { cn } from "$lib/utils";
 
   let {
@@ -48,7 +48,6 @@
   }
 </script>
 
-    <!-- Theme toggle -->
     {#if showTheme}
       <button
         onclick={onToggleTheme}
@@ -74,7 +73,6 @@
       </button>
     {/if}
 
-    <!-- Diagnostics monitor -->
     {#if showPerformance}
       <div class="relative">
         <button
@@ -90,7 +88,6 @@
       </div>
     {/if}
 
-    <!-- Settings -->
     {#if showSettings}
       <button
         onclick={onOpenSettings}

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { mount, tick, unmount } from "svelte";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import Board from "./CollectionBoard.test.svelte";
+import Board from "./CollectionBoardHarness.test.svelte";
 
 let component: ReturnType<typeof mount> | undefined;
 afterEach(async () => {
@@ -20,28 +20,28 @@ function drag(node: Element, type: string): void {
 describe("shared Kanban movement", () => {
   it("ignores external and same-group drops and submits a local move once", async () => {
     let complete: () => void = () => {};
-    const onmove = vi.fn(() => new Promise<void>((resolve) => { complete = resolve; }));
-    component = mount(Board, { target: document.body, props: { onmove } });
+    const onMove = vi.fn(() => new Promise<void>((resolve) => { complete = resolve; }));
+    component = mount(Board, { target: document.body, props: { onMove } });
     const source = document.querySelector('section[aria-label="Todo"]')!;
     const destination = document.querySelector('section[aria-label="Done"]')!;
     drag(destination, "drop");
-    expect(onmove).not.toHaveBeenCalled();
+    expect(onMove).not.toHaveBeenCalled();
     drag(source.querySelector("button")!, "dragstart");
     drag(source, "dragover");
     drag(source, "drop");
-    expect(onmove).not.toHaveBeenCalled();
+    expect(onMove).not.toHaveBeenCalled();
     drag(destination, "dragover");
     drag(destination, "drop");
     drag(destination, "drop");
-    expect(onmove).toHaveBeenCalledTimes(1);
-    expect(onmove.mock.calls[0]).toEqual([{ id: "Task" }, { id: "Done", rows: [] }, null, "after"]);
+    expect(onMove).toHaveBeenCalledTimes(1);
+    expect(onMove.mock.calls[0]).toEqual([{ id: "Task" }, { id: "Done", rows: [] }, null, "after"]);
     complete();
     await tick();
   });
 
   it("shows a failed move and restores the drag control for retry", async () => {
-    const onmove = vi.fn().mockRejectedValue(new Error("Status update failed"));
-    component = mount(Board, { target: document.body, props: { onmove } });
+    const onMove = vi.fn().mockRejectedValue(new Error("Status update failed"));
+    component = mount(Board, { target: document.body, props: { onMove } });
     const handle = document.querySelector<HTMLButtonElement>('button[draggable="true"]')!;
     const destination = document.querySelector('section[aria-label="Done"]')!;
     drag(handle, "dragstart");

@@ -1,7 +1,5 @@
 packages:
   - apps/*
-  - packages/*
-  - extensions/*
 
 managePackageManagerVersions: true
 minimumReleaseAge: 4320

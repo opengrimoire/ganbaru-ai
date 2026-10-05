@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { mount, tick, unmount } from "svelte";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import NotesLoadingSkeletonHarness from "./NotesLoadingSkeletonHarness.svelte";
+import NotesLoadingSkeletonHarness from "./NotesLoadingSkeletonHarness.test.svelte";
 
 let component: ReturnType<typeof mount> | undefined;
 
@@ -13,7 +13,7 @@ afterEach(async () => {
 });
 
 /** Mount actual loading state while keeping readiness controlled by a sibling trigger. */
-async function open(initiallyReady = false, kind: "page" | "database" | "cover" | "block" = "database") {
+async function mountLoadingSkeleton(initiallyReady = false, kind: "page" | "database" | "cover" | "block" = "database") {
   vi.useFakeTimers();
   const onAction = vi.fn();
   component = mount(NotesLoadingSkeletonHarness, { target: document.body, props: { initiallyReady, kind, onAction } });
@@ -25,7 +25,7 @@ async function open(initiallyReady = false, kind: "page" | "database" | "cover" 
 
 describe("Notes loading handoff", () => {
   it("reveals the note title and body skeleton only after half a second", async () => {
-    await open(false, "page");
+    await mountLoadingSkeleton(false, "page");
     await vi.advanceTimersByTimeAsync(499);
     await tick();
     expect(document.querySelector<HTMLElement>(".notes-skeleton-shapes")?.style.opacity).toBe("0");
@@ -35,7 +35,7 @@ describe("Notes loading handoff", () => {
   });
 
   it("shows a note ready before half a second without a skeleton or fade", async () => {
-    const { toggle, content, onAction } = await open(false, "page");
+    const { toggle, content, onAction } = await mountLoadingSkeleton(false, "page");
     await vi.advanceTimersByTimeAsync(499);
     toggle.click();
     await tick();
@@ -50,7 +50,7 @@ describe("Notes loading handoff", () => {
   });
 
   it.each(["database", "cover", "block"] as const)("keeps the existing reveal delay for %s content", async (kind) => {
-    await open(false, kind);
+    await mountLoadingSkeleton(false, kind);
     await vi.advanceTimersByTimeAsync(119);
     await tick();
     expect(document.querySelector<HTMLElement>(".notes-skeleton-shapes")?.style.opacity).toBe("0");
@@ -60,7 +60,7 @@ describe("Notes loading handoff", () => {
   });
 
   it("skips the placeholder and fade for already ready content", async () => {
-    const { content, onAction } = await open(true);
+    const { content, onAction } = await mountLoadingSkeleton(true);
     expect(document.querySelector(".notes-skeleton-placeholder")).toBeNull();
     expect(content.closest(".notes-skeleton-content")?.getAttribute("data-handoff")).toBe("false");
     content.click();
@@ -68,7 +68,7 @@ describe("Notes loading handoff", () => {
   });
 
   it("shows fast results immediately without waiting for the reveal timer", async () => {
-    const { toggle, content, onAction } = await open();
+    const { toggle, content, onAction } = await mountLoadingSkeleton();
     expect(document.querySelector<HTMLElement>(".notes-skeleton-shapes")?.style.opacity).toBe("0");
     toggle.click();
     await tick();
@@ -80,7 +80,7 @@ describe("Notes loading handoff", () => {
   });
 
   it("retires a visible skeleton without blocking ready content or keeping a second layout row", async () => {
-    const { toggle, content, onAction } = await open();
+    const { toggle, content, onAction } = await mountLoadingSkeleton();
     await vi.advanceTimersToNextTimerAsync();
     await tick();
     expect(document.querySelector<HTMLElement>(".notes-skeleton-shapes")?.style.opacity).toBe("1");
@@ -98,7 +98,7 @@ describe("Notes loading handoff", () => {
   });
 
   it("cancels an earlier handoff when loading restarts and clears timers on disposal", async () => {
-    const { toggle, content } = await open();
+    const { toggle, content } = await mountLoadingSkeleton();
     await vi.advanceTimersToNextTimerAsync();
     toggle.click();
     await tick();

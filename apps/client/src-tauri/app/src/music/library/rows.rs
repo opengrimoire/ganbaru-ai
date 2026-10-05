@@ -1,5 +1,5 @@
-use super::error::{MusicLibraryError, MusicLibraryResult};
 use super::models::*;
+use crate::music::error::{MusicLibraryError, MusicLibraryResult};
 
 fn parse_enum<T>(value: &str, field: &str) -> MusicLibraryResult<T>
 where
@@ -39,10 +39,10 @@ pub(crate) struct MusicLibraryItemRow {
     pub duration_ms: Option<i64>,
     pub availability: String,
     pub review_state: String,
-    pub review_changed_at: Option<i64>,
-    pub review_deferred_until: Option<i64>,
-    pub discovered_at: i64,
-    pub updated_at: i64,
+    pub review_changed_at_ms: Option<i64>,
+    pub review_deferred_until_ms: Option<i64>,
+    pub discovered_at_ms: i64,
+    pub updated_at_ms: i64,
     pub version: i64,
 }
 
@@ -76,10 +76,10 @@ impl TryFrom<MusicLibraryItemRow> for MusicLibraryItem {
             duration_ms: row.duration_ms,
             availability: parse_enum(&row.availability, "availability")?,
             review_state: parse_enum(&row.review_state, "reviewState")?,
-            review_changed_at: row.review_changed_at,
-            review_deferred_until: row.review_deferred_until,
-            discovered_at: row.discovered_at,
-            updated_at: row.updated_at,
+            review_changed_at_ms: row.review_changed_at_ms,
+            review_deferred_until_ms: row.review_deferred_until_ms,
+            discovered_at_ms: row.discovered_at_ms,
+            updated_at_ms: row.updated_at_ms,
             version: row.version,
         })
     }
@@ -94,8 +94,8 @@ pub(crate) struct MusicPlaylistRow {
     pub mix_enabled: i64,
     pub repeat_mode: String,
     pub sort_order: i64,
-    pub created_at: i64,
-    pub updated_at: i64,
+    pub created_at_ms: i64,
+    pub updated_at_ms: i64,
     pub version: i64,
 }
 
@@ -113,8 +113,8 @@ impl MusicPlaylistRow {
             repeat_mode: parse_enum(&self.repeat_mode, "repeatMode")?,
             intended_uses,
             sort_order: self.sort_order,
-            created_at: self.created_at,
-            updated_at: self.updated_at,
+            created_at_ms: self.created_at_ms,
+            updated_at_ms: self.updated_at_ms,
             version: self.version,
         })
     }
@@ -132,8 +132,8 @@ pub(crate) struct MusicMembershipRow {
     pub end_ms: Option<i64>,
     pub volume: Option<f64>,
     pub rate: Option<f64>,
-    pub created_at: i64,
-    pub updated_at: i64,
+    pub created_at_ms: i64,
+    pub updated_at_ms: i64,
     pub version: i64,
 }
 
@@ -152,8 +152,8 @@ impl TryFrom<MusicMembershipRow> for MusicPlaylistMembership {
             end_ms: row.end_ms,
             volume: row.volume,
             rate: row.rate,
-            created_at: row.created_at,
-            updated_at: row.updated_at,
+            created_at_ms: row.created_at_ms,
+            updated_at_ms: row.updated_at_ms,
             version: row.version,
         })
     }
@@ -227,10 +227,10 @@ pub(crate) struct MusicSnoozeRow {
     pub item_id: String,
     pub scope: String,
     pub playlist_id: Option<String>,
-    pub starts_at: i64,
-    pub ends_at: Option<i64>,
+    pub starts_at_ms: i64,
+    pub ends_at_ms: Option<i64>,
     pub reason: String,
-    pub created_at: i64,
+    pub created_at_ms: i64,
 }
 
 impl TryFrom<MusicSnoozeRow> for MusicSnooze {
@@ -242,10 +242,10 @@ impl TryFrom<MusicSnoozeRow> for MusicSnooze {
             item_id: row.item_id,
             scope: parse_enum(&row.scope, "scope")?,
             playlist_id: row.playlist_id,
-            starts_at: row.starts_at,
-            ends_at: row.ends_at,
+            starts_at_ms: row.starts_at_ms,
+            ends_at_ms: row.ends_at_ms,
             reason: row.reason,
-            created_at: row.created_at,
+            created_at_ms: row.created_at_ms,
         })
     }
 }
@@ -267,12 +267,12 @@ pub(crate) struct MusicItemListRow {
     pub duration_ms: Option<i64>,
     pub availability: String,
     pub review_state: String,
-    pub discovered_at: i64,
-    pub updated_at: i64,
+    pub discovered_at_ms: i64,
+    pub updated_at_ms: i64,
     pub version: i64,
     pub playlist_count: i64,
     pub active_snooze_count: i64,
-    pub last_played_at: Option<i64>,
+    pub last_played_at_ms: Option<i64>,
     pub play_count: i64,
     pub membership_id: Option<String>,
     pub membership_position: Option<i64>,
@@ -292,7 +292,7 @@ pub(crate) struct MusicIssueRow {
     pub relative_path: Option<String>,
     pub action_required: i64,
     pub message: String,
-    pub created_at: i64,
+    pub created_at_ms: i64,
 }
 
 impl TryFrom<MusicItemListRow> for MusicItemListEntry {
@@ -322,12 +322,12 @@ impl TryFrom<MusicItemListRow> for MusicItemListEntry {
             duration_ms: row.duration_ms,
             availability: parse_enum(&row.availability, "availability")?,
             review_state: parse_enum(&row.review_state, "reviewState")?,
-            discovered_at: row.discovered_at,
-            updated_at: row.updated_at,
+            discovered_at_ms: row.discovered_at_ms,
+            updated_at_ms: row.updated_at_ms,
             version: row.version,
             playlist_count: row.playlist_count,
             active_snooze_count: row.active_snooze_count,
-            last_played_at: row.last_played_at,
+            last_played_at_ms: row.last_played_at_ms,
             play_count: row.play_count,
             membership_id: row.membership_id,
             membership_position: row.membership_position,
@@ -357,8 +357,8 @@ pub(crate) struct MusicLocalLocationRow {
     pub strong_fingerprint: Option<String>,
     pub availability: String,
     pub last_seen_generation: Option<i64>,
-    pub first_seen_at: i64,
-    pub updated_at: i64,
+    pub first_seen_at_ms: i64,
+    pub updated_at_ms: i64,
 }
 
 impl TryFrom<MusicLocalLocationRow> for MusicLocalLocation {
@@ -376,8 +376,8 @@ impl TryFrom<MusicLocalLocationRow> for MusicLocalLocation {
             strong_fingerprint: row.strong_fingerprint,
             availability: parse_enum(&row.availability, "locationAvailability")?,
             last_seen_generation: row.last_seen_generation,
-            first_seen_at: row.first_seen_at,
-            updated_at: row.updated_at,
+            first_seen_at_ms: row.first_seen_at_ms,
+            updated_at_ms: row.updated_at_ms,
         })
     }
 }
@@ -385,22 +385,22 @@ impl TryFrom<MusicLocalLocationRow> for MusicLocalLocation {
 #[derive(Clone, Debug, sqlx::FromRow)]
 pub(crate) struct MusicStatisticsRow {
     pub item_id: String,
-    pub last_played_at: Option<i64>,
+    pub last_played_at_ms: Option<i64>,
     pub play_count: i64,
     pub completion_count: i64,
     pub skip_count: i64,
-    pub updated_at: i64,
+    pub updated_at_ms: i64,
 }
 
 impl From<MusicStatisticsRow> for MusicListeningStatistics {
     fn from(row: MusicStatisticsRow) -> Self {
         Self {
             item_id: row.item_id,
-            last_played_at: row.last_played_at,
+            last_played_at_ms: row.last_played_at_ms,
             play_count: row.play_count,
             completion_count: row.completion_count,
             skip_count: row.skip_count,
-            updated_at: row.updated_at,
+            updated_at_ms: row.updated_at_ms,
         }
     }
 }

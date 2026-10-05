@@ -3,8 +3,8 @@
 import { flushSync, mount, tick, unmount } from "svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { NotesChildDatabaseBlock, NotesDatabaseView, NotesFolder, NotesNavigationDatabase, NotesPage } from "$lib/notes/types";
-import { applyBlockUpdate } from "$lib/notes/block-factory";
-import { createProvisionalNotesPage } from "$lib/notes/page-creation";
+import { applyBlockUpdate } from "$lib/notes/blocks/factory";
+import { createProvisionalNotesPage } from "$lib/notes/pages/creation";
 import NotesWorkspaceHeader from "./NotesWorkspaceHeader.svelte";
 
 const notesState = vi.hoisted(() => ({
@@ -137,7 +137,7 @@ describe("NotesWorkspaceHeader", () => {
     notesState.store.selectedDatabaseBlockId = null;
     notesState.store.selectedDatabaseBlock = null;
     notesState.store.navigationDatabases = [];
-    const { notesDatabaseSession } = await import("$lib/notes/database-session.svelte");
+    const { notesDatabaseSession } = await import("$lib/notes/database/session.svelte");
     notesDatabaseSession.clear();
     vi.clearAllMocks();
     vi.unstubAllGlobals();

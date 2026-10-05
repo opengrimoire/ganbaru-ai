@@ -8,8 +8,8 @@
   } from "$lib/navigation";
   import { getCalendar } from "$lib/stores/calendar.svelte";
   import { getCalendars } from "$lib/stores/calendars.svelte";
-  import { getDoomscrolling } from "$lib/stores/doomscrolling.svelte";
-  import { DOOMSCROLLING_USAGE_REFRESH_INTERVAL_MS, getDoomscrollingUsage } from "$lib/stores/doomscrolling-usage.svelte";
+  import { getDistractions } from "$lib/stores/distractions.svelte";
+  import { DISTRACTIONS_USAGE_REFRESH_INTERVAL_MS, getDistractionsUsage } from "$lib/stores/distractions-usage.svelte";
   import { getMusicPlayer } from "$lib/stores/music-player.svelte";
   import { getPomodoro } from "$lib/stores/pomodoro.svelte";
   import { buildDesktopFocusNotificationCopy, type DesktopFocusNotificationCopy } from "$lib/api/focus";
@@ -18,17 +18,17 @@
   import { getChat } from "$lib/stores/chat.svelte";
   import { getZoom } from "$lib/stores/zoom.svelte";
   import { getPreferences } from "$lib/stores/preferences.svelte";
-  import { getSettingsLauncher } from "$lib/stores/settingsLauncher.svelte";
+  import { getSettingsLauncher } from "$lib/stores/settings-launcher.svelte";
   import { getUpdateManager } from "$lib/stores/updates.svelte";
-  import { UPDATE_AUTO_CHECK_INTERVAL_MS } from "$lib/stores/updates";
+  import { UPDATE_AUTO_CHECK_INTERVAL_MS } from "$lib/stores/update-policy";
   import { getViewport } from "$lib/stores/viewport.svelte";
   import { getDetachedWindows } from "$lib/stores/detached-windows.svelte";
-  import { parseNotesLinkHash } from "$lib/notes/block-link";
+  import { parseNotesLinkHash } from "$lib/notes/links/block-link";
   import {
     listPendingNotesMentionNotifications,
     markNotesMentionNotificationsDelivered,
   } from "$lib/api/notes";
-  import { getNotesNotificationSchedule } from "$lib/notes/notification-schedule.svelte";
+  import { getNotesNotificationSchedule } from "$lib/notes/collaboration/notification-schedule.svelte";
   import type {
     NotesMentionNotification,
     NotesMentionNotificationKind,
@@ -42,31 +42,31 @@
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { appNavigationShortcut, hasShortcutModifier } from "$lib/keyboard-shortcuts";
-  import TitleBar from "$lib/components/TitleBar.svelte";
-  import { getAppCloseCoordinator } from "$lib/components/title-bar/title-bar-shortcut-controller.svelte";
+  import TitleBar from "$lib/components/title-bar/TitleBar.svelte";
+  import { getAppCloseCoordinator } from "$lib/components/title-bar/shortcut-controller.svelte";
   import WindowResizeHandles from "$lib/components/WindowResizeHandles.svelte";
   import CalendarView from "$lib/components/calendar/CalendarView.svelte";
   import MusicPlaybackHost from "$lib/components/music/MusicPlaybackHost.svelte";
-  import MusicSoundscapeCoordinator from "$lib/components/music/MusicSoundscapeCoordinator.svelte";
+  import MusicSoundscapeCoordinator from "$lib/components/music/soundscape/MusicSoundscapeCoordinator.svelte";
   import NotesView from "$lib/components/notes/NotesView.svelte";
   import ProjectsView from "$lib/components/projects/ProjectsView.svelte";
-  import ProjectDashboardView from "$lib/components/projects/ProjectDashboardView.svelte";
-  import ProjectGanttView from "$lib/components/projects/ProjectGanttView.svelte";
-  import ProjectKanbanView from "$lib/components/projects/ProjectKanbanView.svelte";
-  import ProjectListView from "$lib/components/projects/ProjectListView.svelte";
-  import type { ProjectViewComponents } from "$lib/components/projects/project-view-components";
+  import ProjectDashboardView from "$lib/components/projects/views/ProjectDashboardView.svelte";
+  import ProjectGanttView from "$lib/components/projects/views/ProjectGanttView.svelte";
+  import ProjectKanbanView from "$lib/components/projects/views/ProjectKanbanView.svelte";
+  import ProjectListView from "$lib/components/projects/list/ProjectListView.svelte";
+  import type { ProjectViewComponents } from "$lib/components/projects/view-components";
   import ChatWorkspace from "$lib/components/chat/ChatWorkspace.svelte";
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
   import TooltipHost from "$lib/components/ui/TooltipHost.svelte";
   import UpdateNotificationToast from "$lib/components/updates/UpdateNotificationToast.svelte";
-  import { formatEventNotificationBody } from "$lib/components/calendar/event-notifications";
+  import { formatEventNotificationBody } from "$lib/calendar/event-notifications";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import {
     firstMarkTime,
     mark as perfMark,
     setShellStartupMs,
-  } from "$lib/stores/perflog.svelte";
-  import type { MemoryReport, StartupMemorySnapshot } from "$lib/components/perf/memoryReport";
+  } from "$lib/stores/perf-log.svelte";
+  import type { MemoryReport, StartupMemorySnapshot } from "$lib/diagnostics/memory-report";
   import { shouldUseKeyboardFocusIntent } from "$lib/utils";
   import {
     createLifecycleScheduler,
@@ -76,9 +76,9 @@
     createNotesNotificationScheduler,
   } from "$lib/scheduling/notification-schedulers";
   import { onMount } from "svelte";
-  import { getNotesProjectHistoryScheduler } from "$lib/notes/project-history-scheduler";
+  import { getNotesProjectHistoryScheduler } from "$lib/notes/history/project-history-scheduler";
   import { onActiveVaultIdentityChange } from "$lib/vault/active-vault";
-  import { listenForNotesDatabaseChanges } from "$lib/notes/database-window-sync";
+  import { listenForNotesDatabaseChanges } from "$lib/notes/database/window-sync";
   import type { ProjectChatIntegration } from "$lib/projects/types";
 
   perfMark("boot.script-start");
@@ -92,8 +92,8 @@
   if (nav.current !== startupTabView) nav.navigate(startupTabView);
   const calendar = getCalendar();
   const calendars = getCalendars();
-  const doomscrolling = getDoomscrolling();
-  const doomscrollingUsage = getDoomscrollingUsage();
+  const distractions = getDistractions();
+  const distractionsUsage = getDistractionsUsage();
   const music = getMusicPlayer();
   const pomodoro = getPomodoro();
   const notes = getNotes();
@@ -141,8 +141,8 @@
   });
   let unlistenCalendarNotificationOpen: UnlistenFn | null = null;
   let unlistenNotesNotificationOpen: UnlistenFn | null = null;
-  let unlistenDoomscrollingDesktopSettingsOpen: UnlistenFn | null = null;
-  let unlistenDoomscrollingLimitsSettingsOpen: UnlistenFn | null = null;
+  let unlistenDistractionsDesktopSettingsOpen: UnlistenFn | null = null;
+  let unlistenDistractionsLimitsSettingsOpen: UnlistenFn | null = null;
   const NOTES_NOTIFICATION_BODY_MAX_CHARS = 180;
   const AUTOMATIC_UPDATE_CHECK_DELAY_MS = 3_000;
   const FOCUS_NOTIFICATION_COPY_RETRY_MS = 1_000;
@@ -153,7 +153,7 @@
   }
 
   let isMaximized = $state(true);
-  type BenchmarkOverlayComponent = typeof import("$lib/components/benchmark/BenchmarkOverlay.svelte").default;
+  type BenchmarkOverlayComponent = typeof import("$lib/components/diagnostics/BenchmarkOverlay.svelte").default;
   type IdleOverlayComponent = typeof import("$lib/components/pomodoro/IdleOverlay.svelte").default;
   let BenchmarkOverlay = $state<BenchmarkOverlayComponent | null>(null);
   let IdleOverlay = $state<IdleOverlayComponent | null>(null);
@@ -162,7 +162,7 @@
   let devtoolsToggleInFlight = false;
   function ensureBenchmarkOverlay(): Promise<void> {
     if (BenchmarkOverlay) return Promise.resolve();
-    loadingBenchmarkOverlay ??= import("$lib/components/benchmark/BenchmarkOverlay.svelte")
+    loadingBenchmarkOverlay ??= import("$lib/components/diagnostics/BenchmarkOverlay.svelte")
       .then((module) => {
         BenchmarkOverlay = module.default;
       })
@@ -187,7 +187,6 @@
     }
     try {
       await calendar.load();
-      // Calendar startup marks are still produced for normal boots.
     } catch (e) {
       console.error("Failed to load calendar:", e);
     }
@@ -205,7 +204,7 @@
         await ensureDbUrl();
         await ensureBenchmarkOverlay();
         await afterAnimationFrames(2);
-        const { getBenchmarkRunner } = await import("$lib/stores/benchmarkRunner.svelte");
+        const { getBenchmarkRunner } = await import("$lib/stores/benchmark-runner.svelte");
         benchmarkClaimedBoot = await getBenchmarkRunner().checkAndResume();
       }
     } catch (e) {
@@ -325,30 +324,30 @@
           unlistenNotesNotificationOpen = unlisten;
         })
         .catch((e) => console.error("Failed to listen for Notes notification opens:", e));
-      listen("doomscrolling-open-desktop-settings", () => {
+      listen("distractions-open-desktop-settings", () => {
         if (disposed) return;
-        settingsLauncher.open("doomscrolling", { doomscrollingTab: "desktop" });
+        settingsLauncher.open("distractions", { distractionsTab: "desktop" });
       })
         .then((unlisten) => {
           if (disposed) {
             unlisten();
             return;
           }
-          unlistenDoomscrollingDesktopSettingsOpen = unlisten;
+          unlistenDistractionsDesktopSettingsOpen = unlisten;
         })
-        .catch((e) => console.error("Failed to listen for doomscrolling settings opens:", e));
-      listen("doomscrolling-open-limits-settings", () => {
+        .catch((e) => console.error("Failed to listen for distraction settings opens:", e));
+      listen("distractions-open-limits-settings", () => {
         if (disposed) return;
-        settingsLauncher.open("doomscrolling", { doomscrollingTab: "limits" });
+        settingsLauncher.open("distractions", { distractionsTab: "limits" });
       })
         .then((unlisten) => {
           if (disposed) {
             unlisten();
             return;
           }
-          unlistenDoomscrollingLimitsSettingsOpen = unlisten;
+          unlistenDistractionsLimitsSettingsOpen = unlisten;
         })
-        .catch((e) => console.error("Failed to listen for doomscrolling limit settings opens:", e));
+        .catch((e) => console.error("Failed to listen for distraction limit settings opens:", e));
     }
     const unsubscribeHistoryVault = isMainWindow
       ? onActiveVaultIdentityChange((previousVaultId, nextVaultId) => {
@@ -378,14 +377,14 @@
       console.error("calendar boot failed:", e),
     );
     appWindow.isMaximized().then((v) => (isMaximized = v));
-    invoke<number>("get_startup_elapsed_ms").then((ms) => {
+    invoke<number>("startup_elapsed_ms").then((ms) => {
       const scriptStartMs = firstMarkTime("boot.script-start") ?? 0;
       const nextShellStartupMs = Math.max(0, Math.round(ms - performance.now() + scriptStartMs));
       shellStartupMs = nextShellStartupMs;
       setShellStartupMs(nextShellStartupMs);
     });
     const startupMemoryTimerId = setTimeout(() => {
-      invoke<MemoryReport>("get_memory_report")
+      invoke<MemoryReport>("memory_report")
         .then((report) => {
           startupMemorySnapshot = { status: "ready", report };
         })
@@ -423,10 +422,10 @@
     document.addEventListener("keydown", markKeyboardFocus, { capture: true });
     window.addEventListener("hashchange", navigateToNotesHash);
 
-    // Track device timezone changes (travel, OS-level update). On change,
-    // reload calendar events so wall-clock strings reflect the new zone.
-    // Re-resolves on visibility change and window focus after suspend or
-    // device travel. Those same lifecycle events catch every scheduler up.
+    // Track device time zone changes (travel, OS-level update) and reload
+    // Calendar events so wall-clock strings reflect the new zone. The zone is
+    // re-resolved on visibility change and window focus, which also catch
+    // every scheduler up after suspend.
     let knownZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
     const checkZone = () => {
       const current = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -454,10 +453,10 @@
       unlistenCalendarNotificationOpen = null;
       unlistenNotesNotificationOpen?.();
       unlistenNotesNotificationOpen = null;
-      unlistenDoomscrollingDesktopSettingsOpen?.();
-      unlistenDoomscrollingDesktopSettingsOpen = null;
-      unlistenDoomscrollingLimitsSettingsOpen?.();
-      unlistenDoomscrollingLimitsSettingsOpen = null;
+      unlistenDistractionsDesktopSettingsOpen?.();
+      unlistenDistractionsDesktopSettingsOpen = null;
+      unlistenDistractionsLimitsSettingsOpen?.();
+      unlistenDistractionsLimitsSettingsOpen = null;
       document.removeEventListener("wheel", blockNativeWheelScale, { capture: true });
       document.removeEventListener("contextmenu", blockNativeContextMenu, { capture: true });
       document.removeEventListener("pointerdown", markPointerFocus, { capture: true });
@@ -581,10 +580,10 @@
     return t("focusDialog.awaySeconds", totalSeconds);
   }
 
-  const doomscrollingUsageScheduler = createLifecycleScheduler({
+  const distractionsUsageScheduler = createLifecycleScheduler({
     run: async (context) => {
-      await doomscrollingUsage.refresh(context);
-      return context.isCurrent() ? context.now() + DOOMSCROLLING_USAGE_REFRESH_INTERVAL_MS : null;
+      await distractionsUsage.refresh(context);
+      return context.isCurrent() ? context.now() + DISTRACTIONS_USAGE_REFRESH_INTERVAL_MS : null;
     },
     onError: (error) => {
       console.warn("Failed to refresh desktop usage presentation:", error);
@@ -592,13 +591,13 @@
   });
 
   $effect(() => {
-    const _limits = doomscrolling.usageLimits;
+    const _limits = distractions.usageLimits;
     const enabled = isMainWindow
-      && doomscrolling.limitsEnabled
-      && doomscrolling.usageLimits.some((limit) => limit.enabled);
-    const wasEnabled = doomscrollingUsageScheduler.isEnabled();
-    doomscrollingUsageScheduler.setEnabled(enabled);
-    if (enabled && wasEnabled) doomscrollingUsageScheduler.invalidate();
+      && distractions.limitsEnabled
+      && distractions.usageLimits.some((limit) => limit.enabled);
+    const wasEnabled = distractionsUsageScheduler.isEnabled();
+    distractionsUsageScheduler.setEnabled(enabled);
+    if (enabled && wasEnabled) distractionsUsageScheduler.invalidate();
   });
 
   function toggleDevtools(): void {
@@ -790,7 +789,7 @@
     notesNotificationScheduler.resume();
     chatScheduledMessageScheduler.resume();
     notesProjectHistoryScheduler.resume();
-    doomscrollingUsageScheduler.resume();
+    distractionsUsageScheduler.resume();
     music.resumeSnapshotScheduler();
   }
 
@@ -798,7 +797,7 @@
     eventNotificationScheduler.dispose();
     notesNotificationScheduler.dispose();
     chatScheduledMessageScheduler.dispose();
-    doomscrollingUsageScheduler.dispose();
+    distractionsUsageScheduler.dispose();
   }
 </script>
 

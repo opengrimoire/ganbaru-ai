@@ -1,12 +1,12 @@
 import { invoke } from "@tauri-apps/api/core";
 import { ensureDbUrl } from "$lib/api/db";
-import { invalidateNotesNotificationSchedule } from "$lib/notes/notification-schedule.svelte";
+import { invalidateNotesNotificationSchedule } from "$lib/notes/collaboration/notification-schedule.svelte";
 import {
   mapNotesCommentThreadDto,
   mapNotesLocalUserDto,
   mapNotesMentionNotificationDto,
   mapNotesSuggestionDto,
-} from "$lib/notes/notion-mappers";
+} from "$lib/notes/validation/response-mappers";
 import type {
   NotesCommentCreate,
   NotesCommentThread,
@@ -23,7 +23,7 @@ import { invokeNotesMutation } from "./mutation";
 
 export async function getNotesLocalUser(): Promise<NotesLocalUser> {
   const dbUrl = await ensureDbUrl();
-  return mapNotesLocalUserDto(await invoke<unknown>("notes_get_local_user", { dbUrl }));
+  return mapNotesLocalUserDto(await invoke<unknown>("notes_local_user", { dbUrl }));
 }
 
 export async function updateNotesLocalUser(

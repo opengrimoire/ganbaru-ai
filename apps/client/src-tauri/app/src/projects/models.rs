@@ -877,7 +877,7 @@ pub struct ProjectUpdate {
     pub(in crate::projects) work_environment_id: Option<String>,
     pub(in crate::projects) blocker_ruleset_id: Option<String>,
     pub(in crate::projects) music_assignments:
-        Option<Vec<crate::music_context::MusicContextAssignmentDraft>>,
+        Option<Vec<crate::music::assignments::MusicContextAssignmentDraft>>,
     pub(in crate::projects) music_assignments_updated_at: Option<i64>,
 }
 

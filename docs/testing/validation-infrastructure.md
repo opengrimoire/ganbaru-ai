@@ -10,7 +10,7 @@ Run commands through rustup without a conflicting toolchain override. CI install
 
 Toolchain or edition changes require `validate:full` and the platform checks. Compatibility diagnostics must be reviewed for temporary lifetimes, lock and resource cleanup, and native unsafe boundaries rather than fixed mechanically to suppress warnings.
 
-The shared Clippy policy allows `collapsible_if`: nested guards and edition-2024 let-chains are both valid styles. Choose the form that makes control flow and resource scope clearest. This avoids a mandatory rewrite of existing guards merely because the edition now permits let-chains. Other compiler and Clippy warnings remain errors in the normal gate; dependency audit policy is unchanged.
+The shared Clippy policy allows `collapsible_if`: nested guards and edition-2024 let-chains are both valid styles, so choose the form that makes control flow and resource scope clearest. Other compiler and Clippy warnings remain errors in the normal gate.
 
 ## Root execution order
 
@@ -18,7 +18,7 @@ The complete normal gate runs in this order:
 
 1. Rust formatting and Clippy with one Cargo build job locally, or two in Linux CI.
 2. Rust workspace tests with the same Cargo build limit and one runtime test thread.
-3. Svelte Check with a 1,792 MiB Node old-space limit, then TypeScript checking.
+3. Provider protocol snapshot checks, Svelte Check with a 1,792 MiB Node old-space limit, then TypeScript checking.
 4. Four sequential one-worker Vitest shards, excluding benchmark-harness tests.
 5. Tailwind diagnostics through Turbo.
 6. Desktop and Android production builds and bundle contracts through Turbo.
@@ -53,22 +53,22 @@ When changing validation topology, measure at least one affected cache-miss run 
 
 ## Production bundle contracts
 
-Unit tests cannot prove the final production import graph. The bundle contract performs real Vite builds and inspects emitted module metadata. Notes shell contracts keep the current slash menu behind its lazy boundary; deleted components are not required to emit chunks.
+Unit tests cannot prove the final production import graph. The bundle contract performs real Vite builds and inspects emitted module metadata.
 
 Desktop contracts inspect the transitive static imports of the entry, vault setup, and setup-time onboarding prewarm roots. These paths must keep the full App surfaces, terminal packages, Markdown rendering and sanitization, editor packages, and review runtime and helper dependencies out of their closures. Chat may load Markdown for messages, but terminal and review dependencies remain behind their existing dynamic imports. Checks identify emitted source modules and dependency package paths, so renaming or regrouping chunks cannot bypass these boundaries. Common App surfaces remain resident after vault activation.
 
 Desktop and Android builds use different platform entries. The Android wrapper sets the platform before Vite configuration loads and writes to the isolated `.bundle-contracts/android/` directory. Contracts verify required roots and platform adapters, follow static imports transitively, enforce source-module ceilings, and reject desktop-only authority from the mobile artifact.
 
-The Android artifact intentionally includes mobile Doomscrolling, notification, document, and media adapters. It rejects desktop Doomscrolling process control, the desktop App shell, PTYs, Git and provider execution, Rodio, desktop media controls, tray and title bar code, benchmark surfaces, desktop working-folder tools, and heavy editor graphs that are not part of the mobile route.
+The Android artifact intentionally includes mobile anti-distraction, notification, document, and media adapters. It rejects desktop anti-distraction process control, the desktop App shell, PTYs, Git and provider execution, Rodio, desktop media controls, tray and title bar code, benchmark surfaces, desktop working-folder tools, and heavy editor graphs that are not part of the mobile route.
 
 The machine-readable ceilings and required or forbidden module sets are authoritative in:
 
-- `apps/client/scripts/first-use-bundle-baseline.json`
-- `apps/client/scripts/android-bundle-baseline.json`
+- `apps/client/scripts/bundle-contracts/baselines/first-use.json`
+- `apps/client/scripts/bundle-contracts/baselines/android.json`
 
-The measured Projects, Notes, and Chat desktop route ceiling is 367 source modules. Their shared chunk includes the resident application surfaces and music player. Projects column calculations, contextual property actions, and column filters add four modules to the previously measured graph. The ceiling has no extra headroom. Changes to a ceiling require a concrete user-visible rationale and should remove obsolete narrative rather than accumulating a chronology in documentation.
+Both checks fail before inspecting the build when a baseline names an application source path that no longer exists, so renaming or deleting a module cannot silently disable a rule. Dependency package entries are not checked on disk because forbidden packages may be intentionally absent.
 
-Android ceilings reflect the measured import graph without extra headroom: shell 167, Calendar 227, Projects 206, Notes 417, Quick notes 92, Music 172, and Chat 261 source modules. The complete artifact allows 1,101 source modules. Project settings loads its phase playlist rows, shared playlist icons, and collection draft ownership behind the settings panel so configuration waits for Save. These changes preserve the initial route ceilings and keep desktop working-folder commands outside Android. English message modules affect every initial route; Projects presentation preferences also participate in shared project state. Projects header controls reuse the shared floating menu and selection components. Notes initially loads bounded query, presentation, and hierarchy parsers and the hierarchy API. Presentation validation imports its pure parser directly, keeping table and list display helpers outside that initial closure. Database layouts and uncommon editor panels, including link editing, database paste choices, and database deletion confirmation, retain their lazy boundaries. Required and forbidden loading and platform rules remain enforced.
+Ceilings are set to the measured import graph without extra headroom, so an unexpected eager import fails the contract. Raising a ceiling requires a concrete user-visible rationale. Record the reason in the change, not as a chronology in this document. Uncommon panels and heavy layouts, such as Notes database layouts, link editing, and deletion confirmation, stay behind lazy boundaries so initial routes remain small.
 
 ## Android project and pull request build
 
@@ -86,7 +86,7 @@ The root bundle contract builds desktop first, then Android through Turbo.
 
 ## Provider protocol snapshots
 
-Routine checks validate committed provider compatibility artifacts without requiring globally installed tools. A recorded CLI version is provenance for a snapshot, not a developer installation requirement.
+Routine checks validate the committed Codex app-server schema and OpenCode OpenAPI contract without requiring globally installed tools. A recorded CLI version is provenance for a snapshot, not a developer installation requirement.
 
 Provider maintenance can compare an installed Codex app-server schema with the committed snapshot:
 
@@ -94,7 +94,7 @@ Provider maintenance can compare an installed Codex app-server schema with the c
 pnpm --dir apps/client run check:codex-protocol-installed
 ```
 
-Use `generate:codex-protocol` only after reviewed protocol change.
+The scripts under `apps/client/scripts/provider-protocols/` check by default and regenerate only with `--write`; the OpenCode script also needs `--source <path-or-url>` to compare or regenerate. Use `generate:codex-protocol` or `generate:opencode-protocol` only after a reviewed protocol change.
 
 ## Changing validation topology
 

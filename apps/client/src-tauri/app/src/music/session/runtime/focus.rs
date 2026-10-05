@@ -1,8 +1,8 @@
 //! Music effects admitted from committed Focus execution, with manual-intent supersession.
 
 use super::*;
-use crate::music_context::MusicActivityPhase;
-use ganbaru_focus::{CommittedFocusEffect, FocusMode, FocusPhase};
+use crate::music::assignments::MusicActivityPhase;
+use ganbaru_pomodoro::{CommittedFocusEffect, FocusMode, FocusPhase};
 use std::time::Instant;
 
 #[derive(Clone)]
@@ -17,7 +17,7 @@ pub(super) struct FocusLease {
 }
 
 impl FocusLease {
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(desktop)]
     pub(super) fn completion_identity(&self) -> String {
         format!("{}:{:?}", self.activation_key, self.effect.mode)
     }
@@ -261,5 +261,4 @@ fn lease_deadline(effect: &CommittedFocusEffect, wall_ms: i64, monotonic: Instan
 }
 
 #[cfg(test)]
-#[path = "focus_tests.rs"]
 mod tests;

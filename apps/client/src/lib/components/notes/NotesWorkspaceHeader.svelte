@@ -15,40 +15,40 @@
     COMPACT_IDENTITY_ICON_STROKE_WIDTH,
   } from "$lib/icon-sizing";
   import { formatShortcut } from "$lib/keyboard-shortcuts";
-  import { NOTES_PAGE_CHROME_EMOJI_SCALE } from "$lib/notes/page-icon";
+  import { NOTES_PAGE_CHROME_EMOJI_SCALE } from "$lib/notes/pages/icon";
   import {
     notesHierarchyNodeParent,
     notesHierarchyPath,
     type NotesHierarchyNode,
     type NotesHierarchyParent,
-  } from "$lib/notes/hierarchy-navigation";
-  import { notesFoldersForProject } from "$lib/notes/navigation-tree";
-  import { notesPageTitle } from "$lib/notes/page-title";
+  } from "$lib/notes/navigation/hierarchy-menu";
+  import { notesFoldersForProject } from "$lib/notes/navigation/tree";
+  import { notesPageTitle } from "$lib/notes/pages/title";
   import { notesPagesForProject } from "$lib/notes/project-membership";
   import type { NotesPage } from "$lib/notes/types";
   import {
     projectLifecycleBadgeClass,
     projectLifecycleLabel,
-  } from "$lib/projects/project-display";
+  } from "$lib/projects/display";
   import {
     projectNavigatorPanelGeometry,
     type ProjectNavigatorPanelMode,
-  } from "$lib/projects/project-toolbar";
+  } from "$lib/projects/toolbar";
   import type { Project, ProjectGroup } from "$lib/projects/types";
   import { getNotes } from "$lib/stores/notes.svelte";
   import { getProjects } from "$lib/stores/projects.svelte";
   import { getViewport } from "$lib/stores/viewport.svelte";
   import { cn } from "$lib/utils";
   import ProjectIcon from "$lib/components/projects/ProjectIcon.svelte";
-  import WorkspaceBreadcrumbTerminalIcon from "$lib/components/WorkspaceBreadcrumbTerminalIcon.svelte";
+  import WorkspaceBreadcrumbTerminalIcon from "$lib/components/ui/WorkspaceBreadcrumbTerminalIcon.svelte";
   import {
     loadNotesOptionalComponent,
     retryNotesOptionalComponent,
     type LoadedNotesOptionalComponent,
-  } from "./notes-component-registry";
-  import NotesHierarchyPickerPanel from "./NotesHierarchyPickerPanel.svelte";
-  import NotesPageIcon from "./NotesPageIcon.svelte";
-  import NotesProjectNavigator from "./NotesProjectNavigator.svelte";
+  } from "./component-registry";
+  import NotesHierarchyPickerPanel from "$lib/components/notes/navigation/NotesHierarchyPickerPanel.svelte";
+  import NotesPageIcon from "$lib/components/notes/pages/NotesPageIcon.svelte";
+  import NotesProjectNavigator from "$lib/components/notes/navigation/NotesProjectNavigator.svelte";
 
   type NotesNavigatorMode = ProjectNavigatorPanelMode | "notes";
 

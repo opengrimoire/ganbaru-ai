@@ -1,11 +1,11 @@
 <script lang="ts">
   import Archive from "@lucide/svelte/icons/archive";
-  import ProjectSettingsPanelShell from "$lib/components/projects/ProjectSettingsPanelShell.svelte";
+  import ProjectSettingsPanelShell from "$lib/components/projects/settings/ProjectSettingsPanelShell.svelte";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import {
     PROJECT_SETTINGS_PANEL_MAX_HEIGHT,
     projectToolbarPanelGeometry,
-  } from "$lib/projects/project-toolbar";
+  } from "$lib/projects/toolbar";
   import { getViewport } from "$lib/stores/viewport.svelte";
   import {
     APP_FLOATING_SURFACE_SELECTOR,

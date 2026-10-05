@@ -187,8 +187,10 @@ pub(super) fn validate_document(document: &MusicInterchangeDocument) -> MusicLib
                 ));
             }
             for snooze in &membership.snoozes {
-                if snooze.starts_at <= 0
-                    || snooze.ends_at.is_some_and(|end| end <= snooze.starts_at)
+                if snooze.starts_at_ms <= 0
+                    || snooze
+                        .ends_at_ms
+                        .is_some_and(|end| end <= snooze.starts_at_ms)
                 {
                     return Err(validation(
                         "Music snooze must have a positive, ordered time range",
@@ -209,11 +211,11 @@ pub(super) fn validate_document(document: &MusicInterchangeDocument) -> MusicLib
         if assignment.version <= 0 {
             return Err(validation("Invalid Music assignment revision"));
         }
-        crate::music_context::validate_set(&MusicContextAssignmentSet {
+        crate::music::assignments::validate_set(&MusicContextAssignmentSet {
             owner_kind: assignment.owner_kind,
             owner_id: assignment.owner_id.clone(),
-            updated_at: assignment.updated_at,
-            assignments: vec![crate::music_context::MusicContextAssignmentDraft {
+            updated_at_ms: assignment.updated_at_ms,
+            assignments: vec![crate::music::assignments::MusicContextAssignmentDraft {
                 phase: assignment.phase,
                 behavior: assignment.behavior,
                 playlist_id: assignment.playlist_id.clone(),

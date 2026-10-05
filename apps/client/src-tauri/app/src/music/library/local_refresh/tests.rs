@@ -14,13 +14,13 @@ async fn migrated_pool() -> SqlitePool {
         .execute(&pool)
         .await
         .unwrap();
-    crate::db::run_migrations(&pool).await.unwrap();
+    ganbaru_db::run_migrations(&pool).await.unwrap();
     pool
 }
 
 async fn seed_root(pool: &SqlitePool) {
     sqlx::query(
-        "INSERT INTO music_local_roots (id, name, created_at, updated_at)
+        "INSERT INTO music_local_roots (id, name, created_at_ms, updated_at_ms)
          VALUES ('root-1', 'Test music', 1700000000000, 1700000000000)",
     )
     .execute(pool)
@@ -28,7 +28,7 @@ async fn seed_root(pool: &SqlitePool) {
     .unwrap();
     sqlx::query(
         "INSERT INTO music_source_collections
-            (id, kind, identity_key, name, local_root_id, created_at, updated_at)
+            (id, kind, identity_key, name, local_root_id, created_at_ms, updated_at_ms)
          VALUES ('collection-1', 'local-root', 'local-root:root-1',
                  'Test music', 'root-1', 1700000000000, 1700000000000)",
     )
@@ -37,7 +37,7 @@ async fn seed_root(pool: &SqlitePool) {
     .unwrap();
 }
 
-fn temp_root(label: &str) -> PathBuf {
+fn temporary_root(label: &str) -> PathBuf {
     let nonce = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
@@ -50,7 +50,7 @@ fn temp_root(label: &str) -> PathBuf {
     path
 }
 
-fn request(job_id: &str, root: &Path, requested_at: i64) -> MusicLocalRefreshRequest {
+fn request(job_id: &str, root: &Path, requested_at_ms: i64) -> MusicLocalRefreshRequest {
     MusicLocalRefreshRequest {
         job_id: job_id.to_string(),
         root_id: "root-1".to_string(),
@@ -60,7 +60,7 @@ fn request(job_id: &str, root: &Path, requested_at: i64) -> MusicLocalRefreshReq
             root_id: "root-1".to_string(),
             folder_path: root.to_string_lossy().to_string(),
         }],
-        requested_at,
+        requested_at_ms,
     }
 }
 
@@ -69,7 +69,7 @@ fn complete_refresh_catalogs_large_file_sets_with_bounded_staging() {
     tauri::async_runtime::block_on(async {
         let pool = migrated_pool().await;
         seed_root(&pool).await;
-        let root = temp_root("dense");
+        let root = temporary_root("dense");
         for index in 0..5_001_u32 {
             let album = root.join(format!("Album {:02}", index % 17));
             fs::create_dir_all(&album).unwrap();
@@ -120,7 +120,7 @@ fn only_a_complete_current_generation_marks_absent_locations_missing() {
     tauri::async_runtime::block_on(async {
         let pool = migrated_pool().await;
         seed_root(&pool).await;
-        let root = temp_root("reconcile");
+        let root = temporary_root("reconcile");
         fs::write(root.join("kept.mp3"), b"kept media").unwrap();
         fs::write(root.join("removed.mp3"), b"removed media").unwrap();
 
@@ -187,7 +187,7 @@ fn tagged_metadata_updates_without_overwriting_user_authored_fields() {
     tauri::async_runtime::block_on(async {
         let pool = migrated_pool().await;
         seed_root(&pool).await;
-        let root = temp_root("metadata");
+        let root = temporary_root("metadata");
         fs::write(root.join("track.mp3"), id3_title("Original tagged title")).unwrap();
         let first = request("refresh-metadata-1", &root, 1_700_000_000_000);
         prepare(&pool, &first).await.unwrap();
@@ -250,9 +250,9 @@ fn local_paths_remain_distinct_even_when_content_matches() {
         seed_root(&pool).await;
         seed_extra_root(&pool, "root-2", "collection-2").await;
         seed_extra_root(&pool, "root-3", "collection-3").await;
-        let root_1 = temp_root("identity-a");
-        let root_2 = temp_root("identity-b");
-        let root_3 = temp_root("identity-copy");
+        let root_1 = temporary_root("identity-a");
+        let root_2 = temporary_root("identity-b");
+        let root_3 = temporary_root("identity-copy");
         let content_a = collision_fixture(1);
         let content_b = collision_fixture(2);
         fs::write(root_1.join("Theme.mp3"), &content_a).unwrap();
@@ -394,7 +394,7 @@ fn refresh_normalizes_cross_platform_separators_without_collapsing_path_case() {
     tauri::async_runtime::block_on(async {
         let pool = migrated_pool().await;
         seed_root(&pool).await;
-        let root = temp_root("path-normalization");
+        let root = temporary_root("path-normalization");
         fs::create_dir_all(root.join("Album")).unwrap();
         fs::write(root.join("Album/Track.mp3"), b"upper path content").unwrap();
         let first = request("path-first", &root, 1_700_000_000_000);
@@ -443,8 +443,8 @@ fn unavailable_matching_content_remains_distinct_and_available() {
         let pool = migrated_pool().await;
         seed_root(&pool).await;
         seed_extra_root(&pool, "root-2", "collection-2").await;
-        let old_root = temp_root("ambiguous-unavailable-old");
-        let new_root = temp_root("ambiguous-unavailable-new");
+        let old_root = temporary_root("ambiguous-unavailable-old");
+        let new_root = temporary_root("ambiguous-unavailable-new");
         fs::write(old_root.join("Original.mp3"), b"shared media content").unwrap();
         fs::write(new_root.join("Copy.mp3"), b"shared media content").unwrap();
         run_root_refresh(
@@ -489,7 +489,7 @@ fn inaccessible_refresh_preserves_last_known_availability() {
     tauri::async_runtime::block_on(async {
         let pool = migrated_pool().await;
         seed_root(&pool).await;
-        let root = temp_root("inaccessible");
+        let root = temporary_root("inaccessible");
         fs::write(root.join("known.mp3"), b"known content").unwrap();
         let initial = request("accessible", &root, 1_700_000_000_000);
         prepare(&pool, &initial).await.unwrap();
@@ -515,7 +515,7 @@ fn partial_refresh_keeps_unseen_locations_available_and_reports_uncertainty() {
     tauri::async_runtime::block_on(async {
         let pool = migrated_pool().await;
         seed_root(&pool).await;
-        let root = temp_root("partial");
+        let root = temporary_root("partial");
         fs::write(root.join("seen.mp3"), b"seen content").unwrap();
         fs::write(root.join("unseen.mp3"), b"unseen content").unwrap();
         let initial = request("partial-initial", &root, 1_700_000_000_000);
@@ -570,7 +570,7 @@ fn partial_refresh_keeps_unseen_locations_available_and_reports_uncertainty() {
 
 async fn seed_extra_root(pool: &SqlitePool, root_id: &str, collection_id: &str) {
     sqlx::query(
-        "INSERT INTO music_local_roots (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)",
+        "INSERT INTO music_local_roots (id, name, created_at_ms, updated_at_ms) VALUES (?, ?, ?, ?)",
     )
     .bind(root_id)
     .bind(root_id)
@@ -581,7 +581,7 @@ async fn seed_extra_root(pool: &SqlitePool, root_id: &str, collection_id: &str) 
     .unwrap();
     sqlx::query(
         "INSERT INTO music_source_collections
-            (id, kind, identity_key, name, local_root_id, created_at, updated_at)
+            (id, kind, identity_key, name, local_root_id, created_at_ms, updated_at_ms)
          VALUES (?, 'local-root', ?, ?, ?, ?, ?)",
     )
     .bind(collection_id)
@@ -609,7 +609,7 @@ async fn run_root_refresh(
     collection_id: &str,
     root: &Path,
     available_roots: Vec<super::super::MusicAvailableRootPath>,
-    requested_at: i64,
+    requested_at_ms: i64,
 ) {
     let refresh = MusicLocalRefreshRequest {
         job_id: job_id.to_string(),
@@ -617,7 +617,7 @@ async fn run_root_refresh(
         collection_id: collection_id.to_string(),
         folder_path: root.to_string_lossy().to_string(),
         available_roots,
-        requested_at,
+        requested_at_ms,
     };
     prepare(pool, &refresh).await.unwrap();
     let result = run_prepared(pool, refresh).await.unwrap();

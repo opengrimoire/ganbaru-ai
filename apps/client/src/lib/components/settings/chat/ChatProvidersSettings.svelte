@@ -18,15 +18,15 @@
     formatModelDisplayName,
     modelCompany,
     shouldShowModelId,
-  } from "$lib/chat/model-company";
-  import ChatModelAvatar from "$lib/components/chat/ChatModelAvatar.svelte";
+  } from "$lib/chat/composer/model-company";
+  import ChatModelAvatar from "$lib/components/chat/identity/ChatModelAvatar.svelte";
   import CalendarScrollbar from "$lib/components/calendar/CalendarScrollbar.svelte";
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
   import { formatNumber } from "$lib/i18n/formatters";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import { getChat } from "$lib/stores/chat.svelte";
-  import SettingSwitch from "../SettingSwitch.svelte";
-  import type { ChatProviderSetupTarget } from "../types";
+  import Switch from "$lib/components/ui/Switch.svelte";
+  import type { ChatProviderSetupTarget } from "$lib/settings/types";
 
   let {
     onOpenProviderSetup,
@@ -499,7 +499,7 @@
                     {@const headerInstanceId = selectedProvider.configuration.instanceId}
                     {@const headerBusy = refreshingAll || busyIds.includes(headerInstanceId)}
                     <div class="header-actions">
-                      <SettingSwitch
+                      <Switch
                         checked={selectedProvider.configuration.enabled}
                         ariaLabel={selectedProvider.configuration.enabled
                           ? t("settings.chat.providers.disable")
@@ -634,7 +634,7 @@
                               {/if}
                             </div>
                             <div class="model-actions">
-                              <SettingSwitch
+                              <Switch
                                 checked={isVisible(model.id)}
                                 ariaLabel={isVisible(model.id) ? t("settings.chat.models.hide") : t("settings.chat.models.show")}
                                 disabled={selectedBusy}

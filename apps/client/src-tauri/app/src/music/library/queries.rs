@@ -56,10 +56,10 @@ pub(crate) async fn playlist_playback_entries(
             item.availability,
             (SELECT location.root_id FROM music_local_locations AS location
              WHERE location.item_id = item.id AND location.availability = 'available'
-             ORDER BY location.updated_at DESC, location.id LIMIT 1) AS root_id,
+             ORDER BY location.updated_at_ms DESC, location.id LIMIT 1) AS root_id,
             (SELECT location.relative_path FROM music_local_locations AS location
              WHERE location.item_id = item.id AND location.availability = 'available'
-             ORDER BY location.updated_at DESC, location.id LIMIT 1) AS relative_path,
+             ORDER BY location.updated_at_ms DESC, location.id LIMIT 1) AS relative_path,
             membership.position,
             membership.weight,
             membership.enabled,
@@ -70,21 +70,21 @@ pub(crate) async fn playlist_playback_entries(
             EXISTS(
                 SELECT 1 FROM music_snoozes AS snooze
                 WHERE snooze.item_id = item.id
-                  AND snooze.starts_at <= ?
-                  AND (snooze.ends_at IS NULL OR snooze.ends_at > ?)
+                  AND snooze.starts_at_ms <= ?
+                  AND (snooze.ends_at_ms IS NULL OR snooze.ends_at_ms > ?)
                   AND (snooze.scope = 'all-playlists' OR snooze.playlist_id = membership.playlist_id)
             ) AS snoozed,
-            (SELECT MAX(snooze.ends_at) FROM music_snoozes AS snooze
+            (SELECT MAX(snooze.ends_at_ms) FROM music_snoozes AS snooze
              WHERE snooze.item_id = item.id
-               AND snooze.starts_at <= ?
-               AND snooze.ends_at > ?
+               AND snooze.starts_at_ms <= ?
+               AND snooze.ends_at_ms > ?
                AND (snooze.scope = 'all-playlists' OR snooze.playlist_id = membership.playlist_id)
             ) AS snoozed_until,
             EXISTS(
                 SELECT 1 FROM music_snoozes AS snooze
                 WHERE snooze.item_id = item.id
-                  AND snooze.starts_at <= ?
-                  AND snooze.ends_at IS NULL
+                  AND snooze.starts_at_ms <= ?
+                  AND snooze.ends_at_ms IS NULL
                   AND (snooze.scope = 'all-playlists' OR snooze.playlist_id = membership.playlist_id)
             ) AS snoozed_indefinitely
          FROM music_playlist_memberships AS membership
@@ -200,10 +200,10 @@ fn push_item_filters(builder: &mut QueryBuilder<'_, Sqlite>, request: &MusicItem
         builder.push(
             "SELECT 1 FROM music_snoozes AS snooze
              WHERE snooze.item_id = item.id
-               AND snooze.starts_at <= ",
+               AND snooze.starts_at_ms <= ",
         );
         builder.push_bind(request.now_ms);
-        builder.push(" AND (snooze.ends_at IS NULL OR snooze.ends_at > ");
+        builder.push(" AND (snooze.ends_at_ms IS NULL OR snooze.ends_at_ms > ");
         builder.push_bind(request.now_ms);
         builder.push(") ");
         if request.destination == MusicListDestination::Playlist {
@@ -213,7 +213,7 @@ fn push_item_filters(builder: &mut QueryBuilder<'_, Sqlite>, request: &MusicItem
         }
         builder.push(") ");
     }
-    if let Some(search_query) = super::search::query(&request.search) {
+    if let Some(search_query) = super::search::match_expression(&request.search) {
         builder.push(
             "AND item.id IN (
                 SELECT item_id FROM music_search_fts WHERE music_search_fts MATCH ",
@@ -240,9 +240,9 @@ fn push_item_order(builder: &mut QueryBuilder<'_, Sqlite>, request: &MusicItemWi
             FROM music_source_collection_items AS source_item
             WHERE source_item.item_id = item.id), 9223372036854775807)"
         }
-        MusicItemSort::DiscoveredAt => "item.discovered_at",
-        MusicItemSort::AddedToPlaylist => "membership.created_at",
-        MusicItemSort::LastPlayedAt => "COALESCE(stats.last_played_at, 0)",
+        MusicItemSort::DiscoveredAt => "item.discovered_at_ms",
+        MusicItemSort::AddedToPlaylist => "membership.created_at_ms",
+        MusicItemSort::LastPlayedAt => "COALESCE(stats.last_played_at_ms, 0)",
         MusicItemSort::PlayCount => "COALESCE(stats.play_count, 0)",
         MusicItemSort::ManualPosition => "membership.position",
     };
@@ -313,11 +313,11 @@ pub(crate) async fn item_window(
             COALESCE(item.album_override, item.original_album) AS album,
             (SELECT location.root_id FROM music_local_locations AS location
              WHERE location.item_id = item.id
-             ORDER BY location.availability = 'available' DESC, location.updated_at DESC, location.id
+             ORDER BY location.availability = 'available' DESC, location.updated_at_ms DESC, location.id
              LIMIT 1) AS local_root_id,
             (SELECT location.relative_path FROM music_local_locations AS location
              WHERE location.item_id = item.id
-             ORDER BY location.availability = 'available' DESC, location.updated_at DESC, location.id
+             ORDER BY location.availability = 'available' DESC, location.updated_at_ms DESC, location.id
              LIMIT 1) AS relative_path,
             COALESCE((
                 SELECT json_group_array(collection_id) FROM (
@@ -330,15 +330,15 @@ pub(crate) async fn item_window(
             item.original_artwork_identity,
             item.artwork_override,
             item.duration_ms, item.availability, item.review_state,
-            item.discovered_at, item.updated_at, item.version,
+            item.discovered_at_ms, item.updated_at_ms, item.version,
             (SELECT COUNT(*) FROM music_playlist_memberships AS all_memberships
              WHERE all_memberships.item_id = item.id) AS playlist_count,
             (SELECT COUNT(*) FROM music_snoozes AS active_snooze
              WHERE active_snooze.item_id = item.id
-               AND active_snooze.starts_at <= ",
+               AND active_snooze.starts_at_ms <= ",
     );
     item_query.push_bind(request.now_ms);
-    item_query.push(" AND (active_snooze.ends_at IS NULL OR active_snooze.ends_at > ");
+    item_query.push(" AND (active_snooze.ends_at_ms IS NULL OR active_snooze.ends_at_ms > ");
     item_query.push_bind(request.now_ms);
     if request.destination == MusicListDestination::Playlist {
         item_query
@@ -348,7 +348,7 @@ pub(crate) async fn item_window(
     }
     item_query.push(
         ")) AS active_snooze_count,
-            stats.last_played_at, COALESCE(stats.play_count, 0) AS play_count,
+            stats.last_played_at_ms, COALESCE(stats.play_count, 0) AS play_count,
             membership.id AS membership_id, membership.position AS membership_position,
             membership.weight AS membership_weight, membership.enabled AS membership_enabled,
             membership.version AS membership_version",
@@ -443,16 +443,16 @@ pub(crate) async fn playlist_summaries(
                 SUM(CASE WHEN membership.enabled = 1 AND item.availability = 'available'
                     AND NOT EXISTS (
                         SELECT 1 FROM music_snoozes AS snooze
-                        WHERE snooze.item_id = item.id AND snooze.starts_at <= ?
-                          AND (snooze.ends_at IS NULL OR snooze.ends_at > ?)
+                        WHERE snooze.item_id = item.id AND snooze.starts_at_ms <= ?
+                          AND (snooze.ends_at_ms IS NULL OR snooze.ends_at_ms > ?)
                           AND (snooze.scope = 'all-playlists' OR snooze.playlist_id = playlist.id)
                     ) THEN 1 ELSE 0 END) AS eligible_count,
                 SUM(CASE WHEN item.id IS NOT NULL AND item.availability <> 'available'
                     THEN 1 ELSE 0 END) AS unavailable_count,
                 SUM(CASE WHEN item.id IS NOT NULL AND EXISTS (
                         SELECT 1 FROM music_snoozes AS snooze
-                        WHERE snooze.item_id = item.id AND snooze.starts_at <= ?
-                          AND (snooze.ends_at IS NULL OR snooze.ends_at > ?)
+                        WHERE snooze.item_id = item.id AND snooze.starts_at_ms <= ?
+                          AND (snooze.ends_at_ms IS NULL OR snooze.ends_at_ms > ?)
                           AND (snooze.scope = 'all-playlists' OR snooze.playlist_id = playlist.id)
                     ) THEN 1 ELSE 0 END) AS snoozed_count,
                 SUM(CASE WHEN item.source_kind = 'local-file' THEN 1 ELSE 0 END) AS local_count,
@@ -531,7 +531,7 @@ struct SourceSummaryRow {
     kind: String,
     name: String,
     refresh_state: String,
-    last_successful_refresh_at: Option<i64>,
+    last_successful_refresh_at_ms: Option<i64>,
     local_root_id: Option<String>,
     youtube_playlist_id: Option<String>,
     item_count: i64,
@@ -559,12 +559,12 @@ pub(crate) async fn source_summaries(
     }
     let rows = sqlx::query_as::<_, SourceSummaryRow>(
         "SELECT source.id, source.kind, source.name, source.refresh_state,
-                source.last_successful_refresh_at, source.local_root_id,
+                source.last_successful_refresh_at_ms, source.local_root_id,
                 source.youtube_playlist_id,
                 COUNT(source_item.item_id) AS item_count,
                 SUM(CASE WHEN item.availability = 'missing' THEN 1 ELSE 0 END) AS missing_count,
                 SUM(CASE WHEN item.review_state = 'unreviewed'
-                              AND source_item.first_discovered_at >= COALESCE(source.previous_successful_refresh_at, 0)
+                              AND source_item.first_discovered_at_ms >= COALESCE(source.previous_successful_refresh_at_ms, 0)
                     THEN 1 ELSE 0 END) AS new_count,
                 SUM(CASE WHEN item.review_state = 'unreviewed' THEN 1 ELSE 0 END) AS unreviewed_count,
                 SUM(CASE WHEN item.availability = 'unavailable' THEN 1 ELSE 0 END) AS unavailable_count,
@@ -583,7 +583,7 @@ pub(crate) async fn source_summaries(
                   WHERE relink_plan.root_id = source.local_root_id
                     AND relink_plan.state IN ('ready', 'applied')
                     AND relink_entry.match_kind IN ('ambiguous', 'missing')
-                    AND relink_entry.resolved_at IS NULL) +
+                    AND relink_entry.resolved_at_ms IS NULL) +
                  SUM(CASE WHEN item.availability IN ('missing', 'unavailable', 'ambiguous')
                      THEN 1 ELSE 0 END)) AS open_issue_count,
                 source.discovery_enabled,
@@ -612,7 +612,7 @@ pub(crate) async fn source_summaries(
                 name: row.name,
                 refresh_state: MusicRefreshState::try_from(row.refresh_state.as_str())
                     .map_err(|message| MusicLibraryError::validation("refreshState", message))?,
-                last_successful_refresh_at: row.last_successful_refresh_at,
+                last_successful_refresh_at_ms: row.last_successful_refresh_at_ms,
                 local_root_id: row.local_root_id,
                 youtube_playlist_id: row.youtube_playlist_id,
                 item_count: row.item_count,
@@ -643,7 +643,7 @@ fn source_health(row: &SourceSummaryRow, now_ms: i64) -> MusicLibraryResult<Musi
         return Ok(MusicSourceHealth::Issues);
     }
     if row
-        .last_successful_refresh_at
+        .last_successful_refresh_at_ms
         .is_none_or(|refreshed_at| now_ms.saturating_sub(refreshed_at) > SOURCE_STALE_AFTER_MS)
     {
         return Ok(MusicSourceHealth::Stale);
@@ -670,7 +670,7 @@ pub(crate) async fn issues(
     validate_summary_window(offset, limit)?;
     let rows = sqlx::query_as::<_, MusicIssueRow>(
         "SELECT id, issue_kind, item_id, playlist_id, collection_id, root_id,
-                relative_path, action_required, message, created_at
+                relative_path, action_required, message, created_at_ms
              FROM (
                 SELECT 'availability:' || item.id AS id,
                     CASE
@@ -694,7 +694,7 @@ pub(crate) async fn issues(
                         WHEN 'ambiguous' THEN 'The media identity needs confirmation.'
                         ELSE 'The online media is unavailable.'
                     END AS message,
-                    item.updated_at AS created_at
+                    item.updated_at_ms AS created_at_ms
                 FROM music_library_items AS item
                 WHERE item.availability IN ('missing', 'ambiguous', 'unavailable')
                 UNION ALL
@@ -702,7 +702,7 @@ pub(crate) async fn issues(
                     refresh_job.source_collection_id, refresh_job.local_root_id,
                     refresh_issue.relative_path,
                     CASE WHEN refresh_issue.issue_code = 'metadata-fallback' THEN 0 ELSE 1 END,
-                    refresh_issue.message, refresh_issue.created_at
+                    refresh_issue.message, refresh_issue.created_at_ms
                 FROM music_refresh_job_issues AS refresh_issue
                 JOIN music_refresh_jobs AS refresh_job ON refresh_job.id = refresh_issue.job_id
                 WHERE NOT EXISTS (
@@ -720,14 +720,14 @@ pub(crate) async fn issues(
                         WHEN 'ambiguous' THEN 'Several existing tracks could match this replacement file.'
                         ELSE 'An existing track was not found in the replacement folder.'
                     END,
-                    relink_entry.created_at
+                    relink_entry.created_at_ms
                 FROM music_relink_plan_entries AS relink_entry
                 JOIN music_relink_plans AS relink_plan ON relink_plan.id = relink_entry.plan_id
                 WHERE relink_plan.state IN ('ready', 'applied')
                   AND relink_entry.match_kind IN ('ambiguous', 'missing')
-                  AND relink_entry.resolved_at IS NULL
+                  AND relink_entry.resolved_at_ms IS NULL
              )
-             ORDER BY created_at DESC, id
+             ORDER BY created_at_ms DESC, id
              LIMIT ? OFFSET ?",
     )
     .bind(limit)
@@ -747,7 +747,7 @@ pub(crate) async fn issues(
                 relative_path: row.relative_path,
                 action_required: parse_query_bool(row.action_required, "actionRequired")?,
                 message: row.message,
-                created_at: row.created_at,
+                created_at_ms: row.created_at_ms,
             })
         })
         .collect()
@@ -762,8 +762,8 @@ pub(crate) async fn inspector_detail(
                 original_title, original_artist, original_album, original_track_number,
                 original_artwork_identity, youtube_resolution_state, title_override,
                 artist_override, album_override, artwork_override, duration_ms,
-                availability, review_state, review_changed_at, review_deferred_until, discovered_at,
-                updated_at, version
+                availability, review_state, review_changed_at_ms, review_deferred_until_ms, discovered_at_ms,
+                updated_at_ms, version
          FROM music_library_items WHERE id = ?",
     )
     .bind(item_id)
@@ -775,7 +775,7 @@ pub(crate) async fn inspector_detail(
     let locations = sqlx::query_as::<_, MusicLocalLocationRow>(
         "SELECT id, item_id, root_id, relative_path, file_size_bytes, modified_at_ms,
                 lightweight_fingerprint, strong_fingerprint, availability,
-                last_seen_generation, first_seen_at, updated_at
+                last_seen_generation, first_seen_at_ms, updated_at_ms
          FROM music_local_locations WHERE item_id = ? ORDER BY root_id, relative_path",
     )
     .bind(item_id)
@@ -787,7 +787,7 @@ pub(crate) async fn inspector_detail(
     .collect::<MusicLibraryResult<Vec<_>>>()?;
     let memberships = sqlx::query_as::<_, MusicMembershipRow>(
         "SELECT id, playlist_id, item_id, position, weight, enabled,
-                start_ms, end_ms, volume, rate, created_at, updated_at, version
+                start_ms, end_ms, volume, rate, created_at_ms, updated_at_ms, version
          FROM music_playlist_memberships WHERE item_id = ? ORDER BY playlist_id",
     )
     .bind(item_id)
@@ -820,8 +820,8 @@ pub(crate) async fn inspector_detail(
     )
     .collect();
     let snoozes = sqlx::query_as::<_, MusicSnoozeRow>(
-        "SELECT id, item_id, scope, playlist_id, starts_at, ends_at, reason, created_at
-         FROM music_snoozes WHERE item_id = ? ORDER BY created_at DESC, id",
+        "SELECT id, item_id, scope, playlist_id, starts_at_ms, ends_at_ms, reason, created_at_ms
+         FROM music_snoozes WHERE item_id = ? ORDER BY created_at_ms DESC, id",
     )
     .bind(item_id)
     .fetch_all(pool)
@@ -845,7 +845,7 @@ pub(crate) async fn inspector_detail(
         })
         .collect::<MusicLibraryResult<Vec<_>>>()?;
     let statistics = sqlx::query_as::<_, MusicStatisticsRow>(
-        "SELECT item_id, last_played_at, play_count, completion_count, skip_count, updated_at
+        "SELECT item_id, last_played_at_ms, play_count, completion_count, skip_count, updated_at_ms
          FROM music_listening_statistics WHERE item_id = ?",
     )
     .bind(item_id)
@@ -880,7 +880,7 @@ pub(crate) async fn local_roots(
 ) -> MusicLibraryResult<Vec<MusicLocalRoot>> {
     validate_summary_window(offset, limit)?;
     let rows: Vec<(String, String, i64, i64, i64)> = sqlx::query_as(
-        "SELECT id, name, created_at, updated_at, version
+        "SELECT id, name, created_at_ms, updated_at_ms, version
          FROM music_local_roots
          ORDER BY name COLLATE NOCASE, id
          LIMIT ? OFFSET ?",
@@ -893,11 +893,11 @@ pub(crate) async fn local_roots(
     Ok(rows
         .into_iter()
         .map(
-            |(id, name, created_at, updated_at, version)| MusicLocalRoot {
+            |(id, name, created_at_ms, updated_at_ms, version)| MusicLocalRoot {
                 id,
                 name,
-                created_at,
-                updated_at,
+                created_at_ms,
+                updated_at_ms,
                 version,
             },
         )
@@ -913,15 +913,15 @@ struct SourceCollectionRow {
     local_root_id: Option<String>,
     youtube_playlist_id: Option<String>,
     refresh_state: String,
-    last_successful_refresh_at: Option<i64>,
-    previous_successful_refresh_at: Option<i64>,
+    last_successful_refresh_at_ms: Option<i64>,
+    previous_successful_refresh_at_ms: Option<i64>,
     last_refresh_error_code: Option<String>,
     snapshot_generation: i64,
-    created_at: i64,
-    updated_at: i64,
+    created_at_ms: i64,
+    updated_at_ms: i64,
     version: i64,
     discovery_enabled: i64,
-    removed_at: Option<i64>,
+    removed_at_ms: Option<i64>,
 }
 
 pub(crate) async fn source_collections(
@@ -932,9 +932,9 @@ pub(crate) async fn source_collections(
     validate_summary_window(offset, limit)?;
     sqlx::query_as::<_, SourceCollectionRow>(
         "SELECT id, kind, identity_key, name, local_root_id, youtube_playlist_id,
-                refresh_state, last_successful_refresh_at, last_refresh_error_code,
-                previous_successful_refresh_at, snapshot_generation, created_at,
-                updated_at, version, discovery_enabled, removed_at
+                refresh_state, last_successful_refresh_at_ms, last_refresh_error_code,
+                previous_successful_refresh_at_ms, snapshot_generation, created_at_ms,
+                updated_at_ms, version, discovery_enabled, removed_at_ms
          FROM music_source_collections
          ORDER BY name COLLATE NOCASE, id
          LIMIT ? OFFSET ?",
@@ -956,15 +956,15 @@ pub(crate) async fn source_collections(
             youtube_playlist_id: row.youtube_playlist_id,
             refresh_state: MusicRefreshState::try_from(row.refresh_state.as_str())
                 .map_err(|message| MusicLibraryError::validation("refreshState", message))?,
-            last_successful_refresh_at: row.last_successful_refresh_at,
-            previous_successful_refresh_at: row.previous_successful_refresh_at,
+            last_successful_refresh_at_ms: row.last_successful_refresh_at_ms,
+            previous_successful_refresh_at_ms: row.previous_successful_refresh_at_ms,
             last_refresh_error_code: row.last_refresh_error_code,
             snapshot_generation: row.snapshot_generation,
-            created_at: row.created_at,
-            updated_at: row.updated_at,
+            created_at_ms: row.created_at_ms,
+            updated_at_ms: row.updated_at_ms,
             version: row.version,
             discovery_enabled: parse_query_bool(row.discovery_enabled, "discoveryEnabled")?,
-            removed_at: row.removed_at,
+            removed_at_ms: row.removed_at_ms,
         })
     })
     .collect()
@@ -976,7 +976,7 @@ pub(crate) async fn playlist_detail(
 ) -> MusicLibraryResult<MusicPlaylist> {
     let row = sqlx::query_as::<_, MusicPlaylistRow>(
         "SELECT id, name, icon, shuffle_enabled, mix_enabled, repeat_mode, sort_order,
-                created_at, updated_at, version
+                created_at_ms, updated_at_ms, version
          FROM music_playlists WHERE id = ?",
     )
     .bind(playlist_id)

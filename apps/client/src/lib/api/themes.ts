@@ -1,9 +1,9 @@
 /**
  * SQLite bridge for user themes.
  *
- * Built-in light and dark themes stay code-pinned (in `stores/themes.ts`)
- * and are never inserted here; the `themes.id` CHECK constraint blocks the
- * shadow at the SQL level too.
+ * Built-in light and dark themes stay code-pinned (in `themes/definitions.ts`)
+ * and are never inserted here; the `themes.id` CHECK constraint also rejects
+ * their IDs at the SQL level.
  *
  * Tokens live as one row per (theme_id, kind, key) in `theme_tokens`:
  *   kind='source'   keys are bare names (canvas, ink, primary, ...)
@@ -16,12 +16,12 @@
  * `theme_seed_tokens` mirrors the same shape; per-row reset and
  * "Reset all" copy from seed back to live.
  *
- * Note on atomicity: durable theme writes go through Rust commands backed
- * by sqlx. Multi-row mutations use one transaction.
+ * Durable theme writes go through sqlx-backed Rust commands, and multi-row
+ * mutations commit in one transaction.
  */
 
 import { invoke } from "@tauri-apps/api/core";
-import { THEME_TOKEN_ROW_ORDER } from "$lib/stores/themes";
+import { THEME_TOKEN_ROW_ORDER } from "$lib/themes";
 import { ensureDbUrl } from "$lib/api/db";
 
 export type TokenKind = "source" | "app" | "calendar";
@@ -53,21 +53,21 @@ export interface ThemeRow {
   /** Decorative sun/moon tag for the theme list and editor icon. */
   icon_label: "light" | "dark";
   seed_icon_label: "light" | "dark";
-  created_at: number;
-  updated_at: number;
+  created_at_ms: number;
+  updated_at_ms: number;
 }
 
 export interface DismissalRow {
   theme_id: string;
   engine_version: number;
-  dismissed_at: number;
+  dismissed_at_ms: number;
 }
 
 /**
- * Snapshot a user theme as raw row groups suitable for an `insertTheme`
- * call. The store builds one of these from the in-memory `UserTheme`
- * before writing; keeping the DB layer in this shape lets the store
- * stay framework-agnostic.
+ * A user theme as raw row groups for `insertTheme` and
+ * `replaceThemeContent`. The store builds one from its in-memory
+ * `UserTheme` before writing, so this layer stays independent of the
+ * store's types.
  */
 export interface UserThemeWrite {
   id: string;
@@ -131,7 +131,7 @@ function comparePaletteRows(a: PaletteRow, b: PaletteRow): number {
 }
 
 export async function loadAllUserThemes(): Promise<UserThemeRead[]> {
-  const rows = await invoke<UserThemeRead[]>("theme_load_all", {
+  const rows = await invoke<UserThemeRead[]>("themes_load_all", {
     dbUrl: await activeDbUrl(),
   });
   return rows.map((read) => ({
@@ -144,11 +144,11 @@ export async function loadAllUserThemes(): Promise<UserThemeRead[]> {
 }
 
 export async function insertTheme(write: UserThemeWrite): Promise<void> {
-  await invoke<void>("theme_insert", { dbUrl: await activeDbUrl(), write });
+  await invoke<void>("themes_insert", { dbUrl: await activeDbUrl(), write });
 }
 
 export async function deleteTheme(id: string): Promise<void> {
-  await invoke<void>("theme_delete", { dbUrl: await activeDbUrl(), id });
+  await invoke<void>("themes_delete", { dbUrl: await activeDbUrl(), id });
 }
 
 /**
@@ -158,13 +158,13 @@ export async function deleteTheme(id: string): Promise<void> {
  * commit path so a single Save flushes the in-memory buffer to disk in
  * one shot, and by the JSON-paste replace path.
  *
- * Children rows are wiped and re-inserted because the buffer can shift
+ * Child rows are wiped and re-inserted because the buffer can shift
  * any row's value or isolated flag arbitrarily; reconciling row-by-row
  * would not be cheaper. The parent themes row is updated in place so
- * created_at survives and dismissals are not cascaded.
+ * created_at_ms survives and dismissals are not cascaded.
  */
 export async function replaceThemeContent(write: UserThemeWrite): Promise<void> {
-  await invoke<void>("theme_replace_content", {
+  await invoke<void>("themes_replace_content", {
     dbUrl: await activeDbUrl(),
     write,
   });
@@ -174,7 +174,7 @@ export async function renameTheme(
   id: string,
   displayName: string,
 ): Promise<void> {
-  await invoke<void>("theme_rename", {
+  await invoke<void>("themes_rename", {
     dbUrl: await activeDbUrl(),
     id,
     displayName,
@@ -190,7 +190,7 @@ export async function resetTokenToSeed(
   kind: TokenKind,
   key: string,
 ): Promise<void> {
-  await invoke<void>("theme_reset_token_to_seed", {
+  await invoke<void>("themes_reset_token_to_seed", {
     dbUrl: await activeDbUrl(),
     id,
     kind,
@@ -203,14 +203,14 @@ export async function resetTokenToSeed(
  * Used by the editor footer's "Reset all" button.
  */
 export async function resetThemeToSeed(id: string): Promise<void> {
-  await invoke<void>("theme_reset_to_seed", { dbUrl: await activeDbUrl(), id });
+  await invoke<void>("themes_reset_to_seed", { dbUrl: await activeDbUrl(), id });
 }
 
 export async function recordDismissal(
   id: string,
   engineVersion: number,
 ): Promise<void> {
-  await invoke<void>("theme_record_dismissal", {
+  await invoke<void>("themes_record_dismissal", {
     dbUrl: await activeDbUrl(),
     id,
     engineVersion,
@@ -218,7 +218,7 @@ export async function recordDismissal(
 }
 
 export async function loadDismissals(): Promise<DismissalRow[]> {
-  return invoke<DismissalRow[]>("theme_load_dismissals", {
+  return invoke<DismissalRow[]>("themes_load_dismissals", {
     dbUrl: await activeDbUrl(),
   });
 }

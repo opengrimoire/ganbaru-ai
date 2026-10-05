@@ -2,7 +2,7 @@
 
 This directory defines how Ganbaru AI owns, protects, and evolves durable data. It explains decisions that are not obvious from the schema or source code. SQL migrations and schema tests remain authoritative for exact columns, indexes, triggers, and foreign keys.
 
-Documentation in this directory describes the intended product contract. When current code does not meet that contract, the document identifies the gap instead of redefining the contract around an accidental implementation detail.
+These documents describe the intended contract. When current code does not meet it, the document names the gap instead of redefining the contract around an accidental implementation detail.
 
 ## Start here
 
@@ -12,7 +12,7 @@ Documentation in this directory describes the intended product contract. When cu
 - [Invariants](invariants.md) lists conditions that must remain true across writes, recovery, imports, and refactors.
 - [Hazards](hazards.md) records cross-cutting failure scenarios that are easy to miss in ordinary feature work.
 - [Security](security/README.md) defines the threat model and security boundaries.
-- [Sync](sync.md) defines the implemented local whole-vault handoff and the separate planned concurrent synchronization contract. Remote sync is not implemented.
+- [Sync](sync.md) defines the implemented local whole-vault handoff and the separate planned concurrent synchronization contract.
 
 ## Authority map
 
@@ -30,6 +30,6 @@ Feature documents own user-visible behavior. Algorithm documents own pure decisi
 
 ## Change discipline
 
-The app has no external users yet. Old development vaults, internal exports, and device state are unsupported when their contracts change; they do not justify parallel readers or migration shims. Use the current internal format and an explicit development reset. Preserve current crash recovery, rollback, external standards, and platform behavior. SQLx migrations still construct fresh vaults and validate their schema. See [Migration policy](schema/README.md#migration-policy).
+The app has no external users yet, so old development vaults, internal exports, and device state do not justify compatibility readers or migration shims. See [Migration policy](schema/README.md#migration-policy).
 
 Do not document routine fields merely to mirror DDL. Preserve the rationale for non-obvious identity, ownership, deletion, ordering, history, portability, and security decisions.

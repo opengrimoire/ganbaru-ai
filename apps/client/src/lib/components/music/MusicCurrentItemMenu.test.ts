@@ -3,7 +3,7 @@
 import { mount, tick, unmount } from "svelte";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { localFileSourceFromPath } from "$lib/music/sources";
-import type { MusicPlaylistSummary } from "$lib/music/library-contracts";
+import type { MusicPlaylistSummary } from "$lib/music/library/contracts";
 import { getMusicPlayer } from "$lib/stores/music-player.svelte";
 
 const api = vi.hoisted(() => ({

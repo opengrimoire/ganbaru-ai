@@ -8,7 +8,7 @@
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import { getQuickNoteColor } from "$lib/quick-notes/colors";
   import type { QuickNote, QuickNotesCollection, QuickNoteTag } from "$lib/quick-notes/types";
-  import type { Theme } from "$lib/stores/themes";
+  import type { Theme } from "$lib/themes";
   import QuickNoteColorPicker from "./QuickNoteColorPicker.svelte";
   import QuickNoteRichText from "./QuickNoteRichText.svelte";
   import QuickNoteTagPicker from "./QuickNoteTagPicker.svelte";
@@ -19,16 +19,16 @@
     theme,
     tags,
     reorderable = false,
-    onopen,
-    onmove,
-    onpin,
-    oncolor,
-    ontag,
-    onarchive,
-    onunarchive,
-    ontrash,
-    onrestore,
-    ondelete,
+    onOpen,
+    onMove,
+    onPin,
+    onColor,
+    onTag,
+    onArchive,
+    onUnarchive,
+    onTrash,
+    onRestore,
+    onDelete,
     mobileLayout = false,
   }: {
     note: QuickNote;
@@ -36,16 +36,16 @@
     theme: Theme;
     tags: readonly QuickNoteTag[];
     reorderable?: boolean;
-    onopen: () => void;
-    onmove: (direction: -1 | 1) => void;
-    onpin: (pinned: boolean) => void;
-    oncolor: (color: QuickNote["color"]) => void;
-    ontag: (tagId: string | null) => void;
-    onarchive: () => void;
-    onunarchive: () => void;
-    ontrash: () => void;
-    onrestore: () => void;
-    ondelete: () => void;
+    onOpen: () => void;
+    onMove: (direction: -1 | 1) => void;
+    onPin: (pinned: boolean) => void;
+    onColor: (color: QuickNote["color"]) => void;
+    onTag: (tagId: string | null) => void;
+    onArchive: () => void;
+    onUnarchive: () => void;
+    onTrash: () => void;
+    onRestore: () => void;
+    onDelete: () => void;
     mobileLayout?: boolean;
   } = $props();
 
@@ -61,7 +61,7 @@
     if (event.key !== "ArrowUp" && event.key !== "ArrowLeft" && event.key !== "ArrowDown" && event.key !== "ArrowRight") return;
     event.preventDefault();
     event.stopPropagation();
-    onmove(event.key === "ArrowUp" || event.key === "ArrowLeft" ? -1 : 1);
+    onMove(event.key === "ArrowUp" || event.key === "ArrowLeft" ? -1 : 1);
   }
 </script>
 
@@ -86,7 +86,7 @@
   <button
     type="button"
     class={`block w-full px-3.5 pb-2 pt-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-current ${mobileLayout ? "min-h-12" : ""} ${reorderable ? mobileLayout ? "pr-14" : "pr-9" : ""}`}
-    onclick={onopen}
+    onclick={onOpen}
   >
     {#if note.title}
       <h3 class="mb-1.5 wrap-break-word text-[0.92rem] font-semibold leading-snug">{note.title}</h3>
@@ -103,24 +103,24 @@
   </button>
   <div class={`quick-note-actions flex cursor-default items-center gap-0.5 px-2 pb-1.5 ${mobileLayout ? "min-h-12 overflow-x-auto" : "min-h-9"}`} role="toolbar" data-quick-note-no-drag>
     {#if collection === "active"}
-      <button class={actionClass} type="button" aria-label={note.pinned ? t("quickNotes.action.unpin") : t("quickNotes.action.pin")} title={note.pinned ? t("quickNotes.action.unpin") : t("quickNotes.action.pin")} onclick={() => onpin(!note.pinned)}>
+      <button class={actionClass} type="button" aria-label={note.pinned ? t("quickNotes.action.unpin") : t("quickNotes.action.pin")} title={note.pinned ? t("quickNotes.action.unpin") : t("quickNotes.action.pin")} onclick={() => onPin(!note.pinned)}>
         {#if note.pinned}<PinOff class="size-3.5" strokeWidth={1.5} />{:else}<Pin class="size-3.5" strokeWidth={1.5} />{/if}
       </button>
     {/if}
     {#if collection !== "trash"}
-      <QuickNoteColorPicker color={note.color} {theme} onselect={oncolor} buttonClass={actionClass} {mobileLayout} />
-      <QuickNoteTagPicker tagId={note.tagId} {tags} onselect={ontag} buttonClass={actionClass} {mobileLayout} />
-      <button class={actionClass} type="button" aria-label={collection === "archive" ? t("quickNotes.action.unarchive") : t("quickNotes.action.archive")} title={collection === "archive" ? t("quickNotes.action.unarchive") : t("quickNotes.action.archive")} onclick={collection === "archive" ? onunarchive : onarchive}>
+      <QuickNoteColorPicker color={note.color} {theme} onSelect={onColor} buttonClass={actionClass} {mobileLayout} />
+      <QuickNoteTagPicker tagId={note.tagId} {tags} onSelect={onTag} buttonClass={actionClass} {mobileLayout} />
+      <button class={actionClass} type="button" aria-label={collection === "archive" ? t("quickNotes.action.unarchive") : t("quickNotes.action.archive")} title={collection === "archive" ? t("quickNotes.action.unarchive") : t("quickNotes.action.archive")} onclick={collection === "archive" ? onUnarchive : onArchive}>
         {#if collection === "archive"}<ArchiveRestore class="size-3.5" strokeWidth={1.5} />{:else}<Archive class="size-3.5" strokeWidth={1.5} />{/if}
       </button>
-      <button class={actionClass} type="button" aria-label={t("quickNotes.action.trash")} title={t("quickNotes.action.trash")} onclick={ontrash}>
+      <button class={actionClass} type="button" aria-label={t("quickNotes.action.trash")} title={t("quickNotes.action.trash")} onclick={onTrash}>
         <Trash2 class="size-3.5" strokeWidth={1.5} />
       </button>
     {:else}
-      <button class={actionClass} type="button" aria-label={t("quickNotes.action.restore")} title={t("quickNotes.action.restore")} onclick={onrestore}>
+      <button class={actionClass} type="button" aria-label={t("quickNotes.action.restore")} title={t("quickNotes.action.restore")} onclick={onRestore}>
         <RotateCcw class="size-3.5" strokeWidth={1.5} />
       </button>
-      <button class={actionClass} type="button" aria-label={t("quickNotes.action.deletePermanently")} title={t("quickNotes.action.deletePermanently")} onclick={ondelete}>
+      <button class={actionClass} type="button" aria-label={t("quickNotes.action.deletePermanently")} title={t("quickNotes.action.deletePermanently")} onclick={onDelete}>
         <Trash2 class="size-3.5" strokeWidth={1.5} />
       </button>
     {/if}

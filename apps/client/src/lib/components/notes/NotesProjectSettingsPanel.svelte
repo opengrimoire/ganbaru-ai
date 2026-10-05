@@ -7,23 +7,23 @@
   import {
     getNotesHistoryRetentionImpact,
     pruneNotesProjectHistory,
-  } from "$lib/api/notes-project-history";
+  } from "$lib/api/notes/project-history";
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import {
     isNotesPageOpenMode,
     type NotesPageOpenMode,
-  } from "$lib/notes/page-open-mode";
+  } from "$lib/notes/pages/open-mode";
   import {
     DEFAULT_NOTES_HISTORY_RETENTION_DAYS,
     effectiveNotesHistoryRetentionDays,
     isNotesHistoryRetentionDays,
     type NotesHistoryRetentionDays,
-  } from "$lib/notes/history-retention";
+  } from "$lib/notes/history/retention";
   import {
     PROJECT_SETTINGS_PANEL_MAX_HEIGHT,
     projectToolbarPanelGeometry,
-  } from "$lib/projects/project-toolbar";
+  } from "$lib/projects/toolbar";
   import { getProjects } from "$lib/stores/projects.svelte";
   import { getNotes } from "$lib/stores/notes.svelte";
   import { getViewport } from "$lib/stores/viewport.svelte";
@@ -31,9 +31,9 @@
     APP_FLOATING_SURFACE_SELECTOR,
     isAppFloatingSurfaceTarget,
   } from "$lib/utils";
-  import CustomSelect from "$lib/components/settings/CustomSelect.svelte";
-  import ProjectSettingsPanelShell from "$lib/components/projects/ProjectSettingsPanelShell.svelte";
-  import ProjectSettingsSectionHeading from "$lib/components/projects/ProjectSettingsSectionHeading.svelte";
+  import Select from "$lib/components/ui/Select.svelte";
+  import ProjectSettingsPanelShell from "$lib/components/projects/settings/ProjectSettingsPanelShell.svelte";
+  import ProjectSettingsSectionHeading from "$lib/components/projects/settings/ProjectSettingsSectionHeading.svelte";
 
   type NotesProjectDefaultOpenMode = "default" | NotesPageOpenMode;
   type NotesProjectHistoryRetention = "global" | NotesHistoryRetentionDays;
@@ -318,7 +318,7 @@
         <div class="h-px bg-border/70" aria-hidden="true"></div>
         <div class="flex flex-col gap-1.5">
           <ProjectSettingsSectionHeading label={t("settings.section.appearance")} />
-          <CustomSelect
+          <Select
             label={t("notes.projectSettingsDefaultViewMode")}
             value={defaultOpenModeDraft}
             options={openModeOptions}
@@ -333,7 +333,7 @@
 
       <section class="flex flex-col gap-1.5">
         <ProjectSettingsSectionHeading label={t("notes.projectSettingsRestore")} />
-        <CustomSelect
+        <Select
           label={t("notes.projectSettingsHistoryRetention")}
           value={String(historyRetentionDraft)}
           options={historyRetentionOptions}

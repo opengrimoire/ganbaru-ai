@@ -277,26 +277,26 @@ fn row_query<'a>(playlist_id: Option<&'a str>, now_ms: i64) -> QueryBuilder<'a, 
          item.youtube_video_id, item.youtube_resolution_state,
          COALESCE(NULLIF(item.title_override, ''), item.original_title) AS title, item.availability,
          (SELECT root_id FROM music_local_locations WHERE item_id = item.id AND availability = 'available'
-          ORDER BY updated_at DESC, id LIMIT 1) AS root_id,
+          ORDER BY updated_at_ms DESC, id LIMIT 1) AS root_id,
          (SELECT relative_path FROM music_local_locations WHERE item_id = item.id AND availability = 'available'
-          ORDER BY updated_at DESC, id LIMIT 1) AS relative_path,
+          ORDER BY updated_at_ms DESC, id LIMIT 1) AS relative_path,
          membership.id AS membership_id, membership.weight, membership.enabled,
          membership.start_ms, membership.end_ms, membership.volume, membership.rate,
-         (SELECT MAX(ends_at) FROM music_snoozes WHERE item_id = item.id AND starts_at <= ");
+         (SELECT MAX(ends_at_ms) FROM music_snoozes WHERE item_id = item.id AND starts_at_ms <= ");
     query
         .push_bind(now_ms)
-        .push(" AND ends_at > ")
+        .push(" AND ends_at_ms > ")
         .push_bind(now_ms);
     query
         .push(" AND (scope = 'all-playlists' OR playlist_id = ")
         .push_bind(playlist_id)
         .push(
             ")) AS snoozed_until,
-         EXISTS(SELECT 1 FROM music_snoozes WHERE item_id = item.id AND starts_at <= ",
+         EXISTS(SELECT 1 FROM music_snoozes WHERE item_id = item.id AND starts_at_ms <= ",
         );
     query
         .push_bind(now_ms)
-        .push(" AND ends_at IS NULL AND (scope = 'all-playlists' OR playlist_id = ")
+        .push(" AND ends_at_ms IS NULL AND (scope = 'all-playlists' OR playlist_id = ")
         .push_bind(playlist_id);
     query.push(")) AS snoozed_indefinitely FROM music_library_items AS item
          LEFT JOIN music_playlist_memberships AS membership ON membership.item_id = item.id AND membership.playlist_id = ").push_bind(playlist_id);

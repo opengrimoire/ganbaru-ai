@@ -2,8 +2,10 @@ use super::helpers::{insert_event, insert_open_run, migrated_memory_pool};
 use crate::run_migrations;
 use sqlx::Row;
 
-const BASELINE_SCHEMA: &str =
-    include_str!("../../../../apps/client/src-tauri/migrations/20260830173211_baseline_schema.sql");
+const BASELINE_SCHEMA: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/migrations/20261004220000_baseline_schema.sql"
+));
 /// Count the embedded forward migrations so fresh-install checks follow the actual registry.
 fn expected_migration_count() -> i64 {
     i64::try_from(
@@ -55,7 +57,7 @@ fn fresh_database_applies_clean_baseline() {
             "chat_events",
             "chat_command_receipts",
             "chat_checkpoints",
-            "chat_cleanup_queue",
+            "chat_cleanup_jobs",
             "chat_channels",
             "chat_participants",
             "chat_conversations",
@@ -85,7 +87,7 @@ fn fresh_database_applies_clean_baseline() {
             "notes_pages",
             "notes_blocks",
             "notes_data_source_row_hierarchy",
-            "notes_row_hierarchy_source_parent",
+            "idx_notes_data_source_row_hierarchy_parent",
             "notes_row_hierarchy_detach_moved_page",
             "notes_search_fts",
             "notes_folders_validate_parent_insert",
@@ -188,7 +190,7 @@ fn schema_normalizes_domain_storage_with_explicit_receipt_and_runtime_envelopes(
         .fetch_all(&pool)
         .await
         .unwrap();
-        let forbidden = [
+        let forbidden_columns = [
             "pause_log",
             "raw_jcal",
             "skip_ranges_json",
@@ -214,9 +216,9 @@ fn schema_normalizes_domain_storage_with_explicit_receipt_and_runtime_envelopes(
             ("project_reorder_receipts", "response_json"),
             ("project_dependency_cascade_receipts", "request_json"),
             ("project_dependency_cascade_receipts", "response_json"),
-            ("focus_execution_state", "state_json"),
-            ("focus_execution_receipts", "request_json"),
-            ("focus_execution_receipts", "result_json"),
+            ("pomodoro_execution_state", "state_json"),
+            ("pomodoro_execution_receipts", "request_json"),
+            ("pomodoro_execution_receipts", "result_json"),
             ("music_session_checkpoints", "checkpoint_json"),
             ("music_session_receipts", "result_json"),
             ("calendar_edit_receipts", "result_json"),
@@ -235,7 +237,7 @@ fn schema_normalizes_domain_storage_with_explicit_receipt_and_runtime_envelopes(
                 observed_envelopes.insert((table_name.clone(), column_name.clone()));
             }
             assert!(
-                !forbidden.contains(&column_name.as_str())
+                !forbidden_columns.contains(&column_name.as_str())
                     && (!column_name.ends_with("_json") || is_control),
                 "{table_name}.{column_name} should be normalized, not JSON storage",
             );

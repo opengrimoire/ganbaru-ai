@@ -1,12 +1,12 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
-  import { EVENT_COLOR_OPTIONS } from "$lib/components/calendar/utils";
-  import type { EventColor } from "$lib/components/calendar/types";
-  import type { ProjectIconPickerColor } from "$lib/projects/project-icon-picker";
-  import type { ProjectLucideIconNode } from "$lib/projects/project-lucide-catalog.generated";
-  import { serializeProjectIcon } from "$lib/projects/project-icons";
+  import { EVENT_COLOR_OPTIONS } from "$lib/calendar/utils";
+  import type { EventColor } from "$lib/calendar/types";
+  import type { IconPickerColor } from "$lib/projects/icons/picker";
+  import type { ProjectLucideIconNode } from "$lib/projects/icons/lucide-catalog.generated";
+  import { serializeProjectIcon } from "$lib/projects/icons/values";
   import { portal } from "$lib/utils/portal";
-  import LucideNodeIcon from "$lib/components/projects/LucideNodeIcon.svelte";
+  import LucideNodeIcon from "./LucideNodeIcon.svelte";
   import ProjectIcon from "$lib/components/projects/ProjectIcon.svelte";
 
   let {
@@ -29,14 +29,14 @@
     label: string;
     slug?: string;
     iconNode?: readonly ProjectLucideIconNode[] | null;
-    preview?: Snippet<[ProjectIconPickerColor]>;
+    preview?: Snippet<[IconPickerColor]>;
     disabled?: boolean;
-    iconColorLabel: (color: ProjectIconPickerColor) => string;
+    iconColorLabel: (color: IconPickerColor) => string;
     iconColorStyle: (color: EventColor) => string;
     automaticIconColor: string;
     automaticLabel: string;
     columns: number;
-    onSelect: (color: ProjectIconPickerColor) => void;
+    onSelect: (color: IconPickerColor) => void;
   } = $props();
 </script>
 

@@ -6,7 +6,7 @@ use sqlx::sqlite::SqliteQueryResult;
 use sqlx::{Row, Sqlite, Transaction};
 use tauri::{AppHandle, Runtime};
 
-use crate::db_path::connect_sqlite;
+use crate::db::connect_sqlite;
 
 const PALETTE_SIZE: usize = 32;
 const MAX_DISPLAY_NAME_LENGTH: usize = 60;
@@ -49,7 +49,7 @@ struct ThemePaletteWrite {
 pub struct DismissalRow {
     theme_id: String,
     engine_version: i64,
-    dismissed_at: i64,
+    dismissed_at_ms: i64,
 }
 
 #[derive(Serialize)]
@@ -65,8 +65,8 @@ pub struct ThemeRowRead {
     seed_calendar_default_custom: String,
     icon_label: String,
     seed_icon_label: String,
-    created_at: i64,
-    updated_at: i64,
+    created_at_ms: i64,
+    updated_at_ms: i64,
 }
 impl_sqlite_from_row!(ThemeRowRead {
     id,
@@ -80,8 +80,8 @@ impl_sqlite_from_row!(ThemeRowRead {
     seed_calendar_default_custom,
     icon_label,
     seed_icon_label,
-    created_at,
-    updated_at,
+    created_at_ms,
+    updated_at_ms,
 });
 
 #[derive(Serialize)]
@@ -139,7 +139,7 @@ impl ThemeScoped for PaletteRowRead {
 }
 
 #[tauri::command]
-pub async fn theme_load_all<R: Runtime>(
+pub async fn themes_load_all<R: Runtime>(
     app: AppHandle<R>,
     db_url: String,
 ) -> Result<Vec<UserThemeRead>, String> {
@@ -149,9 +149,9 @@ pub async fn theme_load_all<R: Runtime>(
                 derivation_engine_version, calendar_default_mode,
                 calendar_default_custom, seed_calendar_default_mode,
                 seed_calendar_default_custom, icon_label, seed_icon_label,
-                created_at, updated_at
+                created_at_ms, updated_at_ms
          FROM themes
-         ORDER BY created_at ASC",
+         ORDER BY created_at_ms ASC",
     )
     .fetch_all(&pool)
     .await
@@ -216,7 +216,7 @@ pub async fn theme_load_all<R: Runtime>(
 }
 
 #[tauri::command]
-pub async fn theme_insert<R: Runtime>(
+pub async fn themes_insert<R: Runtime>(
     app: AppHandle<R>,
     db_url: String,
     write: UserThemeWrite,
@@ -240,7 +240,7 @@ pub async fn theme_insert<R: Runtime>(
             (id, display_name, icon_label, seed_icon_label, blend_canvas,
              seed_blend_canvas, derivation_engine_version, calendar_default_mode,
              calendar_default_custom, seed_calendar_default_mode,
-             seed_calendar_default_custom, created_at, updated_at)
+             seed_calendar_default_custom, created_at_ms, updated_at_ms)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(&write.id)
@@ -301,7 +301,7 @@ pub async fn theme_insert<R: Runtime>(
 }
 
 #[tauri::command]
-pub async fn theme_replace_content<R: Runtime>(
+pub async fn themes_replace_content<R: Runtime>(
     app: AppHandle<R>,
     db_url: String,
     write: UserThemeWrite,
@@ -323,7 +323,7 @@ pub async fn theme_replace_content<R: Runtime>(
                 calendar_default_custom = ?,
                 seed_calendar_default_mode = ?,
                 seed_calendar_default_custom = ?,
-                updated_at = ?
+                updated_at_ms = ?
           WHERE id = ?",
     )
     .bind(&write.display_name)
@@ -381,7 +381,7 @@ pub async fn theme_replace_content<R: Runtime>(
 }
 
 #[tauri::command]
-pub async fn theme_delete<R: Runtime>(
+pub async fn themes_delete<R: Runtime>(
     app: AppHandle<R>,
     db_url: String,
     id: String,
@@ -397,7 +397,7 @@ pub async fn theme_delete<R: Runtime>(
 }
 
 #[tauri::command]
-pub async fn theme_record_dismissal<R: Runtime>(
+pub async fn themes_record_dismissal<R: Runtime>(
     app: AppHandle<R>,
     db_url: String,
     id: String,
@@ -407,16 +407,16 @@ pub async fn theme_record_dismissal<R: Runtime>(
     if engine_version < 0 {
         return Err("engine_version cannot be negative".to_string());
     }
-    let dismissed_at = now_ms()?;
+    let dismissed_at_ms = now_ms()?;
     let pool = connect_sqlite(app, db_url).await?;
     sqlx::query(
         "INSERT OR REPLACE INTO theme_upgrade_dismissals
-            (theme_id, engine_version, dismissed_at)
+            (theme_id, engine_version, dismissed_at_ms)
          VALUES (?, ?, ?)",
     )
     .bind(id)
     .bind(engine_version)
-    .bind(dismissed_at)
+    .bind(dismissed_at_ms)
     .execute(&pool)
     .await
     .map_err(|e| format!("record theme dismissal: {e}"))?;
@@ -424,16 +424,17 @@ pub async fn theme_record_dismissal<R: Runtime>(
 }
 
 #[tauri::command]
-pub async fn theme_load_dismissals<R: Runtime>(
+pub async fn themes_load_dismissals<R: Runtime>(
     app: AppHandle<R>,
     db_url: String,
 ) -> Result<Vec<DismissalRow>, String> {
     let pool = connect_sqlite(app, db_url).await?;
-    let rows =
-        sqlx::query("SELECT theme_id, engine_version, dismissed_at FROM theme_upgrade_dismissals")
-            .fetch_all(&pool)
-            .await
-            .map_err(|e| format!("load theme dismissals: {e}"))?;
+    let rows = sqlx::query(
+        "SELECT theme_id, engine_version, dismissed_at_ms FROM theme_upgrade_dismissals",
+    )
+    .fetch_all(&pool)
+    .await
+    .map_err(|e| format!("load theme dismissals: {e}"))?;
 
     rows.into_iter()
         .map(|row| {
@@ -444,16 +445,16 @@ pub async fn theme_load_dismissals<R: Runtime>(
                 engine_version: row
                     .try_get("engine_version")
                     .map_err(|e| format!("read dismissal engine_version: {e}"))?,
-                dismissed_at: row
-                    .try_get("dismissed_at")
-                    .map_err(|e| format!("read dismissal dismissed_at: {e}"))?,
+                dismissed_at_ms: row
+                    .try_get("dismissed_at_ms")
+                    .map_err(|e| format!("read dismissal dismissed_at_ms: {e}"))?,
             })
         })
         .collect()
 }
 
 #[tauri::command]
-pub async fn theme_rename<R: Runtime>(
+pub async fn themes_rename<R: Runtime>(
     app: AppHandle<R>,
     db_url: String,
     id: String,
@@ -463,7 +464,7 @@ pub async fn theme_rename<R: Runtime>(
     validate_display_name(&display_name)?;
     let now = now_ms()?;
     let pool = connect_sqlite(app, db_url).await?;
-    let result = sqlx::query("UPDATE themes SET display_name = ?, updated_at = ? WHERE id = ?")
+    let result = sqlx::query("UPDATE themes SET display_name = ?, updated_at_ms = ? WHERE id = ?")
         .bind(display_name)
         .bind(now)
         .bind(id)
@@ -474,7 +475,7 @@ pub async fn theme_rename<R: Runtime>(
 }
 
 #[tauri::command]
-pub async fn theme_reset_token_to_seed<R: Runtime>(
+pub async fn themes_reset_token_to_seed<R: Runtime>(
     app: AppHandle<R>,
     db_url: String,
     id: String,
@@ -511,7 +512,7 @@ pub async fn theme_reset_token_to_seed<R: Runtime>(
 }
 
 #[tauri::command]
-pub async fn theme_reset_to_seed<R: Runtime>(
+pub async fn themes_reset_to_seed<R: Runtime>(
     app: AppHandle<R>,
     db_url: String,
     id: String,
@@ -556,7 +557,7 @@ pub async fn theme_reset_to_seed<R: Runtime>(
             SET blend_canvas = seed_blend_canvas,
                 calendar_default_mode = seed_calendar_default_mode,
                 calendar_default_custom = seed_calendar_default_custom,
-                updated_at = ?
+                updated_at_ms = ?
           WHERE id = ?",
     )
     .bind(now)
@@ -631,7 +632,7 @@ async fn touch_theme(
     theme_id: &str,
     now: i64,
 ) -> Result<(), String> {
-    let result = sqlx::query("UPDATE themes SET updated_at = ? WHERE id = ?")
+    let result = sqlx::query("UPDATE themes SET updated_at_ms = ? WHERE id = ?")
         .bind(now)
         .bind(theme_id)
         .execute(&mut **tx)

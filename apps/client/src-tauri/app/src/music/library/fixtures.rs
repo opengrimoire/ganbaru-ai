@@ -13,7 +13,7 @@ const YOUTUBE_ITEM_COUNT: usize = 600;
 const PLAYLIST_COUNT: usize = 10;
 const INSERT_BATCH_SIZE: usize = 250;
 
-fn fixture_database(error: sqlx::Error) -> MusicLibraryError {
+fn fixture_database_error(error: sqlx::Error) -> MusicLibraryError {
     MusicLibraryError::database("seed dense music fixture", error)
 }
 
@@ -38,18 +38,18 @@ pub struct DenseMusicFixtureSummary {
 pub async fn seed_dense_music_fixture(
     pool: &SqlitePool,
 ) -> MusicLibraryResult<DenseMusicFixtureSummary> {
-    let mut tx = pool.begin().await.map_err(fixture_database)?;
-    clear_previous_fixture(&mut tx).await?;
-    seed_roots_and_collections(&mut tx).await?;
-    seed_playlists(&mut tx).await?;
-    seed_items(&mut tx).await?;
-    seed_locations(&mut tx).await?;
-    seed_source_provenance(&mut tx).await?;
-    let membership_count = seed_memberships(&mut tx).await?;
-    let snooze_count = seed_snoozes(&mut tx).await?;
-    seed_signals_statistics_and_history(&mut tx).await?;
-    seed_assignment_references(&mut tx).await?;
-    tx.commit().await.map_err(fixture_database)?;
+    let mut transaction = pool.begin().await.map_err(fixture_database_error)?;
+    clear_previous_fixture(&mut transaction).await?;
+    seed_roots_and_collections(&mut transaction).await?;
+    seed_playlists(&mut transaction).await?;
+    seed_items(&mut transaction).await?;
+    seed_locations(&mut transaction).await?;
+    seed_source_provenance(&mut transaction).await?;
+    let membership_count = seed_memberships(&mut transaction).await?;
+    let snooze_count = seed_snoozes(&mut transaction).await?;
+    seed_signals_statistics_and_history(&mut transaction).await?;
+    seed_assignment_references(&mut transaction).await?;
+    transaction.commit().await.map_err(fixture_database_error)?;
     search::rebuild(pool, SEEDED_AT).await?;
 
     Ok(DenseMusicFixtureSummary {
@@ -69,7 +69,9 @@ pub async fn seed_dense_music_fixture(
     })
 }
 
-async fn clear_previous_fixture(tx: &mut Transaction<'_, Sqlite>) -> MusicLibraryResult<()> {
+async fn clear_previous_fixture(
+    transaction: &mut Transaction<'_, Sqlite>,
+) -> MusicLibraryResult<()> {
     for statement in [
         "DELETE FROM calendar_events WHERE id LIKE 'benchmark-music-%'",
         "DELETE FROM projects WHERE id LIKE 'benchmark-music-%'",
@@ -80,32 +82,34 @@ async fn clear_previous_fixture(tx: &mut Transaction<'_, Sqlite>) -> MusicLibrar
         "DELETE FROM music_local_roots WHERE id LIKE 'benchmark-music-%'",
     ] {
         sqlx::query(statement)
-            .execute(&mut **tx)
+            .execute(&mut **transaction)
             .await
-            .map_err(fixture_database)?;
+            .map_err(fixture_database_error)?;
     }
     Ok(())
 }
 
-async fn seed_roots_and_collections(tx: &mut Transaction<'_, Sqlite>) -> MusicLibraryResult<()> {
+async fn seed_roots_and_collections(
+    transaction: &mut Transaction<'_, Sqlite>,
+) -> MusicLibraryResult<()> {
     for root_index in 0..LOCAL_ROOT_COUNT {
         let root_id = root_id(root_index);
         sqlx::query(
-            "INSERT INTO music_local_roots (id, name, created_at, updated_at)
+            "INSERT INTO music_local_roots (id, name, created_at_ms, updated_at_ms)
              VALUES (?, ?, ?, ?)",
         )
         .bind(&root_id)
         .bind(format!("Soundtrack archive {}", root_index + 1))
         .bind(SEEDED_AT)
         .bind(SEEDED_AT)
-        .execute(&mut **tx)
+        .execute(&mut **transaction)
         .await
-        .map_err(fixture_database)?;
+        .map_err(fixture_database_error)?;
 
         sqlx::query(
             "INSERT INTO music_source_collections
                 (id, kind, identity_key, name, local_root_id, refresh_state,
-                 last_successful_refresh_at, snapshot_generation, created_at, updated_at)
+                 last_successful_refresh_at_ms, snapshot_generation, created_at_ms, updated_at_ms)
              VALUES (?, 'local-root', ?, ?, ?, 'idle', ?, 3, ?, ?)",
         )
         .bind(local_collection_id(root_index))
@@ -115,9 +119,9 @@ async fn seed_roots_and_collections(tx: &mut Transaction<'_, Sqlite>) -> MusicLi
         .bind(SEEDED_AT)
         .bind(SEEDED_AT)
         .bind(SEEDED_AT)
-        .execute(&mut **tx)
+        .execute(&mut **transaction)
         .await
-        .map_err(fixture_database)?;
+        .map_err(fixture_database_error)?;
     }
 
     for collection_index in 0..YOUTUBE_COLLECTION_COUNT {
@@ -125,7 +129,7 @@ async fn seed_roots_and_collections(tx: &mut Transaction<'_, Sqlite>) -> MusicLi
         sqlx::query(
             "INSERT INTO music_source_collections
                 (id, kind, identity_key, name, youtube_playlist_id, refresh_state,
-                 last_successful_refresh_at, snapshot_generation, created_at, updated_at)
+                 last_successful_refresh_at_ms, snapshot_generation, created_at_ms, updated_at_ms)
              VALUES (?, 'youtube-playlist', ?, ?, ?, 'idle', ?, 2, ?, ?)",
         )
         .bind(youtube_collection_id(collection_index))
@@ -135,14 +139,14 @@ async fn seed_roots_and_collections(tx: &mut Transaction<'_, Sqlite>) -> MusicLi
         .bind(SEEDED_AT)
         .bind(SEEDED_AT)
         .bind(SEEDED_AT)
-        .execute(&mut **tx)
+        .execute(&mut **transaction)
         .await
-        .map_err(fixture_database)?;
+        .map_err(fixture_database_error)?;
     }
     Ok(())
 }
 
-async fn seed_playlists(tx: &mut Transaction<'_, Sqlite>) -> MusicLibraryResult<()> {
+async fn seed_playlists(transaction: &mut Transaction<'_, Sqlite>) -> MusicLibraryResult<()> {
     const NAMES: [&str; PLAYLIST_COUNT] = [
         "Deep work",
         "Quiet reading",
@@ -171,7 +175,7 @@ async fn seed_playlists(tx: &mut Transaction<'_, Sqlite>) -> MusicLibraryResult<
     for (index, name) in NAMES.into_iter().enumerate() {
         sqlx::query(
             "INSERT INTO music_playlists
-                (id, name, icon, shuffle_enabled, repeat_mode, sort_order, created_at, updated_at)
+                (id, name, icon, shuffle_enabled, repeat_mode, sort_order, created_at_ms, updated_at_ms)
              VALUES (?, ?, ?, ?, 'all', ?, ?, ?)",
         )
         .bind(playlist_id(index))
@@ -181,29 +185,29 @@ async fn seed_playlists(tx: &mut Transaction<'_, Sqlite>) -> MusicLibraryResult<
         .bind(index as i64)
         .bind(SEEDED_AT)
         .bind(SEEDED_AT)
-        .execute(&mut **tx)
+        .execute(&mut **transaction)
         .await
-        .map_err(fixture_database)?;
+        .map_err(fixture_database_error)?;
         sqlx::query(
             "INSERT INTO music_playlist_intended_uses (playlist_id, intended_use) VALUES (?, ?)",
         )
         .bind(playlist_id(index))
         .bind(USES[index])
-        .execute(&mut **tx)
+        .execute(&mut **transaction)
         .await
-        .map_err(fixture_database)?;
+        .map_err(fixture_database_error)?;
     }
     Ok(())
 }
 
-async fn seed_items(tx: &mut Transaction<'_, Sqlite>) -> MusicLibraryResult<()> {
+async fn seed_items(transaction: &mut Transaction<'_, Sqlite>) -> MusicLibraryResult<()> {
     for start in (0..item_count()).step_by(INSERT_BATCH_SIZE) {
         let end = (start + INSERT_BATCH_SIZE).min(item_count());
         let mut query = QueryBuilder::<Sqlite>::new(
             "INSERT INTO music_library_items
                 (id, identity_key, source_kind, media_kind, youtube_video_id,
                  original_title, original_artist, original_album, duration_ms,
-                 availability, review_state, review_changed_at, discovered_at, updated_at) ",
+                 availability, review_state, review_changed_at_ms, discovered_at_ms, updated_at_ms) ",
         );
         query.push_values(start..end, |mut row, index| {
             let local = index < LOCAL_ITEM_COUNT;
@@ -258,21 +262,21 @@ async fn seed_items(tx: &mut Transaction<'_, Sqlite>) -> MusicLibraryResult<()> 
         });
         query
             .build()
-            .execute(&mut **tx)
+            .execute(&mut **transaction)
             .await
-            .map_err(fixture_database)?;
+            .map_err(fixture_database_error)?;
     }
     Ok(())
 }
 
-async fn seed_locations(tx: &mut Transaction<'_, Sqlite>) -> MusicLibraryResult<()> {
+async fn seed_locations(transaction: &mut Transaction<'_, Sqlite>) -> MusicLibraryResult<()> {
     for start in (0..LOCAL_ITEM_COUNT).step_by(INSERT_BATCH_SIZE) {
         let end = (start + INSERT_BATCH_SIZE).min(LOCAL_ITEM_COUNT);
         let mut query = QueryBuilder::<Sqlite>::new(
             "INSERT INTO music_local_locations
                 (id, item_id, root_id, relative_path, file_size_bytes, modified_at_ms,
                  lightweight_fingerprint, availability, last_seen_generation,
-                 first_seen_at, updated_at) ",
+                 first_seen_at_ms, updated_at_ms) ",
         );
         query.push_values(start..end, |mut row, index| {
             let root_index = index % LOCAL_ROOT_COUNT;
@@ -291,9 +295,9 @@ async fn seed_locations(tx: &mut Transaction<'_, Sqlite>) -> MusicLibraryResult<
         });
         query
             .build()
-            .execute(&mut **tx)
+            .execute(&mut **transaction)
             .await
-            .map_err(fixture_database)?;
+            .map_err(fixture_database_error)?;
     }
 
     let duplicate_indices = duplicate_local_indices().collect::<Vec<_>>();
@@ -302,7 +306,7 @@ async fn seed_locations(tx: &mut Transaction<'_, Sqlite>) -> MusicLibraryResult<
             "INSERT INTO music_local_locations
                 (id, item_id, root_id, relative_path, file_size_bytes, modified_at_ms,
                  lightweight_fingerprint, availability, last_seen_generation,
-                 first_seen_at, updated_at) ",
+                 first_seen_at_ms, updated_at_ms) ",
         );
         query.push_values(chunk.iter().copied(), |mut row, index| {
             let second_root = (index % LOCAL_ROOT_COUNT + 1) % LOCAL_ROOT_COUNT;
@@ -320,19 +324,21 @@ async fn seed_locations(tx: &mut Transaction<'_, Sqlite>) -> MusicLibraryResult<
         });
         query
             .build()
-            .execute(&mut **tx)
+            .execute(&mut **transaction)
             .await
-            .map_err(fixture_database)?;
+            .map_err(fixture_database_error)?;
     }
     Ok(())
 }
 
-async fn seed_source_provenance(tx: &mut Transaction<'_, Sqlite>) -> MusicLibraryResult<()> {
+async fn seed_source_provenance(
+    transaction: &mut Transaction<'_, Sqlite>,
+) -> MusicLibraryResult<()> {
     for start in (0..item_count()).step_by(INSERT_BATCH_SIZE) {
         let end = (start + INSERT_BATCH_SIZE).min(item_count());
         let mut query = QueryBuilder::<Sqlite>::new(
             "INSERT INTO music_source_collection_items
-                (collection_id, item_id, source_position, first_discovered_at,
+                (collection_id, item_id, source_position, first_discovered_at_ms,
                  last_seen_generation, missing_from_latest_snapshot) ",
         );
         query.push_values(start..end, |mut row, index| {
@@ -359,16 +365,16 @@ async fn seed_source_provenance(tx: &mut Transaction<'_, Sqlite>) -> MusicLibrar
         });
         query
             .build()
-            .execute(&mut **tx)
+            .execute(&mut **transaction)
             .await
-            .map_err(fixture_database)?;
+            .map_err(fixture_database_error)?;
     }
 
     let duplicate_items = duplicate_provenance_pairs();
     for chunk in duplicate_items.chunks(INSERT_BATCH_SIZE) {
         let mut query = QueryBuilder::<Sqlite>::new(
             "INSERT INTO music_source_collection_items
-                (collection_id, item_id, source_position, first_discovered_at,
+                (collection_id, item_id, source_position, first_discovered_at_ms,
                  last_seen_generation, missing_from_latest_snapshot) ",
         );
         query.push_values(
@@ -384,14 +390,14 @@ async fn seed_source_provenance(tx: &mut Transaction<'_, Sqlite>) -> MusicLibrar
         );
         query
             .build()
-            .execute(&mut **tx)
+            .execute(&mut **transaction)
             .await
-            .map_err(fixture_database)?;
+            .map_err(fixture_database_error)?;
     }
     Ok(())
 }
 
-async fn seed_memberships(tx: &mut Transaction<'_, Sqlite>) -> MusicLibraryResult<usize> {
+async fn seed_memberships(transaction: &mut Transaction<'_, Sqlite>) -> MusicLibraryResult<usize> {
     let weights = [
         "rarely",
         "less-often",
@@ -410,7 +416,7 @@ async fn seed_memberships(tx: &mut Transaction<'_, Sqlite>) -> MusicLibraryResul
             let mut query = QueryBuilder::<Sqlite>::new(
                 "INSERT INTO music_playlist_memberships
                     (id, playlist_id, item_id, position, weight, enabled,
-                     start_ms, end_ms, volume, rate, created_at, updated_at) ",
+                     start_ms, end_ms, volume, rate, created_at_ms, updated_at_ms) ",
             );
             query.push_values(chunk.iter().enumerate(), |mut row, (offset, item_index)| {
                 let position = chunk_index * INSERT_BATCH_SIZE + offset;
@@ -431,20 +437,20 @@ async fn seed_memberships(tx: &mut Transaction<'_, Sqlite>) -> MusicLibraryResul
             });
             query
                 .build()
-                .execute(&mut **tx)
+                .execute(&mut **transaction)
                 .await
-                .map_err(fixture_database)?;
+                .map_err(fixture_database_error)?;
         }
     }
     Ok(total)
 }
 
-async fn seed_snoozes(tx: &mut Transaction<'_, Sqlite>) -> MusicLibraryResult<usize> {
+async fn seed_snoozes(transaction: &mut Transaction<'_, Sqlite>) -> MusicLibraryResult<usize> {
     let indices = (0..item_count()).step_by(83).collect::<Vec<_>>();
     for chunk in indices.chunks(INSERT_BATCH_SIZE) {
         let mut query = QueryBuilder::<Sqlite>::new(
             "INSERT INTO music_snoozes
-                (id, item_id, scope, playlist_id, starts_at, ends_at, reason, created_at) ",
+                (id, item_id, scope, playlist_id, starts_at_ms, ends_at_ms, reason, created_at_ms) ",
         );
         query.push_values(chunk.iter().copied(), |mut row, index| {
             let global = index.is_multiple_of(2);
@@ -459,20 +465,20 @@ async fn seed_snoozes(tx: &mut Transaction<'_, Sqlite>) -> MusicLibraryResult<us
         });
         query
             .build()
-            .execute(&mut **tx)
+            .execute(&mut **transaction)
             .await
-            .map_err(fixture_database)?;
+            .map_err(fixture_database_error)?;
     }
     Ok(indices.len())
 }
 
 async fn seed_signals_statistics_and_history(
-    tx: &mut Transaction<'_, Sqlite>,
+    transaction: &mut Transaction<'_, Sqlite>,
 ) -> MusicLibraryResult<()> {
     let signal_indices = (0..item_count()).step_by(17).collect::<Vec<_>>();
     for chunk in signal_indices.chunks(INSERT_BATCH_SIZE) {
         let mut query = QueryBuilder::<Sqlite>::new(
-            "INSERT INTO music_item_signals (item_id, signal, created_at) ",
+            "INSERT INTO music_item_signals (item_id, signal, created_at_ms) ",
         );
         query.push_values(chunk.iter().copied(), |mut row, index| {
             let signals = [
@@ -489,16 +495,16 @@ async fn seed_signals_statistics_and_history(
         });
         query
             .build()
-            .execute(&mut **tx)
+            .execute(&mut **transaction)
             .await
-            .map_err(fixture_database)?;
+            .map_err(fixture_database_error)?;
     }
 
     let statistic_indices = (0..item_count()).step_by(7).collect::<Vec<_>>();
     for chunk in statistic_indices.chunks(INSERT_BATCH_SIZE) {
         let mut query = QueryBuilder::<Sqlite>::new(
             "INSERT INTO music_listening_statistics
-                (item_id, last_played_at, play_count, completion_count, skip_count, updated_at) ",
+                (item_id, last_played_at_ms, play_count, completion_count, skip_count, updated_at_ms) ",
         );
         query.push_values(chunk.iter().copied(), |mut row, index| {
             let plays = (index % 31 + 1) as i64;
@@ -511,15 +517,15 @@ async fn seed_signals_statistics_and_history(
         });
         query
             .build()
-            .execute(&mut **tx)
+            .execute(&mut **transaction)
             .await
-            .map_err(fixture_database)?;
+            .map_err(fixture_database_error)?;
     }
 
     for playlist_index in 0..PLAYLIST_COUNT {
         let mut query = QueryBuilder::<Sqlite>::new(
             "INSERT INTO music_recent_selections
-                (playlist_id, item_id, selection_kind, selected_at) ",
+                (playlist_id, item_id, selection_kind, selected_at_ms) ",
         );
         query.push_values(0..64, |mut row, history_index| {
             let index = (playlist_index * 173 + history_index * 19) % item_count();
@@ -534,21 +540,23 @@ async fn seed_signals_statistics_and_history(
         });
         query
             .build()
-            .execute(&mut **tx)
+            .execute(&mut **transaction)
             .await
-            .map_err(fixture_database)?;
+            .map_err(fixture_database_error)?;
     }
     Ok(())
 }
 
-async fn seed_assignment_references(tx: &mut Transaction<'_, Sqlite>) -> MusicLibraryResult<()> {
+async fn seed_assignment_references(
+    transaction: &mut Transaction<'_, Sqlite>,
+) -> MusicLibraryResult<()> {
     sqlx::query(
         "INSERT INTO project_groups (id, name, icon, sort_order)
          VALUES ('benchmark-music-group', 'Music benchmark projects', 'music', 9000)",
     )
-    .execute(&mut **tx)
+    .execute(&mut **transaction)
     .await
-    .map_err(fixture_database)?;
+    .map_err(fixture_database_error)?;
     sqlx::query(
         "INSERT INTO projects
             (id, group_id, name, icon, sort_order, focus_playlist_id, break_playlist_id)
@@ -557,9 +565,9 @@ async fn seed_assignment_references(tx: &mut Transaction<'_, Sqlite>) -> MusicLi
     )
     .bind(playlist_id(0))
     .bind(playlist_id(8))
-    .execute(&mut **tx)
+    .execute(&mut **transaction)
     .await
-    .map_err(fixture_database)?;
+    .map_err(fixture_database_error)?;
     for (event_index, selected_playlist) in [0_usize, 1].into_iter().enumerate() {
         sqlx::query(
             "INSERT INTO calendar_events
@@ -571,9 +579,9 @@ async fn seed_assignment_references(tx: &mut Transaction<'_, Sqlite>) -> MusicLi
         .bind(format!("2026-07-{:02}T09:00:00Z", event_index + 20))
         .bind(format!("2026-07-{:02}T10:00:00Z", event_index + 20))
         .bind(playlist_id(selected_playlist))
-        .execute(&mut **tx)
+        .execute(&mut **transaction)
         .await
-        .map_err(fixture_database)?;
+        .map_err(fixture_database_error)?;
     }
     Ok(())
 }
@@ -666,7 +674,7 @@ mod tests {
             .execute(&pool)
             .await
             .unwrap();
-        crate::db::run_migrations(&pool).await.unwrap();
+        ganbaru_db::run_migrations(&pool).await.unwrap();
         pool
     }
 

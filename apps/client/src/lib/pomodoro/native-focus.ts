@@ -1,5 +1,5 @@
 import { isValidPomodoroConfig, type PomodoroConfig } from "./rhythm";
-import type { PauseReason, PersistedSegment, SegmentPhase } from "$lib/components/calendar/types";
+import type { PauseReason, PersistedSegment, SegmentPhase } from "$lib/calendar/types";
 
 export type FocusMode = "stopped" | "running" | "manual_pause" | "idle_pause" | "idle_failed" | "suspended" | "return_wait" | "expired";
 export type FocusIntent =
@@ -126,7 +126,7 @@ export function focusProjectionIsCurrent(previous: FocusProjection | null, next:
     || (next.snapshot.revision === previous.snapshot.revision && next.snapshot.observedAtMs >= previous.snapshot.observedAtMs);
 }
 
-/** Interpolate opportunity for display while preserving the accepted event boundary. */
+/** Interpolate the remaining time for display without passing the accepted event end. */
 export function focusDisplayRemainingSeconds(snapshot: FocusSnapshot, visualElapsedMs: number): number {
   const elapsed = Math.max(0, visualElapsedMs);
   const phaseRemaining = snapshot.remainingMs - (snapshot.mode === "running" ? elapsed : 0);

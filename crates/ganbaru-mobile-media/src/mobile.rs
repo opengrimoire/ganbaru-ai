@@ -4,7 +4,7 @@ use tauri::{
     plugin::{PluginApi, PluginHandle},
 };
 
-const PLUGIN_IDENTIFIER: &str = "app.ganbaru.mobile_media";
+const PLUGIN_IDENTIFIER: &str = "org.opengrimoire.ganbaruai.mobile.media";
 
 #[derive(Debug)]
 pub struct MobileMedia<R: Runtime>(PluginHandle<R>);
@@ -76,7 +76,7 @@ struct TreePickRequest {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct PickMediaFileResponse {
+struct PickArtworkFileResponse {
     uri: Option<String>,
 }
 
@@ -167,7 +167,7 @@ impl<R: Runtime> MobileMedia<R> {
     }
 
     pub async fn pick_artwork_file(&self) -> Result<Option<String>, String> {
-        self.command::<PickMediaFileResponse>("pickArtworkFile", ())
+        self.command::<PickArtworkFileResponse>("pickArtworkFile", ())
             .await
             .map(|response| response.uri)
     }

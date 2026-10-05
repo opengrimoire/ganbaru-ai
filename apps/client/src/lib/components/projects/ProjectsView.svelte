@@ -7,7 +7,7 @@
   import { getProjects } from "$lib/stores/projects.svelte";
   import { getMobileBackStack } from "$lib/stores/mobile-back-stack.svelte";
   import { getViewport } from "$lib/stores/viewport.svelte";
-  import type { CalendarEvent, CalendarViewMode } from "$lib/components/calendar/types";
+  import type { CalendarEvent, CalendarViewMode } from "$lib/calendar/types";
   import type {
     ProjectChatIntegration,
     ProjectSection,
@@ -17,16 +17,16 @@
   import {
     projectCalendarCreateDefaults as buildProjectCalendarCreateDefaults,
     projectEventDurationMinutesInDateRange,
-  } from "$lib/projects/project-scheduling";
+  } from "$lib/projects/scheduling/schedule";
   import {
     pickProjectTaskModalLayout,
-  } from "$lib/projects/project-toolbar";
+  } from "$lib/projects/toolbar";
   import ProjectEmptyState from "./ProjectEmptyState.svelte";
   import ProjectWorkspaceHeader from "./ProjectWorkspaceHeader.svelte";
-  import type { ProjectViewComponents } from "./project-view-components";
-  import { ProjectTaskQueryController } from "./project-task-query-controller.svelte";
-  import { ProjectRouteLoadController } from "./project-route-load-controller.svelte";
-  import { ProjectRouteUiController } from "./project-route-ui-controller.svelte";
+  import type { ProjectViewComponents } from "./view-components";
+  import { ProjectTaskQueryController } from "./task-query-controller.svelte";
+  import { ProjectRouteLoadController } from "./route-load-controller.svelte";
+  import { ProjectRouteUiController } from "./route-ui-controller.svelte";
 
   let {
     mobileLayout = false,
@@ -73,7 +73,7 @@
     return Boolean(
       projectId
       && projects.taskViewPage?.projectId === projectId
-      && projects.projectOptionalDataLoaded("saved_views", projectId),
+      && projects.isProjectOptionalDataLoaded("saved_views", projectId),
     );
   });
   const taskDetailDataReady = $derived.by(() => {
@@ -84,7 +84,7 @@
   });
 
   $effect(() => {
-    if (!selectedProjectId || projects.projectDataLoaded(selectedProjectId)) return;
+    if (!selectedProjectId || projects.isProjectDataLoaded(selectedProjectId)) return;
     void projects.ensureProjectData(selectedProjectId).catch((error) => {
       console.error("load selected project data failed", error);
     });

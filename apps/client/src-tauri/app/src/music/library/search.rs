@@ -56,19 +56,19 @@ fn push_projection(builder: &mut QueryBuilder<'_, Sqlite>) {
 
 async fn replace_index_state(
     transaction: &mut Transaction<'_, Sqlite>,
-    rebuilt_at: i64,
+    rebuilt_at_ms: i64,
 ) -> MusicLibraryResult<()> {
     sqlx::query(
-        "INSERT INTO music_search_index_state (singleton, schema_version, fingerprint, rebuilt_at)
+        "INSERT INTO music_search_index_state (singleton, schema_version, fingerprint, rebuilt_at_ms)
          VALUES (1, ?, ?, ?)
          ON CONFLICT(singleton) DO UPDATE SET
             schema_version = excluded.schema_version,
             fingerprint = excluded.fingerprint,
-            rebuilt_at = excluded.rebuilt_at",
+            rebuilt_at_ms = excluded.rebuilt_at_ms",
     )
     .bind(SEARCH_SCHEMA_VERSION)
     .bind(SEARCH_FINGERPRINT)
-    .bind(rebuilt_at)
+    .bind(rebuilt_at_ms)
     .execute(&mut **transaction)
     .await
     .map_err(|error| MusicLibraryError::database("save music search index state", error))?;
@@ -77,9 +77,9 @@ async fn replace_index_state(
 
 pub(crate) async fn rebuild(
     pool: &SqlitePool,
-    rebuilt_at: i64,
+    rebuilt_at_ms: i64,
 ) -> MusicLibraryResult<MusicSearchRebuildResult> {
-    if rebuilt_at <= 0 {
+    if rebuilt_at_ms <= 0 {
         return Err(MusicLibraryError::validation(
             "rebuiltAt",
             "must be a positive Unix epoch millisecond value",
@@ -103,7 +103,7 @@ pub(crate) async fn rebuild(
         .execute(&mut *transaction)
         .await
         .map_err(|error| MusicLibraryError::database("rebuild music search index", error))?;
-    replace_index_state(&mut transaction, rebuilt_at).await?;
+    replace_index_state(&mut transaction, rebuilt_at_ms).await?;
     let indexed_item_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM music_search_fts")
         .fetch_one(&mut *transaction)
         .await
@@ -116,7 +116,7 @@ pub(crate) async fn rebuild(
         indexed_item_count,
         schema_version: SEARCH_SCHEMA_VERSION,
         fingerprint: SEARCH_FINGERPRINT.to_string(),
-        rebuilt_at,
+        rebuilt_at_ms,
     })
 }
 
@@ -216,7 +216,7 @@ pub(crate) async fn refresh_playlist(
     Ok(())
 }
 
-pub(crate) fn query(value: &str) -> Option<String> {
+pub(crate) fn match_expression(value: &str) -> Option<String> {
     let tokens = value
         .split_whitespace()
         .map(|token| token.trim_matches(|character: char| !character.is_alphanumeric()))

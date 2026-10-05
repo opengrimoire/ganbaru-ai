@@ -2,12 +2,11 @@
 
 use std::time::{Duration, Instant};
 
-use ganbaru_focus::{FocusErrorCode, FocusExecutionError, FocusMode, FocusSegmentSnapshot};
+use ganbaru_pomodoro::{FocusErrorCode, FocusExecutionError, FocusMode, FocusSegmentSnapshot};
 use tokio::sync::watch;
 
 use super::{FocusProjection, error};
 
-#[path = "delivery_worker.rs"]
 mod worker;
 
 const QUIESCENCE_TIMEOUT: Duration = Duration::from_secs(5);
@@ -268,5 +267,4 @@ fn retain_closed_phase(
 }
 
 #[cfg(test)]
-#[path = "delivery_tests.rs"]
 mod tests;

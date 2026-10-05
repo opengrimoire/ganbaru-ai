@@ -12,7 +12,7 @@
     ChatFolderCapability,
   } from "$lib/chat/contracts";
   import { chatErrorMessage } from "$lib/chat/error-presentation";
-  import CustomSelect from "$lib/components/settings/CustomSelect.svelte";
+  import Select from "$lib/components/ui/Select.svelte";
   import SettingsCheckbox from "$lib/components/settings/SettingsCheckbox.svelte";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
@@ -308,8 +308,8 @@
             <div class="check-row"><SettingsCheckbox checked={participate} label={t("settings.chat.teammates.participate")} onChange={(checked) => { participate = checked; }} /><span><strong>{t("settings.chat.teammates.participate")}</strong><small>{t("settings.chat.teammates.participateDescription")}</small></span></div>
           </fieldset>
           <div class="profile-fields">
-            <div class="select-field"><span>{t("settings.chat.teammates.history")}</span><CustomSelect value={historyBoundary} options={[{ value: "entire", label: t("settings.chat.teammates.historyEntire") }, { value: "fromGrant", label: t("settings.chat.teammates.historyFromGrant") }]} onChange={(value) => { historyBoundary = value === "fromGrant" ? "fromGrant" : "entire"; }} disabled={!editableRevision || mode === "duplicate" || !readHistory} class="w-full" /></div>
-            <div class="select-field"><span>{t("settings.chat.teammates.profileManager.maximumFolderCapability")}</span><CustomSelect value={maximumFolderCapability} options={[{ value: "none", label: t("settings.chat.teammates.folderCapabilities.none") }, { value: "read", label: t("settings.chat.teammates.folderCapabilities.read") }, { value: "edit", label: t("settings.chat.teammates.folderCapabilities.edit") }, { value: "execute", label: t("settings.chat.teammates.folderCapabilities.execute") }, { value: "publish", label: t("settings.chat.teammates.folderCapabilities.publish") }]} onChange={(value) => { if (value === "none" || value === "read" || value === "edit" || value === "execute" || value === "publish") maximumFolderCapability = value; }} disabled={!editableRevision || mode === "duplicate"} class="w-full" /></div>
+            <div class="select-field"><span>{t("settings.chat.teammates.history")}</span><Select value={historyBoundary} options={[{ value: "entire", label: t("settings.chat.teammates.historyEntire") }, { value: "fromGrant", label: t("settings.chat.teammates.historyFromGrant") }]} onChange={(value) => { historyBoundary = value === "fromGrant" ? "fromGrant" : "entire"; }} disabled={!editableRevision || mode === "duplicate" || !readHistory} class="w-full" /></div>
+            <div class="select-field"><span>{t("settings.chat.teammates.profileManager.maximumFolderCapability")}</span><Select value={maximumFolderCapability} options={[{ value: "none", label: t("settings.chat.teammates.folderCapabilities.none") }, { value: "read", label: t("settings.chat.teammates.folderCapabilities.read") }, { value: "edit", label: t("settings.chat.teammates.folderCapabilities.edit") }, { value: "execute", label: t("settings.chat.teammates.folderCapabilities.execute") }, { value: "publish", label: t("settings.chat.teammates.folderCapabilities.publish") }]} onChange={(value) => { if (value === "none" || value === "read" || value === "edit" || value === "execute" || value === "publish") maximumFolderCapability = value; }} disabled={!editableRevision || mode === "duplicate"} class="w-full" /></div>
           </div>
           <p class="profile-note">{t("settings.chat.teammates.profileManager.ceilingNote")}</p>
           {#if impact}

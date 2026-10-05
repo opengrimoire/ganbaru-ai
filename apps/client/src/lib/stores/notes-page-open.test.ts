@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import { applyBlockUpdate, createBlockUpdate, createBlockWrite } from "$lib/notes/block-factory";
-import { notesDatabaseSession } from "$lib/notes/database-session.svelte";
+import { applyBlockUpdate, createBlockUpdate, createBlockWrite } from "$lib/notes/blocks/factory";
+import { notesDatabaseSession } from "$lib/notes/database/session.svelte";
 import type { NotesCompoundEdit, NotesCompoundEditResult } from "$lib/api/notes/compound-edits";
 import type {
   NotesBlock,

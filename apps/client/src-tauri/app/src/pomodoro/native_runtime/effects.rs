@@ -1,4 +1,4 @@
-use ganbaru_focus::{CommittedFocusEffect, FocusExecutionError};
+use ganbaru_pomodoro::{CommittedFocusEffect, FocusExecutionError};
 use std::time::{Duration, Instant};
 
 use super::FocusProjection;
@@ -94,14 +94,13 @@ impl DeliveryRetry {
 }
 
 #[cfg(test)]
-#[path = "effects_tests.rs"]
 mod tests;
 
 #[derive(Default)]
 pub(super) struct FocusEffects {
     last: Option<CommittedFocusEffect>,
     pending: bool,
-    #[cfg(not(any(target_os = "android", target_os = "ios")))]
+    #[cfg(desktop)]
     desktop: super::presentation::DesktopPresentation,
     #[cfg(target_os = "android")]
     mobile: super::mobile::AndroidPresentation,
@@ -159,7 +158,7 @@ impl FocusEffects {
                 .map_err(FocusExecutionError::from)
                 .and(rules_result)
         };
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        #[cfg(desktop)]
         let presentation_result = crate::tray::reconcile_committed_focus(
             app,
             projection.vault_generation,
@@ -173,7 +172,7 @@ impl FocusEffects {
                 .apply(app, projection.vault_generation, snapshot, now_ms, pool)
                 .await,
         );
-        #[cfg(any(target_os = "android", target_os = "ios"))]
+        #[cfg(mobile)]
         let _ = pool;
         #[cfg(target_os = "android")]
         let presentation_result = self
@@ -188,7 +187,7 @@ impl FocusEffects {
     }
 
     pub async fn revoke(&mut self, app: &tauri::AppHandle) -> Result<(), FocusExecutionError> {
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        #[cfg(desktop)]
         let presentation_result = self.desktop.revoke(app).await;
         #[cfg(target_os = "android")]
         let presentation_result = self.mobile.revoke(app).await;
@@ -214,7 +213,7 @@ impl FocusEffects {
         {
             self.mobile.configure_copy(app, copy).await
         }
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        #[cfg(desktop)]
         {
             let _ = app;
             self.desktop.configure_copy(copy)
@@ -222,39 +221,39 @@ impl FocusEffects {
     }
 
     pub fn next_presentation_deadline(&self) -> Option<i64> {
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        #[cfg(desktop)]
         {
             self.desktop.next_deadline()
         }
-        #[cfg(any(target_os = "android", target_os = "ios"))]
+        #[cfg(mobile)]
         {
             None
         }
     }
 
     pub fn invalidate_preferences(&mut self) {
-        #[cfg(not(any(target_os = "android", target_os = "ios")))]
+        #[cfg(desktop)]
         self.desktop.invalidate_preferences();
     }
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 async fn publish_rules(
     app: &tauri::AppHandle,
     effect: CommittedFocusEffect,
     now_ms: i64,
 ) -> Result<(), FocusExecutionError> {
-    let generation = crate::doomscrolling::runtime::capture_publication_generation(app);
+    let generation = crate::distractions::runtime::capture_publication_generation(app);
     let app = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        crate::doomscrolling::state::publish_committed_focus(&app, &effect, generation, now_ms)
+        crate::distractions::state_files::publish_committed_focus(&app, &effect, generation, now_ms)
     })
     .await
     .map_err(|error| format!("Publish accepted Focus rules: {error}"))??;
     Ok(())
 }
 
-#[cfg(any(target_os = "android", target_os = "ios"))]
+#[cfg(mobile)]
 async fn publish_rules(
     _app: &tauri::AppHandle,
     _effect: CommittedFocusEffect,

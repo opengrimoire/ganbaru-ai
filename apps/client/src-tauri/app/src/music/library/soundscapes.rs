@@ -28,7 +28,7 @@ pub(crate) async fn definitions(
         "SELECT s.id, s.source_kind, s.generated_kind, s.bundled_identity, s.name, s.icon, s.group_id,
                 CASE WHEN s.source_kind = 'local-loop'
                      THEN COALESCE(l.availability, 'missing') ELSE s.availability END,
-                l.absolute_path, s.created_at, s.updated_at, s.version
+                l.absolute_path, s.created_at_ms, s.updated_at_ms, s.version
          FROM music_soundscapes s
          LEFT JOIN music_soundscape_locations l
            ON l.soundscape_id = s.id AND l.device_id = ?
@@ -52,11 +52,11 @@ pub(crate) async fn definitions(
         if availability != definition.availability {
             sqlx::query(
                 "UPDATE music_soundscape_locations
-                 SET availability = ?, updated_at = MAX(updated_at + 1, ?)
+                 SET availability = ?, updated_at_ms = MAX(updated_at_ms + 1, ?)
                  WHERE soundscape_id = ? AND device_id = ?",
             )
             .bind(availability.as_ref())
-            .bind(definition.updated_at)
+            .bind(definition.updated_at_ms)
             .bind(&definition.id)
             .bind(device_id)
             .execute(pool)
@@ -80,7 +80,7 @@ pub(crate) async fn upsert(
         .await
         .map_err(|error| MusicLibraryError::database("begin soundscape update", error))?;
     let existing = sqlx::query_as::<_, (i64, i64, String)>(
-        "SELECT created_at, version, source_kind FROM music_soundscapes WHERE id = ?",
+        "SELECT created_at_ms, version, source_kind FROM music_soundscapes WHERE id = ?",
     )
     .bind(&request.id)
     .fetch_optional(&mut *transaction)
@@ -136,15 +136,15 @@ pub(crate) async fn upsert(
                 .expect("new location requires a path"),
         )?;
     }
-    let created_at = existing
+    let created_at_ms = existing
         .as_ref()
         .map(|row| row.0)
-        .unwrap_or(request.updated_at);
+        .unwrap_or(request.updated_at_ms);
     let version = existing.as_ref().map(|row| row.1 + 1).unwrap_or(1);
     sqlx::query(
         "INSERT INTO music_soundscapes
             (id, source_kind, generated_kind, bundled_identity, name, icon, group_id, availability,
-             created_at, updated_at, version)
+             created_at_ms, updated_at_ms, version)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
             source_kind = excluded.source_kind,
@@ -154,7 +154,7 @@ pub(crate) async fn upsert(
             icon = excluded.icon,
             group_id = excluded.group_id,
             availability = excluded.availability,
-            updated_at = excluded.updated_at,
+            updated_at_ms = excluded.updated_at_ms,
             version = excluded.version",
     )
     .bind(&request.id)
@@ -169,8 +169,8 @@ pub(crate) async fn upsert(
     .bind(&request.icon)
     .bind(&request.group_id)
     .bind(MusicSoundscapeAvailability::Available.as_ref())
-    .bind(created_at)
-    .bind(request.updated_at)
+    .bind(created_at_ms)
+    .bind(request.updated_at_ms)
     .bind(version)
     .execute(&mut *transaction)
     .await
@@ -190,21 +190,21 @@ pub(crate) async fn upsert(
         sqlx::query(
             "INSERT INTO music_soundscape_locations
                 (soundscape_id, device_id, absolute_path, availability,
-                 file_size_bytes, modified_at_ms, updated_at)
+                 file_size_bytes, modified_at_ms, updated_at_ms)
              VALUES (?, ?, ?, 'available', ?, ?, ?)
              ON CONFLICT(soundscape_id, device_id) DO UPDATE SET
                 absolute_path = excluded.absolute_path,
                 availability = excluded.availability,
                 file_size_bytes = excluded.file_size_bytes,
                 modified_at_ms = excluded.modified_at_ms,
-                updated_at = excluded.updated_at",
+                updated_at_ms = excluded.updated_at_ms",
         )
         .bind(&request.id)
         .bind(&request.device_id)
         .bind(path)
         .bind(i64::try_from(metadata.len()).unwrap_or(i64::MAX))
         .bind(modified_at_ms)
-        .bind(request.updated_at)
+        .bind(request.updated_at_ms)
         .execute(&mut *transaction)
         .await
         .map_err(|error| MusicLibraryError::database("save soundscape location", error))?;
@@ -250,8 +250,8 @@ pub(crate) async fn remove(
             "UPDATE music_soundscape_state
              SET active_soundscape_id = ?,
                  desired_playing = CASE WHEN ? = 0 THEN 0 ELSE desired_playing END,
-                 updated_at = updated_at + 1, version = version + 1
-             WHERE singleton_id = 1",
+                 updated_at_ms = updated_at_ms + 1, version = version + 1
+             WHERE singleton = 1",
         )
         .bind(first_remaining)
         .bind(remaining_count as i64)
@@ -264,8 +264,8 @@ pub(crate) async fn remove(
 
 pub(crate) async fn state(pool: &SqlitePool) -> MusicLibraryResult<MusicSoundscapeState> {
     let row = sqlx::query_as::<_, (Option<String>, bool, Option<f64>, Option<f64>, bool, f64, i64, i64, bool)>(
-        "SELECT active_soundscape_id, multiple_enabled, generated_level, local_level, desired_playing, volume, updated_at, version, automatic_intent
-         FROM music_soundscape_state WHERE singleton_id = 1",
+        "SELECT active_soundscape_id, multiple_enabled, generated_level, local_level, desired_playing, volume, updated_at_ms, version, automatic_intent
+         FROM music_soundscape_state WHERE singleton = 1",
     )
     .fetch_one(pool)
     .await
@@ -285,7 +285,7 @@ pub(crate) async fn state(pool: &SqlitePool) -> MusicLibraryResult<MusicSoundsca
         local_level: row.3,
         desired_playing: row.4,
         volume: row.5,
-        updated_at: row.6,
+        updated_at_ms: row.6,
         version: row.7,
     })
 }
@@ -311,13 +311,13 @@ pub(crate) async fn update_state(
             ));
         }
     }
-    if request.updated_at <= 0 {
+    if request.updated_at_ms <= 0 {
         return Err(MusicLibraryError::validation(
             "updatedAt",
             "must be positive",
         ));
     }
-    if request.active_ids.len() > crate::soundscape::MAX_SOUNDSCAPE_LAYERS {
+    if request.active_ids.len() > crate::music::soundscape::MAX_SOUNDSCAPE_LAYERS {
         return Err(MusicLibraryError::validation(
             "activeIds",
             "cannot play more than 16 background sounds",
@@ -369,8 +369,8 @@ pub(crate) async fn update_state(
     let result = sqlx::query(
         "UPDATE music_soundscape_state
          SET active_soundscape_id = ?, multiple_enabled = ?, generated_level = ?, local_level = ?, desired_playing = ?, volume = ?,
-             updated_at = ?, version = version + 1, automatic_intent = 0
-         WHERE singleton_id = 1 AND version = ?",
+             updated_at_ms = ?, version = version + 1, automatic_intent = 0
+         WHERE singleton = 1 AND version = ?",
     )
     .bind(request.active_soundscape_id)
     .bind(request.multiple_enabled)
@@ -378,7 +378,7 @@ pub(crate) async fn update_state(
     .bind(request.local_level)
     .bind(request.desired_playing)
     .bind(request.volume)
-    .bind(request.updated_at)
+    .bind(request.updated_at_ms)
     .bind(request.expected_version)
     .execute(&mut *transaction)
     .await
@@ -437,7 +437,7 @@ fn validate_write(request: &MusicSoundscapeWrite) -> MusicLibraryResult<()> {
             ));
         }
     }
-    if request.updated_at <= 0 {
+    if request.updated_at_ms <= 0 {
         return Err(MusicLibraryError::validation(
             "updatedAt",
             "must be positive",
@@ -551,8 +551,8 @@ fn decode_definition(row: DefinitionRow) -> MusicLibraryResult<MusicSoundscapeDe
             MusicLibraryError::runtime("decode soundscape availability", message)
         })?,
         local_path: row.8,
-        created_at: row.9,
-        updated_at: row.10,
+        created_at_ms: row.9,
+        updated_at_ms: row.10,
         version: row.11,
     })
 }
@@ -609,7 +609,7 @@ mod tests {
                     device_id: "device-a".into(),
                     local_path: Some(path.to_string_lossy().into_owned()),
                     expected_version: None,
-                    updated_at: 1_700_000_000_000,
+                    updated_at_ms: 1_700_000_000_000,
                 },
             )
             .await
@@ -627,7 +627,7 @@ mod tests {
                 device_id: "device-a".into(),
                 local_path: saved.local_path.clone(),
                 expected_version: Some(saved.version),
-                updated_at: 1_700_000_000_001,
+                updated_at_ms: 1_700_000_000_001,
             };
             assert!(validate_write(&invalid_icon).is_err());
 
@@ -657,7 +657,7 @@ mod tests {
                     desired_playing: true,
                     volume: 0.42,
                     expected_version: initial.version,
-                    updated_at: 1_700_000_000_001,
+                    updated_at_ms: 1_700_000_000_001,
                 },
             )
             .await
@@ -678,7 +678,7 @@ mod tests {
                         desired_playing: true,
                         volume: 0.42,
                         expected_version: playing.version,
-                        updated_at: 1_700_000_000_002,
+                        updated_at_ms: 1_700_000_000_002,
                     }
                 )
                 .await
@@ -696,7 +696,7 @@ mod tests {
                         desired_playing: true,
                         volume: 0.5,
                         expected_version: playing.version,
-                        updated_at: 1_700_000_000_002,
+                        updated_at_ms: 1_700_000_000_002,
                     }
                 )
                 .await
@@ -714,7 +714,7 @@ mod tests {
                     desired_playing: true,
                     volume: 0.42,
                     expected_version: playing.version,
-                    updated_at: 1_700_000_000_003,
+                    updated_at_ms: 1_700_000_000_003,
                 },
             )
             .await
@@ -744,7 +744,7 @@ mod tests {
                     device_id: "device-a".into(),
                     local_path: Some(path.to_string_lossy().into_owned()),
                     expected_version: Some(saved.version),
-                    updated_at: 1_700_000_000_004,
+                    updated_at_ms: 1_700_000_000_004,
                 },
             )
             .await
@@ -764,7 +764,7 @@ mod tests {
                     device_id: "device-b".into(),
                     local_path: None,
                     expected_version: Some(renamed.version),
-                    updated_at: 1_700_000_000_005,
+                    updated_at_ms: 1_700_000_000_005,
                 },
             )
             .await

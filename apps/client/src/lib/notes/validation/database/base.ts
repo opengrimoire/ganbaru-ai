@@ -1,6 +1,6 @@
 import type { NotesChildDatabaseBlockPayload, NotesCreatedDatabase } from "../../contracts/core";
-import { NOTES_DATABASE_VIEW_TYPES } from "../../contracts/database";
-import type { NotesDataSource, NotesDataSourceSchema, NotesDataSourceTemplate, NotesDatabase, NotesDatabaseDataSourceSummary, NotesDatabaseView, NotesDatabaseViewType } from "../../contracts/database";
+import { NOTES_DATABASE_VIEW_TYPES } from "$lib/notes/contracts/database";
+import type { NotesDataSource, NotesDataSourceSchema, NotesDataSourceTemplate, NotesDatabase, NotesDatabaseDataSourceSummary, NotesDatabaseView, NotesDatabaseViewType } from "$lib/notes/contracts/database";
 import { parseNullableNotesIcon, parseNullablePageCover } from ".././assets";
 import { parseNotesBlock, parseNotesParent } from ".././blocks";
 import { containsControlCharacters, readBoolean, readDisplayString, readInteger, readNotesDatabaseViewType, readNullableRecord, readNullableString, readOptionalUuidString, readRecord, readRecordArray, readString } from ".././readers";

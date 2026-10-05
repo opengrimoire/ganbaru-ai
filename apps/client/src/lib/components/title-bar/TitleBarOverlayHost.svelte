@@ -1,19 +1,19 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import type { StartupMemorySnapshot } from "$lib/components/perf/memoryReport";
+  import type { StartupMemorySnapshot } from "$lib/diagnostics/memory-report";
   import { getLocalization } from "$lib/i18n/translator.svelte";
-  import { getSettingsLauncher } from "$lib/stores/settingsLauncher.svelte";
-  import { getThemeEditor } from "$lib/stores/themeEditor.svelte";
+  import { getSettingsLauncher } from "$lib/stores/settings-launcher.svelte";
+  import { getThemeEditor } from "$lib/stores/theme-editor.svelte";
   import SettingsModal from "$lib/components/settings/SettingsModal.svelte";
   import MusicPanel from "$lib/components/music/MusicPanel.svelte";
   import QuickNotesPanel from "$lib/components/quick-notes/QuickNotesPanel.svelte";
   import { preloadQuickNotesInitialSnapshot } from "$lib/quick-notes/initial-snapshot";
-  import { startMusicFirstUsePreload } from "$lib/music/music-first-use-preload";
-  import { preloadDataSection } from "$lib/components/settings/settings-sections";
+  import { startMusicFirstUsePreload } from "$lib/music/first-use-preload";
+  import { preloadDataSection } from "$lib/components/settings/section-catalog";
 
-  type PerformancePopoverComponent = typeof import("$lib/components/perf/PerformancePopover.svelte").default;
-  type FloatingThemeEditorComponent = typeof import("$lib/components/settings/FloatingThemeEditor.svelte").default;
-  type ThemeQuickSwitcherComponent = typeof import("$lib/components/ThemeQuickSwitcher.svelte").default;
+  type PerformancePopoverComponent = typeof import("$lib/components/diagnostics/PerformancePopover.svelte").default;
+  type FloatingThemeEditorComponent = typeof import("$lib/components/themes/editor/FloatingThemeEditor.svelte").default;
+  type ThemeQuickSwitcherComponent = typeof import("$lib/components/themes/ThemeQuickSwitcher.svelte").default;
 
   let {
     showPerformance = $bindable(),
@@ -53,7 +53,7 @@
 
   function loadPerformance(): Promise<void> {
     if (PerformancePopover) return Promise.resolve();
-    performanceLoad ??= import("$lib/components/perf/PerformancePopover.svelte")
+    performanceLoad ??= import("$lib/components/diagnostics/PerformancePopover.svelte")
       .then((module) => { PerformancePopover = module.default; })
       .finally(() => { performanceLoad = null; });
     return performanceLoad;
@@ -61,7 +61,7 @@
 
   function loadEditor(): Promise<void> {
     if (FloatingThemeEditor) return Promise.resolve();
-    editorLoad ??= import("$lib/components/settings/FloatingThemeEditor.svelte")
+    editorLoad ??= import("$lib/components/themes/editor/FloatingThemeEditor.svelte")
       .then((module) => { FloatingThemeEditor = module.default; })
       .finally(() => { editorLoad = null; });
     return editorLoad;
@@ -69,7 +69,7 @@
 
   function loadSwitcher(): Promise<void> {
     if (ThemeQuickSwitcher) return Promise.resolve();
-    switcherLoad ??= import("$lib/components/ThemeQuickSwitcher.svelte")
+    switcherLoad ??= import("$lib/components/themes/ThemeQuickSwitcher.svelte")
       .then((module) => { ThemeQuickSwitcher = module.default; })
       .finally(() => { switcherLoad = null; });
     return switcherLoad;
@@ -122,11 +122,11 @@
 {/if}
 
 {#if showQuickNotes}
-  <QuickNotesPanel onclose={() => { showQuickNotes = false; }} />
+  <QuickNotesPanel onClose={() => { showQuickNotes = false; }} />
 {/if}
 
 {#if musicMounted}
-  <MusicPanel visible={showMusic} onclose={() => { showMusic = false; }} />
+  <MusicPanel visible={showMusic} onClose={() => { showMusic = false; }} />
 {/if}
 
 {#if showThemeQuickSwitcher && ThemeQuickSwitcher}
@@ -138,7 +138,7 @@
   <SettingsModal
     onClose={() => settingsLauncher.close()}
     initialSection={settingsLauncher.targetSection}
-    initialDoomscrollingTab={settingsLauncher.targetDoomscrollingTab}
+    initialDistractionsTab={settingsLauncher.targetDistractionsTab}
     initialChatSubsection={settingsLauncher.targetChatSubsection}
     initialChatTeammateId={settingsLauncher.targetChatTeammateId}
     initialChatChannelId={settingsLauncher.targetChatChannelId}

@@ -1,22 +1,18 @@
 # Notes links and collaboration
 
+Status: implemented for local links, backlinks, comments, suggestions, mentions, and notifications. Shared access control and sync are planned.
+
 ## Inline links
 
-**Implemented:** linked text uses semantic anchors. In the editor, hovering a link opens a compact floating popover with its destination, Copy, and Edit. Clicking the text or destination opens the link, including Ctrl/Cmd-click. The preview preserves the caret and allows moving the pointer across its gap; leaving the link and preview dismisses it. Touch and text dragging do not trigger hover actions. Local note and database-block references use normal Notes navigation; web and email links open through the system handler. Read-only rich text opens links directly. Selecting linked text does not interrupt the selection or navigate.
+Linked text uses semantic anchors. Hovering a link in the editor opens a small floating preview with its destination, Copy, and Edit; clicking the link opens it. Ctrl/Cmd+K or Edit opens an anchored panel with Page or URL and Link title fields, where note titles can be searched without reading database rows. Applying keeps surrounding text and formatting, and Remove link keeps the text. Link panels float outside the document layout, and invalid destinations, stale selections, and failed actions stay visible in the panel.
 
-Ctrl/Cmd+K and Edit open an anchored panel with Page or URL and Link title fields. The edit form stays open when the pointer leaves it. Available note titles can be searched without reading database rows. Apply and Remove link share the bottom action area beneath a divider aligned with the field margins. Both use plain text button styling, with an icon only for Remove link. Applying changes preserves surrounding text and inline formatting. Remove link keeps the text. Outside clicks and leaving the panel with keyboard focus dismiss it without taking focus back; Escape returns focus to the original text range. Resuming typing dismisses the preview. A delayed editor-panel load does not take focus back from another field. Invalid destinations, stale selections, and failed actions stay visible in the panel.
+Pasting a single valid URL onto selected text links the existing words, including across a document selection as one undo step; code blocks and database blocks are unchanged.
 
-Pasting a single valid URL onto selected text applies the hyperlink while preserving the words and formatting. Document selections support this across text blocks with one undo step, leaving database blocks and code unchanged. Ordinary copied text still replaces the selection, and code and explicit paste as plain text keep their literal paste behavior.
+Local links persist as `#notes?page=UUID` with an optional `block=UUID`, and links copied from the current app origin normalize to this form. Rust validates the identities before saving, and navigation checks whether the target is still available. This is not an operating-system URL scheme or a public sharing URL.
 
-Link panels use 80% of the rendered Notes paragraph font size and inherit it through their buttons and fields, including when portaled outside the note. Labels and errors scale with the panel text. The note's paragraph typography stays unchanged. They use a light shadow and a field border cue instead of an extra focus contour. They live outside the note's layout, reposition on scrolling and viewport changes, and scroll only when their full bordered height exceeds available space. They release their observers and hover timers when closed and load only when opened. Linking and copying a local database reference do not read or duplicate its rows or schema.
+Page and database mentions render as compact inline references. Hovering shows the current title and path (and, for databases, a schematic preview that fetches no rows); metadata loads only on hover intent or activation. Clicking a database mention opens its database surface. Within the vault, rich clipboard paste keeps mention identities without duplicating their destinations; missing or invalid metadata degrades to readable text or an ordinary hyperlink.
 
-Local text links persist as `#notes?page=UUID` with an optional `block=UUID`. Links copied from the current app origin normalize to this portable form. Rust validates these identities before saving; navigation still checks whether the target is available. This does not register an operating-system URL scheme or create a public sharing URL.
-
-Page and database mentions render as compact inline references with a destination icon. Hovering opens a small floating card with the current destination title and containing path. Database cards include a schematic table preview without fetching rows or mounting a database view. Metadata loads only after hover intent or when activation needs to resolve a database owner. Clicking or Ctrl/Cmd-clicking a database mention opens its dedicated database surface. Native text selection and dragging remain available. Rich clipboard paste inside Notes retains local mention identities; external consumers receive readable text and an available local hyperlink.
-
-Inline clipboard references carry a validated page or database identity independently of their hyperlink. A database mention without a known owner remains an inline reference when pasted into Notes; copying it reads no target metadata, rows, or schema. Nested text annotations and selected label text survive the round trip. Missing or invalid reference metadata leaves readable text or a valid ordinary hyperlink. Inline references never request the independent page or database copies used by block clipboard operations. Target availability is checked during navigation rather than by clipboard serialization.
-
-External activation uses a Notes-owned native command on desktop and Android. It validates the existing rich-text URL bounds, allows only HTTP, HTTPS, and email destinations, and rejects embedded credentials before invoking the system handler. Local references stay within Notes navigation. The command does not fetch content or widen the generic opener allowlist.
+External links open through a Notes-owned native command that allows only HTTP, HTTPS, and email destinations, rejects embedded credentials, fetches nothing, and does not widen the generic opener allowlist. Local references stay within Notes navigation.
 
 ## Stable links and aliases
 
@@ -54,7 +50,7 @@ Suggestions store original and proposed text, range and context anchors, author,
 
 Rich text can mention users, projects, tasks, pages, dates, and supported local objects. Reminder and participant mentions can create local notification rows. Delivery is owned by the local application or platform scheduler and never by a hosted Notes service.
 
-Opening a note does not load the database mention catalog. A mention menu requests that data when opened, shares an in-flight request with other open menus, and releases it after the menus close. Reopening refreshes the catalog so database edits are reflected without retaining every row in each editor pane.
+The mention catalog loads only while a mention menu is open, so opening a note never reads database rows for mentions.
 
 Notification previews and deep links obey the same effective page access as direct reads.
 
@@ -66,7 +62,7 @@ Resolve, reopen, accept, and reject operations validate base versions. Future sy
 
 ## Access
 
-Future collaboration can grant group-wide, project-wide, folder-subtree, page, comment, or task-context access. Project membership alone does not imply access to every Note.
+**Planned:** shared collaboration can grant group-wide, project-wide, folder-subtree, page, comment, or task-context access. Project membership alone does not imply access to every Note.
 
 Search, backlinks, mentions, notifications, history, templates, imports, exports, Chat links, reports, and AI context packages enforce the same effective access as direct page reads.
 
@@ -74,7 +70,7 @@ Inviting a participant requires an explicit history-visibility choice when prior
 
 ## Sync direction
 
-Local editing remains SQLite-canonical. Future encrypted CRDT sync may coordinate changes over the same page and block graph, but it must preserve local canonical data, explicit access, conflict semantics, and derivative Markdown boundaries.
+Local editing remains SQLite-canonical. Planned encrypted CRDT sync may coordinate changes over the same page and block graph, but it must preserve local canonical data, explicit access, conflict semantics, and derivative Markdown boundaries.
 
 Exact encryption, key distribution, offline revocation, and multi-author conflict behavior belong to the [sync](../../data/sync.md) and [access-control](../../data/access-control.md) specifications.
 

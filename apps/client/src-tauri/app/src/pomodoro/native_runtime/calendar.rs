@@ -1,7 +1,7 @@
-use ganbaru_focus::{FocusErrorCode, FocusExecutionError};
+use ganbaru_pomodoro::{FocusErrorCode, FocusExecutionError};
 use sqlx::{Sqlite, Transaction};
 
-pub(super) type CalendarContext = crate::calendar_reads::focus_context::FocusCalendarContext;
+pub(super) type CalendarContext = crate::calendar::reads::focus_context::FocusCalendarContext;
 
 /// Resolve the owner from canonical Calendar and committed execution in the accepted transaction.
 pub(super) async fn resolve(
@@ -9,7 +9,7 @@ pub(super) async fn resolve(
     now_ms: i64,
     requested: Option<&str>,
 ) -> Result<CalendarContext, FocusExecutionError> {
-    crate::calendar_reads::focus_context::resolve(tx, now_ms, requested)
+    crate::calendar::reads::focus_context::resolve(tx, now_ms, requested)
         .await
         .map_err(|message| FocusExecutionError {
             code: FocusErrorCode::Unavailable,

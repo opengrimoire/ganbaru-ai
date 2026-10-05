@@ -1,7 +1,7 @@
 <script lang="ts">
-  import type { EventColor } from "$lib/components/calendar/types";
-  import { EVENT_COLOR_OPTIONS } from "$lib/components/calendar/utils";
-  import type { ProjectIconPickerColor } from "$lib/projects/project-icon-picker";
+  import type { EventColor } from "$lib/calendar/types";
+  import { EVENT_COLOR_OPTIONS } from "$lib/calendar/utils";
+  import type { IconPickerColor } from "$lib/projects/icons/picker";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import { cn } from "$lib/utils";
 
@@ -11,14 +11,14 @@
     onAskEveryTimeChange, disabled = false,
   }: {
     open?: boolean;
-    color: ProjectIconPickerColor;
+    color: IconPickerColor;
     label: string;
     askEveryTime: boolean;
     colorSelectionBorder: string;
     automaticColor: string;
-    colorLabel: (color: ProjectIconPickerColor) => string;
+    colorLabel: (color: IconPickerColor) => string;
     colorSwatch: (color: EventColor) => string;
-    onSelect: (color: ProjectIconPickerColor) => void;
+    onSelect: (color: IconPickerColor) => void;
     onOpen: () => void;
     onAskEveryTimeChange: (enabled: boolean) => void;
     disabled?: boolean;

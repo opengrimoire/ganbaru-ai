@@ -14,11 +14,11 @@
     "ganbaru-mobile-notifications:allow-cancelCalendarNotifications",
     "ganbaru-mobile-notifications:allow-takeCalendarNotificationAction",
     "ganbaru-mobile-notifications:allow-reconcilePomodoroSchedule",
-    "ganbaru-mobile-doomscrolling:allow-accessStatus",
-    "ganbaru-mobile-doomscrolling:allow-openUsageAccessSettings",
-    "ganbaru-mobile-doomscrolling:allow-openAccessibilitySettings",
-    "ganbaru-mobile-doomscrolling:allow-listLaunchableApps",
-    "ganbaru-mobile-doomscrolling:allow-takeNotificationAction",
+    "ganbaru-mobile-distractions:allow-accessStatus",
+    "ganbaru-mobile-distractions:allow-openUsageAccessSettings",
+    "ganbaru-mobile-distractions:allow-openAccessibilitySettings",
+    "ganbaru-mobile-distractions:allow-listLaunchableApps",
+    "ganbaru-mobile-distractions:allow-takeNotificationAction",
     {
       "identifier": "opener:allow-open-url",
       "allow": [

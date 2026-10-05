@@ -44,4 +44,4 @@ Quick notes creates no Markdown files and does not participate in Notes search, 
 
 The panel and editor manage focus, close with Escape or Android Back as appropriate, and restore prior focus. DOM order remains canonical even when masonry changes visual placement. Reorder, tags, lifecycle, formatting, color, and close actions are keyboard reachable and have visible touch equivalents.
 
-Reduced-motion preference disables displacement animation. At recovery-size windows, primary close, Save state, restore, and delete actions remain reachable.
+Reduced motion disables displacement animation. At recovery-size windows, close, save state, restore, and delete actions remain reachable.

@@ -4,17 +4,17 @@
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import ListTodo from "@lucide/svelte/icons/list-todo";
   import LoaderCircle from "@lucide/svelte/icons/loader-circle";
-  import MusicPlaylistIcon from "./builder/MusicPlaylistIcon.svelte";
+  import MusicPlaylistIcon from "$lib/components/music/builder/MusicPlaylistIcon.svelte";
   import {
     bulkEditMusicMemberships,
     getMusicMembershipMatrix,
     getMusicPlaylistSummaries,
   } from "$lib/api/music-library";
   import { getLocalization } from "$lib/i18n/translator.svelte";
-  import { notifyMusicLibraryChanged } from "$lib/music/music-library-events";
-  import type { MusicPlaylistSummary } from "$lib/music/library-contracts";
-  import { sortReviewPlaylists } from "$lib/music/music-review";
-  import { systemMusicPlaylistName } from "$lib/music/music-system-playlists";
+  import { notifyMusicLibraryChanged } from "$lib/music/library/events";
+  import type { MusicPlaylistSummary } from "$lib/music/library/contracts";
+  import { sortReviewPlaylists } from "$lib/music/review";
+  import { systemMusicPlaylistName } from "$lib/music/playlists/system";
   import { getMusicPlayer } from "$lib/stores/music-player.svelte";
 
   let { onOpenBuilder, active = true }: {
@@ -137,7 +137,7 @@
         removePlaylistIds,
         weightPlaylistIds: [],
         weight: null,
-        updatedAt: Date.now(),
+        updatedAtMs: Date.now(),
       });
       notifyMusicLibraryChanged();
       if (open && request === generation && itemId === targetItemId) {

@@ -5,7 +5,7 @@
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import VaultLanguageDropdown from "./VaultLanguageDropdown.svelte";
   import AboutInformationDialog from "./AboutInformationDialog.svelte";
-  import { onboardingPrimaryAction } from "./onboarding-primary-action";
+  import { onboardingPrimaryAction } from "$lib/vault/onboarding-primary-action";
 
   let { onContinue }: { onContinue: () => void } = $props();
 

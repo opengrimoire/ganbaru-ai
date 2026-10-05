@@ -111,7 +111,7 @@ pub(super) async fn ensure_built_in_music_playlists(pool: &SqlitePool) -> MusicL
     for playlist in BUILT_IN_MUSIC_PLAYLISTS {
         sqlx::query(
             "INSERT OR IGNORE INTO music_playlists
-                (id, name, icon, shuffle_enabled, repeat_mode, sort_order, created_at, updated_at, version)
+                (id, name, icon, shuffle_enabled, repeat_mode, sort_order, created_at_ms, updated_at_ms, version)
              VALUES (?, ?, ?, 1, 'all', (SELECT COALESCE(MAX(sort_order), -1) + 1 FROM music_playlists), 1, 1, 1)",
         )
         .bind(playlist.id)

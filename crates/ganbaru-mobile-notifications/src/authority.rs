@@ -7,7 +7,7 @@ struct RegisteredAuthority {
     process_nonce: i64,
     check: Box<AuthorityChecker>,
 }
-static CHECKER: OnceLock<RegisteredAuthority> = OnceLock::new();
+static AUTHORITY: OnceLock<RegisteredAuthority> = OnceLock::new();
 
 /// Register the application-owned cached revision check before starting delivery.
 /// Android callbacks cannot use a WebView or retained notification as authority.
@@ -18,7 +18,7 @@ pub fn set_focus_authority_checker(
     if process_nonce <= 0 {
         return Err("Native Android Focus process identity must be positive".to_owned());
     }
-    CHECKER
+    AUTHORITY
         .set(RegisteredAuthority {
             process_nonce,
             check: Box::new(checker),
@@ -28,13 +28,13 @@ pub fn set_focus_authority_checker(
 
 #[cfg(target_os = "android")]
 pub(super) fn process_nonce() -> Result<i64, String> {
-    CHECKER
+    AUTHORITY
         .get()
         .map(|authority| authority.process_nonce)
         .ok_or_else(|| "Native Android Focus authority is not installed".to_owned())
 }
 
-fn checked(
+fn is_phase_current(
     authority: Option<&RegisteredAuthority>,
     process_nonce: i64,
     generation: i64,
@@ -51,7 +51,7 @@ fn checked(
     })
 }
 
-fn checked_process(authority: Option<&RegisteredAuthority>, process_nonce: i64) -> bool {
+fn is_process_current(authority: Option<&RegisteredAuthority>, process_nonce: i64) -> bool {
     process_nonce > 0 && authority.is_some_and(|authority| authority.process_nonce == process_nonce)
 }
 
@@ -72,13 +72,13 @@ fn contained(check: impl FnOnce() -> bool) -> bool {
 // Two opaque JNI pointers are ignored, one signed 64-bit jlong is inspected,
 // and the returned unsigned 8-bit jboolean is zero or one. This total check
 // invokes no callback, accesses no raw pointer, and cannot unwind.
-#[unsafe(export_name = "Java_app_ganbaru_mobile_1notifications_NativeFocusAuthority_isProcessCurrent")]
+#[unsafe(export_name = "Java_org_opengrimoire_ganbaruai_mobile_notifications_NativeFocusAuthority_isProcessCurrent")]
 pub extern "system" fn native_focus_process_is_current(
     _environment: *mut std::ffi::c_void,
     _class: *mut std::ffi::c_void,
     process_nonce: i64,
 ) -> u8 {
-    u8::from(checked_process(CHECKER.get(), process_nonce))
+    u8::from(is_process_current(AUTHORITY.get(), process_nonce))
 }
 
 /// JNI uses two opaque pointers plus three primitive jlong inputs and a jboolean result.
@@ -89,7 +89,7 @@ pub extern "system" fn native_focus_process_is_current(
 // JNI supplies opaque environment/class pointers, three signed 64-bit jlong values,
 // and consumes an unsigned 8-bit jboolean. No pointer is accessed or retained.
 // The installed checker lives for the process and panics are contained below.
-#[unsafe(export_name = "Java_app_ganbaru_mobile_1notifications_NativeFocusAuthority_isCurrent")]
+#[unsafe(export_name = "Java_org_opengrimoire_ganbaruai_mobile_notifications_NativeFocusAuthority_isCurrent")]
 pub extern "system" fn native_focus_is_current(
     _environment: *mut std::ffi::c_void,
     _class: *mut std::ffi::c_void,
@@ -98,7 +98,7 @@ pub extern "system" fn native_focus_is_current(
     revision: i64,
 ) -> u8 {
     u8::from(contained(|| {
-        checked(CHECKER.get(), process_nonce, generation, revision)
+        is_phase_current(AUTHORITY.get(), process_nonce, generation, revision)
     }))
 }
 
@@ -120,17 +120,17 @@ mod tests {
     }
     #[test]
     fn native_callback_rejects_uninstalled_or_invalid_authority() {
-        assert!(!checked(None, 100, 1, 0));
+        assert!(!is_phase_current(None, 100, 1, 0));
         let authority = RegisteredAuthority {
             process_nonce: 100,
             check: Box::new(|_, _| true),
         };
-        assert!(!checked(Some(&authority), 0, 1, 0));
-        assert!(!checked(Some(&authority), -1, 1, 0));
-        assert!(!checked(Some(&authority), 101, 1, 0));
-        assert!(!checked(Some(&authority), 100, -1, 0));
-        assert!(!checked(Some(&authority), 100, 0, 0));
-        assert!(!checked(Some(&authority), 100, 1, -1));
+        assert!(!is_phase_current(Some(&authority), 0, 1, 0));
+        assert!(!is_phase_current(Some(&authority), -1, 1, 0));
+        assert!(!is_phase_current(Some(&authority), 101, 1, 0));
+        assert!(!is_phase_current(Some(&authority), 100, -1, 0));
+        assert!(!is_phase_current(Some(&authority), 100, 0, 0));
+        assert!(!is_phase_current(Some(&authority), 100, 1, -1));
     }
     #[test]
     fn native_callback_revocation_requires_the_process_without_requiring_an_active_phase() {
@@ -138,11 +138,11 @@ mod tests {
             process_nonce: 100,
             check: Box::new(|_, _| false),
         };
-        assert!(!checked(Some(&authority), 100, 3, 10));
-        assert!(checked_process(Some(&authority), 100));
-        assert!(!checked_process(Some(&authority), 101));
-        assert!(!checked_process(Some(&authority), 0));
-        assert!(!checked_process(None, 100));
+        assert!(!is_phase_current(Some(&authority), 100, 3, 10));
+        assert!(is_process_current(Some(&authority), 100));
+        assert!(!is_process_current(Some(&authority), 101));
+        assert!(!is_process_current(Some(&authority), 0));
+        assert!(!is_process_current(None, 100));
     }
     #[test]
     fn native_callback_checks_live_revision_at_execution_time() {
@@ -157,14 +157,14 @@ mod tests {
             generation == 3 && candidate == current.load(Ordering::Acquire)
         })
         .unwrap();
-        let checker = CHECKER.get();
-        assert!(checked(checker, 100, 3, 10));
+        let authority = AUTHORITY.get();
+        assert!(is_phase_current(authority, 100, 3, 10));
         revision.store(11, Ordering::Release);
-        assert!(!checked(checker, 100, 3, 10));
-        assert!(checked(checker, 100, 3, 11));
-        assert!(!checked(checker, 100, 2, 11));
+        assert!(!is_phase_current(authority, 100, 3, 10));
+        assert!(is_phase_current(authority, 100, 3, 11));
+        assert!(!is_phase_current(authority, 100, 2, 11));
         // A restarted process must reject old envelopes even if counters coincide.
-        assert!(!checked(checker, 99, 3, 11));
+        assert!(!is_phase_current(authority, 99, 3, 11));
         assert!(set_focus_authority_checker(101, |_, _| true).is_err());
     }
 }

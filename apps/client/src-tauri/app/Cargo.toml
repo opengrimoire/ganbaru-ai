@@ -18,12 +18,12 @@ ammonia = { workspace = true }
 base64 = { workspace = true }
 chrono = { workspace = true }
 flate2 = { workspace = true }
-ganbaru-chat-contracts = { path = "../../../../crates/ganbaru-chat-contracts" }
-ganbaru-chat = { path = "../../../../crates/ganbaru-chat", default-features = false }
-ganbaru-db = { path = "../../../../crates/ganbaru-db" }
-ganbaru-focus = { path = "../../../../crates/ganbaru-focus" }
-ganbaru-notes = { path = "../../../../crates/ganbaru-notes" }
-ganbaru-working-folders = { path = "../../../../crates/ganbaru-working-folders" }
+ganbaru-chat-contracts = { workspace = true }
+ganbaru-chat = { workspace = true }
+ganbaru-db = { workspace = true }
+ganbaru-notes = { workspace = true }
+ganbaru-pomodoro = { workspace = true }
+ganbaru-working-folders = { workspace = true }
 jiff = { workspace = true }
 reqwest = { workspace = true }
 rcgen = { workspace = true }
@@ -45,8 +45,8 @@ libc = { workspace = true }
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 axum = { workspace = true }
-ganbaru-chat = { path = "../../../../crates/ganbaru-chat", features = ["native-runtime"] }
-ganbaru-chat-providers = { path = "../../../../crates/ganbaru-chat-providers" }
+ganbaru-chat = { workspace = true, features = ["native-runtime"] }
+ganbaru-chat-providers = { workspace = true }
 keyring = { workspace = true }
 notify = { workspace = true }
 notify-rust = { workspace = true }
@@ -60,7 +60,7 @@ tauri-plugin-updater = { workspace = true }
 
 [target.'cfg(target_os = "android")'.dependencies]
 ganbaru-mobile-documents = { workspace = true }
-ganbaru-mobile-doomscrolling = { workspace = true }
+ganbaru-mobile-distractions = { workspace = true }
 ganbaru-mobile-media = { workspace = true }
 ganbaru-mobile-notifications = { workspace = true }
 tauri-plugin-notification = { workspace = true }
@@ -90,4 +90,4 @@ objc2-foundation = { workspace = true }
 objc2-web-kit = { workspace = true }
 
 [dev-dependencies]
-ganbaru-chat = { path = "../../../../crates/ganbaru-chat", features = ["test-support"] }
+ganbaru-chat = { workspace = true, features = ["test-support"] }

@@ -11,13 +11,13 @@
   let {
     tagId,
     tags,
-    onselect,
+    onSelect,
     buttonClass = "",
     mobileLayout = false,
   }: {
     tagId: string | null;
     tags: readonly QuickNoteTag[];
-    onselect: (tagId: string | null) => void;
+    onSelect: (tagId: string | null) => void;
     buttonClass?: string;
     mobileLayout?: boolean;
   } = $props();
@@ -46,7 +46,7 @@
   }
 
   function choose(next: string | null): void {
-    onselect(next);
+    onSelect(next);
     closePicker();
   }
 

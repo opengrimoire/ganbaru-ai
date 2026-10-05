@@ -164,13 +164,13 @@ pub(in crate::music::library) fn strong_fingerprint(path: &Path) -> Result<Strin
     let mut hasher = Sha256::new();
     let mut buffer = vec![0_u8; 256 * 1024];
     loop {
-        let read = file
+        let bytes_read = file
             .read(&mut buffer)
             .map_err(|error| format!("cannot hash media: {error}"))?;
-        if read == 0 {
+        if bytes_read == 0 {
             break;
         }
-        hasher.update(&buffer[..read]);
+        hasher.update(&buffer[..bytes_read]);
     }
     Ok(format!("sha256:{:x}", hasher.finalize()))
 }

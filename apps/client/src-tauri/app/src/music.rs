@@ -1,53 +1,67 @@
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 use base64::{Engine as _, engine::general_purpose};
+#[cfg(not(target_os = "ios"))]
 use serde::{Deserialize, Serialize};
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 use std::{
     collections::{HashMap, VecDeque},
     fs,
     path::{Path, PathBuf},
     process::Stdio,
 };
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 use std::{
     sync::atomic::{AtomicU64, Ordering},
     time::{SystemTime, UNIX_EPOCH},
 };
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 use tauri::Manager;
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 use tauri_plugin_dialog::{DialogExt, FilePath};
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 mod artwork;
-pub(crate) mod host;
+pub(crate) mod assignments;
+pub(crate) mod error;
+#[cfg(not(target_os = "ios"))]
 pub(crate) mod library;
+#[cfg(desktop)]
+pub(crate) mod media_controls;
+#[cfg(not(target_os = "ios"))]
+pub(crate) mod media_server;
+pub(crate) mod player;
+#[cfg(not(target_os = "ios"))]
 pub(crate) mod root_bindings;
+#[cfg(not(target_os = "ios"))]
 pub(crate) mod session;
-mod youtube_host;
-pub(crate) mod youtube_metadata;
-pub(crate) mod youtube_thumbnail;
+#[cfg(desktop)]
+pub(crate) mod soundscape;
+#[cfg(not(target_os = "ios"))]
+pub(crate) mod youtube;
 
-pub(crate) use host::setup_youtube_host;
+#[cfg(not(target_os = "ios"))]
+pub(crate) use media_server::setup_youtube_host;
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 use artwork::{extract_embedded_artwork, find_track_artwork};
 
+#[cfg(not(target_os = "ios"))]
 const MAX_MEDIA_FOLDER_FILES: usize = 5_000;
+#[cfg(not(target_os = "ios"))]
 const MAX_ARTWORK_BYTES: u64 = 12 * 1024 * 1024;
 #[cfg(not(target_os = "ios"))]
 const MAX_INTERCHANGE_BYTES: u64 = 8 * 1024 * 1024;
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 static MEDIA_FOLDER_SCAN_GENERATION: AtomicU64 = AtomicU64::new(0);
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 const MEDIA_EXTENSIONS: &[&str] = &[
     "aac", "aif", "aiff", "alac", "ape", "avi", "flac", "flv", "m4a", "m4v", "mkv", "mov", "mp3",
     "mp4", "mpeg", "mpg", "ogg", "ogv", "opus", "wav", "webm", "wma", "wmv",
 ];
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 const SOUNDSCAPE_AUDIO_EXTENSIONS: &[&str] = &["flac", "m4a", "mp3", "mp4", "oga", "ogg", "wav"];
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 fn replace_music_export_file(path: &Path, contents: &[u8]) -> Result<(), String> {
     let parent = path
         .parent()
@@ -84,6 +98,7 @@ fn replace_music_export_file(path: &Path, contents: &[u8]) -> Result<(), String>
     Ok(())
 }
 
+#[cfg(not(target_os = "ios"))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MediaFolderTrack {
@@ -92,6 +107,7 @@ pub struct MediaFolderTrack {
     pub artwork_path: Option<String>,
 }
 
+#[cfg(not(target_os = "ios"))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MediaFolderSelection {
@@ -101,7 +117,7 @@ pub struct MediaFolderSelection {
     pub truncated: bool,
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 #[tauri::command]
 pub async fn music_pick_media_folder(
     app: tauri::AppHandle,
@@ -154,7 +170,7 @@ pub async fn music_pick_media_folder(
         })
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 #[tauri::command]
 pub async fn music_detect_default_folder(
     app: tauri::AppHandle,
@@ -175,7 +191,7 @@ pub async fn music_detect_default_folder() -> Result<Option<MediaFolderSelection
     Ok(None)
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 fn detect_non_empty_media_folder(folder: &Path) -> Result<Option<MediaFolderSelection>, String> {
     require_absolute_directory(folder)?;
     let mut queue = VecDeque::from([folder.to_path_buf()]);
@@ -218,7 +234,7 @@ fn detect_non_empty_media_folder(folder: &Path) -> Result<Option<MediaFolderSele
     Ok(None)
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 #[tauri::command]
 pub async fn music_pick_root_binding_folder(
     app: tauri::AppHandle,
@@ -251,7 +267,7 @@ pub async fn music_pick_root_binding_folder(
         .map(|selection| selection.map(|tree| tree.tree_uri))
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 #[tauri::command]
 pub async fn music_pick_media_file(app: tauri::AppHandle) -> Result<Option<String>, String> {
     let selected = tauri::async_runtime::spawn_blocking(move || {
@@ -270,7 +286,7 @@ pub async fn music_pick_media_file(app: tauri::AppHandle) -> Result<Option<Strin
     Ok(selected.map(|path| path.to_string_lossy().into_owned()))
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 #[tauri::command]
 pub async fn music_pick_soundscape_file(app: tauri::AppHandle) -> Result<Option<String>, String> {
     let selected = tauri::async_runtime::spawn_blocking(move || {
@@ -289,7 +305,7 @@ pub async fn music_pick_soundscape_file(app: tauri::AppHandle) -> Result<Option<
     Ok(selected.map(|path| path.to_string_lossy().into_owned()))
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 #[tauri::command]
 pub async fn music_pick_artwork_file(app: tauri::AppHandle) -> Result<Option<String>, String> {
     let selected = tauri::async_runtime::spawn_blocking(move || {
@@ -317,7 +333,7 @@ pub async fn music_pick_artwork_file(app: tauri::AppHandle) -> Result<Option<Str
     app.mobile_media().pick_artwork_file().await
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 #[tauri::command]
 pub async fn music_pick_and_read_interchange_file(
     app: tauri::AppHandle,
@@ -382,7 +398,7 @@ pub async fn music_pick_and_read_interchange_file(
     )
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 /// Writes a completed native Music snapshot after all SQLite reads have finished.
 pub async fn music_pick_and_write_interchange_file(
     app: tauri::AppHandle,
@@ -477,7 +493,7 @@ fn music_interchange_file_name(default_name: &str, extension: &str) -> Result<St
     Ok(format!("{safe_stem}.{extension}"))
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 #[tauri::command]
 pub async fn music_artwork_data_url(path: String) -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(move || {
@@ -511,7 +527,7 @@ pub async fn music_artwork_data_url(app: tauri::AppHandle, path: String) -> Resu
         .ok_or_else(|| "selected artwork is unavailable".to_string())
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 #[tauri::command]
 pub async fn music_embedded_artwork_data_url(path: String) -> Result<Option<String>, String> {
     tauri::async_runtime::spawn_blocking(move || {
@@ -546,7 +562,7 @@ pub async fn music_embedded_artwork_data_url(
         .await
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 fn artwork_content_type(bytes: &[u8]) -> Option<&'static str> {
     if bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
         Some("image/png")
@@ -565,17 +581,17 @@ fn artwork_content_type(bytes: &[u8]) -> Option<&'static str> {
     }
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 fn music_folder_start_directory(app: &tauri::AppHandle) -> Option<PathBuf> {
     existing_music_start_directory(app.path().audio_dir().ok())
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 fn existing_music_start_directory(candidate: Option<PathBuf>) -> Option<PathBuf> {
     candidate.filter(|path| path.is_dir())
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 #[tauri::command]
 pub fn music_reveal_local_file(path: String) -> Result<(), String> {
     let path = PathBuf::from(path);
@@ -588,7 +604,7 @@ fn scan_media_folder(folder: &Path) -> Result<MediaFolderSelection, String> {
     scan_media_folder_with_cancel(folder, || false)
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 fn scan_media_folder_with_cancel(
     folder: &Path,
     is_cancelled: impl Fn() -> bool,
@@ -599,13 +615,13 @@ fn scan_media_folder_with_cancel(
     let mut truncated = false;
     let mut artwork_cache: HashMap<PathBuf, Vec<PathBuf>> = HashMap::new();
 
-    while let Some(dir) = queue.pop_front() {
+    while let Some(directory) = queue.pop_front() {
         if is_cancelled() {
             truncated = true;
             break;
         }
-        let mut entries = fs::read_dir(&dir)
-            .map_err(|e| format!("failed to read media folder '{}': {e}", dir.display()))?
+        let mut entries = fs::read_dir(&directory)
+            .map_err(|e| format!("failed to read media folder '{}': {e}", directory.display()))?
             .collect::<Result<Vec<_>, _>>()
             .map_err(|e| format!("failed to read media folder entry: {e}"))?;
         entries.sort_by_key(|entry| entry.path());
@@ -656,13 +672,13 @@ fn scan_media_folder_with_cancel(
     })
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 fn dialog_path(path: FilePath) -> Result<PathBuf, String> {
     path.into_path()
         .map_err(|e| format!("selected path is not a local folder: {e}"))
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 fn require_absolute_directory(path: &Path) -> Result<(), String> {
     if !path.is_absolute() {
         return Err("media folder path must be absolute".to_string());
@@ -676,7 +692,7 @@ fn require_absolute_directory(path: &Path) -> Result<(), String> {
     }
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 fn require_absolute_file(path: &Path) -> Result<(), String> {
     if !path.is_absolute() {
         return Err("media file path must be absolute".to_string());
@@ -708,15 +724,12 @@ fn reveal_local_file(path: &Path) -> Result<(), String> {
     spawn_file_manager_command("explorer.exe", [std::ffi::OsStr::new(&selection)])
 }
 
-#[cfg(all(
-    not(any(target_os = "android", target_os = "ios")),
-    not(any(target_os = "linux", target_os = "macos", windows))
-))]
+#[cfg(all(desktop, not(any(target_os = "linux", target_os = "macos", windows))))]
 fn reveal_local_file(_path: &Path) -> Result<(), String> {
     Err("opening media file locations is not implemented for this platform".to_string())
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 fn spawn_file_manager_command<I, S>(program: &str, args: I) -> Result<(), String>
 where
     I: IntoIterator<Item = S>,
@@ -732,7 +745,7 @@ where
         .map_err(|e| format!("open media file location: {e}"))
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 fn is_supported_media_path(path: &Path) -> bool {
     path.extension()
         .and_then(|value| value.to_str())
@@ -743,7 +756,7 @@ fn is_supported_media_path(path: &Path) -> bool {
         })
 }
 
-#[cfg(not(any(target_os = "android", target_os = "ios")))]
+#[cfg(desktop)]
 fn media_title_from_path(path: &Path) -> String {
     path.file_stem()
         .and_then(|value| value.to_str())
@@ -758,8 +771,8 @@ mod tests {
         artwork_rank_for_track, find_track_artwork, parse_apic_frame, parse_flac_picture_block,
         remove_id3_unsynchronization,
     };
-    use super::host::{ByteRange, media_content_type, parse_byte_range};
-    use super::youtube_host::youtube_host_html;
+    use super::media_server::{ByteRange, media_content_type, parse_byte_range};
+    use super::youtube::player_page::youtube_host_html;
     use super::*;
     use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -849,7 +862,7 @@ mod tests {
 
     #[test]
     fn music_folder_start_directory_uses_only_existing_directories() {
-        let root = unique_temp_dir("ganbaru-ai-music-start-dir");
+        let root = unique_temporary_dir("ganbaru-ai-music-start-dir");
         let music_dir = root.join("localized-audio");
         let file_path = root.join("not-a-directory");
         fs::create_dir_all(&music_dir).unwrap();
@@ -867,7 +880,7 @@ mod tests {
 
     #[test]
     fn automatic_music_folder_detection_stops_after_the_first_supported_file() {
-        let root = unique_temp_dir("ganbaru-ai-music-detection");
+        let root = unique_temporary_dir("ganbaru-ai-music-detection");
         fs::create_dir_all(root.join("album")).unwrap();
         fs::write(root.join("notes.txt"), []).unwrap();
         assert!(detect_non_empty_media_folder(&root).unwrap().is_none());
@@ -886,7 +899,7 @@ mod tests {
     fn media_folder_scan_returns_deterministic_partial_results_on_cancellation() {
         use std::cell::Cell;
 
-        let root = unique_temp_dir("ganbaru-ai-music-cancel");
+        let root = unique_temporary_dir("ganbaru-ai-music-cancel");
         fs::create_dir_all(&root).unwrap();
         for name in ["c.mp3", "a.mp3", "b.mp3"] {
             fs::write(root.join(name), []).unwrap();
@@ -908,7 +921,7 @@ mod tests {
 
     #[test]
     fn media_folder_scan_handles_deep_trees_without_recursion() {
-        let root = unique_temp_dir("ganbaru-ai-music-deep");
+        let root = unique_temporary_dir("ganbaru-ai-music-deep");
         let mut directory = root.clone();
         for index in 0..128 {
             directory = directory.join(format!("d{index}"));
@@ -927,8 +940,8 @@ mod tests {
     fn media_folder_scan_does_not_follow_symlinks() {
         use std::os::unix::fs::symlink;
 
-        let root = unique_temp_dir("ganbaru-ai-music-symlink");
-        let outside = unique_temp_dir("ganbaru-ai-music-outside");
+        let root = unique_temporary_dir("ganbaru-ai-music-symlink");
+        let outside = unique_temporary_dir("ganbaru-ai-music-outside");
         fs::create_dir_all(&root).unwrap();
         fs::create_dir_all(&outside).unwrap();
         fs::write(outside.join("outside.mp3"), []).unwrap();
@@ -942,7 +955,7 @@ mod tests {
 
     #[test]
     fn media_folder_scan_stops_at_five_thousand_tracks() {
-        let root = unique_temp_dir("ganbaru-ai-music-cap");
+        let root = unique_temporary_dir("ganbaru-ai-music-cap");
         fs::create_dir_all(&root).unwrap();
         for index in 0..=MAX_MEDIA_FOLDER_FILES {
             fs::write(root.join(format!("{index:05}.mp3")), []).unwrap();
@@ -993,7 +1006,7 @@ mod tests {
 
     #[test]
     fn artwork_lookup_uses_parent_album_front_image() {
-        let root = unique_temp_dir("ganbaru-ai-artwork-parent");
+        let root = unique_temporary_dir("ganbaru-ai-artwork-parent");
         let album_dir = root.join("Anime/Made in Abyss/2017 - Made in Abyss OST");
         let disc_dir = album_dir.join("CD 1");
         fs::create_dir_all(&disc_dir).unwrap();
@@ -1011,7 +1024,7 @@ mod tests {
 
     #[test]
     fn artwork_lookup_prefers_matching_sidecar_image() {
-        let root = unique_temp_dir("ganbaru-ai-artwork-sidecar");
+        let root = unique_temporary_dir("ganbaru-ai-artwork-sidecar");
         fs::create_dir_all(&root).unwrap();
         let track = root.join("02 - Focus.mp3");
         let sidecar = root.join("02 - Focus.jpg");
@@ -1089,7 +1102,7 @@ mod tests {
 
     #[test]
     fn mp4_cover_atom_parser_extracts_cover_art() {
-        let root = unique_temp_dir("ganbaru-ai-artwork-mp4");
+        let root = unique_temporary_dir("ganbaru-ai-artwork-mp4");
         fs::create_dir_all(&root).unwrap();
         let path = root.join("theme.m4a");
         let mut data_content = Vec::new();
@@ -1128,7 +1141,7 @@ mod tests {
         atom
     }
 
-    fn unique_temp_dir(name: &str) -> PathBuf {
+    fn unique_temporary_dir(name: &str) -> PathBuf {
         let nanos = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()

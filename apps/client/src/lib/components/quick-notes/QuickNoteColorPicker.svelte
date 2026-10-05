@@ -1,13 +1,13 @@
 <script lang="ts">
   import { tick } from "svelte";
   import Palette from "@lucide/svelte/icons/palette";
-  import { EVENT_COLOR_OPTIONS, getEventColor } from "$lib/components/calendar/utils";
-  import type { EventColor } from "$lib/components/calendar/types";
-  import { contrastRatio } from "$lib/components/ui/colorMath";
+  import { EVENT_COLOR_OPTIONS, getEventColor } from "$lib/calendar/utils";
+  import type { EventColor } from "$lib/calendar/types";
+  import { contrastRatio } from "$lib/color/math";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import { activateModalFocus } from "$lib/modal-focus";
   import { getMobileBackStack } from "$lib/stores/mobile-back-stack.svelte";
-  import { resolveCalendarTokens, type Theme } from "$lib/stores/themes";
+  import { resolveCalendarTokens, type Theme } from "$lib/themes";
   import { portal } from "$lib/utils/portal";
 
   const PALETTE_COLUMNS = 4;
@@ -20,13 +20,13 @@
   let {
     color,
     theme,
-    onselect,
+    onSelect,
     buttonClass = "",
     mobileLayout = false,
   }: {
     color: EventColor;
     theme: Theme;
-    onselect: (color: EventColor) => void;
+    onSelect: (color: EventColor) => void;
     buttonClass?: string;
     mobileLayout?: boolean;
   } = $props();
@@ -98,7 +98,7 @@
   }
 
   function choose(next: EventColor): void {
-    onselect(next);
+    onSelect(next);
     closePicker();
   }
 

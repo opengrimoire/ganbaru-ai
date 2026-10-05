@@ -5,7 +5,7 @@
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import type { DetachableTabView } from "$lib/navigation";
   import { getPreferences } from "$lib/stores/preferences.svelte";
-  import type { TitleBarControlId } from "$lib/stores/preferences";
+  import type { TitleBarControlId } from "$lib/stores/preference-options";
   import { cn } from "$lib/utils";
 
   let {

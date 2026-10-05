@@ -2,7 +2,7 @@
 
 import { describe, expect, it, vi } from "vitest";
 import { loadProjectTaskView, updateProjectTask } from "$lib/api/projects";
-import { PROJECT_TASK_FILTER_DEFAULTS } from "$lib/projects/project-list-view";
+import { PROJECT_TASK_FILTER_DEFAULTS } from "$lib/projects/list/view";
 import type {
   ProjectOptionalDataKind,
   ProjectsOptionalData,
@@ -160,7 +160,7 @@ describe("Projects initial loading", () => {
     } satisfies ProjectsWorkspaceSnapshot);
     await Promise.all([firstLoad, secondLoad]);
     expect(projects.selectedProjectId).toBe("project-1");
-    expect(projects.projectDataLoaded("project-1")).toBe(true);
+    expect(projects.isProjectDataLoaded("project-1")).toBe(true);
     expect(backend.workspaceCalls).toBe(1);
 
     await Promise.all([

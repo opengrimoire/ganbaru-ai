@@ -45,7 +45,7 @@ impl TransferReadBudget {
     /// Probe a repository-owned query in the same snapshot before allocating rows.
     pub(super) async fn read<T>(
         &mut self,
-        tx: &mut Transaction<'_, Sqlite>,
+        transaction: &mut Transaction<'_, Sqlite>,
         source_sql: &str,
         text_columns: &[&str],
         bindings: &[&str],
@@ -72,7 +72,7 @@ impl TransferReadBudget {
         }
         let (records, bytes) = query
             .bind(limit)
-            .fetch_one(&mut **tx)
+            .fetch_one(&mut **transaction)
             .await
             .map_err(|error| MusicLibraryError::database("admit Music transfer rows", error))?;
         let records =
@@ -92,7 +92,7 @@ impl TransferReadBudget {
         }
         query
             .bind(limit)
-            .fetch_all(&mut **tx)
+            .fetch_all(&mut **transaction)
             .await
             .map_err(|error| {
                 MusicLibraryError::database("read admitted Music transfer rows", error)
