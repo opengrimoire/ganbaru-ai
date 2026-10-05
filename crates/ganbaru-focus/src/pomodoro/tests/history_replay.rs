@@ -67,7 +67,7 @@ fn load_adaptive_history_reads_recent_signals() {
         .await
         .unwrap();
         sqlx::query(
-            "INSERT INTO doomscrolling_block_events
+            "INSERT INTO distractions_block_events
                     (id, run_id, segment_id, occurred_at, source_type, source_key,
                      phase, decision)
                  VALUES ('block-1', 'run-1', 'segment-1', '2026-05-29T10:05:00Z',

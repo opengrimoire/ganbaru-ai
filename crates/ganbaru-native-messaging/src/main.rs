@@ -27,9 +27,9 @@ fn block_on<F: std::future::Future>(future: F) -> F::Output {
 }
 
 // Chromium native messaging host names allow underscores but not hyphens.
-const HOST_NAME: &str = "org.opengrimoire.ganbaru_ai.doomscrolling";
-const DEV_HOST_NAME: &str = "org.opengrimoire.ganbaru_ai.doomscrolling_dev";
-const EXTENSION_CONNECTION_FILE: &str = "doomscrolling-extension-status.json";
+const HOST_NAME: &str = "org.opengrimoire.ganbaru_ai.distractions";
+const DEV_HOST_NAME: &str = "org.opengrimoire.ganbaru_ai.distractions_dev";
+const EXTENSION_CONNECTION_FILE: &str = "distractions-extension-status.json";
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]

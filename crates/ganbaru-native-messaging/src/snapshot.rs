@@ -5,11 +5,11 @@ use serde::{Deserialize, Deserializer};
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
-use crate::config::{DoomscrollingConfig, default_config, read_config};
+use crate::config::{DistractionsConfig, default_config, read_config};
 use crate::{NativeResponse, now_utc};
 
-const STATE_FILE: &str = "doomscrolling-state.json";
-const LIMIT_STATE_FILE: &str = "doomscrolling-limit-state.json";
+const STATE_FILE: &str = "distractions-state.json";
+const LIMIT_STATE_FILE: &str = "distractions-limit-state.json";
 const APP_STATE_FILE: &str = "app-state.json";
 const CONFIG_FILE: &str = "config.json";
 const APP_SQLITE_FILE: &str = "ganbaru-ai.sqlite";
@@ -52,7 +52,7 @@ pub(super) struct RuntimeState {
 pub(super) struct StateSnapshot {
     pub(super) config_dir: Option<PathBuf>,
     pub(super) vault_path: Option<PathBuf>,
-    pub(super) config: DoomscrollingConfig,
+    pub(super) config: DistractionsConfig,
     pub(super) runtime: Option<RuntimeState>,
     pub(super) limit_state: Option<LimitState>,
 }
@@ -210,7 +210,7 @@ pub(super) fn runtime_status_at(
             false,
             "inactive".to_string(),
             None,
-            Some("Doomscrolling disabled".to_string()),
+            Some("distraction rules are disabled".to_string()),
         );
     }
 

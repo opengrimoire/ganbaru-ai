@@ -94,7 +94,7 @@ fn close_run_records_adaptive_outcomes_and_context_state() {
         tx.commit().await.unwrap();
 
         sqlx::query(
-            "INSERT INTO doomscrolling_block_events
+            "INSERT INTO distractions_block_events
                     (id, run_id, segment_id, occurred_at, source_type, source_key,
                      phase, decision)
                  VALUES ('block-1', 'run-1', 'segment-1', '2026-05-29T10:10:00Z',
@@ -343,7 +343,7 @@ fn close_run_records_boundary_phase_outcomes() {
         tx.commit().await.unwrap();
 
         sqlx::query(
-            "INSERT INTO doomscrolling_block_events
+            "INSERT INTO distractions_block_events
                     (id, run_id, segment_id, occurred_at, source_type, source_key,
                      phase, decision)
                  VALUES ('block-break-1', 'run-1', 'segment-2', '2026-05-29T10:46:00Z',

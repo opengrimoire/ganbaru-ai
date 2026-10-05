@@ -1,4 +1,4 @@
-//! Validated Doomscrolling configuration and embedded category definitions.
+//! Validated Distractions configuration and embedded category definitions.
 
 use serde::Deserialize;
 use serde_json::Value;
@@ -21,7 +21,7 @@ pub(super) struct BuiltInCategory {
 }
 
 pub(super) const BUILT_IN_CATEGORIES_JSON: &str =
-    include_str!("../../../apps/client/src/lib/doomscrolling/categories.json");
+    include_str!("../../../apps/client/src/lib/distractions/categories.json");
 
 fn built_in_categories() -> &'static [BuiltInCategory] {
     static CATEGORIES: OnceLock<Vec<BuiltInCategory>> = OnceLock::new();
@@ -32,27 +32,27 @@ fn built_in_categories() -> &'static [BuiltInCategory] {
 
 fn parse_built_in_categories(json: &str) -> Vec<BuiltInCategory> {
     let categories: Vec<BuiltInCategory> =
-        serde_json::from_str(json).expect("embedded doomscrolling categories must be valid JSON");
+        serde_json::from_str(json).expect("embedded distraction categories must be valid JSON");
     let mut seen_ids = HashSet::new();
     for category in &categories {
         assert!(
             !category.id.trim().is_empty(),
-            "embedded doomscrolling category id must not be empty"
+            "embedded distraction category id must not be empty"
         );
         assert!(
             !category.label.trim().is_empty(),
-            "embedded doomscrolling category label must not be empty"
+            "embedded distraction category label must not be empty"
         );
         assert!(
             seen_ids.insert(category.id.as_str()),
-            "embedded doomscrolling category ids must be unique"
+            "embedded distraction category ids must be unique"
         );
     }
     categories
 }
 
 #[derive(Debug, Clone)]
-pub(super) enum DoomscrollingMode {
+pub(super) enum DistractionsMode {
     Blacklist,
     Whitelist,
 }
@@ -90,8 +90,8 @@ pub(super) struct UsageLimitsConfig {
 }
 
 #[derive(Debug, Clone)]
-pub(super) struct DoomscrollingConfig {
-    pub(super) mode: DoomscrollingMode,
+pub(super) struct DistractionsConfig {
+    pub(super) mode: DistractionsMode,
     pub(super) enabled: bool,
     pub(super) block_during_focus: bool,
     pub(super) block_during_short_breaks: bool,
@@ -106,7 +106,7 @@ pub(super) struct DoomscrollingConfig {
     pub(super) limit_configuration_digest: Option<String>,
 }
 
-pub(super) fn read_config(path: &std::path::Path) -> Option<DoomscrollingConfig> {
+pub(super) fn read_config(path: &std::path::Path) -> Option<DistractionsConfig> {
     let mut contents = Vec::new();
     std::fs::File::open(path)
         .ok()?
@@ -117,38 +117,38 @@ pub(super) fn read_config(path: &std::path::Path) -> Option<DoomscrollingConfig>
         return None;
     }
     let value: Value = serde_json::from_slice(&contents).ok()?;
-    let doomscrolling = value.get("doomscrolling")?;
-    let mode = read_mode(doomscrolling)?;
-    Some(DoomscrollingConfig {
+    let distractions = value.get("distractions")?;
+    let mode = read_mode(distractions)?;
+    Some(DistractionsConfig {
         mode,
-        enabled: doomscrolling
+        enabled: distractions
             .get("enabled")
             .and_then(Value::as_bool)
             .unwrap_or(true),
-        block_during_focus: doomscrolling
+        block_during_focus: distractions
             .get("blockDuringFocus")
             .and_then(Value::as_bool)
             .unwrap_or(true),
-        block_during_short_breaks: doomscrolling
+        block_during_short_breaks: distractions
             .get("blockDuringShortBreaks")
             .and_then(Value::as_bool)
             .unwrap_or(true),
-        block_during_long_breaks: doomscrolling
+        block_during_long_breaks: distractions
             .get("blockDuringLongBreaks")
             .and_then(Value::as_bool)
             .unwrap_or(true),
-        pause_during_focus_pause: doomscrolling
+        pause_during_focus_pause: distractions
             .get("pauseDuringFocusPause")
             .and_then(Value::as_bool)
             .unwrap_or(true),
-        blocked_category_ids: read_category_array(doomscrolling.get("blockedCategories")),
+        blocked_category_ids: read_category_array(distractions.get("blockedCategories")),
         custom_category_stacks: read_custom_category_stacks(
-            doomscrolling.get("customCategoryStacks"),
+            distractions.get("customCategoryStacks"),
         ),
-        blocked_hosts: read_host_array(doomscrolling.get("blockedHosts")),
-        exception_hosts: read_host_array(doomscrolling.get("exceptionHosts")),
-        allowed_hosts: read_host_array(doomscrolling.get("allowedHosts")),
-        limits: read_usage_limits_config(doomscrolling.get("limits")),
+        blocked_hosts: read_host_array(distractions.get("blockedHosts")),
+        exception_hosts: read_host_array(distractions.get("exceptionHosts")),
+        allowed_hosts: read_host_array(distractions.get("allowedHosts")),
+        limits: read_usage_limits_config(distractions.get("limits")),
         limit_configuration_digest: Some(limit_configuration_digest(&value)?),
     })
 }
@@ -157,18 +157,15 @@ const MAX_CONFIG_BYTES: u64 = 1024 * 1024;
 
 /// Bind derived budget exhaustion to the exact persisted limit branch.
 pub(super) fn limit_configuration_digest(root: &Value) -> Option<String> {
-    let bytes = serde_json::to_vec(
-        root.pointer("/doomscrolling/limits")
-            .unwrap_or(&Value::Null),
-    )
-    .ok()?;
+    let bytes =
+        serde_json::to_vec(root.pointer("/distractions/limits").unwrap_or(&Value::Null)).ok()?;
     Some(format!("{:x}", Sha256::digest(bytes)))
 }
 
-pub(super) fn read_mode(doomscrolling: &Value) -> Option<DoomscrollingMode> {
-    match doomscrolling.get("mode").and_then(Value::as_str) {
-        Some("blacklist") => Some(DoomscrollingMode::Blacklist),
-        Some("whitelist") => Some(DoomscrollingMode::Whitelist),
+pub(super) fn read_mode(distractions: &Value) -> Option<DistractionsMode> {
+    match distractions.get("mode").and_then(Value::as_str) {
+        Some("blacklist") => Some(DistractionsMode::Blacklist),
+        Some("whitelist") => Some(DistractionsMode::Whitelist),
         _ => None,
     }
 }
@@ -501,9 +498,9 @@ pub(super) fn read_host_rule(item: &Value) -> Option<String> {
     }
 }
 
-pub(super) fn default_config() -> DoomscrollingConfig {
-    DoomscrollingConfig {
-        mode: DoomscrollingMode::Blacklist,
+pub(super) fn default_config() -> DistractionsConfig {
+    DistractionsConfig {
+        mode: DistractionsMode::Blacklist,
         enabled: true,
         block_during_focus: true,
         block_during_short_breaks: true,
@@ -522,11 +519,11 @@ pub(super) fn default_config() -> DoomscrollingConfig {
     }
 }
 
-impl DoomscrollingMode {
+impl DistractionsMode {
     pub(super) fn as_str(&self) -> &'static str {
         match self {
-            DoomscrollingMode::Blacklist => "blacklist",
-            DoomscrollingMode::Whitelist => "whitelist",
+            DistractionsMode::Blacklist => "blacklist",
+            DistractionsMode::Whitelist => "whitelist",
         }
     }
 }

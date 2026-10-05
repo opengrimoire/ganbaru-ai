@@ -78,7 +78,7 @@ The native owner holds the queue and decoder; the WebView is only a projection.
 - A vault handoff waits for playback to actually stop or reports a timeout; the old vault's canceled playback never resumes.
 - Desktop audio, soundscapes, path reveal, and loopback media capabilities are absent.
 
-## Doomscrolling
+## Distraction blocker
 
 - Separate Usage Access and Accessibility disclosures.
 - Grant, deny, revoke, and recover each access independently.
@@ -91,7 +91,7 @@ The native owner holds the queue and decoder; the WebView is only a projection.
 - Notification deep links open the relevant settings.
 - Store-policy declaration matches observed behavior.
 
-Runtime cases without the WebView are in [Doomscrolling runtime acceptance](doomscrolling.md).
+Runtime cases without the WebView are in [Distraction blocker runtime acceptance](distractions.md).
 
 ## Vault handoff pairing
 

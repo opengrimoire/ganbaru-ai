@@ -101,7 +101,7 @@ Each entry names the owning modules, why the boundary exists, its key safety inv
 
 ### Windows desktop integration
 
-**Owned modules:** `apps/client/src-tauri/app/src/desktop_runtime.rs`, `apps/client/src-tauri/app/src/doomscrolling/foreground/windows.rs`, `apps/client/src-tauri/app/src/media_controls/windows.rs`, `apps/client/src-tauri/app/src/notification/idle.rs`, and the Windows portion of `apps/client/src-tauri/app/src/pomodoro_enforcement.rs`.
+**Owned modules:** `apps/client/src-tauri/app/src/desktop_runtime.rs`, `apps/client/src-tauri/app/src/distractions/foreground/windows.rs`, `apps/client/src-tauri/app/src/media_controls/windows.rs`, `apps/client/src-tauri/app/src/notification/idle.rs`, and the Windows portion of `apps/client/src-tauri/app/src/pomodoro_enforcement.rs`.
 
 **Contract:** Win32 process enumeration and memory queries, foreground window and process inspection, close messages, low-level keyboard hooks, execution-state and idle APIs, and system media transport controls interop. Primary contracts include [Tool Help snapshots](https://learn.microsoft.com/en-us/windows/win32/api/tlhelp32/nf-tlhelp32-createtoolhelp32snapshot), [`LowLevelKeyboardProc`](https://learn.microsoft.com/en-us/windows/win32/winmsg/lowlevelkeyboardproc), [`SetWindowsHookExW`](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-setwindowshookexw), [`GetLastInputInfo`](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getlastinputinfo), and [SMTC `GetForWindow`](https://learn.microsoft.com/en-us/windows/win32/api/systemmediatransportcontrolsinterop/nf-systemmediatransportcontrolsinterop-isystemmediatransportcontrolsinterop-getforwindow). Tauri and stable Rust do not expose these capabilities with the same semantics.
 

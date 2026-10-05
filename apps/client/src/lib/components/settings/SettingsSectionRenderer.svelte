@@ -9,7 +9,7 @@
   import ChatSection from "./ChatSection.svelte";
   import FocusSection from "./FocusSection.svelte";
   import MusicSection from "./MusicSection.svelte";
-  import DoomscrollingSection from "./DoomscrollingSection.svelte";
+  import DistractionsSection from "./DistractionsSection.svelte";
   import UpdatesSection from "./UpdatesSection.svelte";
   import ShortcutsSection from "./ShortcutsSection.svelte";
   import AboutSection from "./AboutSection.svelte";
@@ -22,12 +22,12 @@
 
   let {
     activeSection,
-    initialDoomscrollingTab,
+    initialDistractionsTab,
     activeChatSubsection,
     initialChatTeammateId,
     initialChatChannelId,
     initialChatCreateTeammate,
-    onOpenDoomscrollingLimitEditor,
+    onOpenDistractionsLimitEditor,
     onOpenNotesTransferPanel,
     onOpenChatProviderSetup,
     onChatSubsectionChange,
@@ -65,10 +65,10 @@
 
 {#if activeSection === "notes"}
   <NotesSection onOpenTransferPanel={onOpenNotesTransferPanel} />
-{:else if activeSection === "doomscrolling"}
-  <DoomscrollingSection
-    initialTab={initialDoomscrollingTab}
-    onOpenLimitEditor={onOpenDoomscrollingLimitEditor}
+{:else if activeSection === "distractions"}
+  <DistractionsSection
+    initialTab={initialDistractionsTab}
+    onOpenLimitEditor={onOpenDistractionsLimitEditor}
   />
 {:else if activeSection === "chat"}
   <ChatSection

@@ -87,7 +87,7 @@ pub(crate) fn mutate_active_vault_config<R: Runtime, T, E>(
         ));
     }
     #[cfg(not(target_os = "ios"))]
-    let previous_doomscrolling = root.get("doomscrolling").cloned();
+    let previous_distractions = root.get("distractions").cloned();
     let previous_preferences = root.get("preferences").cloned();
     let result = mutate(&mut root)?;
     crate::chat::config::parse_chat_config_branch(&root)
@@ -96,14 +96,14 @@ pub(crate) fn mutate_active_vault_config<R: Runtime, T, E>(
         .map_err(|error| map_storage_error(error.to_string()))?;
     let write = || write_text_file_atomically(&path, &serialized);
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    let write_result = if previous_doomscrolling.as_ref() != root.get("doomscrolling") {
-        crate::doomscrolling::runtime::commit_configuration(app, write)
+    let write_result = if previous_distractions.as_ref() != root.get("distractions") {
+        crate::distractions::runtime::commit_configuration(app, write)
     } else {
         write()
     };
     #[cfg(target_os = "android")]
-    let write_result = if previous_doomscrolling.as_ref() != root.get("doomscrolling") {
-        crate::doomscrolling_mobile::runtime::commit_configuration(app, write)
+    let write_result = if previous_distractions.as_ref() != root.get("distractions") {
+        crate::distractions_mobile::runtime::commit_configuration(app, write)
     } else {
         write()
     };

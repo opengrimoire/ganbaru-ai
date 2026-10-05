@@ -29,7 +29,7 @@ Exclusion at build time, rather than hiding controls in the UI, reduces artifact
 | Chat | Channels, messages, replies, search, drafts, scheduling | Provider-free communication and existing review activity only; no Codex, Claude, Cursor, Grok, OpenCode, shells, terminals, or Git |
 | Pomodoro | Canonical accepted runs, history and recovery in `ganbaru-focus` | Commitment reminders, accepted-phase deadline alarms and ongoing notification |
 | Music | Canonical library, playlists, assignments, player state | Selected document tree and Media3 local audio; no desktop soundscape engine |
-| Doomscrolling | Shared rule and usage-limit intent | Selected packages, Usage Access, Accessibility Home action, native journal, linked-device combined usage |
+| Distraction blocker | Shared rule and usage-limit intent | Selected packages, Usage Access, Accessibility Home action, native journal, linked-device combined usage |
 | Settings | Shared portable preferences | Platform equivalents and direct special-access recovery |
 | Updates | Version and release information | Distribution source owns installation and updates; desktop updater absent |
 
@@ -37,7 +37,7 @@ Future encrypted sync can make mobile a cross-device communication and review cl
 
 ## Feature ownership
 
-Platform documentation defines only Android differences. Canonical feature behavior stays in [Calendar](../../features/calendar/README.md), [Projects](../../features/projects/README.md), [Notes](../../features/notes/README.md), [Chat](../../features/chat/README.md), [Pomodoro](../../features/pomodoro/README.md), [Music](../../features/music/README.md), and [Doomscrolling](../../features/doomscrolling/README.md).
+Platform documentation defines only Android differences. Canonical feature behavior stays in [Calendar](../../features/calendar/README.md), [Projects](../../features/projects/README.md), [Notes](../../features/notes/README.md), [Chat](../../features/chat/README.md), [Pomodoro](../../features/pomodoro/README.md), [Music](../../features/music/README.md), and [Distraction blocker](../../features/distractions/README.md).
 
 ## Future iOS alignment
 

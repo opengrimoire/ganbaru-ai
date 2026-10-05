@@ -505,12 +505,12 @@ pub(crate) fn resume_native_runtimes<R: Runtime>(app: &tauri::AppHandle<R>) -> R
     let focus = crate::pomodoro::resume_after_vault_handoff(app);
     let music = crate::music::session::resume_after_vault_handoff(app);
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    let doomscrolling = crate::doomscrolling::runtime::resume_after_vault_handoff(app);
+    let distractions = crate::distractions::runtime::resume_after_vault_handoff(app);
     #[cfg(target_os = "android")]
-    let doomscrolling = crate::doomscrolling_mobile::runtime::resume_after_vault_handoff(app);
+    let distractions = crate::distractions_mobile::runtime::resume_after_vault_handoff(app);
     #[cfg(target_os = "ios")]
-    let doomscrolling = Ok(());
-    focus.and(music).and(doomscrolling)
+    let distractions = Ok(());
+    focus.and(music).and(distractions)
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]

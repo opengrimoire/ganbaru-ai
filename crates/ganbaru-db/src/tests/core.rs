@@ -3,7 +3,7 @@ use crate::run_migrations;
 use sqlx::Row;
 
 const BASELINE_SCHEMA: &str =
-    include_str!("../../../../apps/client/src-tauri/migrations/20260830173211_baseline_schema.sql");
+    include_str!("../../../../apps/client/src-tauri/migrations/20261004220000_baseline_schema.sql");
 /// Count the embedded forward migrations so fresh-install checks follow the actual registry.
 fn expected_migration_count() -> i64 {
     i64::try_from(

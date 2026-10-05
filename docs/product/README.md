@@ -1,6 +1,6 @@
 # Product direction
 
-Ganbaru AI is an anti-procrastination and anti-burnout productivity app. It combines planning, focus, knowledge, communication, and distraction control without requiring hosted Ganbaru infrastructure.
+Ganbaru AI is an anti-procrastination and anti-burnout productivity app. It combines planning, focus, knowledge, communication, and distraction blocking without requiring hosted Ganbaru infrastructure.
 
 The product is free, local-first, privacy-first, donation-funded, and licensed under AGPL 3.0. AI is optional. The app must remain useful when no provider is installed, configured, or reachable.
 
@@ -47,7 +47,7 @@ The [feature index](../features/README.md) is the current capability map. The ma
 - Projects for tasks, planning views, dependencies, history, templates, and later structured delegation.
 - Notes and Quick notes for durable knowledge and lightweight capture.
 - Chat for project communication and optional local coding-agent execution.
-- Doomscrolling controls for browsers, desktop applications, and selected Android applications.
+- Distraction blockers for browsers, desktop applications, and selected Android applications.
 - Music and app sounds integrated with focus and platform media controls.
 - Themes, localization, profiles, and adaptive desktop and mobile shells.
 - Future diary, sleep, work environment, sync, collaboration, BYOK assistant, and gamification systems.

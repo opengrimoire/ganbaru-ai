@@ -1,6 +1,6 @@
 use super::{
     NativeResponse,
-    config::{DoomscrollingConfig, DoomscrollingMode, UsageLimitsConfig},
+    config::{DistractionsConfig, DistractionsMode, UsageLimitsConfig},
     events::{block_event_phase, record_block_event_in_database},
     rules::{HostDecision, decide_url, host_from_url, host_matches_rule},
     snapshot::{RuntimeState, StateSnapshot, runtime_status_at, should_enforce},
@@ -11,9 +11,9 @@ use sqlx::Row;
 static APP_MIGRATOR: sqlx::migrate::Migrator =
     sqlx::migrate!("../../apps/client/src-tauri/migrations");
 
-fn config() -> DoomscrollingConfig {
-    DoomscrollingConfig {
-        mode: DoomscrollingMode::Blacklist,
+fn config() -> DistractionsConfig {
+    DistractionsConfig {
+        mode: DistractionsMode::Blacklist,
         enabled: true,
         block_during_focus: true,
         block_during_short_breaks: true,
@@ -176,11 +176,11 @@ fn decision_reasons_preserve_wire_labels_and_typed_event_metadata() {
             }
         );
         assert_eq!(
-            decision.blocker_mode(&DoomscrollingMode::Blacklist),
+            decision.blocker_mode(&DistractionsMode::Blacklist),
             if is_limit { "limit" } else { "blacklist" }
         );
         assert_eq!(
-            decision.blocker_mode(&DoomscrollingMode::Whitelist),
+            decision.blocker_mode(&DistractionsMode::Whitelist),
             if is_limit { "limit" } else { "whitelist" }
         );
     }
@@ -245,7 +245,7 @@ fn records_block_event_to_sqlite_without_full_url() {
             .unwrap();
         let table_count: i64 = sqlx::query_scalar(
             "SELECT COUNT(*) FROM sqlite_schema
-             WHERE type = 'table' AND name = 'doomscrolling_block_events'",
+             WHERE type = 'table' AND name = 'distractions_block_events'",
         )
         .fetch_one(&pool)
         .await
@@ -279,8 +279,8 @@ fn records_block_event_to_sqlite_without_full_url() {
             .unwrap();
         let row = sqlx::query(
             "SELECT e.source_key, e.decision, e.phase, s.rule_kind, s.blocker_mode
-                 FROM doomscrolling_block_events e
-                 JOIN doomscrolling_block_event_rule_snapshots s ON s.block_event_id = e.id",
+                 FROM distractions_block_events e
+                 JOIN distractions_block_event_rule_snapshots s ON s.block_event_id = e.id",
         )
         .fetch_one(&pool)
         .await
@@ -339,7 +339,7 @@ fn usage_samples_are_spooled_outside_the_vault_until_the_app_acknowledges_them()
         let spool_url = format!(
             "sqlite:{}",
             config_path
-                .join("doomscrolling-device-spool.sqlite")
+                .join("distractions-device-spool.sqlite")
                 .to_string_lossy()
         );
         let pool = sqlx::sqlite::SqlitePoolOptions::new()
@@ -592,7 +592,7 @@ fn predecessor_string_rule_entries_are_not_loaded() {
 }
 
 #[test]
-fn doomscrolling_mode_and_rule_enabled_flags_are_explicit() {
+fn distractions_mode_and_rule_enabled_flags_are_explicit() {
     assert!(super::config::read_mode(&serde_json::json!({})).is_none());
     assert!(super::config::read_host_rule(&serde_json::json!({ "host": "example.com" })).is_none());
     assert!(
@@ -1093,7 +1093,7 @@ fn enforces_paused_focus_when_pause_setting_disabled() {
 #[test]
 fn blocks_hosts_outside_whitelist_mode() {
     let mut config = config();
-    config.mode = DoomscrollingMode::Whitelist;
+    config.mode = DistractionsMode::Whitelist;
     let decision = decide_url("reddit.com", None, &config);
     assert!(decision.blocked());
     assert_eq!(
@@ -1105,7 +1105,7 @@ fn blocks_hosts_outside_whitelist_mode() {
 #[test]
 fn allows_hosts_inside_whitelist_mode() {
     let mut config = config();
-    config.mode = DoomscrollingMode::Whitelist;
+    config.mode = DistractionsMode::Whitelist;
     let decision = decide_url("docs.github.com", None, &config);
     assert!(!decision.blocked());
     assert_eq!(
@@ -1119,10 +1119,10 @@ fn rules_fingerprint_changes_when_mode_or_rules_change() {
     let mut changed_config = config();
     let base = super::rules::rules_fingerprint(&changed_config, None);
 
-    changed_config.mode = DoomscrollingMode::Whitelist;
+    changed_config.mode = DistractionsMode::Whitelist;
     assert_ne!(super::rules::rules_fingerprint(&changed_config, None), base);
 
-    changed_config.mode = DoomscrollingMode::Blacklist;
+    changed_config.mode = DistractionsMode::Blacklist;
     changed_config
         .blocked_hosts
         .push("news.ycombinator.com".to_string());

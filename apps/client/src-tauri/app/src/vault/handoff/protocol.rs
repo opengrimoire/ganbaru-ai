@@ -10,7 +10,7 @@ pub(crate) const MAX_ARCHIVE_BYTES: u64 = 100 * 1024 * 1024 * 1024;
 pub(crate) const MAX_IDENTIFIER_BYTES: usize = 160;
 pub(crate) const MAX_DEVICE_LABEL_BYTES: usize = 128;
 const MAX_APP_VERSION_BYTES: usize = 64;
-pub(crate) const MAX_DOOMSCROLLING_SAMPLES: usize = 1_024;
+pub(crate) const MAX_DISTRACTIONS_SAMPLES: usize = 1_024;
 pub(crate) const TRANSFER_CHUNK_BYTES: usize = 64 * 1024;
 const PAIRING_QR_MAGIC: &[u8; 4] = b"GBQ\x01";
 
@@ -131,7 +131,7 @@ impl BundleMetadata {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct DoomscrollingSampleMessage {
+pub(crate) struct DistractionsSampleMessage {
     pub sample_id: String,
     pub device_id: String,
     pub source_type: String,
@@ -243,18 +243,18 @@ pub(crate) enum ControlMessage {
         transfer_id: Option<String>,
         requested_upload: Option<BundlePurpose>,
     },
-    DoomscrollingExchange {
+    DistractionsExchange {
         protocol_version: u16,
         vault_id: String,
         device_id: String,
-        samples: Vec<DoomscrollingSampleMessage>,
+        samples: Vec<DistractionsSampleMessage>,
         acknowledged_peer_sample_ids: Vec<String>,
-        owner_snapshot: Vec<DoomscrollingSampleMessage>,
+        owner_snapshot: Vec<DistractionsSampleMessage>,
     },
-    DoomscrollingAcknowledged {
+    DistractionsAcknowledged {
         acknowledged_sample_ids: Vec<String>,
-        peer_samples: Vec<DoomscrollingSampleMessage>,
-        combined_samples: Vec<DoomscrollingSampleMessage>,
+        peer_samples: Vec<DistractionsSampleMessage>,
+        combined_samples: Vec<DistractionsSampleMessage>,
     },
     Error {
         code: String,
@@ -404,7 +404,7 @@ impl ControlMessage {
                     validate_identifier("transfer id", transfer_id)?;
                 }
             }
-            Self::DoomscrollingExchange {
+            Self::DistractionsExchange {
                 protocol_version,
                 vault_id,
                 device_id,
@@ -415,31 +415,31 @@ impl ControlMessage {
                 validate_protocol(*protocol_version)?;
                 validate_identifier("vault id", vault_id)?;
                 validate_identifier("device id", device_id)?;
-                if samples.len() > MAX_DOOMSCROLLING_SAMPLES {
-                    return Err("too many Doomscrolling samples".to_string());
+                if samples.len() > MAX_DISTRACTIONS_SAMPLES {
+                    return Err("too many Distractions samples".to_string());
                 }
                 for sample in samples {
-                    validate_doomscrolling_sample(sample)?;
+                    validate_distractions_sample(sample)?;
                     if sample.device_id != *device_id {
-                        return Err("Doomscrolling sample metadata is invalid".to_string());
+                        return Err("Distractions sample metadata is invalid".to_string());
                     }
                 }
-                validate_doomscrolling_sample_ids(acknowledged_peer_sample_ids)?;
-                validate_doomscrolling_samples(owner_snapshot)?;
-                if samples.len() + owner_snapshot.len() > MAX_DOOMSCROLLING_SAMPLES {
-                    return Err("Doomscrolling exchange exceeds the sample limit".to_string());
+                validate_distractions_sample_ids(acknowledged_peer_sample_ids)?;
+                validate_distractions_samples(owner_snapshot)?;
+                if samples.len() + owner_snapshot.len() > MAX_DISTRACTIONS_SAMPLES {
+                    return Err("Distractions exchange exceeds the sample limit".to_string());
                 }
             }
-            Self::DoomscrollingAcknowledged {
+            Self::DistractionsAcknowledged {
                 acknowledged_sample_ids,
                 peer_samples,
                 combined_samples,
             } => {
-                validate_doomscrolling_sample_ids(acknowledged_sample_ids)?;
-                validate_doomscrolling_samples(peer_samples)?;
-                validate_doomscrolling_samples(combined_samples)?;
-                if peer_samples.len() + combined_samples.len() > MAX_DOOMSCROLLING_SAMPLES {
-                    return Err("Doomscrolling response exceeds the sample limit".to_string());
+                validate_distractions_sample_ids(acknowledged_sample_ids)?;
+                validate_distractions_samples(peer_samples)?;
+                validate_distractions_samples(combined_samples)?;
+                if peer_samples.len() + combined_samples.len() > MAX_DISTRACTIONS_SAMPLES {
+                    return Err("Distractions response exceeds the sample limit".to_string());
                 }
             }
             Self::Error { code, message, .. } => {
@@ -453,9 +453,9 @@ impl ControlMessage {
     }
 }
 
-fn validate_doomscrolling_sample_ids(sample_ids: &[String]) -> Result<(), String> {
-    if sample_ids.len() > MAX_DOOMSCROLLING_SAMPLES {
-        return Err("too many acknowledged Doomscrolling samples".to_string());
+fn validate_distractions_sample_ids(sample_ids: &[String]) -> Result<(), String> {
+    if sample_ids.len() > MAX_DISTRACTIONS_SAMPLES {
+        return Err("too many acknowledged Distractions samples".to_string());
     }
     for sample_id in sample_ids {
         validate_identifier("sample id", sample_id)?;
@@ -463,17 +463,17 @@ fn validate_doomscrolling_sample_ids(sample_ids: &[String]) -> Result<(), String
     Ok(())
 }
 
-fn validate_doomscrolling_samples(samples: &[DoomscrollingSampleMessage]) -> Result<(), String> {
-    if samples.len() > MAX_DOOMSCROLLING_SAMPLES {
-        return Err("too many Doomscrolling samples".to_string());
+fn validate_distractions_samples(samples: &[DistractionsSampleMessage]) -> Result<(), String> {
+    if samples.len() > MAX_DISTRACTIONS_SAMPLES {
+        return Err("too many Distractions samples".to_string());
     }
     for sample in samples {
-        validate_doomscrolling_sample(sample)?;
+        validate_distractions_sample(sample)?;
     }
     Ok(())
 }
 
-fn validate_doomscrolling_sample(sample: &DoomscrollingSampleMessage) -> Result<(), String> {
+fn validate_distractions_sample(sample: &DistractionsSampleMessage) -> Result<(), String> {
     validate_identifier("sample id", &sample.sample_id)?;
     validate_identifier("sample device id", &sample.device_id)?;
     if !matches!(
@@ -490,7 +490,7 @@ fn validate_doomscrolling_sample(sample: &DoomscrollingSampleMessage) -> Result<
         || !valid_local_date(&sample.local_date)
         || sample.created_at_unix_ms < 0
     {
-        return Err("Doomscrolling sample metadata is invalid".to_string());
+        return Err("Distractions sample metadata is invalid".to_string());
     }
     Ok(())
 }

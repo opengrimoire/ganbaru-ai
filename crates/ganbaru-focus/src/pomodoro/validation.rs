@@ -482,7 +482,7 @@ fn validate_adaptive_decision_mode(value: &str) -> Result<(), String> {
 
 fn validate_adaptive_feature_source(value: &str) -> Result<(), String> {
     match value {
-        "pomodoro" | "doomscrolling" | "calendar" | "diary" | "project" | "environment"
+        "pomodoro" | "distractions" | "calendar" | "diary" | "project" | "environment"
         | "device" => Ok(()),
         _ => Err(format!("invalid adaptive feature source_kind: {value}")),
     }

@@ -454,7 +454,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "blocked_burst_count",
@@ -462,7 +462,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "repeated_blocked_source_attempt_count",
@@ -470,7 +470,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "focus_repeated_blocked_source_attempt_count",
@@ -478,7 +478,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "break_repeated_blocked_source_attempt_count",
@@ -486,7 +486,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "focus_blocked_attempt_count",
@@ -494,7 +494,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "early_focus_blocked_attempt_count",
@@ -502,7 +502,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "late_focus_blocked_attempt_count",
@@ -510,7 +510,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "break_blocked_attempt_count",
@@ -518,7 +518,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "break_overtime_blocked_attempt_count",
@@ -526,7 +526,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "short_break_overtime_blocked_attempt_count",
@@ -534,7 +534,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "long_break_overtime_blocked_attempt_count",
@@ -542,7 +542,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "extension_count",
@@ -910,7 +910,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "blocked_burst_count",
@@ -918,7 +918,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "repeated_blocked_source_attempt_count",
@@ -926,7 +926,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "focus_repeated_blocked_source_attempt_count",
@@ -934,7 +934,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "break_repeated_blocked_source_attempt_count",
@@ -942,7 +942,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "focus_blocked_attempt_count",
@@ -950,7 +950,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "early_focus_blocked_attempt_count",
@@ -958,7 +958,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "late_focus_blocked_attempt_count",
@@ -966,7 +966,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "break_blocked_attempt_count",
@@ -974,7 +974,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "break_overtime_blocked_attempt_count",
@@ -982,7 +982,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "short_break_overtime_blocked_attempt_count",
@@ -990,7 +990,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "long_break_overtime_blocked_attempt_count",
@@ -998,7 +998,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "extension_count",
@@ -2024,7 +2024,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "blocked_burst_count",
@@ -2032,7 +2032,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "repeated_blocked_source_attempt_count",
@@ -2040,7 +2040,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "focus_repeated_blocked_source_attempt_count",
@@ -2048,7 +2048,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "break_repeated_blocked_source_attempt_count",
@@ -2056,7 +2056,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "focus_blocked_attempt_count",
@@ -2064,7 +2064,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "early_focus_blocked_attempt_count",
@@ -2072,7 +2072,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "late_focus_blocked_attempt_count",
@@ -2080,7 +2080,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "break_blocked_attempt_count",
@@ -2088,7 +2088,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "break_overtime_blocked_attempt_count",
@@ -2096,7 +2096,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "short_break_overtime_blocked_attempt_count",
@@ -2104,7 +2104,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "long_break_overtime_blocked_attempt_count",
@@ -2112,7 +2112,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "extension_count",
@@ -2512,7 +2512,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "blocked_burst_count",
@@ -2520,7 +2520,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "repeated_blocked_source_attempt_count",
@@ -2528,7 +2528,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "focus_repeated_blocked_source_attempt_count",
@@ -2536,7 +2536,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "break_repeated_blocked_source_attempt_count",
@@ -2544,7 +2544,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "focus_blocked_attempt_count",
@@ -2552,7 +2552,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "early_focus_blocked_attempt_count",
@@ -2560,7 +2560,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "late_focus_blocked_attempt_count",
@@ -2568,7 +2568,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "break_blocked_attempt_count",
@@ -2576,7 +2576,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "break_overtime_blocked_attempt_count",
@@ -2584,7 +2584,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "short_break_overtime_blocked_attempt_count",
@@ -2592,7 +2592,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "long_break_overtime_blocked_attempt_count",
@@ -2600,7 +2600,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "extension_count",
@@ -4653,7 +4653,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "blocked_burst_count",
@@ -4661,7 +4661,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "repeated_blocked_source_attempt_count",
@@ -4669,7 +4669,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "focus_repeated_blocked_source_attempt_count",
@@ -4677,7 +4677,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "break_repeated_blocked_source_attempt_count",
@@ -4685,7 +4685,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "focus_blocked_attempt_count",
@@ -4693,7 +4693,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "early_focus_blocked_attempt_count",
@@ -4701,7 +4701,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "late_focus_blocked_attempt_count",
@@ -4709,7 +4709,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "break_blocked_attempt_count",
@@ -4717,7 +4717,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "break_overtime_blocked_attempt_count",
@@ -4725,7 +4725,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "short_break_overtime_blocked_attempt_count",
@@ -4733,7 +4733,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "long_break_overtime_blocked_attempt_count",
@@ -4741,7 +4741,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "extension_count",
@@ -5129,7 +5129,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "blocked_burst_count",
@@ -5137,7 +5137,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "repeated_blocked_source_attempt_count",
@@ -5145,7 +5145,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "focus_repeated_blocked_source_attempt_count",
@@ -5153,7 +5153,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "break_repeated_blocked_source_attempt_count",
@@ -5161,7 +5161,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "focus_blocked_attempt_count",
@@ -5169,7 +5169,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "early_focus_blocked_attempt_count",
@@ -5177,7 +5177,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "late_focus_blocked_attempt_count",
@@ -5185,7 +5185,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "break_blocked_attempt_count",
@@ -5193,7 +5193,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "break_overtime_blocked_attempt_count",
@@ -5201,7 +5201,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "short_break_overtime_blocked_attempt_count",
@@ -5209,7 +5209,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "long_break_overtime_blocked_attempt_count",
@@ -5217,7 +5217,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "extension_count",
@@ -28554,7 +28554,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "blocked_burst_count",
@@ -28562,7 +28562,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "repeated_blocked_source_attempt_count",
@@ -28570,7 +28570,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "focus_repeated_blocked_source_attempt_count",
@@ -28578,7 +28578,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "break_repeated_blocked_source_attempt_count",
@@ -28586,7 +28586,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "focus_blocked_attempt_count",
@@ -28594,7 +28594,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "early_focus_blocked_attempt_count",
@@ -28602,7 +28602,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "late_focus_blocked_attempt_count",
@@ -28610,7 +28610,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "break_blocked_attempt_count",
@@ -28618,7 +28618,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "break_overtime_blocked_attempt_count",
@@ -28626,7 +28626,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "short_break_overtime_blocked_attempt_count",
@@ -28634,7 +28634,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "long_break_overtime_blocked_attempt_count",
@@ -28642,7 +28642,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "extension_count",
@@ -29010,7 +29010,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "blocked_burst_count",
@@ -29018,7 +29018,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "repeated_blocked_source_attempt_count",
@@ -29026,7 +29026,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "focus_repeated_blocked_source_attempt_count",
@@ -29034,7 +29034,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "break_repeated_blocked_source_attempt_count",
@@ -29042,7 +29042,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "focus_blocked_attempt_count",
@@ -29050,7 +29050,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "early_focus_blocked_attempt_count",
@@ -29058,7 +29058,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "late_focus_blocked_attempt_count",
@@ -29066,7 +29066,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "break_blocked_attempt_count",
@@ -29074,7 +29074,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "break_overtime_blocked_attempt_count",
@@ -29082,7 +29082,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "short_break_overtime_blocked_attempt_count",
@@ -29090,7 +29090,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "long_break_overtime_blocked_attempt_count",
@@ -29098,7 +29098,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "extension_count",
@@ -30124,7 +30124,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "blocked_burst_count",
@@ -30132,7 +30132,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "repeated_blocked_source_attempt_count",
@@ -30140,7 +30140,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "focus_repeated_blocked_source_attempt_count",
@@ -30148,7 +30148,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "break_repeated_blocked_source_attempt_count",
@@ -30156,7 +30156,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "focus_blocked_attempt_count",
@@ -30164,7 +30164,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "early_focus_blocked_attempt_count",
@@ -30172,7 +30172,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "late_focus_blocked_attempt_count",
@@ -30180,7 +30180,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "break_blocked_attempt_count",
@@ -30188,7 +30188,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "break_overtime_blocked_attempt_count",
@@ -30196,7 +30196,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "short_break_overtime_blocked_attempt_count",
@@ -30204,7 +30204,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "long_break_overtime_blocked_attempt_count",
@@ -30212,7 +30212,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "extension_count",
@@ -30612,7 +30612,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "blocked_burst_count",
@@ -30620,7 +30620,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "repeated_blocked_source_attempt_count",
@@ -30628,7 +30628,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "focus_repeated_blocked_source_attempt_count",
@@ -30636,7 +30636,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "break_repeated_blocked_source_attempt_count",
@@ -30644,7 +30644,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "focus_blocked_attempt_count",
@@ -30652,7 +30652,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "early_focus_blocked_attempt_count",
@@ -30660,7 +30660,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "late_focus_blocked_attempt_count",
@@ -30668,7 +30668,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "break_blocked_attempt_count",
@@ -30676,7 +30676,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "break_overtime_blocked_attempt_count",
@@ -30684,7 +30684,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "short_break_overtime_blocked_attempt_count",
@@ -30692,7 +30692,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "long_break_overtime_blocked_attempt_count",
@@ -30700,7 +30700,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "extension_count",
@@ -32753,7 +32753,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "blocked_burst_count",
@@ -32761,7 +32761,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "repeated_blocked_source_attempt_count",
@@ -32769,7 +32769,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "focus_repeated_blocked_source_attempt_count",
@@ -32777,7 +32777,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "break_repeated_blocked_source_attempt_count",
@@ -32785,7 +32785,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "focus_blocked_attempt_count",
@@ -32793,7 +32793,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "early_focus_blocked_attempt_count",
@@ -32801,7 +32801,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "late_focus_blocked_attempt_count",
@@ -32809,7 +32809,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "break_blocked_attempt_count",
@@ -32817,7 +32817,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "break_overtime_blocked_attempt_count",
@@ -32825,7 +32825,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "short_break_overtime_blocked_attempt_count",
@@ -32833,7 +32833,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "long_break_overtime_blocked_attempt_count",
@@ -32841,7 +32841,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "extension_count",
@@ -33229,7 +33229,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "blocked_burst_count",
@@ -33237,7 +33237,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "repeated_blocked_source_attempt_count",
@@ -33245,7 +33245,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "focus_repeated_blocked_source_attempt_count",
@@ -33253,7 +33253,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "break_repeated_blocked_source_attempt_count",
@@ -33261,7 +33261,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "focus_blocked_attempt_count",
@@ -33269,7 +33269,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "early_focus_blocked_attempt_count",
@@ -33277,7 +33277,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "late_focus_blocked_attempt_count",
@@ -33285,7 +33285,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "break_blocked_attempt_count",
@@ -33293,7 +33293,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "break_overtime_blocked_attempt_count",
@@ -33301,7 +33301,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "short_break_overtime_blocked_attempt_count",
@@ -33309,7 +33309,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "long_break_overtime_blocked_attempt_count",
@@ -33317,7 +33317,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "extension_count",
@@ -56654,7 +56654,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "blocked_burst_count",
@@ -56662,7 +56662,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "repeated_blocked_source_attempt_count",
@@ -56670,7 +56670,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "focus_repeated_blocked_source_attempt_count",
@@ -56678,7 +56678,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "break_repeated_blocked_source_attempt_count",
@@ -56686,7 +56686,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "focus_blocked_attempt_count",
@@ -56694,7 +56694,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "early_focus_blocked_attempt_count",
@@ -56702,7 +56702,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "late_focus_blocked_attempt_count",
@@ -56710,7 +56710,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "break_blocked_attempt_count",
@@ -56718,7 +56718,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "break_overtime_blocked_attempt_count",
@@ -56726,7 +56726,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "short_break_overtime_blocked_attempt_count",
@@ -56734,7 +56734,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "long_break_overtime_blocked_attempt_count",
@@ -56742,7 +56742,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "extension_count",
@@ -57110,7 +57110,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "blocked_burst_count",
@@ -57118,7 +57118,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "repeated_blocked_source_attempt_count",
@@ -57126,7 +57126,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "focus_repeated_blocked_source_attempt_count",
@@ -57134,7 +57134,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "break_repeated_blocked_source_attempt_count",
@@ -57142,7 +57142,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "focus_blocked_attempt_count",
@@ -57150,7 +57150,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "early_focus_blocked_attempt_count",
@@ -57158,7 +57158,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "late_focus_blocked_attempt_count",
@@ -57166,7 +57166,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "break_blocked_attempt_count",
@@ -57174,7 +57174,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "break_overtime_blocked_attempt_count",
@@ -57182,7 +57182,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "short_break_overtime_blocked_attempt_count",
@@ -57190,7 +57190,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "long_break_overtime_blocked_attempt_count",
@@ -57198,7 +57198,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "extension_count",
@@ -58224,7 +58224,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "blocked_burst_count",
@@ -58232,7 +58232,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "repeated_blocked_source_attempt_count",
@@ -58240,7 +58240,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "focus_repeated_blocked_source_attempt_count",
@@ -58248,7 +58248,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "break_repeated_blocked_source_attempt_count",
@@ -58256,7 +58256,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "focus_blocked_attempt_count",
@@ -58264,7 +58264,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "early_focus_blocked_attempt_count",
@@ -58272,7 +58272,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "late_focus_blocked_attempt_count",
@@ -58280,7 +58280,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "break_blocked_attempt_count",
@@ -58288,7 +58288,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "break_overtime_blocked_attempt_count",
@@ -58296,7 +58296,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "short_break_overtime_blocked_attempt_count",
@@ -58304,7 +58304,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "long_break_overtime_blocked_attempt_count",
@@ -58312,7 +58312,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "extension_count",
@@ -58712,7 +58712,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "blocked_burst_count",
@@ -58720,7 +58720,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "repeated_blocked_source_attempt_count",
@@ -58728,7 +58728,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "focus_repeated_blocked_source_attempt_count",
@@ -58736,7 +58736,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "break_repeated_blocked_source_attempt_count",
@@ -58744,7 +58744,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "focus_blocked_attempt_count",
@@ -58752,7 +58752,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "early_focus_blocked_attempt_count",
@@ -58760,7 +58760,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "late_focus_blocked_attempt_count",
@@ -58768,7 +58768,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "break_blocked_attempt_count",
@@ -58776,7 +58776,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "break_overtime_blocked_attempt_count",
@@ -58784,7 +58784,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "short_break_overtime_blocked_attempt_count",
@@ -58792,7 +58792,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "long_break_overtime_blocked_attempt_count",
@@ -58800,7 +58800,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "extension_count",
@@ -60853,7 +60853,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "blocked_burst_count",
@@ -60861,7 +60861,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "repeated_blocked_source_attempt_count",
@@ -60869,7 +60869,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "focus_repeated_blocked_source_attempt_count",
@@ -60877,7 +60877,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "break_repeated_blocked_source_attempt_count",
@@ -60885,7 +60885,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "focus_blocked_attempt_count",
@@ -60893,7 +60893,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "early_focus_blocked_attempt_count",
@@ -60901,7 +60901,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "late_focus_blocked_attempt_count",
@@ -60909,7 +60909,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "break_blocked_attempt_count",
@@ -60917,7 +60917,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "break_overtime_blocked_attempt_count",
@@ -60925,7 +60925,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "short_break_overtime_blocked_attempt_count",
@@ -60933,7 +60933,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "long_break_overtime_blocked_attempt_count",
@@ -60941,7 +60941,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "extension_count",
@@ -61329,7 +61329,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "blocked_burst_count",
@@ -61337,7 +61337,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "repeated_blocked_source_attempt_count",
@@ -61345,7 +61345,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "focus_repeated_blocked_source_attempt_count",
@@ -61353,7 +61353,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "break_repeated_blocked_source_attempt_count",
@@ -61361,7 +61361,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "focus_blocked_attempt_count",
@@ -61369,7 +61369,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "early_focus_blocked_attempt_count",
@@ -61377,7 +61377,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "late_focus_blocked_attempt_count",
@@ -61385,7 +61385,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "break_blocked_attempt_count",
@@ -61393,7 +61393,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "break_overtime_blocked_attempt_count",
@@ -61401,7 +61401,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "short_break_overtime_blocked_attempt_count",
@@ -61409,7 +61409,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "long_break_overtime_blocked_attempt_count",
@@ -61417,7 +61417,7 @@
             "categoricalValue": null,
             "booleanValue": null,
             "missing": false,
-            "sourceKind": "doomscrolling"
+            "sourceKind": "distractions"
           },
           {
             "featureKey": "extension_count",

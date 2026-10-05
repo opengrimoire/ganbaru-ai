@@ -233,7 +233,7 @@ pub fn show_benchmark_notification(
 }
 
 #[tauri::command]
-pub fn show_doomscrolling_desktop_block_notification(
+pub fn show_distractions_desktop_block_notification(
     app: tauri::AppHandle,
     app_name: String,
     app_sounds: State<'_, AppSoundState>,
@@ -254,7 +254,7 @@ pub fn show_doomscrolling_desktop_block_notification(
             app_name
         };
         let body = escape_notification_markup(&format!(
-            "{app_name} was closed because it is blocked by your desktop rules. Change this in Settings > Doomscrolling > Desktop apps (or click this notification)"
+            "{app_name} was closed because it is blocked by your desktop rules. Change this in Settings > Distractions > Desktop apps (or click this notification)"
         ));
         let mut notification = Notification::new();
         notification
@@ -266,10 +266,10 @@ pub fn show_doomscrolling_desktop_block_notification(
         apply_linux_notification_hints(&mut notification, Some("device"), true, true);
         show_notification_with_linux_action(
             &notification,
-            "Failed to show doomscrolling desktop block notification",
+            "Failed to show distraction desktop block notification",
             |action| {
                 if action == "default" {
-                    let _ = app.emit("doomscrolling-open-desktop-settings", ());
+                    let _ = app.emit("distractions-open-desktop-settings", ());
                     focus_main_window(app.clone());
                 }
             },
@@ -278,7 +278,7 @@ pub fn show_doomscrolling_desktop_block_notification(
 }
 
 #[tauri::command]
-pub fn show_doomscrolling_desktop_limit_notification(
+pub fn show_distractions_desktop_limit_notification(
     app: tauri::AppHandle,
     app_name: String,
     limit_name: String,
@@ -313,7 +313,7 @@ pub fn show_doomscrolling_desktop_limit_notification(
             limit_name
         };
         let body = escape_notification_markup(&format!(
-            "{app_name} was closed because {limit_name} reached its limit. Change this in Settings > Doomscrolling > Limits (or click this notification)"
+            "{app_name} was closed because {limit_name} reached its limit. Change this in Settings > Distractions > Limits (or click this notification)"
         ));
         let mut notification = Notification::new();
         notification
@@ -325,10 +325,10 @@ pub fn show_doomscrolling_desktop_limit_notification(
         apply_linux_notification_hints(&mut notification, Some("device"), true, true);
         show_notification_with_linux_action(
             &notification,
-            "Failed to show doomscrolling desktop limit notification",
+            "Failed to show distraction desktop limit notification",
             |action| {
                 if action == "default" {
-                    let _ = app.emit("doomscrolling-open-limits-settings", ());
+                    let _ = app.emit("distractions-open-limits-settings", ());
                     focus_main_window(app.clone());
                 }
             },

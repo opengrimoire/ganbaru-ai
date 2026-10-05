@@ -244,10 +244,10 @@ async fn publish_rules(
     effect: CommittedFocusEffect,
     now_ms: i64,
 ) -> Result<(), FocusExecutionError> {
-    let generation = crate::doomscrolling::runtime::capture_publication_generation(app);
+    let generation = crate::distractions::runtime::capture_publication_generation(app);
     let app = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        crate::doomscrolling::state::publish_committed_focus(&app, &effect, generation, now_ms)
+        crate::distractions::state::publish_committed_focus(&app, &effect, generation, now_ms)
     })
     .await
     .map_err(|error| format!("Publish accepted Focus rules: {error}"))??;

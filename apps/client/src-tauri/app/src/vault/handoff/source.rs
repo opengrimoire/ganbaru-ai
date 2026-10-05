@@ -208,7 +208,7 @@ async fn prepare(
 
 #[cfg(target_os = "android")]
 async fn prepare_local_state_for_snapshot(app: &tauri::AppHandle) -> Result<(), String> {
-    crate::doomscrolling_mobile::synchronize_for_snapshot(app.clone()).await
+    crate::distractions_mobile::synchronize_for_snapshot(app.clone()).await
 }
 
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -220,7 +220,7 @@ async fn prepare_local_state_for_snapshot(app: &tauri::AppHandle) -> Result<(), 
         format!("sqlite:{}", crate::vault::APP_SQLITE_FILE),
     )
     .await?;
-    crate::doomscrolling_linked::drain_local_spool(app, &pool, &vault_id, &device_id)
+    crate::distractions_linked::drain_local_spool(app, &pool, &vault_id, &device_id)
         .await
         .map(|_| ())
 }

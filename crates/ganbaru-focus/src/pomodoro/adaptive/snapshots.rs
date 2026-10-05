@@ -342,7 +342,7 @@ fn feature_writes(features: &FeatureVector) -> Vec<PomodoroAdaptiveFeatureWrite>
         .chain(
             blocking
                 .into_iter()
-                .map(|(key, value)| numeric_feature(key, value, "doomscrolling")),
+                .map(|(key, value)| numeric_feature(key, value, "distractions")),
         )
         .chain(
             controls

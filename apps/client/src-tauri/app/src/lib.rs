@@ -20,15 +20,15 @@ mod chat;
 mod db;
 mod db_path;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
-mod doomscrolling;
-#[path = "doomscrolling/limits.rs"]
-pub(crate) mod doomscrolling_limits;
-#[path = "doomscrolling/limits_store.rs"]
-mod doomscrolling_limits_store;
-mod doomscrolling_linked;
+mod distractions;
+#[path = "distractions/limits.rs"]
+pub(crate) mod distractions_limits;
+#[path = "distractions/limits_store.rs"]
+mod distractions_limits_store;
+mod distractions_linked;
 #[cfg(any(target_os = "android", all(test, not(target_os = "ios"))))]
 #[cfg_attr(not(target_os = "android"), allow(dead_code))]
-mod doomscrolling_mobile;
+mod distractions_mobile;
 #[cfg(all(test, not(any(target_os = "android", target_os = "ios"))))]
 mod first_use_contracts;
 #[cfg(not(any(target_os = "android", target_os = "ios")))]
@@ -107,8 +107,8 @@ mod composition_tests {
             "pomodoro::native_runtime::focus_subscribe",
             "pomodoro::native_runtime::focus_renew_subscription",
             "pomodoro::native_runtime::focus_unsubscribe",
-            "crate::doomscrolling_mobile::doomscrolling_mobile_update_copy",
-            "crate::doomscrolling_mobile::doomscrolling_mobile_load_usage_projection",
+            "crate::distractions_mobile::distractions_mobile_update_copy",
+            "crate::distractions_mobile::distractions_mobile_load_usage_projection",
             "music::session::runtime::music_session_subscribe",
             "music::session::runtime::music_session_read_frame",
             "music::session::runtime::music_session_acknowledge",
@@ -147,13 +147,13 @@ mod composition_tests {
             "chat::workspace_commands::",
             "chat::interaction_commands::",
             "chat::preview::",
-            "doomscrolling::commands::",
-            "doomscrolling::state::",
-            "doomscrolling::usage::",
-            "doomscrolling::limits_read::",
-            "doomscrolling::catalog::",
-            "doomscrolling_mobile::doomscrolling_mobile_sync_events",
-            "doomscrolling_mobile::doomscrolling_mobile_list_usage_samples",
+            "distractions::commands::",
+            "distractions::state::",
+            "distractions::usage::",
+            "distractions::limits_read::",
+            "distractions::catalog::",
+            "distractions_mobile::distractions_mobile_sync_events",
+            "distractions_mobile::distractions_mobile_list_usage_samples",
             "notification::show_event_notification",
             "soundscape::",
             "tray::",

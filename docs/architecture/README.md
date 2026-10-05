@@ -12,7 +12,7 @@ Exact dependency versions are authoritative in `package.json`, `apps/client/pack
 | Tauri composition | `apps/client/src-tauri/app/` | Commands, managed state, lifecycle, platform services, and adapter composition |
 | Domain services | `crates/ganbaru-*` | Tauri-free persistence, contracts, provider transports, filesystem boundaries, and reusable logic |
 | Durable storage | `apps/client/src-tauri/migrations/` and the active vault | SQLite schema, managed assets, and file-authoritative documents |
-| Android adapters | `crates/ganbaru-mobile-*` and `apps/client/src-tauri/gen/android/` | Notifications, document transfer, media, Doomscrolling access, and Android application integration |
+| Android adapters | `crates/ganbaru-mobile-*` and `apps/client/src-tauri/gen/android/` | Notifications, document transfer, media, anti-distraction access, and Android application integration |
 | Browser integration | `extensions/chrome/` and `crates/ganbaru-native-messaging/` | Chromium blocking, status, and local native messaging |
 | Shared package contracts | `packages/shared-types/` | TypeScript types shared across workspaces |
 

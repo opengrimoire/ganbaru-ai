@@ -12,10 +12,10 @@
  * stale targeting.
  */
 
-import type { ChatSettingsSubsection, DoomscrollingSettingsTab, SectionId } from "$lib/components/settings/types";
+import type { ChatSettingsSubsection, DistractionsSettingsTab, SectionId } from "$lib/components/settings/types";
 
 interface SettingsLaunchOptions {
-  doomscrollingTab?: DoomscrollingSettingsTab;
+  distractionsTab?: DistractionsSettingsTab;
   chatSubsection?: ChatSettingsSubsection;
   chatTeammateId?: string;
   chatChannelId?: string;
@@ -25,7 +25,7 @@ interface SettingsLaunchOptions {
 class SettingsLauncherStore {
   isOpen = $state(false);
   targetSection = $state<SectionId | undefined>(undefined);
-  targetDoomscrollingTab = $state<DoomscrollingSettingsTab | undefined>(undefined);
+  targetDistractionsTab = $state<DistractionsSettingsTab | undefined>(undefined);
   targetChatSubsection = $state<ChatSettingsSubsection | undefined>(undefined);
   targetChatTeammateId = $state<string | undefined>(undefined);
   targetChatChannelId = $state<string | undefined>(undefined);
@@ -38,8 +38,8 @@ class SettingsLauncherStore {
    */
   open(section?: SectionId, options: SettingsLaunchOptions = {}) {
     this.targetSection = section;
-    this.targetDoomscrollingTab = section === "doomscrolling"
-      ? options.doomscrollingTab
+    this.targetDistractionsTab = section === "distractions"
+      ? options.distractionsTab
       : undefined;
     this.targetChatSubsection = section === "chat" ? options.chatSubsection : undefined;
     this.targetChatTeammateId = section === "chat" ? options.chatTeammateId : undefined;
@@ -51,7 +51,7 @@ class SettingsLauncherStore {
   close() {
     this.isOpen = false;
     this.targetSection = undefined;
-    this.targetDoomscrollingTab = undefined;
+    this.targetDistractionsTab = undefined;
     this.targetChatSubsection = undefined;
     this.targetChatTeammateId = undefined;
     this.targetChatChannelId = undefined;

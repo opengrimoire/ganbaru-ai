@@ -15,7 +15,7 @@ describe("Settings detail registries", () => {
     const second = loadSettingsDetail("notes-transfer");
 
     expect(second).toBe(first);
-    expect(settingsDetailHasLoaded("doomscrolling-limit")).toBe(false);
+    expect(settingsDetailHasLoaded("distractions-limit")).toBe(false);
     await expect(first).resolves.toMatchObject({ kind: "notes-transfer" });
     expect(settingsDetailHasLoaded("notes-transfer")).toBe(true);
   });

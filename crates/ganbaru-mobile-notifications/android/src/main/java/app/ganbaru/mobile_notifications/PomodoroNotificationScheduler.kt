@@ -127,7 +127,7 @@ internal object PomodoroNotificationScheduler {
   fun update(context: Context, projection: PomodoroNotificationProjection) {
     validate(projection)
     save(context, projection)
-    DoomscrollingPhaseBridge.publish(context, projection)
+    DistractionsPhaseBridge.publish(context, projection)
     PomodoroNotificationService.synchronize(context)
   }
 
@@ -148,7 +148,7 @@ internal object PomodoroNotificationScheduler {
     context.stopService(Intent(context, PomodoroNotificationService::class.java))
     notificationManager(context).cancel(POMODORO_NOTIFICATION_ID)
     if (!keepBoundaryAlert) notificationManager(context).cancel(POMODORO_ALERT_NOTIFICATION_ID)
-    DoomscrollingPhaseBridge.clear(context)
+    DistractionsPhaseBridge.clear(context)
   }
 
   /** A committed closed phase supplies its own reminder input, independently of alarm delivery. */
@@ -224,7 +224,7 @@ internal object PomodoroNotificationScheduler {
       alarmManager(context).cancel(boundaryIntent(context, null, null))
       if (alertBoundary) postBoundaryAlert(context, projection, completedPhase, null)
       clearCurrent(context)
-      DoomscrollingPhaseBridge.clear(context)
+      DistractionsPhaseBridge.clear(context)
       service.finishSession()
       return
     }
@@ -234,11 +234,11 @@ internal object PomodoroNotificationScheduler {
     if (activePhase == null) {
       alarmManager(context).cancel(boundaryIntent(context, null, null))
       clearCurrent(context)
-      DoomscrollingPhaseBridge.clear(context)
+      DistractionsPhaseBridge.clear(context)
       service.finishSession()
       return
     }
-    DoomscrollingPhaseBridge.publish(context, projection, activePhase)
+    DistractionsPhaseBridge.publish(context, projection, activePhase)
     postOngoing(service, projection, activePhase, now)
     scheduleBoundary(context, projection, activePhase)
   }

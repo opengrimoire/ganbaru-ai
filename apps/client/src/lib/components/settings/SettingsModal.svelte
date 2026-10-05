@@ -29,8 +29,8 @@
   } from "$lib/components/settings/mobile-theme-editor-loader";
   import type { MobileThemeEditorComponent } from "$lib/components/settings/mobile-theme-editor-loader-contract";
   import type {
-    DoomscrollingLimitEditorTarget,
-    DoomscrollingSettingsTab,
+    DistractionsLimitEditorTarget,
+    DistractionsSettingsTab,
     NotesTransferOperation,
     ChatProviderSetupTarget,
     ChatSettingsSubsection,
@@ -42,14 +42,14 @@
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
 
   type SettingsDetailView =
-    | { kind: "doomscrolling-limit"; target: DoomscrollingLimitEditorTarget }
+    | { kind: "distractions-limit"; target: DistractionsLimitEditorTarget }
     | { kind: "notes-transfer"; operation: NotesTransferOperation }
     | { kind: "chat-provider"; target: ChatProviderSetupTarget };
 
   let {
     onClose,
     initialSection,
-    initialDoomscrollingTab,
+    initialDistractionsTab,
     initialChatSubsection,
     initialChatTeammateId,
     initialChatChannelId,
@@ -58,7 +58,7 @@
   }: {
     onClose: () => void;
     initialSection?: SectionId;
-    initialDoomscrollingTab?: DoomscrollingSettingsTab;
+    initialDistractionsTab?: DistractionsSettingsTab;
     initialChatSubsection?: ChatSettingsSubsection;
     initialChatTeammateId?: string;
     initialChatChannelId?: string;
@@ -286,13 +286,13 @@
     scrollSettingsToTop();
   }
 
-  function openDoomscrollingLimitEditor(target: DoomscrollingLimitEditorTarget): void {
-    activeSection = "doomscrolling";
-    detailView = { kind: "doomscrolling-limit", target };
+  function openDistractionsLimitEditor(target: DistractionsLimitEditorTarget): void {
+    activeSection = "distractions";
+    detailView = { kind: "distractions-limit", target };
     detailScrollEl = undefined;
     detailScrollbarInsetTop = 0;
     detailScrollbarInsetBottom = 0;
-    requestSettingsDetail("doomscrolling-limit");
+    requestSettingsDetail("distractions-limit");
     scrollSettingsToTop();
   }
 
@@ -430,7 +430,7 @@
         {#if detailView}
           {#if activeDetailLoadState?.status === "ready"}
             {@const loadedDetail = activeDetailLoadState.component}
-            {#if loadedDetail.kind === "doomscrolling-limit" && detailView.kind === "doomscrolling-limit"}
+            {#if loadedDetail.kind === "distractions-limit" && detailView.kind === "distractions-limit"}
               {@const DetailComponent = loadedDetail.component}
               <DetailComponent
                 target={detailView.target}
@@ -466,12 +466,12 @@
           <div class="mx-auto w-full max-w-xl">
             <SettingsSectionRenderer
               {activeSection}
-              {initialDoomscrollingTab}
+              {initialDistractionsTab}
               {activeChatSubsection}
               {initialChatTeammateId}
               {initialChatChannelId}
               {initialChatCreateTeammate}
-              onOpenDoomscrollingLimitEditor={openDoomscrollingLimitEditor}
+              onOpenDistractionsLimitEditor={openDistractionsLimitEditor}
               onOpenNotesTransferPanel={openNotesTransferPanel}
               onOpenChatProviderSetup={openChatProviderSetup}
               onChatSubsectionChange={(subsection: ChatSettingsSubsection) => {
@@ -653,7 +653,7 @@
         {#if detailView}
           {#if activeDetailLoadState?.status === "ready"}
             {@const loadedDetail = activeDetailLoadState.component}
-            {#if loadedDetail.kind === "doomscrolling-limit" && detailView.kind === "doomscrolling-limit"}
+            {#if loadedDetail.kind === "distractions-limit" && detailView.kind === "distractions-limit"}
               {@const DetailComponent = loadedDetail.component}
               <DetailComponent
                 target={detailView.target}
@@ -726,12 +726,12 @@
         {:else}
           <SettingsSectionRenderer
             {activeSection}
-            {initialDoomscrollingTab}
+            {initialDistractionsTab}
             {activeChatSubsection}
             {initialChatTeammateId}
             {initialChatChannelId}
             {initialChatCreateTeammate}
-            onOpenDoomscrollingLimitEditor={openDoomscrollingLimitEditor}
+            onOpenDistractionsLimitEditor={openDistractionsLimitEditor}
             onOpenNotesTransferPanel={openNotesTransferPanel}
             onOpenChatProviderSetup={openChatProviderSetup}
             onChatSubsectionChange={(subsection: ChatSettingsSubsection) => {

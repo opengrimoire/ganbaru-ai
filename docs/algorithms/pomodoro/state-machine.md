@@ -95,7 +95,7 @@ A focus phase accepts one extension of up to three minutes. Breaks accept extens
 2. Compute the decision.
 3. Persist all canonical rows and the receipt in one transaction.
 4. Update in-memory state from the committed result.
-5. Publish notifications, overlays, media, tray, Doomscrolling, and window projections.
+5. Publish notifications, overlays, media, tray, anti-distraction, and window projections.
 
 If an effect fails after commit, state remains canonical and delivery retries. User history is never rolled back because a tray or sound effect failed.
 

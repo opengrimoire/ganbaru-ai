@@ -1,6 +1,6 @@
 # Device linking and synchronization
 
-**Status: Partial.** Local single-writer whole-vault handoff is implemented in source: secure LAN pairing, one administration desktop, explicit write ownership, read-only refresh, and combined Doomscrolling accounting. Physical multi-device acceptance is pending. Concurrent operation replication, conflict handling, the encrypted relay, and convergence are planned.
+**Status: Partial.** Local single-writer whole-vault handoff is implemented in source: secure LAN pairing, one administration desktop, explicit write ownership, read-only refresh, and combined distraction usage accounting. Physical multi-device acceptance is pending. Concurrent operation replication, conflict handling, the encrypted relay, and convergence are planned.
 
 This contract links one person's devices; multi-person sharing is later work. The phone must provide full offline access to portable Notes, Projects, Calendar, and other synchronized content. Focus execution has its own controller and evidence rules in [Focus authority](../algorithms/pomodoro/focus-authority.md).
 
@@ -40,7 +40,7 @@ Failure or cancellation before the transfer is durably stored restores pre-commi
 
 The archive includes `vault.json`, portable `config.json`, the SQLite snapshot, managed project folders, and managed assets. External music and project folders, credentials, executable and provider paths, operating-system permissions, the active-vault pointer, device keys, pairing and ownership records, and live process state stay device-local.
 
-Each non-owner keeps its last activated copy for read-only browsing and refreshes through the coordinator on start, resume, LAN reconnect, or explicit request. A read-only coordinator first fetches a fresh snapshot from the owner and relays it. Reachable clients keep a bounded authenticated long poll open so an explicit request does not wait for the periodic reconnect interval; disconnected clients retry with slower backoff. After activation, Android reruns startup reconciliation, rebuilding Calendar notification schedules and republishing Doomscrolling rules. A disconnected phone keeps its existing alarms and rules until it refreshes. Whole-vault refresh is a lifecycle or explicit operation and must never run after every mutation as a substitute for incremental sync.
+Each non-owner keeps its last activated copy for read-only browsing and refreshes through the coordinator on start, resume, LAN reconnect, or explicit request. A read-only coordinator first fetches a fresh snapshot from the owner and relays it. Reachable clients keep a bounded authenticated long poll open so an explicit request does not wait for the periodic reconnect interval; disconnected clients retry with slower backoff. After activation, Android reruns startup reconciliation, rebuilding Calendar notification schedules and republishing distraction rules. A disconnected phone keeps its existing alarms and rules until it refreshes. Whole-vault refresh is a lifecycle or explicit operation and must never run after every mutation as a substitute for incremental sync.
 
 ### Replacing and recovering vaults
 
@@ -48,9 +48,9 @@ Linking never merges two independent vaults. Before the first transfer replaces 
 
 Unlinking never silently picks a new owner. The owner can remove an unreachable read-only device immediately but not an unreachable device that owns the vault. The coordinator keeps a bounded revocation record; on reconnect the removed device is denied, clears its link, and keeps its copy read-only. Network and TLS failures never clear membership. If the owner is permanently lost, an explicit recovery action unlinks the devices and advances the local copy to a new standalone generation; the copies do not merge.
 
-### Doomscrolling exception
+### Distraction usage exception
 
-Doomscrolling usage is the only write from inactive devices. Browser, desktop, and Android usage enters a bounded device-local spool with stable device-scoped sample IDs. Through the coordinator, the owner inserts samples transactionally and idempotently, acknowledges them, and returns the combined counter. Disconnected enforcement uses the last accepted combined value plus new local usage, and reconnection preserves the exact sum. Simultaneous disconnected use can temporarily exceed a combined limit because neither device knows the other's newest usage.
+Distraction usage is the only write from inactive devices. Browser, desktop, and Android usage enters a bounded device-local spool with stable device-scoped sample IDs. Through the coordinator, the owner inserts samples transactionally and idempotently, acknowledges them, and returns the combined counter. Disconnected enforcement uses the last accepted combined value plus new local usage, and reconnection preserves the exact sum. Simultaneous disconnected use can temporarily exceed a combined limit because neither device knows the other's newest usage.
 
 This handoff is deliberately not the concurrent synchronization system: it has no operation journal, CRDT, conflict resolution, cloud delivery, or bidirectional editing.
 
@@ -74,7 +74,7 @@ Every persisted field needs an explicit replication classification before it can
 | --- | --- | --- |
 | Notes, Projects, Calendar, Quick notes | Content, relationships, templates, archive, Trash, retained history, favorites | Recents, current selection, navigation, viewport layout |
 | Preferences | Profile, themes, language, time format, rhythm defaults | Font scale, layout, shortcuts, notification delivery, explicit presentation overrides |
-| Doomscrolling | Rule definitions and device-attributed history | Permissions, application bindings, enforcement state |
+| Distraction blocker | Rule definitions and device-attributed history | Permissions, application bindings, enforcement state |
 | Music | Library identities, playlists, assignments, portable preferences | Source bindings, media bytes, current playback, volume, routing |
 | Chat | Organizational content, portable review history, origin-attributed drafts | Execution processes, credentials, provider homes, terminals, native trust, paths, caches |
 | Managed assets | Immutable content and metadata | Transfer staging, local availability, caches |

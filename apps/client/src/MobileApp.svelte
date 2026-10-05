@@ -419,7 +419,7 @@
     perfMark("boot.mobile-calendar-presented");
     primarySurfacePresented = true;
     reportInitialSurfacePresentedIfReady();
-    void synchronizeMobileDoomscrolling();
+    void synchronizeMobileDistractions();
     void ensureCalendarNotificationScheduler();
     const batches: readonly (readonly DeferredSurface[])[] = [
       ["projects"],
@@ -485,19 +485,19 @@
     }
   }
 
-  async function synchronizeMobileDoomscrolling(): Promise<void> {
+  async function synchronizeMobileDistractions(): Promise<void> {
     try {
       const [storeModule, usageModule, mobileModule] = await Promise.all([
-        import("$lib/stores/doomscrolling.svelte"),
-        import("$lib/stores/doomscrolling-usage.svelte"),
-        import("$lib/scheduling/mobile-doomscrolling"),
+        import("$lib/stores/distractions.svelte"),
+        import("$lib/stores/distractions-usage.svelte"),
+        import("$lib/scheduling/mobile-distractions"),
       ]);
-      await storeModule.getDoomscrolling().publishMobileRules();
-      await usageModule.getDoomscrollingUsage().refresh();
-      const target = await mobileModule.takeMobileDoomscrollingNotificationAction();
-      if (target) settingsLauncher.open("doomscrolling", { doomscrollingTab: target });
+      await storeModule.getDistractions().publishMobileRules();
+      await usageModule.getDistractionsUsage().refresh();
+      const target = await mobileModule.takeMobileDistractionsNotificationAction();
+      if (target) settingsLauncher.open("distractions", { distractionsTab: target });
     } catch (error) {
-      console.warn("Failed to synchronize Android Doomscrolling", error);
+      console.warn("Failed to synchronize Android Distractions", error);
     }
   }
 
@@ -667,7 +667,7 @@
         await Promise.all([
           calendarNotificationScheduler?.reconcile(),
           pomodoroScheduleScheduler?.reconcile(),
-          synchronizeMobileDoomscrolling(),
+          synchronizeMobileDistractions(),
         ]);
         const eventId = await calendarNotificationScheduler?.takeAction();
         if (eventId) navigate("calendar");
@@ -919,7 +919,7 @@
       <SettingsSurface
         presentation="mobile"
         initialSection={settingsLauncher.targetSection}
-        initialDoomscrollingTab={settingsLauncher.targetDoomscrollingTab}
+        initialDistractionsTab={settingsLauncher.targetDistractionsTab}
         initialChatSubsection={settingsLauncher.targetChatSubsection}
         initialChatTeammateId={settingsLauncher.targetChatTeammateId}
         initialChatChannelId={settingsLauncher.targetChatChannelId}

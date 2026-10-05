@@ -5,16 +5,16 @@ function unavailableDetail(kind: SettingsDetailKind): Promise<LoadedSettingsDeta
   return Promise.reject(new Error(`Settings detail ${kind} is unavailable on mobile.`));
 }
 
-let doomscrollingLimitLoaded = false;
+let distractionsLimitLoaded = false;
 
 /** Reject desktop-only settings detail surfaces without importing their component graphs. */
 export function loadSettingsDetail(kind: SettingsDetailKind): Promise<LoadedSettingsDetail> {
-  if (kind === "doomscrolling-limit") {
-    return import("./DoomscrollingLimitEditor.svelte").then((module) => ({
-      kind: "doomscrolling-limit" as const,
+  if (kind === "distractions-limit") {
+    return import("./DistractionsLimitEditor.svelte").then((module) => ({
+      kind: "distractions-limit" as const,
       component: module.default,
     })).then((loaded) => {
-      doomscrollingLimitLoaded = true;
+      distractionsLimitLoaded = true;
       return loaded;
     });
   }
@@ -28,5 +28,5 @@ export function retrySettingsDetail(kind: SettingsDetailKind): Promise<LoadedSet
 
 /** Mobile settings never cache a desktop-only detail surface. */
 export function settingsDetailHasLoaded(kind: SettingsDetailKind): boolean {
-  return kind === "doomscrolling-limit" && doomscrollingLimitLoaded;
+  return kind === "distractions-limit" && distractionsLimitLoaded;
 }

@@ -149,8 +149,8 @@ describe("SettingsModal remount state", () => {
       target,
       props: {
         presentation: "mobile",
-        initialSection: "doomscrolling",
-        initialDoomscrollingTab: "limits",
+        initialSection: "distractions",
+        initialDistractionsTab: "limits",
         onClose: () => undefined,
       },
     });

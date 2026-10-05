@@ -20,7 +20,7 @@ The Cargo workspace extracts domains that benefit from Tauri-free contracts and 
 - `ganbaru-chat` owns Chat persistence, runtime services, Git workspaces, checkpoints, review, and source control.
 - `ganbaru-working-folders` owns portable folder identities, bindings, repository kinds, and device-local state shapes.
 - `ganbaru-native-messaging` is the independent Chromium native messaging host.
-- `ganbaru-mobile-*` crates expose narrow Android notification, document, media, and Doomscrolling plugins.
+- `ganbaru-mobile-*` crates expose narrow Android notification, document, media, and anti-distraction plugins.
 
 Code stays in the application crate when it is only composition or Tauri adaptation. It moves to a core crate when the domain boundary, portability, or independent tests justify the extraction.
 
@@ -42,7 +42,7 @@ Vault selection, snapshots, backup, restore, and handoff are serialized: native 
 
 ## Asynchronous and blocking work
 
-Tauri asynchronous command executors must not perform unbounded synchronous work. SQLx operations stay on their asynchronous path. Filesystem traversal, process observation, blocking platform APIs, image and media probing, and archive generation run on blocking workers when their cost depends on user input or external state. Examples include Music folder scans, Doomscrolling application discovery and process observation, project icon fetching, and Notes import and export.
+Tauri asynchronous command executors must not perform unbounded synchronous work. SQLx operations stay on their asynchronous path. Filesystem traversal, process observation, blocking platform APIs, image and media probing, and archive generation run on blocking workers when their cost depends on user input or external state. Examples include Music folder scans, anti-distraction application discovery and process observation, project icon fetching, and Notes import and export.
 
 Worker code must not hold a SQLite transaction or a shared mutex while awaiting a blocking task. Cancellation returns no partial authoritative result, atomic writers publish only complete output, and a replaced request cannot publish results after a newer generation has become authoritative.
 
@@ -53,8 +53,8 @@ Several runtime domains have exactly one native owner per vault. The WebView pre
 - **Calendar:** Rust expands recurrence in each event's home zone (using Jiff for timezone facts) and serves bounded windows to the UI, the Pomodoro scheduler, and Android reminders. Edits, creation, Project scheduling, deletion, and Undo go through a semantic native boundary. Preview prepares the same rows as Save, and Save commits Calendar writes with Focus reconciliation and a retry receipt in one transaction. See [recurrence editing](../features/calendar/recurrence-editing.md) and [deletion and Undo](../features/calendar/deletion-and-undo.md).
 - **Focus:** the `ganbaru-focus` native owner accepts semantic commands, commits transitions, and publishes snapshots. Recovery uses only committed canonical execution state. Overlays, warnings, sounds, Android notifications, and blocking phases follow accepted state, never a frontend timer. See [Pomodoro](../features/pomodoro/README.md).
 - **Music:** one native owner serializes queue intent and playback effects. Automatic background intent cannot authorize playback after restart without fresh admission, and native audio does not depend on the WebView presentation stream. See [Music playback](../features/music/playback.md).
-- **Doomscrolling (desktop):** one native owner observes usage, persists interval evidence to a device-local spool before deriving budgets, and makes block and close decisions only from a fresh snapshot of persisted configuration for the current local date. The UI reads a projection and cannot submit usage or request closes. See [Doomscrolling](../features/doomscrolling/README.md).
-- **Doomscrolling (Android):** the Guardian service keeps its own operating-system observation and enforcement. A serialized Rust publisher synchronizes its usage journal, derives budgets, and publishes rules; presentation can only supply localized copy. Guardian keeps the last accepted rules when the application process is absent.
+- **Distraction blocker (desktop):** one native owner observes usage, persists interval evidence to a device-local spool before deriving budgets, and makes block and close decisions only from a fresh snapshot of persisted configuration for the current local date. The UI reads a projection and cannot submit usage or request closes. See [Distraction blocker](../features/distractions/README.md).
+- **Distraction blocker (Android):** the Guardian service keeps its own operating-system observation and enforcement. A serialized Rust publisher synchronizes its usage journal, derives budgets, and publishes rules; presentation can only supply localized copy. Guardian keeps the last accepted rules when the application process is absent.
 
 Configuration changes, vault selection, handoff, and shutdown revoke obsolete generations so stale work cannot publish effects.
 
@@ -62,7 +62,7 @@ Configuration changes, vault selection, handoff, and shutdown revoke obsolete ge
 
 Desktop composition includes the tray, updater, detached windows, native notifications, process control, browser native messaging, Rodio and Symphonia audio, MPRIS or Windows media controls, provider processes, terminals, Git workspaces, and browser previews. Platform media-control protocol state stays inside its target-gated adapter.
 
-Android composition uses plugin adapters and system-owned surfaces instead of desktop implementations. Notification schedules, selected document grants, Media3 playback, and Doomscrolling access remain subordinate to canonical vault data.
+Android composition uses plugin adapters and system-owned surfaces instead of desktop implementations. Notification schedules, selected document grants, Media3 playback, and anti-distraction access remain subordinate to canonical vault data.
 
 The browser native messaging host evaluates rules into typed decisions. Extension labels and stored event classifications derive from the same decision rather than from parsing display text.
 

@@ -12,7 +12,7 @@ export const SETTINGS_SECTION_IDS = [
   "chat",
   "focus",
   "music",
-  "doomscrolling",
+  "distractions",
   "data",
   "updates",
   "shortcuts",
@@ -21,10 +21,10 @@ export const SETTINGS_SECTION_IDS = [
 
 export type SectionId = (typeof SETTINGS_SECTION_IDS)[number];
 
-export type DoomscrollingSettingsTab = "limits" | "browser" | "mobile" | "desktop";
+export type DistractionsSettingsTab = "limits" | "browser" | "mobile" | "desktop";
 export type ChatSettingsSubsection = "teammates" | "providers" | "permissions" | "behavior";
 
-export type DoomscrollingLimitEditorTarget =
+export type DistractionsLimitEditorTarget =
   | { mode: "create" }
   | { mode: "edit"; limitId: string };
 
@@ -41,5 +41,5 @@ export type ChatProviderSetupTarget =
   | { mode: "create"; familyId: string }
   | { mode: "edit"; instanceId: string };
 
-export const SETTINGS_DETAIL_KINDS = ["doomscrolling-limit", "notes-transfer", "chat-provider"] as const;
+export const SETTINGS_DETAIL_KINDS = ["distractions-limit", "notes-transfer", "chat-provider"] as const;
 export type SettingsDetailKind = (typeof SETTINGS_DETAIL_KINDS)[number];

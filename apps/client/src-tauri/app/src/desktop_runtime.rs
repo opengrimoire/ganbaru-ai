@@ -75,9 +75,9 @@ fn get_startup_elapsed_ms() -> u64 {
         .unwrap_or(0)
 }
 
-fn clear_doomscrolling_enforcement_state_best_effort(app: &tauri::AppHandle, context: &str) {
-    if let Err(error) = doomscrolling::clear_doomscrolling_enforcement_state(app) {
-        eprintln!("failed to clear doomscrolling enforcement state {context}: {error}");
+fn clear_distractions_enforcement_state_best_effort(app: &tauri::AppHandle, context: &str) {
+    if let Err(error) = distractions::clear_distractions_enforcement_state(app) {
+        eprintln!("failed to clear distraction enforcement state {context}: {error}");
     }
 }
 
@@ -109,7 +109,7 @@ fn force_quit(
         overlays.focus(&app);
         return;
     }
-    clear_doomscrolling_enforcement_state_best_effort(&app, "before force quit");
+    clear_distractions_enforcement_state_best_effort(&app, "before force quit");
     app.exit(0);
 }
 
@@ -118,8 +118,8 @@ fn force_quit(
 #[tauri::command]
 async fn reset_database(app: tauri::AppHandle) -> Result<(), String> {
     let writable_vault = vault::active_writable_vault_path(&app)?;
-    doomscrolling::runtime::stop_for_vault_handoff(&app).await?;
-    doomscrolling::clear_doomscrolling_enforcement_state(&app)?;
+    distractions::runtime::stop_for_vault_handoff(&app).await?;
+    distractions::clear_distractions_enforcement_state(&app)?;
     db_path::close_all_sqlite_pools(&app).await?;
     let db_path = writable_vault.as_ref().join(vault::APP_SQLITE_FILE);
 
@@ -226,7 +226,7 @@ fn restart_app(
     overlays: tauri::State<'_, notification::PomodoroOverlayState>,
 ) {
     overlays.shutdown(&app);
-    clear_doomscrolling_enforcement_state_best_effort(&app, "before restart");
+    clear_distractions_enforcement_state_best_effort(&app, "before restart");
     app.request_restart();
 }
 
@@ -236,7 +236,7 @@ fn restart_app(
 #[tauri::command]
 fn restart_app_after_delay(app: tauri::AppHandle, delay_ms: u64) -> Result<(), String> {
     spawn_delayed_relaunch_helper(delay_ms)?;
-    clear_doomscrolling_enforcement_state_best_effort(&app, "before delayed restart");
+    clear_distractions_enforcement_state_best_effort(&app, "before delayed restart");
     app.exit(0);
     Ok(())
 }
@@ -943,8 +943,8 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             notification::commands::show_event_notification,
             notification::commands::show_notes_notification,
             notification::commands::show_benchmark_notification,
-            notification::commands::show_doomscrolling_desktop_block_notification,
-            notification::commands::show_doomscrolling_desktop_limit_notification,
+            notification::commands::show_distractions_desktop_block_notification,
+            notification::commands::show_distractions_desktop_limit_notification,
             notification::dismiss_pomodoro_completion,
             notification::idle::get_idle_status,
             music::music_pick_artwork_file,
@@ -1324,10 +1324,10 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             project_icons::project_icon_asset_path,
             project_icons::project_icon_asset_data_url,
             project_icons::project_icon_delete_assets_if_unreferenced,
-            doomscrolling::state::doomscrolling_get_extension_status,
-            doomscrolling::limits_read::doomscrolling_load_usage_projection,
-            doomscrolling::catalog::doomscrolling_list_desktop_apps,
-            doomscrolling::commands::doomscrolling_open_extension_install_docs,
+            distractions::state::distractions_get_extension_status,
+            distractions::limits_read::distractions_load_usage_projection,
+            distractions::catalog::distractions_list_desktop_apps,
+            distractions::commands::distractions_open_extension_install_docs,
             themes::theme_insert,
             themes::theme_replace_content,
             themes::theme_delete,
@@ -1343,12 +1343,12 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             if let Err(error) = vault::handoff::start_desktop(app.handle()) {
                 eprintln!("vault handoff coordinator is unavailable: {error}");
             }
-            clear_doomscrolling_enforcement_state_best_effort(app.handle(), "during startup");
+            clear_distractions_enforcement_state_best_effort(app.handle(), "during startup");
             schedule_main_window_reveal_fallback(app.handle());
             chat::revocation::start_startup_recovery(app.handle());
             music::setup_youtube_host(app.handle())?;
             music::session::setup(app.handle());
-            doomscrolling::runtime::setup(app.handle());
+            distractions::runtime::setup(app.handle());
             media_controls::setup_media_controls(app.handle())?;
             if let Err(err) = notification::restore_stale_shortcuts(app.handle()) {
                 eprintln!("failed to restore stale Linux shortcuts: {err}");
@@ -1417,11 +1417,11 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             app_handle
                 .state::<vault::handoff::CoordinatorLifecycle>()
                 .stop();
-            clear_doomscrolling_enforcement_state_best_effort(app_handle, "before app exit");
+            clear_distractions_enforcement_state_best_effort(app_handle, "before app exit");
             if let Err(error) = tauri::async_runtime::block_on(
-                doomscrolling::runtime::stop_for_vault_handoff(app_handle),
+                distractions::runtime::stop_for_vault_handoff(app_handle),
             ) {
-                eprintln!("Doomscrolling shutdown flush failed: {error}");
+                eprintln!("Distractions shutdown flush failed: {error}");
             }
         }
     });

@@ -701,7 +701,7 @@ async fn load_adaptive_block_events(
 ) -> Result<Vec<PomodoroAdaptiveHistoryBlockEventRead>, String> {
     let mut rows = sqlx::query(
         "SELECT occurred_at, phase, source_type, source_key, decision
-         FROM doomscrolling_block_events
+         FROM distractions_block_events
          WHERE occurred_at < ?
          ORDER BY occurred_at DESC
          LIMIT ?",

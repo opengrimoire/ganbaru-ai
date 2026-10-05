@@ -138,7 +138,7 @@
   <SettingsModal
     onClose={() => settingsLauncher.close()}
     initialSection={settingsLauncher.targetSection}
-    initialDoomscrollingTab={settingsLauncher.targetDoomscrollingTab}
+    initialDistractionsTab={settingsLauncher.targetDistractionsTab}
     initialChatSubsection={settingsLauncher.targetChatSubsection}
     initialChatTeammateId={settingsLauncher.targetChatTeammateId}
     initialChatChannelId={settingsLauncher.targetChatChannelId}

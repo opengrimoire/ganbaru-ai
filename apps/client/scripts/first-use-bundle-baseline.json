@@ -316,14 +316,14 @@
       "src/lib/components/settings/NotesSection.svelte",
       "src/lib/components/settings/FocusSection.svelte",
       "src/lib/components/settings/MusicSection.svelte",
-      "src/lib/components/settings/DoomscrollingSection.svelte",
+      "src/lib/components/settings/DistractionsSection.svelte",
       "src/lib/components/settings/UpdatesSection.svelte",
       "src/lib/components/settings/ShortcutsSection.svelte",
       "src/lib/components/settings/AboutSection.svelte"
     ],
     "forbiddenModules": [
       "src/lib/components/settings/DataSection.svelte",
-      "src/lib/components/settings/DoomscrollingLimitEditor.svelte",
+      "src/lib/components/settings/DistractionsLimitEditor.svelte",
       "src/lib/components/settings/NotesTransferSettingsPanel.svelte",
       "src/lib/components/notes/NotesHtmlImportDialog.svelte",
       "src/lib/components/notes/NotesNotionApiImportDialog.svelte",
@@ -337,7 +337,7 @@
     "src/lib/components/notes/NotesNotionApiImportDialog.svelte",
     "src/lib/components/notes/NotesNotionExportImportDialog.svelte",
     "src/lib/components/notes/NotesJsonGraphExportDialog.svelte",
-    "src/lib/components/settings/DoomscrollingLimitEditor.svelte"
+    "src/lib/components/settings/DistractionsLimitEditor.svelte"
   ],
   "defaultEnglishStartup": {
     "loadedModules": [

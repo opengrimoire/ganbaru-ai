@@ -21,8 +21,8 @@ const appIdentifiers = {
   dev: "org.opengrimoire.ganbaruai.dev",
 };
 const hostNames = {
-  app: "org.opengrimoire.ganbaru_ai.doomscrolling",
-  dev: "org.opengrimoire.ganbaru_ai.doomscrolling_dev",
+  app: "org.opengrimoire.ganbaru_ai.distractions",
+  dev: "org.opengrimoire.ganbaru_ai.distractions_dev",
 };
 
 let browser = "chrome";
@@ -141,7 +141,7 @@ chmodSync(launcherPath, 0o755);
 
 const manifest = {
   name: hostName,
-  description: `Ganbaru AI doomscrolling native host (${appTarget})`,
+  description: `Ganbaru AI anti-distraction native host (${appTarget})`,
   path: launcherPath,
   type: "stdio",
   allowed_origins: [`chrome-extension://${extensionId}/`],

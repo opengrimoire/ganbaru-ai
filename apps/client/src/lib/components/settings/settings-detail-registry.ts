@@ -6,8 +6,8 @@ import type { SettingsDetailKind } from "./types";
 
 export type LoadedSettingsDetail =
   | {
-    kind: "doomscrolling-limit";
-    component: typeof import("./DoomscrollingLimitEditor.svelte").default;
+    kind: "distractions-limit";
+    component: typeof import("./DistractionsLimitEditor.svelte").default;
   }
   | {
     kind: "notes-transfer";
@@ -19,9 +19,9 @@ export type LoadedSettingsDetail =
   };
 
 const DETAIL_IMPORTERS = {
-  "doomscrolling-limit": () => import("./DoomscrollingLimitEditor.svelte")
+  "distractions-limit": () => import("./DistractionsLimitEditor.svelte")
     .then((module) => ({
-      default: { kind: "doomscrolling-limit" as const, component: module.default },
+      default: { kind: "distractions-limit" as const, component: module.default },
     })),
   "notes-transfer": () => import("./NotesTransferSettingsPanel.svelte")
     .then((module) => ({

@@ -31,7 +31,7 @@ Native session checkpoints are keyed by device ID and hold portable item and mem
 
 Background sound state records whether a selection was manual or automatic. An automatic selection restored after restart is displayed but never starts output by itself; a fresh native Focus phase decision is required.
 
-## Doomscrolling
+## Distraction blocker
 
 Portable rules live in the vault `config.json`, with separate browser and desktop settings because the surfaces can carry different intent. SQLite stores usage samples and block events for daily limits, reports, and recovery. Local-date grouping keeps the date basis, so a later device timezone change never reassigns historical usage. Browser rules, desktop application rules, and Android app rules have separate source identities and validation.
 
@@ -41,7 +41,7 @@ Device-local state supports enforcement without replacing portable policy:
 - The desktop native owner spools captured usage batches with retry receipts before publishing totals, and sent sample IDs are immutable until acknowledged.
 - Android's Guardian journal records usage, totals, and its observation checkpoint in one transaction. A full journal rejects new evidence without advancing the checkpoint, and rows from another vault stay pending until that vault is active again.
 
-Linked-device accounting follows [Sync](../sync.md#doomscrolling-exception). Accepted totals and acknowledgement identities commit together, so a failed acknowledgement is retried before new evidence is sent and never double-counts usage. A capture with inconsistent identities, vault attribution, dates, or oversized evidence fails explicitly instead of publishing a truncated total. Vault and configuration changes revoke the old native publication before the new one becomes visible.
+Linked-device accounting follows [Sync](../sync.md#distraction-usage-exception). Accepted totals and acknowledgement identities commit together, so a failed acknowledgement is retried before new evidence is sent and never double-counts usage. A capture with inconsistent identities, vault attribution, dates, or oversized evidence fails explicitly instead of publishing a truncated total. Vault and configuration changes revoke the old native publication before the new one becomes visible.
 
 ## Profile and managed icons
 

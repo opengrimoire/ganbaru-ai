@@ -1,6 +1,6 @@
 # Ganbaru AI Chromium extension
 
-This is the Chromium-based anti-doomscrolling extension.
+This is the Chromium-based anti-distraction extension.
 
 During development it runs as an unpacked extension and talks to a local native messaging host. Chromium native messaging host names allow underscores but not hyphens, so the host identifiers intentionally use `ganbaru_ai`.
 
@@ -81,7 +81,7 @@ cd apps/client
 pnpm tauri dev
 ```
 
-Open Ganbaru AI, go to Settings > Doomscrolling, keep Blacklist mode selected, enable browser blocking, keep Block during focus enabled, and add blocked websites such as:
+Open Ganbaru AI, go to Settings > Distractions, keep Blacklist mode selected, enable browser blocking, keep Block during focus enabled, and add blocked websites such as:
 
 ```text
 reddit.com
@@ -105,7 +105,7 @@ Keep `extensions/chrome` registered to the `app` target if Ganbaru AI is helping
   ```
 
 - Extension HTML, CSS, JS, manifest, or icon changes need the reload button on the matching Ganbaru AI card in the browser's extensions page. Run `pnpm -w run setup:chromium-extension` again before reloading the dev extension when source files changed.
-- Changing Doomscrolling modes, categories, or website lists while a focus or break phase is active is picked up by the extension on the next state poll.
+- Changing anti-distraction modes, categories, or website lists while a focus or break phase is active is picked up by the extension on the next state poll.
 - Removing and adding the unpacked extension gives it a new id. If that happens, run the native host registration command again with the new id.
 
 ## Smoke test checklist
@@ -113,7 +113,7 @@ Keep `extensions/chrome` registered to the `app` target if Ganbaru AI is helping
 1. Register the native host for the extension you want to test. Use the dev extension id with the `dev` target when testing `pnpm tauri dev`.
 2. Start the matching Ganbaru AI app.
 3. Confirm the extension popup says connected.
-4. In Ganbaru AI, open Settings > Doomscrolling.
+4. In Ganbaru AI, open Settings > Distractions.
 5. Keep Blacklist mode selected, enable browser blocking, keep Block during focus enabled, and add `reddit.com` to blocked websites.
 6. Start a Pomodoro focus phase.
 7. Open `https://reddit.com`.
@@ -152,7 +152,7 @@ Keep `extensions/chrome` registered to the `app` target if Ganbaru AI is helping
 
    Replace `chrome` with `chromium`, `brave`, or `edge` when testing in those browsers. Use the dev extension id and replace `app` with `dev` only when registering `extensions/chrome-dev`.
 
-6. Start Ganbaru AI, open Settings, then Doomscrolling. Keep Blacklist mode selected, enable browser blocking, keep Block during focus enabled, and add blocked websites such as:
+6. Start Ganbaru AI, open Settings, then Distractions. Keep Blacklist mode selected, enable browser blocking, keep Block during focus enabled, and add blocked websites such as:
 
    ```text
    reddit.com
@@ -161,7 +161,7 @@ Keep `extensions/chrome` registered to the `app` target if Ganbaru AI is helping
 
 7. Start a Pomodoro focus phase and open one of the blocked sites.
 
-The extension defaults to fail open. If the native host is not registered, Doomscrolling is disabled, the current phase toggle is off, no protected Pomodoro phase is active, or the app has not written a fresh runtime state, it will not block pages.
+The extension defaults to fail open. If the native host is not registered, the distraction blocker is disabled, the current phase toggle is off, no protected Pomodoro phase is active, or the app has not written a fresh runtime state, it will not block pages.
 
 ## Troubleshooting
 
@@ -177,7 +177,7 @@ If the dev app says the extension is not connected while the host is registered 
 
 **The extension is loaded but never blocks.**
 
-Check that Ganbaru AI is running, browser blocking and Block during focus are enabled in Settings > Doomscrolling, the blocked website is saved without `https://`, and a Pomodoro focus phase is active.
+Check that Ganbaru AI is running, browser blocking and Block during focus are enabled in Settings > Distractions, the blocked website is saved without `https://`, and a Pomodoro focus phase is active.
 
 **Usage limits stay at zero.**
 

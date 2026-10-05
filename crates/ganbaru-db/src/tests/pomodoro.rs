@@ -83,7 +83,7 @@ fn schema_keeps_pomodoro_foreign_key_targets() {
             ("pomodoro_adaptive_decisions", "pomodoro_runs"),
             ("pomodoro_adaptive_planned_blocks", "pomodoro_runs"),
             ("pomodoro_adaptive_assignments", "pomodoro_runs"),
-            ("doomscrolling_block_events", "pomodoro_runs"),
+            ("distractions_block_events", "pomodoro_runs"),
         ];
 
         for (child_table, target_table) in references {
@@ -208,8 +208,8 @@ fn schema_creates_pomodoro_adaptive_tables() {
             "pomodoro_adaptive_experiment_variants",
             "pomodoro_adaptive_assignments",
             "pomodoro_adaptive_outcomes",
-            "doomscrolling_block_events",
-            "doomscrolling_block_event_rule_snapshots",
+            "distractions_block_events",
+            "distractions_block_event_rule_snapshots",
         ];
 
         for table in adaptive_tables {

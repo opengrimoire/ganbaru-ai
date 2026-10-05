@@ -60,9 +60,9 @@ async fn freeze_runtimes<R: Runtime>(
     crate::pomodoro::stop_for_vault_handoff(app).await?;
     crate::music::session::stop_for_vault_handoff(app).await?;
     #[cfg(not(any(target_os = "android", target_os = "ios")))]
-    crate::doomscrolling::runtime::stop_for_vault_handoff(app).await?;
+    crate::distractions::runtime::stop_for_vault_handoff(app).await?;
     #[cfg(target_os = "android")]
-    crate::doomscrolling_mobile::runtime::stop_for_vault_handoff(app).await?;
+    crate::distractions_mobile::runtime::stop_for_vault_handoff(app).await?;
     Ok(resume)
 }
 

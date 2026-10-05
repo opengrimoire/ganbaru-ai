@@ -301,17 +301,17 @@ export default defineConfig({
           ? "src/lib/components/settings/settings-detail-registry.mobile.ts"
           : "src/lib/components/settings/settings-detail-registry.ts",
       ),
-      "$lib/components/settings/doomscrolling-desktop-selector": path.resolve(
+      "$lib/components/settings/distractions-desktop-selector": path.resolve(
         configDir,
         mobileBuild
-          ? "src/lib/components/settings/mobile/MobileNoopDoomscrollingDesktopSelector.svelte"
-          : "src/lib/components/settings/DoomscrollingAppSelector.svelte",
+          ? "src/lib/components/settings/mobile/MobileNoopDistractionsDesktopSelector.svelte"
+          : "src/lib/components/settings/DistractionsAppSelector.svelte",
       ),
-      "$lib/components/settings/doomscrolling-browser-connection": path.resolve(
+      "$lib/components/settings/distractions-browser-connection": path.resolve(
         configDir,
         mobileBuild
-          ? "src/lib/components/settings/mobile/MobileNoopDoomscrollingBrowserConnection.svelte"
-          : "src/lib/components/settings/DoomscrollingBrowserConnectionStatus.svelte",
+          ? "src/lib/components/settings/mobile/MobileNoopDistractionsBrowserConnection.svelte"
+          : "src/lib/components/settings/DistractionsBrowserConnectionStatus.svelte",
       ),
       "$lib/components/settings/mobile-theme-editor-loader": path.resolve(
         configDir,
@@ -367,9 +367,9 @@ export default defineConfig({
           ? "src/lib/stores/zoom.mobile.svelte.ts"
           : "src/lib/stores/zoom.svelte.ts",
       ),
-      "$lib/stores/doomscrolling-usage.svelte": path.resolve(
+      "$lib/stores/distractions-usage.svelte": path.resolve(
         configDir,
-        "src/lib/stores/doomscrolling-usage.svelte.ts",
+        "src/lib/stores/distractions-usage.svelte.ts",
       ),
       "$lib/stores/mobile-back-stack.svelte": path.resolve(
         configDir,

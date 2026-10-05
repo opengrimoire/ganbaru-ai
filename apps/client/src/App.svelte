@@ -8,8 +8,8 @@
   } from "$lib/navigation";
   import { getCalendar } from "$lib/stores/calendar.svelte";
   import { getCalendars } from "$lib/stores/calendars.svelte";
-  import { getDoomscrolling } from "$lib/stores/doomscrolling.svelte";
-  import { DOOMSCROLLING_USAGE_REFRESH_INTERVAL_MS, getDoomscrollingUsage } from "$lib/stores/doomscrolling-usage.svelte";
+  import { getDistractions } from "$lib/stores/distractions.svelte";
+  import { DISTRACTIONS_USAGE_REFRESH_INTERVAL_MS, getDistractionsUsage } from "$lib/stores/distractions-usage.svelte";
   import { getMusicPlayer } from "$lib/stores/music-player.svelte";
   import { getPomodoro } from "$lib/stores/pomodoro.svelte";
   import { buildDesktopFocusNotificationCopy, type DesktopFocusNotificationCopy } from "$lib/api/focus";
@@ -92,8 +92,8 @@
   if (nav.current !== startupTabView) nav.navigate(startupTabView);
   const calendar = getCalendar();
   const calendars = getCalendars();
-  const doomscrolling = getDoomscrolling();
-  const doomscrollingUsage = getDoomscrollingUsage();
+  const distractions = getDistractions();
+  const distractionsUsage = getDistractionsUsage();
   const music = getMusicPlayer();
   const pomodoro = getPomodoro();
   const notes = getNotes();
@@ -141,8 +141,8 @@
   });
   let unlistenCalendarNotificationOpen: UnlistenFn | null = null;
   let unlistenNotesNotificationOpen: UnlistenFn | null = null;
-  let unlistenDoomscrollingDesktopSettingsOpen: UnlistenFn | null = null;
-  let unlistenDoomscrollingLimitsSettingsOpen: UnlistenFn | null = null;
+  let unlistenDistractionsDesktopSettingsOpen: UnlistenFn | null = null;
+  let unlistenDistractionsLimitsSettingsOpen: UnlistenFn | null = null;
   const NOTES_NOTIFICATION_BODY_MAX_CHARS = 180;
   const AUTOMATIC_UPDATE_CHECK_DELAY_MS = 3_000;
   const FOCUS_NOTIFICATION_COPY_RETRY_MS = 1_000;
@@ -325,30 +325,30 @@
           unlistenNotesNotificationOpen = unlisten;
         })
         .catch((e) => console.error("Failed to listen for Notes notification opens:", e));
-      listen("doomscrolling-open-desktop-settings", () => {
+      listen("distractions-open-desktop-settings", () => {
         if (disposed) return;
-        settingsLauncher.open("doomscrolling", { doomscrollingTab: "desktop" });
+        settingsLauncher.open("distractions", { distractionsTab: "desktop" });
       })
         .then((unlisten) => {
           if (disposed) {
             unlisten();
             return;
           }
-          unlistenDoomscrollingDesktopSettingsOpen = unlisten;
+          unlistenDistractionsDesktopSettingsOpen = unlisten;
         })
-        .catch((e) => console.error("Failed to listen for doomscrolling settings opens:", e));
-      listen("doomscrolling-open-limits-settings", () => {
+        .catch((e) => console.error("Failed to listen for distraction settings opens:", e));
+      listen("distractions-open-limits-settings", () => {
         if (disposed) return;
-        settingsLauncher.open("doomscrolling", { doomscrollingTab: "limits" });
+        settingsLauncher.open("distractions", { distractionsTab: "limits" });
       })
         .then((unlisten) => {
           if (disposed) {
             unlisten();
             return;
           }
-          unlistenDoomscrollingLimitsSettingsOpen = unlisten;
+          unlistenDistractionsLimitsSettingsOpen = unlisten;
         })
-        .catch((e) => console.error("Failed to listen for doomscrolling limit settings opens:", e));
+        .catch((e) => console.error("Failed to listen for distraction limit settings opens:", e));
     }
     const unsubscribeHistoryVault = isMainWindow
       ? onActiveVaultIdentityChange((previousVaultId, nextVaultId) => {
@@ -454,10 +454,10 @@
       unlistenCalendarNotificationOpen = null;
       unlistenNotesNotificationOpen?.();
       unlistenNotesNotificationOpen = null;
-      unlistenDoomscrollingDesktopSettingsOpen?.();
-      unlistenDoomscrollingDesktopSettingsOpen = null;
-      unlistenDoomscrollingLimitsSettingsOpen?.();
-      unlistenDoomscrollingLimitsSettingsOpen = null;
+      unlistenDistractionsDesktopSettingsOpen?.();
+      unlistenDistractionsDesktopSettingsOpen = null;
+      unlistenDistractionsLimitsSettingsOpen?.();
+      unlistenDistractionsLimitsSettingsOpen = null;
       document.removeEventListener("wheel", blockNativeWheelScale, { capture: true });
       document.removeEventListener("contextmenu", blockNativeContextMenu, { capture: true });
       document.removeEventListener("pointerdown", markPointerFocus, { capture: true });
@@ -581,10 +581,10 @@
     return t("focusDialog.awaySeconds", totalSeconds);
   }
 
-  const doomscrollingUsageScheduler = createLifecycleScheduler({
+  const distractionsUsageScheduler = createLifecycleScheduler({
     run: async (context) => {
-      await doomscrollingUsage.refresh(context);
-      return context.isCurrent() ? context.now() + DOOMSCROLLING_USAGE_REFRESH_INTERVAL_MS : null;
+      await distractionsUsage.refresh(context);
+      return context.isCurrent() ? context.now() + DISTRACTIONS_USAGE_REFRESH_INTERVAL_MS : null;
     },
     onError: (error) => {
       console.warn("Failed to refresh desktop usage presentation:", error);
@@ -592,13 +592,13 @@
   });
 
   $effect(() => {
-    const _limits = doomscrolling.usageLimits;
+    const _limits = distractions.usageLimits;
     const enabled = isMainWindow
-      && doomscrolling.limitsEnabled
-      && doomscrolling.usageLimits.some((limit) => limit.enabled);
-    const wasEnabled = doomscrollingUsageScheduler.isEnabled();
-    doomscrollingUsageScheduler.setEnabled(enabled);
-    if (enabled && wasEnabled) doomscrollingUsageScheduler.invalidate();
+      && distractions.limitsEnabled
+      && distractions.usageLimits.some((limit) => limit.enabled);
+    const wasEnabled = distractionsUsageScheduler.isEnabled();
+    distractionsUsageScheduler.setEnabled(enabled);
+    if (enabled && wasEnabled) distractionsUsageScheduler.invalidate();
   });
 
   function toggleDevtools(): void {
@@ -790,7 +790,7 @@
     notesNotificationScheduler.resume();
     chatScheduledMessageScheduler.resume();
     notesProjectHistoryScheduler.resume();
-    doomscrollingUsageScheduler.resume();
+    distractionsUsageScheduler.resume();
     music.resumeSnapshotScheduler();
   }
 
@@ -798,7 +798,7 @@
     eventNotificationScheduler.dispose();
     notesNotificationScheduler.dispose();
     chatScheduledMessageScheduler.dispose();
-    doomscrollingUsageScheduler.dispose();
+    distractionsUsageScheduler.dispose();
   }
 </script>
 

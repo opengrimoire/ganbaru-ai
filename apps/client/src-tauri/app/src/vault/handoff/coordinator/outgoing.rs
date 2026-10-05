@@ -78,7 +78,7 @@ impl<R: Runtime> CoordinatorState<R> {
                 format!("sqlite:{}", crate::vault::APP_SQLITE_FILE),
             )
             .await?;
-            crate::doomscrolling_linked::drain_local_spool(
+            crate::distractions_linked::drain_local_spool(
                 &self.app,
                 &pool,
                 &vault_id,

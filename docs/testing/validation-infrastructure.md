@@ -59,7 +59,7 @@ Desktop contracts inspect the transitive static imports of the entry, vault setu
 
 Desktop and Android builds use different platform entries. The Android wrapper sets the platform before Vite configuration loads and writes to the isolated `.bundle-contracts/android/` directory. Contracts verify required roots and platform adapters, follow static imports transitively, enforce source-module ceilings, and reject desktop-only authority from the mobile artifact.
 
-The Android artifact intentionally includes mobile Doomscrolling, notification, document, and media adapters. It rejects desktop Doomscrolling process control, the desktop App shell, PTYs, Git and provider execution, Rodio, desktop media controls, tray and title bar code, benchmark surfaces, desktop working-folder tools, and heavy editor graphs that are not part of the mobile route.
+The Android artifact intentionally includes mobile anti-distraction, notification, document, and media adapters. It rejects desktop anti-distraction process control, the desktop App shell, PTYs, Git and provider execution, Rodio, desktop media controls, tray and title bar code, benchmark surfaces, desktop working-folder tools, and heavy editor graphs that are not part of the mobile route.
 
 The machine-readable ceilings and required or forbidden module sets are authoritative in:
 

@@ -33,7 +33,7 @@ Groups organize projects. Projects own settings, statuses, priorities, tags, cus
 | Explicit task date locks and cascade protection overrides | Planned |
 | Task assignees, reviewers, and task-linked Chat work | Planned; the assignee and reviewer columns currently show the local profile |
 | Guided planning and generated reports | Planned |
-| Work-environment and Doomscrolling defaults | Planned |
+| Work-environment and anti-distraction defaults | Planned |
 
 ## Routine group
 

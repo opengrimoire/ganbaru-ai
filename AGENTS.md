@@ -2,7 +2,7 @@
 
 Ganbaru AI is an anti-procrastination and anti-burnout productivity app. It is free, local, open-source (AGPL 3.0), privacy-first, and lightweight, with opt-in AI. It is built with Tauri v2 (Rust) and Svelte 5 for Linux, Windows, and a pre-release Android implementation. macOS and iOS are future platform work.
 
-Features are highly interconnected. Calendar, Pomodoro, Projects, Notes, Chat with local coding agents, Doomscrolling blocking, Music, Quick notes, themes, localization, and the Android shell exist and are still being completed. The diary, sleep alarm, work environments, and concurrent sync are planned; gamification is deferred. [docs/features/README.md](docs/features/README.md) owns the current status of each feature.
+Features are highly interconnected. Calendar, Pomodoro, Projects, Notes, Chat with local coding agents, the distraction blocker, Music, Quick notes, themes, localization, and the Android shell exist and are still being completed. The diary, sleep alarm, work environments, and concurrent sync are planned; gamification is deferred. [docs/features/README.md](docs/features/README.md) owns the current status of each feature.
 
 ## Documentation
 
@@ -47,7 +47,7 @@ apps/
         benchmark/: benchmark runner, samplers, output, and scenarios
         calendar/: shared Calendar logic and iCalendar parser/serializer
         chat/: Chat contracts, runtime validation of untrusted responses, and interaction models and controllers
-        doomscrolling/: shared browser and desktop blocking rules
+        distractions/: shared browser and desktop blocking rules
         i18n/: typed localization catalogs, locale resolution, and formatters
         music/: frontend music source and playback helpers
         notes/: Notes contracts, validation, editor operations, databases, and tree helpers
@@ -70,7 +70,7 @@ apps/
         src/notes.rs, notes/: Notes command adapters, working-Markdown composition, and asset authorization
         src/pomodoro.rs, pomodoro/, pomodoro_enforcement.rs: Focus command adapters, native execution runtime, and timer overlays
         src/projects.rs, projects/, project_icons.rs: Projects commands, persistence, history, custom fields, templates, and icons
-        src/doomscrolling*.rs, doomscrolling*/: browser, desktop, Android, and linked-device blocking and usage accounting
+        src/distractions*.rs, distractions*/: browser, desktop, Android, and linked-device blocking and usage accounting
         src/music*.rs, music/, media_player*, media_controls*, soundscape.rs: local playback, native Music session, media controls, and soundscapes
         src/quick_notes/, notification*, tray.rs, themes.rs, updates.rs, profile_images.rs: remaining feature modules
         src/benchmark_seed.rs, first_use_contracts.rs: benchmark data and first-use query contracts
@@ -90,7 +90,7 @@ crates/
   ganbaru-chat/: Chat persistence, runtime, Git workspaces, checkpoints, review, and application services
   ganbaru-working-folders/: Tauri-free working-folder IDs, bindings, and device-state operations
   ganbaru-native-messaging/: ganbaru-ai-native-messaging browser host binary
-  ganbaru-mobile-*/: Android plugins for documents, Doomscrolling, media, and notifications
+  ganbaru-mobile-*/: Android plugins for documents, the distraction blocker, media, and notifications
 packages/shared-types/: TypeScript types shared across workspaces
 extensions/chrome/: Chromium extension (manifest v3); chrome-dev/ is a generated, ignored dev copy
 Cargo.toml, rust-toolchain.toml, rustfmt.toml, turbo.json, pnpm-workspace.yaml, package.json: workspace configuration and root scripts
@@ -105,7 +105,7 @@ Planned work without source directories yet includes the self-hosted sync relay,
 ```
 Ganbaru AI/
   vault.json: folder marker, id, display name, and schema version
-  config.json: folder-local preferences, UI state, and Doomscrolling settings
+  config.json: folder-local preferences, UI state, and anti-distraction settings
   ganbaru-ai.sqlite: SQLite source of truth for structured data, Notes, and indexes
   notes/daily/, notes/projects/: reserved note document directories
   notes/exports/: derivative Markdown exports (planned, not authoritative)
@@ -119,7 +119,7 @@ Ganbaru AI/
 
 Music files stay wherever the user keeps them; the vault stores library metadata, source identities, playlists, assignments, and playback state, not media bytes. Desktop backups go to a user-selected path outside the vault. Android portable backups are exported to shared Downloads and restored through the system document picker.
 
-Tauri's platform app config directory stores device-local bootstrap and runtime state only (`app-state.json`, benchmark state and SQLite, Doomscrolling runtime snapshots). Production and dev builds keep separate app config directories and therefore separate active-folder pointers.
+Tauri's platform app config directory stores device-local bootstrap and runtime state only (`app-state.json`, benchmark state and SQLite, anti-distraction runtime snapshots). Production and dev builds keep separate app config directories and therefore separate active-folder pointers.
 
 ## Key conventions
 
@@ -194,7 +194,7 @@ Read `docs/testing/README.md` when changing tests, validation scripts, task orde
 - There are no external users yet. Old development vaults, internal exports, and device state need no compatibility, migration shims, or fallback readers. Keep one current internal format and require an explicit development reset for unsupported state. Preserve crash recovery, transaction rollback, external standards support, and platform-specific behavior.
 - Remove obsolete internal readers, writers, and unused code together. Keep fresh-vault schema construction and current schema invariants covered. Never delete or reset local vaults automatically as part of source cleanup.
 - Migrations live in `apps/client/src-tauri/migrations/` and are embedded by `ganbaru-db` through `sqlx::migrate!` (no manual registration). Name them `YYYYMMDDHHMMSS_description.sql` with a UTC timestamp.
-- `20260830173211_baseline_schema.sql` is the final pre-user baseline, approved by the maintainer on 2026-08-30. Earlier development databases are unsupported and must be recreated. Once a user-capable release can apply it, never edit it; add new timestamped migrations instead. Future baseline squashes require explicit maintainer approval.
+- `20261004220000_baseline_schema.sql` is the final pre-user baseline, approved by the maintainer on 2026-10-04. Earlier development databases are unsupported and must be recreated. Once a user-capable release can apply it, never edit it; add new timestamped migrations instead. Future baseline squashes require explicit maintainer approval.
 - SQLx validates applied migration checksums, so never rewrite an applied migration to fix a live install. Keep migrations idempotent and narrowly scoped when practical. Preserve user-authored values that still have meaning; only delete data that is obsolete or derivable from canonical data.
 - Keep `crates/ganbaru-db/src/lib.rs` focused on pool and migration services, schema and migration invariant tests in `crates/ganbaru-db/src/tests/`, and active-folder path authorization in `apps/client/src-tauri/app/src/db.rs`.
 - Never hardcode Ganbaru AI folder paths; read them from user configuration.

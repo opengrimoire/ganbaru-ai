@@ -254,7 +254,7 @@ pub(in crate::pomodoro) async fn load_adaptive_run_outcome_summary(
 
     summary.blocked_attempt_count = sqlx::query_scalar(
         "SELECT COUNT(*)
-         FROM doomscrolling_block_events
+         FROM distractions_block_events
          WHERE run_id = ?
            AND occurred_at <= ?
            AND decision IN ('blocked', 'limit_exhausted')",
@@ -276,7 +276,7 @@ async fn count_blocked_attempts_for_interval_tx(
 ) -> Result<i64, String> {
     sqlx::query_scalar(
         "SELECT COUNT(*)
-         FROM doomscrolling_block_events
+         FROM distractions_block_events
          WHERE run_id = ?
            AND occurred_at >= ?
            AND occurred_at <= ?

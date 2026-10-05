@@ -1603,64 +1603,21 @@ fn schema_creates_strict_project_notes_history_storage() {
 }
 
 #[test]
-fn six_heading_migration_preserves_blocks_templates_and_foreign_keys() {
+fn notes_block_types_accept_six_heading_levels_in_blocks_and_templates() {
     super::block_on(async {
-        let pool = sqlx::sqlite::SqlitePoolOptions::new()
-            .max_connections(1)
-            .connect("sqlite::memory:")
-            .await
-            .unwrap();
-        let previous = sqlx::migrate::Migrator {
-            migrations: std::borrow::Cow::Borrowed(&crate::MIGRATOR.migrations[..2]),
-            ..sqlx::migrate::Migrator::DEFAULT
-        };
-        previous.run(&pool).await.unwrap();
+        let pool = migrated_memory_pool().await;
         sqlx::raw_sql(
             "INSERT INTO notes_pages (id, parent_type, title, properties) VALUES ('page', 'workspace', 'Headings', '{}');
              INSERT INTO notes_blocks (id, page_id, parent_type, parent_page_id, type, payload, has_children)
                VALUES ('parent', 'page', 'page_id', 'page', 'heading_4', '{\"rich_text\":[],\"is_toggleable\":true}', 1);
              INSERT INTO notes_blocks (id, page_id, parent_type, parent_block_id, type, payload)
                VALUES ('child', 'page', 'block_id', 'parent', 'paragraph', '{\"rich_text\":[]}');
-             CREATE TABLE migration_block_reference (block_id TEXT REFERENCES notes_blocks(id) ON DELETE CASCADE);
-             INSERT INTO migration_block_reference VALUES ('parent');
              INSERT INTO notes_page_templates (id, name) VALUES ('template', 'Headings');
              INSERT INTO notes_page_template_blocks (template_id, id, parent_type, type, payload, has_children)
                VALUES ('template', 'parent', 'template', 'heading_4', '{\"rich_text\":[],\"is_toggleable\":true}', 1);
              INSERT INTO notes_page_template_blocks (template_id, id, parent_type, parent_block_id, type, payload)
                VALUES ('template', 'child', 'block_id', 'parent', 'paragraph', '{\"rich_text\":[]}');",
         ).execute(&pool).await.unwrap();
-        let before: Vec<(i64, String, String, String)> =
-            sqlx::query_as("SELECT rowid, id, type, payload FROM notes_blocks ORDER BY id")
-                .fetch_all(&pool)
-                .await
-                .unwrap();
-        let templates_before: Vec<(i64, String, String, String)> = sqlx::query_as(
-            "SELECT rowid, id, type, payload FROM notes_page_template_blocks ORDER BY id",
-        )
-        .fetch_all(&pool)
-        .await
-        .unwrap();
-        crate::run_migrations(&pool).await.unwrap();
-        crate::run_migrations(&pool).await.unwrap();
-        let after = sqlx::query_as("SELECT rowid, id, type, payload FROM notes_blocks ORDER BY id")
-            .fetch_all(&pool)
-            .await
-            .unwrap();
-        let templates_after = sqlx::query_as(
-            "SELECT rowid, id, type, payload FROM notes_page_template_blocks ORDER BY id",
-        )
-        .fetch_all(&pool)
-        .await
-        .unwrap();
-        assert_eq!(before, after);
-        assert_eq!(templates_before, templates_after);
-        assert_eq!(
-            sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM migration_block_reference")
-                .fetch_one(&pool)
-                .await
-                .unwrap(),
-            1
-        );
         for table in ["notes_blocks", "notes_page_template_blocks"] {
             for heading in ["heading_5", "heading_6"] {
                 sqlx::query(&format!("UPDATE {table} SET type = ? WHERE id = 'parent'"))

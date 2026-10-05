@@ -14,7 +14,7 @@ Source paths, schema inventories, cache tuning, device test matrices, and delive
 | Notes | Partial | [Notes](notes/README.md) |
 | Chat | Partial | [Chat](chat/README.md) |
 | AI integrations | Partial | [AI integrations](ai/README.md) |
-| Doomscrolling | Partial | [Doomscrolling](doomscrolling/README.md) |
+| Distraction blocker | Partial | [Distraction blocker](distractions/README.md) |
 | Music | Partial | [Music](music/README.md) |
 | Themes | Implemented | [Themes](themes/README.md) |
 | Localization | Partial | [Localization](localization.md) |

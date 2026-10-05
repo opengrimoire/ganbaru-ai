@@ -39,7 +39,7 @@ Storage and interoperability stay canonical and untranslated:
 
 ## Translation scope
 
-Settings, title bar, Calendar, Pomodoro, Music, Doomscrolling, theme editor, diagnostics, and benchmark overlays all use catalog keys or feature-local helpers. Internal IDs, CSS tokens, config keys, SQL columns, generated benchmark output, and tests can stay English when they are not shown to users. If an internal English value is shown, localize it at the render boundary rather than changing the stored identity.
+Settings, title bar, Calendar, Pomodoro, Music, distraction blocker, theme editor, diagnostics, and benchmark overlays all use catalog keys or feature-local helpers. Internal IDs, CSS tokens, config keys, SQL columns, generated benchmark output, and tests can stay English when they are not shown to users. If an internal English value is shown, localize it at the render boundary rather than changing the stored identity.
 
 Shared confirmation dialogs add localized Escape and Enter hints at render time, so feature catalogs provide only action text and translations never duplicate shortcut wording. A custom confirmation surface must render the same hints and keys.
 

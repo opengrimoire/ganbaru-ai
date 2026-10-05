@@ -1,7 +1,7 @@
 mod calendar;
 mod chat;
 mod core;
-mod doomscrolling;
+mod distractions;
 mod helpers;
 mod music;
 mod notes;

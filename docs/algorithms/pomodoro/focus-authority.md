@@ -15,7 +15,7 @@ A timer measures an accepted interval; it does not prove productive work. Calend
 - A run publishes running state only after its initial write commits. A failed write leaves no executing timer. A late start uses its actual acceptance time.
 - A finished break waiting for return is not an accepted phase. Waiting for any duration cannot start focus; the user must accept the return ("Ready to return").
 
-Rationale: without these rules, a phone alarm or a desktop that was off at event start could fabricate focus history and drive Doomscrolling or Music as if the user were working.
+Rationale: without these rules, a phone alarm or a desktop that was off at event start could fabricate focus history and drive the distraction blocker or Music as if the user were working.
 
 ## Native owner
 
@@ -38,7 +38,7 @@ Rationale: desktop crashes leave no trustworthy evidence of what happened after 
 
 ## Cross-feature effects
 
-Notifications, overlays, tray, sounds, Music, Doomscrolling, and Android Guardian are effects of committed state, never inputs to it.
+Notifications, overlays, tray, sounds, Music, the distraction blocker, and Android Guardian are effects of committed state, never inputs to it.
 
 - Effects carry the Focus publication generation and the shared vault ownership generation, and are rechecked against current native authority immediately before delivery. Superseded, stopped, or different-run effects are dropped.
 - Effect validity is a monotonic lease (15 seconds) clipped to the accepted phase and event deadlines. Return wait, failed, stopped, and expired phases cannot authorize phase-dependent rules.
@@ -71,4 +71,4 @@ Lost-device recovery creates a new generation. Records recovered from the old ge
 
 Live status uses a separate connection from durable replication. During an active companion connection, heartbeats run every 15 seconds and status expires after 45 seconds without a fresh response, measured with local monotonic time and connection generations rather than peer clocks.
 
-When status expires, show the last confirmed state and "Status unavailable." Do not infer focus, idle, failure, or completed phases. Cached deadlines may produce clearly labeled scheduled reminders only. Phone activity does not reset the desktop idle clock or override webcam suppression and source failures. Phase-dependent Music and Doomscrolling consume confirmed state with bounded validity, and Android background restrictions appear as degraded connectivity.
+When status expires, show the last confirmed state and "Status unavailable." Do not infer focus, idle, failure, or completed phases. Cached deadlines may produce clearly labeled scheduled reminders only. Phone activity does not reset the desktop idle clock or override webcam suppression and source failures. Phase-dependent Music and the distraction blocker consume confirmed state with bounded validity, and Android background restrictions appear as degraded connectivity.

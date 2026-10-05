@@ -437,16 +437,16 @@ pub(crate) async fn probe_coordinator(
 }
 
 #[cfg(any(target_os = "android", all(test, not(target_os = "ios"))))]
-pub(crate) async fn exchange_doomscrolling(
+pub(crate) async fn exchange_distractions(
     manager: &PairingManager,
-    samples: Vec<super::protocol::DoomscrollingSampleMessage>,
+    samples: Vec<super::protocol::DistractionsSampleMessage>,
     acknowledged_peer_sample_ids: Vec<String>,
-    owner_snapshot: Vec<super::protocol::DoomscrollingSampleMessage>,
+    owner_snapshot: Vec<super::protocol::DistractionsSampleMessage>,
 ) -> Result<
     (
         Vec<String>,
-        Vec<super::protocol::DoomscrollingSampleMessage>,
-        Vec<super::protocol::DoomscrollingSampleMessage>,
+        Vec<super::protocol::DistractionsSampleMessage>,
+        Vec<super::protocol::DistractionsSampleMessage>,
     ),
     String,
 > {
@@ -456,7 +456,7 @@ pub(crate) async fn exchange_doomscrolling(
     let (device_id, _) = manager.identity()?;
     match authenticated_exchange(
         manager,
-        ControlMessage::DoomscrollingExchange {
+        ControlMessage::DistractionsExchange {
             protocol_version: PROTOCOL_VERSION,
             vault_id: coordinator.vault_id,
             device_id,
@@ -467,13 +467,13 @@ pub(crate) async fn exchange_doomscrolling(
     )
     .await?
     {
-        ControlMessage::DoomscrollingAcknowledged {
+        ControlMessage::DistractionsAcknowledged {
             acknowledged_sample_ids,
             peer_samples,
             combined_samples,
         } => Ok((acknowledged_sample_ids, peer_samples, combined_samples)),
         ControlMessage::Error { message, .. } => Err(message),
-        _ => Err("coordinator returned an invalid Doomscrolling response".to_string()),
+        _ => Err("coordinator returned an invalid Distractions response".to_string()),
     }
 }
 

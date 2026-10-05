@@ -6,14 +6,14 @@ export default defineConfig({
   plugins: [svelte()],
   resolve: {
     alias: {
-      "$lib/components/settings/doomscrolling-browser-connection": path.resolve(
-        "./src/lib/components/settings/DoomscrollingBrowserConnectionStatus.svelte",
+      "$lib/components/settings/distractions-browser-connection": path.resolve(
+        "./src/lib/components/settings/DistractionsBrowserConnectionStatus.svelte",
       ),
-      "$lib/components/settings/doomscrolling-desktop-selector": path.resolve(
-        "./src/lib/components/settings/DoomscrollingAppSelector.svelte",
+      "$lib/components/settings/distractions-desktop-selector": path.resolve(
+        "./src/lib/components/settings/DistractionsAppSelector.svelte",
       ),
-      "$lib/stores/doomscrolling-usage.svelte": path.resolve(
-        "./src/lib/stores/doomscrolling-usage.svelte.ts",
+      "$lib/stores/distractions-usage.svelte": path.resolve(
+        "./src/lib/stores/distractions-usage.svelte.ts",
       ),
       $lib: path.resolve("./src/lib"),
     },

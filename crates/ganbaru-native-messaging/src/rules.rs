@@ -1,7 +1,7 @@
 //! Pure browser decisions and stable rule fingerprints.
 
 use crate::config::{
-    BUILT_IN_CATEGORIES_JSON, BuiltInCategory, DoomscrollingConfig, DoomscrollingMode,
+    BUILT_IN_CATEGORIES_JSON, BuiltInCategory, DistractionsConfig, DistractionsMode,
     UsageLimitEntry, built_in_category, normalize_host_rule, usage_limit_entry_source_keys,
 };
 use crate::snapshot::LimitState;
@@ -73,7 +73,7 @@ impl HostDecision {
         }
     }
 
-    pub(super) fn blocker_mode(&self, mode: &DoomscrollingMode) -> &'static str {
+    pub(super) fn blocker_mode(&self, mode: &DistractionsMode) -> &'static str {
         match self {
             Self::DailyLimit(_) | Self::WeeklyLimit(_) => "limit",
             _ => mode.as_str(),
@@ -84,7 +84,7 @@ impl HostDecision {
 pub(super) fn decide_url_with_limits(
     host: &str,
     url: Option<&str>,
-    config: &DoomscrollingConfig,
+    config: &DistractionsConfig,
     limit_state: Option<&LimitState>,
     regular_rules_active: bool,
 ) -> HostDecision {
@@ -107,14 +107,14 @@ pub(super) fn decide_url_with_limits(
 pub(super) fn decide_url(
     host: &str,
     url: Option<&str>,
-    config: &DoomscrollingConfig,
+    config: &DistractionsConfig,
 ) -> HostDecision {
     if is_safety_allowed_host(host) {
         return HostDecision::SafetyAllowlist;
     }
 
     match config.mode {
-        DoomscrollingMode::Whitelist => {
+        DistractionsMode::Whitelist => {
             for allowed_host in &config.allowed_hosts {
                 if host_matches_rule(host, allowed_host) {
                     return HostDecision::WhitelistedHost(allowed_host.clone());
@@ -122,7 +122,7 @@ pub(super) fn decide_url(
             }
             HostDecision::OutsideWhitelist
         }
-        DoomscrollingMode::Blacklist => {
+        DistractionsMode::Blacklist => {
             for exception_host in &config.exception_hosts {
                 if host_matches_rule(host, exception_host) {
                     return HostDecision::ExceptionHost(exception_host.clone());
@@ -155,7 +155,7 @@ pub(super) fn decide_url(
 
 fn decide_url_limit(
     host: &str,
-    config: &DoomscrollingConfig,
+    config: &DistractionsConfig,
     limit_state: Option<&LimitState>,
 ) -> HostDecision {
     if is_safety_allowed_host(host) || !config.limits.enabled {
@@ -263,7 +263,7 @@ fn feed_fingerprint_hosts(hash: &mut u64, label: &str, hosts: &[String]) {
 }
 
 pub(super) fn rules_fingerprint(
-    config: &DoomscrollingConfig,
+    config: &DistractionsConfig,
     limit_state: Option<&LimitState>,
 ) -> String {
     let mut hash = 14_695_981_039_346_656_037_u64;

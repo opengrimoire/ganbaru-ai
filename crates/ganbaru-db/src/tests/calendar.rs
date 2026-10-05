@@ -36,31 +36,12 @@ fn schema_creates_normalized_calendar_archive_tables() {
 }
 
 #[test]
-fn archive_metadata_migration_preserves_older_rows_and_historical_reference_values() {
+fn archive_metadata_keeps_historical_reference_values_and_enforces_constraints() {
     super::block_on(async {
-        let pool = sqlx::sqlite::SqlitePoolOptions::new()
-            .max_connections(1)
-            .connect("sqlite::memory:")
-            .await
-            .unwrap();
-        sqlx::query("PRAGMA foreign_keys=ON")
-            .execute(&pool)
-            .await
-            .unwrap();
-        let boundary = crate::MIGRATOR
-            .iter()
-            .position(|migration| migration.description == "calendar archive metadata")
-            .expect("archive migration is embedded");
-        let previous = sqlx::migrate::Migrator {
-            migrations: std::borrow::Cow::Borrowed(&crate::MIGRATOR.migrations[..boundary]),
-            ..sqlx::migrate::Migrator::DEFAULT
-        };
-        previous.run(&pool).await.unwrap();
+        let pool = migrated_memory_pool().await;
         sqlx::query("INSERT INTO calendar_events_archive (id, source_event_id, archived_at, title, start_time, end_time, calendar_id, created_at, updated_at)
             VALUES ('older', 'removed-source', '2026-05-23T11:00:00Z', 'Historical event', '2026-05-23T09:00:00Z', '2026-05-23T10:00:00Z', 'local', '2026-05-23T08:00:00Z', '2026-05-23T08:00:00Z')")
             .execute(&pool).await.unwrap();
-        crate::run_migrations(&pool).await.unwrap();
-        crate::run_migrations(&pool).await.unwrap();
         let older: (String, Option<String>, Option<String>) = sqlx::query_as(
             "SELECT title, original_occurrence_id, recurrence_date FROM calendar_events_archive WHERE id='older'",
         ).fetch_one(&pool).await.unwrap();

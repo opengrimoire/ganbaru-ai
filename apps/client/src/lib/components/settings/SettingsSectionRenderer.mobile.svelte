@@ -6,14 +6,14 @@
   import NotesSection from "./NotesSection.svelte";
   import AboutSection from "./AboutSection.svelte";
   import FocusSection from "./FocusSection.svelte";
-  import DoomscrollingSection from "./DoomscrollingSection.svelte";
+  import DistractionsSection from "./DistractionsSection.svelte";
   import MobileDataSection from "./mobile/MobileDataSection.svelte";
   import type { SettingsSectionRendererProps } from "./settings-section-renderer-contract";
 
   let {
     activeSection,
-    initialDoomscrollingTab,
-    onOpenDoomscrollingLimitEditor,
+    initialDistractionsTab,
+    onOpenDistractionsLimitEditor,
   }: SettingsSectionRendererProps = $props();
 
 </script>
@@ -47,10 +47,10 @@
     {@const MusicSettings = module.default}
     <MusicSettings />
   {/await}
-{:else if activeSection === "doomscrolling"}
-  <DoomscrollingSection
-    initialTab={initialDoomscrollingTab}
-    onOpenLimitEditor={onOpenDoomscrollingLimitEditor}
+{:else if activeSection === "distractions"}
+  <DistractionsSection
+    initialTab={initialDistractionsTab}
+    onOpenLimitEditor={onOpenDistractionsLimitEditor}
   />
 {:else if activeSection === "data"}
   <MobileDataSection />

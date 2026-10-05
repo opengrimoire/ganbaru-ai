@@ -22,7 +22,7 @@ The portable format is the recovery path after reinstall. Android system backup 
 
 The handoff protocol is owned by [device linking and synchronization](../../data/sync.md). On Android, device identity, the pinned coordinator fingerprint, ownership generation, transfer state, and staging live in application-private platform state and are never part of the transferred vault. Incoming vaults use the same archive validator and atomic activation path as portable restore. Before the first ownership activation replaces an independent vault, Android exports it to Downloads and also keeps a private rollback copy; backup failure aborts the transfer.
 
-After activation, startup reconciles Calendar notifications and Doomscrolling projections. Device-local alarms, native enforcement, Media3 state, permissions, and document-tree grants are not replaced by the incoming vault.
+After activation, startup reconciles Calendar notifications and anti-distraction projections. Device-local alarms, native enforcement, Media3 state, permissions, and document-tree grants are not replaced by the incoming vault.
 
 ## Lifecycle and process death
 
@@ -55,7 +55,7 @@ Manufacturer task cleaners can still override standard behavior. The app offers 
 
 Local audio uses a Media3 session service and ExoPlayer, which own background playback, audio focus, the media notification, and lock-screen, headset, and system controls. Sources use a retained document-tree permission and stable tree-relative identities. Scanning and metadata work stay off the main thread and within explicit bounds. Library, playlist, assignment, and playback state remain canonical in SQLite.
 
-## Doomscrolling guardian
+## Anti-distraction guardian
 
 Selected-app rules run in a private `:guardian` process that holds alarm handling, ongoing notification coordination, Usage Access reads, the opt-in Accessibility Service, validated rule projections, and a bounded native journal. Only the guardian opens its private preferences and journal database, and non-exported providers validate rule projections and journal imports.
 

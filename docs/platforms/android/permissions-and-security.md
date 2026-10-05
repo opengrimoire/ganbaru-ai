@@ -22,7 +22,7 @@ Returning from settings refreshes actual platform state. Manufacturer autostart 
 
 ## Accessibility boundary
 
-The Doomscrolling service requests only the event stream needed to identify package window changes. It does not retrieve view content, text, gestures, keystrokes, notifications, screen images, or arbitrary browsing data.
+The anti-distraction service requests only the event stream needed to identify package window changes. It does not retrieve view content, text, gestures, keystrokes, notifications, screen images, or arbitrary browsing data.
 
 Enforcement uses the standard Home global action for a fresh explicitly selected package. It does not use overlays, gesture injection, screen capture, or device-owner authority.
 

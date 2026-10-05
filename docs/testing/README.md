@@ -11,7 +11,7 @@ This document is the command and gate-selection reference. Supporting documents 
 - [Calendar recurrence](calendar-recurrence.md): recurrence edit, protection, deletion, and Undo matrices.
 - [Notes editor](notes-editor.md): editor, database, transfer, clipboard, and recovery acceptance.
 - [Project dependency cascades](project-dependency-cascades.md): dependency date review, apply, retry, and Gantt acceptance.
-- [Doomscrolling runtime](doomscrolling.md): desktop and Android runtime acceptance without the WebView.
+- [Distraction blocker runtime](distractions.md): desktop and Android runtime acceptance without the WebView.
 - [Music desktop](music.md): real audio, lifecycle, and automation acceptance.
 - [Performance harness](../performance/harness.md): benchmark-only contracts outside normal validation.
 

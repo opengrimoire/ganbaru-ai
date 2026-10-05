@@ -325,13 +325,13 @@ async fn authenticated_control_flow_prepares_commits_and_acknowledges() {
 }
 
 #[tokio::test]
-async fn authenticated_doomscrolling_exchange_returns_acknowledged_and_combined_samples() {
+async fn authenticated_distractions_exchange_returns_acknowledged_and_combined_samples() {
     use super::super::coordinator::{CoordinatorOperation, CoordinatorResponse};
-    use super::super::protocol::DoomscrollingSampleMessage;
+    use super::super::protocol::DistractionsSampleMessage;
 
     let (pair, mut requests) = LocalPair::start_with_coordinator().await;
     pair.enroll().await;
-    let sample = DoomscrollingSampleMessage {
+    let sample = DistractionsSampleMessage {
         sample_id: "phone-sample".to_string(),
         device_id: "device-phone".to_string(),
         source_type: "mobile-app".to_string(),
@@ -345,9 +345,9 @@ async fn authenticated_doomscrolling_exchange_returns_acknowledged_and_combined_
     let expected = sample.clone();
     let response_sample = sample.clone();
     let coordinator = tokio::spawn(async move {
-        let request = requests.recv().await.expect("Doomscrolling request");
+        let request = requests.recv().await.expect("Distractions request");
         match request.operation {
-            CoordinatorOperation::DoomscrollingExchange {
+            CoordinatorOperation::DistractionsExchange {
                 vault_id,
                 device_id,
                 samples,
@@ -364,18 +364,18 @@ async fn authenticated_doomscrolling_exchange_returns_acknowledged_and_combined_
         }
         request
             .response
-            .send(Ok(CoordinatorResponse::DoomscrollingAcknowledged {
+            .send(Ok(CoordinatorResponse::DistractionsAcknowledged {
                 acknowledged_sample_ids: vec!["phone-sample".to_string()],
                 peer_samples: Vec::new(),
                 combined_samples: vec![response_sample],
             }))
-            .expect("send Doomscrolling response");
+            .expect("send Distractions response");
     });
 
     let (acknowledged, peer, combined) =
-        exchange_doomscrolling(&pair.phone, vec![sample.clone()], Vec::new(), Vec::new())
+        exchange_distractions(&pair.phone, vec![sample.clone()], Vec::new(), Vec::new())
             .await
-            .expect("exchange Doomscrolling usage");
+            .expect("exchange Distractions usage");
     assert_eq!(acknowledged, vec![sample.sample_id]);
     assert!(peer.is_empty());
     assert_eq!(combined.len(), 1);

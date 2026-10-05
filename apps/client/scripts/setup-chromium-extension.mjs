@@ -8,7 +8,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, "../../..");
 const extensionDir = join(repoRoot, "extensions", "chrome");
 const devExtensionDir = join(repoRoot, "extensions", "chrome-dev");
-const devHostName = "org.opengrimoire.ganbaru_ai.doomscrolling_dev";
+const devHostName = "org.opengrimoire.ganbaru_ai.distractions_dev";
 
 const build = spawnSync("cargo", ["build", "--bin", "ganbaru-ai-native-messaging"], {
   cwd: repoRoot,
@@ -30,7 +30,7 @@ cpSync(extensionDir, devExtensionDir, { recursive: true });
 const devManifestPath = join(devExtensionDir, "manifest.json");
 const devManifest = JSON.parse(readFileSync(devManifestPath, "utf8"));
 devManifest.name = "Ganbaru AI dev";
-devManifest.description = "Development build of the Ganbaru AI anti-doomscrolling extension.";
+devManifest.description = "Development build of the Ganbaru AI anti-distraction extension.";
 devManifest.action = {
   ...devManifest.action,
   default_title: "Ganbaru AI dev",

@@ -32,7 +32,7 @@ Rust owns recurrence expansion, scope and protection decisions, and every Calend
 - **Pomodoro:** an event can own focus settings and the active run identity. See [Pomodoro](../pomodoro/README.md).
 - **Projects:** events and tasks can share a project and explicit task-event links. See [Projects](../projects/README.md).
 - **Music:** projects and events can provide phase soundtrack assignments. See [Music automation](../music/automation.md).
-- **Doomscrolling:** Pomodoro phase state can activate current blocker snapshots. See [Doomscrolling activation](../doomscrolling/rules-and-activation.md).
+- **Distraction blocker:** Pomodoro phase state can activate current blocker snapshots. See [Distraction rule activation](../distractions/rules-and-activation.md).
 - **Work environments:** planned environment context can add portable defaults and platform-specific actions. See [Work environments](../work-environments.md).
 
 ## Documentation map

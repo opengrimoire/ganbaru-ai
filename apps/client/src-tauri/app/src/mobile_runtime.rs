@@ -15,7 +15,7 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
     let builder = builder
         .plugin(tauri_plugin_notification::init())
         .plugin(ganbaru_mobile_documents::init())
-        .plugin(ganbaru_mobile_doomscrolling::init())
+        .plugin(ganbaru_mobile_distractions::init())
         .plugin(ganbaru_mobile_media::init())
         .plugin(ganbaru_mobile_notifications::init());
     #[cfg(target_os = "ios")]
@@ -176,8 +176,8 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             pomodoro::native_runtime::focus_subscribe,
             pomodoro::native_runtime::focus_renew_subscription,
             pomodoro::native_runtime::focus_unsubscribe,
-            crate::doomscrolling_mobile::doomscrolling_mobile_update_copy,
-            crate::doomscrolling_mobile::doomscrolling_mobile_load_usage_projection,
+            crate::distractions_mobile::distractions_mobile_update_copy,
+            crate::distractions_mobile::distractions_mobile_load_usage_projection,
             projects::workspace::projects_load_workspace,
             projects::workspace::projects_refresh_workspace,
             projects::workspace::projects_load_task_view,
@@ -389,7 +389,7 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             music::session::setup(app.handle());
             pomodoro::setup(app.handle());
             #[cfg(target_os = "android")]
-            crate::doomscrolling_mobile::runtime::setup(app.handle());
+            crate::distractions_mobile::runtime::setup(app.handle());
             #[cfg(target_os = "android")]
             vault::handoff::receiver::start_reconnect_refresh(app.handle().clone());
             Ok(())
@@ -401,11 +401,11 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
         #[cfg(target_os = "android")]
         if matches!(_event, tauri::RunEvent::Resumed) {
             vault::handoff::receiver::trigger_coordinator_reconciliation(_app.clone());
-            crate::doomscrolling_mobile::runtime::wake(_app);
+            crate::distractions_mobile::runtime::wake(_app);
         }
         #[cfg(target_os = "android")]
         if matches!(_event, tauri::RunEvent::Exit) {
-            crate::doomscrolling_mobile::runtime::stop(_app);
+            crate::distractions_mobile::runtime::stop(_app);
         }
     });
 }

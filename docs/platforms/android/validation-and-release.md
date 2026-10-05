@@ -27,7 +27,7 @@ The release candidate must pass:
 - First use, app-private vault creation, folder import, backup, restore, and reinstall recovery.
 - Offline launch and behavior for the promised local feature set.
 - Process death, Activity recreation, reboot, package replacement, clock, and timezone recovery.
-- Notification, alarm, foreground-service, Music, and Doomscrolling special-access grant, denial, revocation, and recovery.
+- Notification, alarm, foreground-service, Music, and anti-distraction special-access grant, denial, revocation, and recovery.
 - Compact, wide, portrait, landscape, keyboard, cutout, gesture navigation, and system Back behavior.
 - Minified WebView bridge and capability operation.
 - No desktop-only providers, binaries, capabilities, or assets in the artifact.
@@ -36,7 +36,7 @@ The release candidate must pass:
 
 ## Current validation state
 
-Reference-device checks cover the Android 10 shell, lifecycle, layout, navigation, and core feature flows. Still required before delivery: predictive Back, broader OEM background management, complete special-access revocation, all supported ABIs, physical cross-process Pomodoro and Doomscrolling acceptance, multi-device handoff, signed minified artifacts, and the full release matrix. The detailed scenario matrix lives in [Android testing](../../testing/android.md).
+Reference-device checks cover the Android 10 shell, lifecycle, layout, navigation, and core feature flows. Still required before delivery: predictive Back, broader OEM background management, complete special-access revocation, all supported ABIs, physical cross-process Pomodoro and distraction blocker acceptance, multi-device handoff, signed minified artifacts, and the full release matrix. The detailed scenario matrix lives in [Android testing](../../testing/android.md).
 
 ## Distribution and updates
 

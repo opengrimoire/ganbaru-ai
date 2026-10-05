@@ -75,6 +75,6 @@ Native notifications identify the current transition and offer only actions the 
 
 - Calendar owns event timing and active-event identity.
 - Music can apply phase soundtrack assignments and optional manual-pause ownership.
-- Doomscrolling can apply phase rule snapshots.
+- The distraction blocker can apply phase rule snapshots.
 - Projects provide event and rhythm defaults.
 - Work environments may later add context defaults without replacing run state (planned).

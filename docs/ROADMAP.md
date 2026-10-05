@@ -59,13 +59,13 @@ See [Projects](features/projects/README.md) and [Notes](features/notes/README.md
 
 See [Chat](features/chat/README.md), [AI integration](features/ai/README.md), and [Chat access control](data/access-control.md).
 
-### Music and Doomscrolling
+### Music and the distraction blocker
 
 - Complete local library repair and assignment workflows and Android background playback reliability.
 - Redesign YouTube interaction so Ganbaru never obscures or disables required embedded-player controls.
 - Complete blocking rule coverage, diagnostics, and false-positive recovery across platforms.
 
-See [Music](features/music/README.md) and [Doomscrolling](features/doomscrolling/README.md).
+See [Music](features/music/README.md) and [Distraction blocker](features/distractions/README.md).
 
 ## Next product outcomes
 
@@ -77,7 +77,7 @@ Morning and evening diary flows with mood and energy baselines, and an Android s
 
 ### Human work environments
 
-Saved desktop environments that prepare applications, browser resources, Music, Doomscrolling rules, and project context when a Calendar block begins. They never grant AI execution authority. See [Work environments](features/work-environments.md) and [Edge panel](features/edge-panel.md).
+Saved desktop environments that prepare applications, browser resources, Music, distraction rules, and project context when a Calendar block begins. They never grant AI execution authority. See [Work environments](features/work-environments.md) and [Edge panel](features/edge-panel.md).
 
 ### Structured project delegation
 
@@ -108,7 +108,7 @@ Gamification remains deliberately deferred. It must reflect genuine progress, pr
 ## Dependency rules
 
 - Diary and sleep build on the existing vault, notification, Calendar, Pomodoro, and Android foundations.
-- Work environments depend on stable Calendar activation, Music, and Doomscrolling adapters.
+- Work environments depend on stable Calendar activation, Music, and anti-distraction adapters.
 - Structured delegation depends on Projects, Notes, Chat, and access control.
 - Human collaboration depends on domain-specific sync operations and permission-safe derived data.
 - BYOK assistants and external MCP depend on the same identity, authorization, and provenance rules as local coordination.

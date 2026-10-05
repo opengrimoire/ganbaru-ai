@@ -16,7 +16,7 @@ New projects default to no event name, the adaptive Pomodoro preset, global idle
 
 Playlist selectors list real Music playlists. Choosing a playlist plays it automatically during that phase; choosing None means silence. A missing or deleted playlist remains an explicit unavailable assignment with a repair path. Track-level settings stay in Music playlist membership data; see [Music automation](../music/automation.md).
 
-Work-environment and Doomscrolling defaults are planned and must not appear as functional selectors until their storage and runtime behavior exist.
+Work-environment and anti-distraction defaults are planned and must not appear as functional selectors until their storage and runtime behavior exist.
 
 ## Default application
 

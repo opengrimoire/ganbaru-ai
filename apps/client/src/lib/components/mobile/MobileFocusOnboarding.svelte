@@ -5,11 +5,11 @@
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
   import { onboardingPrimaryAction } from "$lib/components/vault/onboarding-primary-action";
   import {
-    mobileDoomscrollingAccessStatus,
-    openMobileDoomscrollingAccessibilitySettings,
-    openMobileDoomscrollingUsageAccessSettings,
-    type MobileDoomscrollingAccessStatus,
-  } from "$lib/scheduling/mobile-doomscrolling";
+    mobileDistractionsAccessStatus,
+    openMobileDistractionsAccessibilitySettings,
+    openMobileDistractionsUsageAccessSettings,
+    type MobileDistractionsAccessStatus,
+  } from "$lib/scheduling/mobile-distractions";
   import {
     completeMobileFocusOnboarding,
     markMobileFocusAccessReviewed,
@@ -35,7 +35,7 @@
 
   let backgroundStatus = $state<MobileBackgroundExecutionStatus | null>(null);
   let notificationStatus = $state<MobileNotificationAccessStatus | null>(null);
-  let doomscrollingStatus = $state<MobileDoomscrollingAccessStatus | null>(null);
+  let distractionsStatus = $state<MobileDistractionsAccessStatus | null>(null);
   let loading = $state(true);
   let opening = $state<MobileFocusAccessReview | null>(null);
   let pendingReview = $state<MobileFocusAccessReview | null>(null);
@@ -62,10 +62,10 @@
   }
 
   async function refresh(): Promise<void> {
-    const [backgroundResult, notificationResult, doomscrollingResult] = await Promise.allSettled([
+    const [backgroundResult, notificationResult, distractionsResult] = await Promise.allSettled([
       mobileBackgroundExecutionStatus(),
       mobileNotificationAccessStatus(),
-      mobileDoomscrollingAccessStatus(),
+      mobileDistractionsAccessStatus(),
     ]);
     unavailable = false;
     if (backgroundResult.status === "fulfilled") {
@@ -80,10 +80,10 @@
       console.warn("Android notification access status failed", notificationResult.reason);
       unavailable = true;
     }
-    if (doomscrollingResult.status === "fulfilled") {
-      doomscrollingStatus = doomscrollingResult.value;
+    if (distractionsResult.status === "fulfilled") {
+      distractionsStatus = distractionsResult.value;
     } else {
-      console.warn("Android Doomscrolling access status failed", doomscrollingResult.reason);
+      console.warn("Android Distractions access status failed", distractionsResult.reason);
       unavailable = true;
     }
     loading = false;
@@ -152,15 +152,15 @@
     }
   }
 
-  function reviewDoomscrolling(target: "usage" | "accessibility"): void {
-    if (target === "accessibility" && !doomscrollingStatus?.accessibility) {
+  function reviewDistractions(target: "usage" | "accessibility"): void {
+    if (target === "accessibility" && !distractionsStatus?.accessibility) {
       disclosure = target;
       return;
     }
-    void openDoomscrollingSettings(target);
+    void openDistractionsSettings(target);
   }
 
-  async function openDoomscrollingSettings(
+  async function openDistractionsSettings(
     target: "usage" | "accessibility" | null,
   ): Promise<void> {
     if (!target || opening) return;
@@ -168,21 +168,21 @@
     opening = review;
     beginSettingsReview(review);
     try {
-      if (target === "usage") await openMobileDoomscrollingUsageAccessSettings();
-      else await openMobileDoomscrollingAccessibilitySettings();
+      if (target === "usage") await openMobileDistractionsUsageAccessSettings();
+      else await openMobileDistractionsAccessibilitySettings();
     } catch (error) {
       pendingReview = null;
-      console.warn("Android Doomscrolling settings failed", error);
+      console.warn("Android Distractions settings failed", error);
       unavailable = true;
     } finally {
       opening = null;
     }
   }
 
-  function agreeAndReviewDoomscrolling(): void {
+  function agreeAndReviewDistractions(): void {
     const target = disclosure;
     disclosure = null;
-    void openDoomscrollingSettings(target);
+    void openDistractionsSettings(target);
   }
 
   function complete(): void {
@@ -313,19 +313,19 @@
             () => { void openBackground("battery"); },
           )}
 
-          {#if doomscrollingStatus}
+          {#if distractionsStatus}
             {@render accessRow(
               "usage-access",
               t("mobile.focusOnboarding.usageAccess"),
               t("mobile.focusOnboarding.usageAccessDescription"),
-              () => reviewDoomscrolling("usage"),
+              () => reviewDistractions("usage"),
             )}
 
             {@render accessRow(
               "app-blocking",
               t("mobile.focusOnboarding.appBlocking"),
               t("mobile.focusOnboarding.appBlockingDescription"),
-              () => reviewDoomscrolling("accessibility"),
+              () => reviewDistractions("accessibility"),
             )}
           {/if}
         </div>
@@ -361,11 +361,11 @@
 
 {#if disclosure}
   <ConfirmDialog
-    title={t("settings.doomscrolling.mobile.disclosureBlockingTitle")}
-    message={t("settings.doomscrolling.mobile.disclosureBlockingMessage")}
-    confirmLabel={t("settings.doomscrolling.mobile.agreeAndReview")}
-    cancelLabel={t("settings.doomscrolling.mobile.notNow")}
-    onConfirm={agreeAndReviewDoomscrolling}
+    title={t("settings.distractions.mobile.disclosureBlockingTitle")}
+    message={t("settings.distractions.mobile.disclosureBlockingMessage")}
+    confirmLabel={t("settings.distractions.mobile.agreeAndReview")}
+    cancelLabel={t("settings.distractions.mobile.notNow")}
+    onConfirm={agreeAndReviewDistractions}
     onCancel={() => { disclosure = null; }}
   />
 {/if}

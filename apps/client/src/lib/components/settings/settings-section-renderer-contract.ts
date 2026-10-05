@@ -1,8 +1,8 @@
 import type {
   ChatProviderSetupTarget,
   ChatSettingsSubsection,
-  DoomscrollingLimitEditorTarget,
-  DoomscrollingSettingsTab,
+  DistractionsLimitEditorTarget,
+  DistractionsSettingsTab,
   NotesTransferOperation,
   SectionId,
 } from "./types";
@@ -10,12 +10,12 @@ import type {
 /** Props shared by the compile-time desktop and mobile settings renderers. */
 export interface SettingsSectionRendererProps {
   readonly activeSection: SectionId;
-  readonly initialDoomscrollingTab?: DoomscrollingSettingsTab;
+  readonly initialDistractionsTab?: DistractionsSettingsTab;
   readonly activeChatSubsection: ChatSettingsSubsection;
   readonly initialChatTeammateId?: string;
   readonly initialChatChannelId?: string;
   readonly initialChatCreateTeammate?: boolean;
-  readonly onOpenDoomscrollingLimitEditor: (target: DoomscrollingLimitEditorTarget) => void;
+  readonly onOpenDistractionsLimitEditor: (target: DistractionsLimitEditorTarget) => void;
   readonly onOpenNotesTransferPanel: (operation: NotesTransferOperation) => void;
   readonly onOpenChatProviderSetup: (target: ChatProviderSetupTarget) => void;
   readonly onChatSubsectionChange: (subsection: ChatSettingsSubsection) => void;

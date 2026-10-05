@@ -19,7 +19,7 @@ Projects, Notes, and Chat share one compact identity row. On phones, selecting a
 - **Notes** reuses the page, block, database, history, and navigation contracts. Working-folder Markdown controls are absent, and managed images and files use bounded document-input flows.
 - **Chat** reuses the responsive canonical workspace. Channel navigation replaces the conversation while open instead of covering it with a desktop overlay. Provider setup, terminal, files, Git, local review workspace, and execution diagnostics are absent.
 - **Pomodoro, Quick notes, and the compact Music player** float above the active destination within the visible safe viewport. The Music library builder expands to a full-screen workspace.
-- **Settings** keeps the desktop category structure where a shared preference or Android equivalent exists and omits unsupported controls, including keyboard shortcuts. Doomscrolling settings include shared usage limits, Android selected-app rules and access status, and read-only browser and desktop configuration from the portable vault.
+- **Settings** keeps the desktop category structure where a shared preference or Android equivalent exists and omits unsupported controls, including keyboard shortcuts. Anti-distraction settings include shared usage limits, Android selected-app rules and access status, and read-only browser and desktop configuration from the portable vault.
 
 ## Linking with a desktop
 
@@ -32,7 +32,7 @@ The linking protocol, ownership rules, and data protections are owned by [device
 - When the phone opens or becomes read-only, a focused prompt names the current main device and offers `Use on this device` or `Continue in read-only`. `Use on this device` is the only normal action that requests write ownership. A read-only vault remains browsable through the ordinary shell.
 - Emergency local-copy recovery appears only in Data settings, after membership is lost while the local copy is read-only.
 
-Scheduled Calendar alarms and the last accepted Doomscrolling rules keep working while the phone is offline or backgrounded. Desktop Calendar changes reach Android notification scheduling only after a successful read-only refresh.
+Scheduled Calendar alarms and the last accepted distraction rules keep working while the phone is offline or backgrounded. Desktop Calendar changes reach Android notification scheduling only after a successful read-only refresh.
 
 ## Insets, keyboard, and input
 

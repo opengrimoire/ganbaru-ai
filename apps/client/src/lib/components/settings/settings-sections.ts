@@ -35,7 +35,7 @@ export const SETTINGS_SECTIONS: SettingsSectionMeta[] = [
   { id: "chat", labelKey: "settings.section.chat", icon: MessageSquare },
   { id: "focus", labelKey: "settings.section.focus", icon: Timer },
   { id: "music", labelKey: "settings.section.music", icon: Music },
-  { id: "doomscrolling", labelKey: "settings.section.doomscrolling", icon: GlobeOff },
+  { id: "distractions", labelKey: "settings.section.distractions", icon: GlobeOff },
   { id: "data", labelKey: "settings.section.data", icon: HardDrive },
   { id: "updates", labelKey: "settings.section.updates", icon: DownloadCloud },
   { id: "shortcuts", labelKey: "settings.section.shortcuts", icon: Keyboard },
