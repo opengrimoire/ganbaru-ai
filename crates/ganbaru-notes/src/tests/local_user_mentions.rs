@@ -39,20 +39,20 @@ fn local_user_identity_drives_notes_comments() {
         let updated_user = local_user::update_local_user(
             &pool,
             NoteLocalUserUpdate {
-                display_name: "Victor".to_string(),
+                display_name: "Alice".to_string(),
             },
         )
         .await
         .unwrap();
         let updated_user_json = serde_json::to_value(updated_user).unwrap();
         assert_eq!(updated_user_json["id"], local_user_id);
-        assert_eq!(updated_user_json["display_name"], "Victor");
+        assert_eq!(updated_user_json["display_name"], "Alice");
 
         let listed = comments::list_comments(&pool, PAGE_A, false).await.unwrap();
         let listed_json = serde_json::to_value(listed).unwrap();
         assert_eq!(
             listed_json[0]["comments"][0]["display_name"]["resolved_name"],
-            "Victor"
+            "Alice"
         );
 
         let replied = comments::create_comment(
@@ -71,7 +71,7 @@ fn local_user_identity_drives_notes_comments() {
         let replied_value = serde_json::to_value(replied).unwrap();
         assert_eq!(
             replied_value["comments"][1]["display_name"]["resolved_name"],
-            "Victor"
+            "Alice"
         );
 
         let resolved = comments::resolve_comment_thread(&pool, &thread_id, true)
@@ -115,7 +115,7 @@ fn mention_notifications_sync_blocks_comments_and_delivery_state() {
                         rich_text("Plan "),
                         date_mention("2026-07-05", "Sunday", true),
                         rich_text(" with "),
-                        user_mention(&local_user_id, "Victor"),
+                        user_mention(&local_user_id, "Alice"),
                         rich_text(" on "),
                         project_task_mention(BLOCK_B, "Task")
                     ],
@@ -132,7 +132,7 @@ fn mention_notifications_sync_blocks_comments_and_delivery_state() {
                 parent: Some(page_parent(PAGE_A)),
                 discussion_id: None,
                 anchor: None,
-                rich_text: vec![rich_text("Ping "), user_mention(&local_user_id, "Victor")],
+                rich_text: vec![rich_text("Ping "), user_mention(&local_user_id, "Alice")],
                 attachments: None,
             },
         )

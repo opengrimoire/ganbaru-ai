@@ -140,7 +140,7 @@ export function interactionState(): ChatInteractionStateRead {
       contextLimit: 258_000,
       cost: null,
     },
-    accountStatus: { accountLabel: "victor@example.com", planLabel: "Plus", usage: null },
+    accountStatus: { accountLabel: "alice@example.com", planLabel: "Plus", usage: null },
     rateLimitStatus: {
       limited: false,
       resetsAt: null,

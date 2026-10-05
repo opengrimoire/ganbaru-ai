@@ -214,9 +214,9 @@ describe("profile preferences", () => {
   });
 
   it("trims profile display names while allowing an empty value", () => {
-    expect(normalizeProfileDisplayName("  Victor  ")).toEqual({
+    expect(normalizeProfileDisplayName("  Alice  ")).toEqual({
       ok: true,
-      value: "Victor",
+      value: "Alice",
     });
     expect(normalizeProfileDisplayName("   ")).toEqual({
       ok: true,
@@ -235,9 +235,9 @@ describe("profile preferences", () => {
   });
 
   it("trims profile full names while allowing an empty value", () => {
-    expect(normalizeProfileFullName("  Victor Example  ")).toEqual({
+    expect(normalizeProfileFullName("  Alice Example  ")).toEqual({
       ok: true,
-      value: "Victor Example",
+      value: "Alice Example",
     });
     expect(normalizeProfileFullName("   ")).toEqual({
       ok: true,

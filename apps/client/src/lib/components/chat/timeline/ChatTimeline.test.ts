@@ -114,7 +114,7 @@ describe("ChatTimeline", () => {
   it("renders and removes the local participant from a selected reaction", async () => {
     const chat = getChat();
     chat.timelineItems = [message("reaction-message", null, "user", "React to this")];
-    chat.toggleSessionMessageReaction("timeline:reaction-message", "emoji:✅", "Victor");
+    chat.toggleSessionMessageReaction("timeline:reaction-message", "emoji:✅", "Alice");
     const target = mountTimeline();
     await tick();
 

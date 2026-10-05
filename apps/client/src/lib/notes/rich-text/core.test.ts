@@ -583,7 +583,7 @@ describe("notes rich text helpers", () => {
     expect(
       filterNotesMentionTargets(
         [
-          { id: "user", kind: "user", title: "Victor", subtitle: "Local user" },
+          { id: "user", kind: "user", title: "Alice", subtitle: "Local user" },
           { id: "project", kind: "project", title: "Roadmap", subtitle: "Project" },
           { id: "task", kind: "project_task", title: "Bug", subtitle: "Roadmap" },
         ],

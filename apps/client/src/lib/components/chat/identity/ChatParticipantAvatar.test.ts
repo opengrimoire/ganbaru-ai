@@ -59,7 +59,7 @@ describe("ChatParticipantAvatar", () => {
   });
 
   it("reacts to current local profile names and images without changing the participant", async () => {
-    preferences.setProfileDisplayName("Victor Benito");
+    preferences.setProfileDisplayName("Alice Smith");
     preferences.setProfileImagePath(null);
     target = document.createElement("div");
     document.body.append(target);
@@ -68,7 +68,7 @@ describe("ChatParticipantAvatar", () => {
       props: { participant: localParticipant, size: 32 },
     });
 
-    expect(target.textContent?.trim()).toBe("VB");
+    expect(target.textContent?.trim()).toBe("AS");
 
     preferences.setProfileDisplayName("Renamed Person");
     const imagePath = `profile/${"a".repeat(64)}.png`;

@@ -74,7 +74,7 @@ describe("organizational unread messages", () => {
 });
 
 describe("local message reactions", () => {
-  const localParticipant = { participantId: "participant:local-owner", displayName: "Victor" };
+  const localParticipant = { participantId: "participant:local-owner", displayName: "Alice" };
   const teammate = { participantId: "participant:teammate", displayName: "Atlas" };
 
   it("accepts only Unicode and custom emoji picker values", () => {

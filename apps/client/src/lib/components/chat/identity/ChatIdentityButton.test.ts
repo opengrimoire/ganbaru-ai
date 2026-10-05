@@ -131,7 +131,7 @@ describe("ChatIdentityButton", () => {
   });
 
   it("opens local identity details and links to profile settings", async () => {
-    preferences.setProfileDisplayName("Victor Benito");
+    preferences.setProfileDisplayName("Alice Smith");
     target = document.createElement("div");
     document.body.append(target);
     component = mount(ChatIdentityButton, {
@@ -142,7 +142,7 @@ describe("ChatIdentityButton", () => {
     target.querySelector<HTMLButtonElement>(".identity-trigger")?.click();
     await tick();
     const card = document.body.querySelector<HTMLElement>(".identity-card");
-    expect(card?.textContent).toContain("Victor Benito");
+    expect(card?.textContent).toContain("Alice Smith");
     expect(card?.textContent).toContain("Private local identity");
 
     card?.querySelector<HTMLButtonElement>("footer button")?.click();

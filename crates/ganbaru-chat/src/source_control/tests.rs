@@ -26,23 +26,23 @@ fn detects_supported_https_and_ssh_remotes() {
 fn normalizes_change_requests_from_each_cli_shape() {
     let github = parse_change_request_list(
         HostedSourceControlKind::Github,
-        r#"[{"number":17,"title":"Improve chat","url":"https://github.com/o/r/pull/17","state":"OPEN","baseRefName":"dev","headRefName":"feature","author":{"login":"victor"},"isDraft":true}]"#,
+        r#"[{"number":17,"title":"Improve chat","url":"https://github.com/o/r/pull/17","state":"OPEN","baseRefName":"dev","headRefName":"feature","author":{"login":"alice"},"isDraft":true}]"#,
     )
     .unwrap();
     assert_eq!(github[0].number, 17);
-    assert_eq!(github[0].author.as_deref(), Some("victor"));
+    assert_eq!(github[0].author.as_deref(), Some("alice"));
     assert!(github[0].draft);
 
     let gitlab = parse_change_request_list(
         HostedSourceControlKind::Gitlab,
-        r#"[{"iid":4,"title":"Improve chat","web_url":"https://gitlab.com/o/r/-/merge_requests/4","state":"opened","target_branch":"dev","source_branch":"feature","author":{"username":"victor"}}]"#,
+        r#"[{"iid":4,"title":"Improve chat","web_url":"https://gitlab.com/o/r/-/merge_requests/4","state":"opened","target_branch":"dev","source_branch":"feature","author":{"username":"alice"}}]"#,
     )
     .unwrap();
     assert_eq!(gitlab[0].url, "https://gitlab.com/o/r/-/merge_requests/4");
 
     let azure = parse_change_request_list(
         HostedSourceControlKind::AzureDevops,
-        r#"[{"pullRequestId":8,"title":"Improve chat","url":"https://api.invalid/8","status":"active","targetRefName":"refs/heads/dev","sourceRefName":"refs/heads/feature","createdBy":{"displayName":"Victor"},"repository":{"webUrl":"https://dev.azure.com/o/p/_git/r"}}]"#,
+        r#"[{"pullRequestId":8,"title":"Improve chat","url":"https://api.invalid/8","status":"active","targetRefName":"refs/heads/dev","sourceRefName":"refs/heads/feature","createdBy":{"displayName":"Alice"},"repository":{"webUrl":"https://dev.azure.com/o/p/_git/r"}}]"#,
     )
     .unwrap();
     assert_eq!(azure[0].base_branch, "dev");
@@ -78,7 +78,7 @@ fn normalizes_bitbucket_change_requests() {
         "state": "OPEN",
         "destination": { "branch": { "name": "dev" } },
         "source": { "branch": { "name": "feature/chat" } },
-        "author": { "display_name": "Victor" },
+        "author": { "display_name": "Alice" },
         "links": { "html": { "href": "https://bitbucket.org/team/project/pull-requests/23" } },
         "draft": true
     }))
@@ -87,7 +87,7 @@ fn normalizes_bitbucket_change_requests() {
     assert_eq!(change_request.number, 23);
     assert_eq!(change_request.base_branch, "dev");
     assert_eq!(change_request.head_branch, "feature/chat");
-    assert_eq!(change_request.author.as_deref(), Some("Victor"));
+    assert_eq!(change_request.author.as_deref(), Some("Alice"));
     assert!(change_request.draft);
 }
 

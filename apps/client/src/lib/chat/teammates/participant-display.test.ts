@@ -5,9 +5,9 @@ describe("Chat participant display", () => {
   it("resolves every local-user snapshot through the current profile", () => {
     expect(chatParticipantDisplayName(
       { id: "participant:local-owner", kind: "local_user", displayName: "You" },
-      "Victor",
+      "Alice",
       "You",
-    )).toBe("Victor");
+    )).toBe("Alice");
   });
 
   it("uses the localized fallback for an unnamed local profile", () => {
@@ -21,12 +21,12 @@ describe("Chat participant display", () => {
   it("does not override teammates or future collaborators", () => {
     expect(chatParticipantDisplayName(
       { id: "participant:atlas", kind: "ai_teammate", displayName: "Atlas" },
-      "Victor",
+      "Alice",
       "You",
     )).toBe("Atlas");
     expect(chatParticipantDisplayName(
       { id: "participant:alex", kind: "human", displayName: "Alex" },
-      "Victor",
+      "Alice",
       "You",
     )).toBe("Alex");
   });
@@ -34,7 +34,7 @@ describe("Chat participant display", () => {
   it("does not treat an invalid second local participant as the owner", () => {
     expect(chatParticipantDisplayName(
       { id: "participant:other", kind: "local_user", displayName: "Stored name" },
-      "Victor",
+      "Alice",
       "You",
     )).toBe("Stored name");
   });
