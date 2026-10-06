@@ -9,7 +9,7 @@
   } = $props();
 </script>
 
-<div {...attributes} bind:this={element} role="dialog" aria-label={label} tabindex="-1" data-floating-root data-app-floating-surface data-app-shortcuts="ignore" class={cn("collection-panel flex min-h-0 flex-col overflow-hidden rounded-md border border-border bg-popover text-collection text-popover-foreground shadow-sm", className)}>
+<div {...attributes} bind:this={element} role="dialog" aria-label={label} tabindex="-1" data-floating-root data-app-floating-surface data-app-shortcuts="ignore" class={cn("collection-panel flex min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-popover text-collection text-popover-foreground shadow-sm", className)}>
   {@render children()}
 </div>
 
@@ -59,6 +59,7 @@
   }
   .collection-panel :global([role="listbox"][data-app-floating-surface]) {
     padding-inline: 0.375rem;
+    border-radius: var(--radius-xl);
     box-shadow: var(--shadow-sm);
   }
   .collection-panel :global([role="option"]) {
