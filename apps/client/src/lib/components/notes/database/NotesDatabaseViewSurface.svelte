@@ -489,7 +489,7 @@
       <span class="inline-flex size-8 shrink-0 items-center justify-center rounded-md border border-border text-muted-foreground">
         <Icon class="size-4" strokeWidth={1.75} aria-hidden="true" />
       </span>
-      <input class="h-8 min-w-0 flex-1 rounded-md border border-border bg-background px-2 text-[length:inherit] outline-none" aria-label={t("notes.databaseViewName")} value={selectedView.name} disabled={selectionDisabled || editingLocked}
+      <input class="h-8 min-w-0 flex-1 rounded-md border border-border bg-transparent px-2 text-[length:inherit] outline-none" aria-label={t("notes.databaseViewName")} value={selectedView.name} disabled={selectionDisabled || editingLocked}
         onblur={(event) => { nameDraft = event.currentTarget.value; void saveName(); }}
         onkeydown={(event) => { if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); } }} />
     </div>
@@ -507,7 +507,7 @@
         }} />
     {/each}
     <CollectionMenuSeparator />
-    <input class="mb-1 h-8 w-full min-w-0 rounded-md border border-border bg-background px-2 text-[length:inherit] outline-none" aria-label={t("notes.databaseSourceName")} placeholder={t("notes.databaseSourceName")}
+    <input class="mb-1 h-8 w-full min-w-0 rounded-md border border-border bg-transparent px-2 text-[length:inherit] outline-none" aria-label={t("notes.databaseSourceName")} placeholder={t("notes.databaseSourceName")}
       bind:value={sourceName} disabled={selectionDisabled || editingLocked} onkeydown={(event) => event.stopPropagation()} />
     <CollectionMenuItem icon={Plus} label={t("notes.databaseSourceCreate")} disabled={selectionDisabled || editingLocked || !sourceName.trim()} onclick={() => { void manageSource(); }} />
     <CollectionMenuSeparator />
@@ -537,7 +537,7 @@
     {/each}
     {#if overflowCount > 0}
       <CollectionMenu label={t("notes.databaseMoreViews", overflowCount)} kind="actions" showHeader={false} dismissOnAction disabled={selectionDisabled}>
-        <input class="mb-1.5 h-8 w-full rounded border border-border bg-background px-2 text-[length:inherit] outline-none focus:border-ring" aria-label={t("notes.databaseSearchViews")} placeholder={t("notes.databaseSearchViews")} bind:value={viewSearch} />
+        <input class="mb-1.5 h-8 w-full rounded-md border border-border bg-transparent px-2 text-[length:inherit] outline-none" aria-label={t("notes.databaseSearchViews")} placeholder={t("notes.databaseSearchViews")} bind:value={viewSearch} />
         <div class="grid gap-0">
           {#each searchableViews as view (view.id)}
             {@const Icon = viewIcons[view.type as NotesDatabaseViewKind]}
@@ -565,7 +565,7 @@
     {#if selectedView}
       <CollectionMenu label={t("notes.databaseViewActions")} kind="actions" iconOnly showHeader={false} disabled={selectionDisabled}>
         {#if editingName}
-          <input bind:this={nameInput} class="h-9 w-full rounded-md border border-border bg-background px-2 outline-none focus:border-ring" aria-label={t("notes.databaseViewName")} bind:value={nameDraft} onkeydown={(event) => { event.stopPropagation(); if (event.key === "Enter") void saveName(); if (event.key === "Escape") { nameDraft = selectedView?.name ?? ""; editingName = false; } }} onblur={() => { if (editingName) void saveName(); }} />
+          <input bind:this={nameInput} class="h-9 w-full rounded-md border border-border bg-transparent px-2 outline-none" aria-label={t("notes.databaseViewName")} bind:value={nameDraft} onkeydown={(event) => { event.stopPropagation(); if (event.key === "Enter") void saveName(); if (event.key === "Escape") { nameDraft = selectedView?.name ?? ""; editingName = false; } }} onblur={() => { if (editingName) void saveName(); }} />
         {:else}
           <div class="grid gap-0">
             <button data-collection-menu-keep-open type="button" class="flex min-h-9 items-center gap-2 rounded-md px-2 text-left hover:bg-accent" disabled={editingLocked} onclick={beginRename}><Pencil class="size-4" />{t("notes.databaseViewRename")}</button>

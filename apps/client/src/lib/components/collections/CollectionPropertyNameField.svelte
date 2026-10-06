@@ -81,7 +81,7 @@
     <span class="inline-flex size-8 shrink-0 items-center justify-center rounded-md border border-border text-muted-foreground">
       <Icon class="size-4" strokeWidth={1.75} aria-hidden="true" />
     </span>
-    <input class="h-8 min-w-0 flex-1 rounded-md border border-border bg-background px-2 text-[length:inherit] outline-none read-only:text-muted-foreground" aria-label={t("collections.property.name")}
+    <input class="h-8 min-w-0 flex-1 rounded-md border border-border bg-transparent px-2 text-[length:inherit] outline-none read-only:text-muted-foreground" aria-label={t("collections.property.name")}
       readonly={!editable || saving} maxlength={maxLength} bind:value={draft}
       onfocus={() => { editing = true; }}
       onblur={() => { editing = false; void commit(); }}

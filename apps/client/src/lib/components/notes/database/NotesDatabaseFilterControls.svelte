@@ -103,7 +103,7 @@
             </button>
           </div>
           {#if notesDatabaseFilterNeedsValue(filter.condition)}
-            <input class="h-8 min-w-0 rounded-md border border-input bg-background px-2 text-foreground outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            <input class="h-8 min-w-0 rounded-md border border-border bg-transparent px-2 text-foreground outline-none"
               type={property?.type === "number" ? "number" : property && notesDatabaseIsDateFilterProperty(property) && String(filter.value ?? "").length === 10 ? "date" : "text"}
               step={property?.type === "number" ? "any" : undefined}
               value={String(filter.value ?? "")} disabled={pending} aria-label={t("notes.databaseTableFilterValue")}

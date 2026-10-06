@@ -72,7 +72,6 @@
   .collection-panel :global(textarea:focus) {
     outline: none;
     box-shadow: none;
-    background-color: color-mix(in srgb, var(--accent) 35%, var(--background));
   }
   :global(html[data-shell="mobile"]) .collection-panel {
     --collection-row-height: 2.75rem;

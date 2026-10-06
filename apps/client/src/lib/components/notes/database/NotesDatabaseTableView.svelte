@@ -1069,7 +1069,7 @@
                 onChange={(nextValue) => { selectedTemplateId = nextValue; }} />
               <CollectionMenuItem icon={Trash2} label={t("notes.databaseTemplatesDelete")} destructive disabled={mutating || !selectedTemplateId} onclick={() => { void deleteSelectedTemplate(); }} />
               <CollectionMenuSeparator />
-              <input class="mb-1 h-8 w-full min-w-0 rounded-md border border-border bg-background px-2 text-[length:inherit] outline-none" aria-label={t("notes.databaseTemplatesName")}
+              <input class="mb-1 h-8 w-full min-w-0 rounded-md border border-border bg-transparent px-2 text-[length:inherit] outline-none" aria-label={t("notes.databaseTemplatesName")}
                 value={templateName} placeholder={t("notes.databaseTemplatesNamePlaceholder")} disabled={mutating}
                 oninput={(event) => { templateName = event.currentTarget.value; }}
                 onkeydown={(event) => event.stopPropagation()} />
