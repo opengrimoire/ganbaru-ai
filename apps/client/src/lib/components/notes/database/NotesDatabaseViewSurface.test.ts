@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { mount, tick, unmount } from "svelte";
+import { createRawSnippet, mount, tick, unmount } from "svelte";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { duplicateNotesDatabaseView, listNotesDatabaseViews, listNotesDataSourceTemplates, listNotesDataSources, setNotesDatabaseEditingLock, createNotesDataSource, attachNotesDataSource } from "$lib/api/notes";
 import { databaseResource, MAX_DATABASE_SESSION_RESOURCES, notesDatabaseSession } from "$lib/notes/database/session.svelte";
@@ -62,6 +62,7 @@ function open(onReady = () => {}, options: {
     onReady,
     reloadKeys: { table: 0, board: 0, gallery: 0, list: 0, calendar: 0, timeline: 0 },
     onSelectPage: vi.fn(), onEditProperties: vi.fn(), onCreateLinkedDatabaseView: vi.fn(),
+    propertyEditor: createRawSnippet<[string]>(() => ({ render: () => "<div></div>" })), onLoadPropertyEditor: vi.fn(),
     onAddProperty: options.onAddProperty ?? vi.fn(async () => {}),
     onSavingChange: options.onSavingChange,
     editingLocked: options.editingLocked,

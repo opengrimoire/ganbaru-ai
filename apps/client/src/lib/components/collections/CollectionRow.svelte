@@ -16,7 +16,7 @@
 
 <div
   {...attributes}
-  class={cn("collection-row group/row grid min-h-11 items-center px-1 text-[0.866667rem]", header && "font-normal text-muted-foreground", selected && "bg-accent/40", divider && "border-b border-(--cal-gridline)", className)}
+  class={cn("collection-row group/row grid min-h-11 items-center px-1 text-paragraph", header && "font-normal text-muted-foreground", selected && "bg-accent/40", divider && "border-b border-(--cal-gridline)", className)}
   data-collection-hoverable={header ? undefined : ""}
   data-compact={compactTemplate ? "true" : undefined}
   style={`--collection-columns: ${template}; --collection-compact-columns: ${compactTemplate ?? template}; ${minWidth ? `min-width: ${minWidth};` : ""} ${styleText ?? ""}`}

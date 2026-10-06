@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { mount, tick, unmount } from "svelte";
+import { createRawSnippet, mount, tick, unmount } from "svelte";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { NotesDataSourceTableView } from "$lib/notes/types";
 import {
@@ -67,14 +67,16 @@ function pointer(target: EventTarget, type: string, x: number): void {
 async function open(
   onSavingChange = vi.fn<(saving: boolean) => void>(),
   initialTable = table(240),
-  onEditProperties = vi.fn<(propertyId?: string) => void>(),
+  onEditProperties = vi.fn<() => void>(),
   editingLocked = false,
 ) {
+  const onLoadPropertyEditor = vi.fn<(propertyId: string) => void>();
+  const propertyEditor = createRawSnippet<[string]>((propertyId) => ({ render: () => `<p data-property-editor>Editing ${propertyId()}</p>` }));
   vi.mocked(getNotesDataSourceTableView).mockResolvedValue(initialTable);
   vi.mocked(listNotesDataSourceTemplates).mockResolvedValue([]);
   vi.mocked(loadNotesPage).mockRejectedValue(new Error("Page not found"));
   component = mount(NotesDatabaseTableView, { target: document.body, props: {
-    dataSourceId: "source", onSavingChange, onSelectPage: vi.fn(), onAddProperty: vi.fn(), onEditProperties, onCloseSettings: vi.fn(), editingLocked,
+    dataSourceId: "source", onSavingChange, onSelectPage: vi.fn(), onAddProperty: vi.fn(), onEditProperties, propertyEditor, onLoadPropertyEditor, onCloseSettings: vi.fn(), editingLocked,
   } });
   await tick();
   await tick();
@@ -82,7 +84,7 @@ async function open(
   const handle = document.querySelector<HTMLButtonElement>(".collection-resize")!;
   handle.setPointerCapture = vi.fn();
   const row = document.querySelector<HTMLElement>('[role="row"]')!;
-  return { handle, onSavingChange, onEditProperties, width: () => row.style.getPropertyValue("--collection-columns") };
+  return { handle, onSavingChange, onEditProperties, onLoadPropertyEditor, width: () => row.style.getPropertyValue("--collection-columns") };
 }
 
 /** Include a hidden property between visible properties to exercise saved presentation. */
@@ -250,24 +252,27 @@ describe("Notes table property actions", () => {
     });
   });
 
-  it("keeps the required title visible and targets the property editor", async () => {
-    const { onEditProperties } = await open(vi.fn(), configuredTable());
+  it("keeps the required title visible and edits its property in a submenu beside the column menu", async () => {
+    const { onEditProperties, onLoadPropertyEditor } = await open(vi.fn(), configuredTable());
     const panel = await propertyMenu("Name");
     expect(panel.textContent).not.toContain("Move left");
     expect(panel.textContent).not.toContain("Move right");
     expect(panel.textContent).not.toContain("Hide");
     action(panel, "Edit property").click();
-    expect(onEditProperties).toHaveBeenCalledWith("title");
+    await vi.waitFor(() => expect(document.querySelector('[role="dialog"][aria-label="Edit property"] [data-property-editor]')?.textContent).toBe("Editing title"));
+    expect(onLoadPropertyEditor).toHaveBeenCalledExactlyOnceWith("title");
+    expect(panel.isConnected).toBe(true);
+    expect(onEditProperties).not.toHaveBeenCalled();
     expect(updateNotesDataSourceTableView).not.toHaveBeenCalled();
   });
 
-  it("passes the chosen property to the editor and hides only that view column", async () => {
+  it("loads the chosen property for its editor and hides only that view column", async () => {
     const initial = configuredTable();
     vi.mocked(updateNotesDataSourceTableView).mockResolvedValue(initial);
-    const { onEditProperties } = await open(vi.fn(), initial);
+    const { onLoadPropertyEditor } = await open(vi.fn(), initial);
     const panel = await propertyMenu("Status");
     action(panel, "Edit property").click();
-    expect(onEditProperties).toHaveBeenCalledWith("status");
+    await vi.waitFor(() => expect(onLoadPropertyEditor).toHaveBeenCalledExactlyOnceWith("status"));
     action(panel, "Hide").click();
     await vi.waitFor(() => expect(updateNotesDataSourceTableView).toHaveBeenCalledOnce());
     expect(vi.mocked(updateNotesDataSourceTableView).mock.calls[0][1].configuration.hidden_property_ids)

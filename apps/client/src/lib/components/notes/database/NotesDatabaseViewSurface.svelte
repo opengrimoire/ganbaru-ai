@@ -1,7 +1,7 @@
 <script lang="ts">
   import NotesLoadingSkeleton from "$lib/components/notes/NotesLoadingSkeleton.svelte";
   import CollectionViewButton from "$lib/components/collections/CollectionViewButton.svelte";
-  import { tick, untrack } from "svelte";
+  import { tick, untrack, type Snippet } from "svelte";
   import { databaseResource, notesDatabaseSession } from "$lib/notes/database/session.svelte";
   import Table2 from "@lucide/svelte/icons/table-2";
   import Columns3 from "@lucide/svelte/icons/columns-3";
@@ -67,6 +67,8 @@
     reloadKeys,
     onSelectPage,
     onEditProperties,
+    propertyEditor,
+    onLoadPropertyEditor,
     onCreateLinkedDatabaseView,
     onAddProperty,
     onPropertyAction,
@@ -80,7 +82,11 @@
     initialViewId: string | null;
     reloadKeys: Record<NotesDatabaseViewKind, number>;
     onSelectPage: (pageId: string) => void;
-    onEditProperties: (propertyId?: string, anchor?: HTMLElement | null, scope?: NotesDatabaseSourceEditingScope) => void;
+    onEditProperties: (anchor?: HTMLElement | null, scope?: NotesDatabaseSourceEditingScope) => void;
+    /** Renders the schema fields of one property inside a table column's Edit property submenu. */
+    propertyEditor: Snippet<[string]>;
+    /** Loads the schema that {@link propertyEditor} edits for a property in the active view's source. */
+    onLoadPropertyEditor: (propertyId: string, scope: NotesDatabaseSourceEditingScope) => void;
     onCreateLinkedDatabaseView: () => void;
     onAddProperty: (type: NotesDataSourcePropertyType, name: string, scope?: NotesDatabaseSourceEditingScope) => Promise<void>;
     onPropertyAction?: (request: NotesDatabasePropertyActionRequest, scope: NotesDatabaseSourceEditingScope) => Promise<void>;
@@ -464,11 +470,11 @@
     viewSettingsOpen = true;
   }
 
-  /** Open source schema editing at the requested property, beside the database toolbar. */
-  function editProperties(propertyId?: string): void {
+  /** Open the full source schema editor beside the database toolbar. */
+  function editProperties(): void {
     if (editingLocked) return;
     viewSettingsOpen = false;
-    onEditProperties(propertyId, settingsAnchor, editingScope());
+    onEditProperties(settingsAnchor, editingScope());
   }
 </script>
 
@@ -619,7 +625,7 @@
 {@const reportLayoutSaving = untrack(() => layoutInstance.reportSaving)}
 {#if selectedView && viewLoadState?.status === "ready" && viewLoadState.key === activeViewKind && viewLoadState.component.kind === "table"}
   {@const NotesDatabaseTableView = viewLoadState.component.component}
-  <NotesDatabaseTableView {onReady} onSavingChange={reportLayoutSaving} dataSourceId={activeSourceId} {databaseId} viewId={activeViewId} {onSelectPage} {editingLocked} onAddProperty={(type, name) => onAddProperty(type, name, editingScope())} onPropertyAction={onPropertyAction ? (request) => onPropertyAction?.(request, editingScope()) ?? Promise.resolve() : undefined} {newRowRequest} settingsOpen={viewSettingsOpen} {settingsAnchor} {settingsHeader} onCloseSettings={() => { viewSettingsOpen = false; }} onEditProperties={editProperties} reloadKey={reloadKeys.table} />
+  <NotesDatabaseTableView {onReady} onSavingChange={reportLayoutSaving} dataSourceId={activeSourceId} {databaseId} viewId={activeViewId} {onSelectPage} {editingLocked} onAddProperty={(type, name) => onAddProperty(type, name, editingScope())} onPropertyAction={onPropertyAction ? (request) => onPropertyAction?.(request, editingScope()) ?? Promise.resolve() : undefined} {newRowRequest} settingsOpen={viewSettingsOpen} {settingsAnchor} {settingsHeader} onCloseSettings={() => { viewSettingsOpen = false; }} onEditProperties={editProperties} {propertyEditor} onLoadPropertyEditor={(propertyId) => onLoadPropertyEditor(propertyId, editingScope())} reloadKey={reloadKeys.table} />
 {:else if selectedView && viewLoadState?.status === "ready" && viewLoadState.key === activeViewKind && viewLoadState.component.kind === "board"}
   {@const NotesDatabaseBoardView = viewLoadState.component.component}
   <NotesDatabaseBoardView {onReady} onSavingChange={reportLayoutSaving} settingsOpen={viewSettingsOpen} {settingsAnchor} {settingsHeader} onCloseSettings={() => { viewSettingsOpen = false; }} onEditProperties={editProperties} dataSourceId={activeSourceId} {databaseId} {editingLocked} viewId={activeViewId} {onSelectPage} reloadKey={reloadKeys.board} />

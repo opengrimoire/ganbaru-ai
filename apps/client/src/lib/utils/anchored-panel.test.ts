@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from "vitest";
-import { anchoredPanelContentHeight, anchoredPanelStyle, anchoredPanelWidth, type AnchoredPanelInput } from "./anchored-panel";
+import { anchoredPanelContentHeight, anchoredPanelStyle, anchoredPanelWidth, anchoredSidePanelStyle, type AnchoredPanelInput, type AnchoredSidePanelInput } from "./anchored-panel";
 
 const ANCHOR: AnchoredPanelInput = {
   triggerRect: { top: 40, right: 480, bottom: 72, left: 448 },
@@ -64,5 +64,39 @@ describe("Anchored floating panel geometry", () => {
     expect(anchoredPanelContentHeight(panel, [header, content])).toBe(123);
     panel.remove();
     vi.restoreAllMocks();
+  });
+});
+
+const SUBMENU: AnchoredSidePanelInput = {
+  triggerRect: { top: 200, right: 380, bottom: 228, left: 140 },
+  parentRect: { top: 120, right: 386, bottom: 520, left: 134 },
+  viewportWidth: 1200,
+  viewportHeight: 800,
+  preferredWidth: 240,
+  preferredMaxHeight: 560,
+  contentHeight: 180,
+  alignOffset: 7,
+};
+
+describe("Anchored submenu geometry", () => {
+  it("opens beside the parent menu with its first row level with the trigger", () => {
+    expect(anchoredSidePanelStyle(SUBMENU)).toBe("position:fixed; left:390px; top:193px; width:240px; max-height:560px");
+  });
+
+  it("flips to the left of the parent menu when the right side lacks room", () => {
+    const style = anchoredSidePanelStyle({ ...SUBMENU, triggerRect: { top: 200, right: 1100, bottom: 228, left: 860 }, parentRect: { top: 120, right: 1106, bottom: 520, left: 854 } });
+    expect(style).toContain("left:610px");
+  });
+
+  it("opens below the trigger when neither side of the parent menu has room", () => {
+    const narrow = { ...SUBMENU, viewportWidth: 400 };
+    expect(anchoredSidePanelStyle(narrow)).toBe(anchoredPanelStyle(narrow));
+  });
+
+  it("shifts a tall submenu up to stay inside the viewport and caps it to the viewport height", () => {
+    expect(anchoredSidePanelStyle({ ...SUBMENU, triggerRect: { top: 700, right: 380, bottom: 728, left: 140 } })).toContain("top:612px");
+    const tall = anchoredSidePanelStyle({ ...SUBMENU, contentHeight: 2_000, viewportHeight: 300 });
+    expect(tall).toContain("top:8px");
+    expect(tall).toContain("max-height:284px");
   });
 });

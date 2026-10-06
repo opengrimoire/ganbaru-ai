@@ -6,6 +6,7 @@ import CollectionMenu from "./CollectionMenu.svelte";
 
 let component: ReturnType<typeof mount> | undefined;
 let nested: ReturnType<typeof mount> | undefined;
+const submenus: ReturnType<typeof mount>[] = [];
 
 afterEach(async () => {
   if (nested) await unmount(nested);
@@ -364,5 +365,137 @@ describe("Shared collection menus", () => {
     expect(applyTemplate).toHaveBeenCalledOnce();
     expect(dialog.querySelector('[role="dialog"]')).toBeNull();
     expect(document.activeElement).toBe(trigger);
+  });
+});
+
+/** Mount a column menu whose rows open the Edit property and Sort submenus. */
+async function openWithSubmenus(): Promise<{ dialog: HTMLElement; parent: HTMLElement; rows: Record<"edit" | "sort", HTMLButtonElement> }> {
+  const { dialog, row } = host();
+  const submenuChildren = (action: string) => createRawSnippet(() => ({ render: () => `<div><button type="button">${action}</button></div>` }));
+  const children = createRawSnippet(() => ({
+    render: () => '<div><button type="button">Hide</button><div data-edit-target></div><div data-sort-target></div></div>',
+    setup: (element) => {
+      submenus.push(
+        mount(CollectionMenu, { target: element.querySelector("[data-edit-target]")!, props: { label: "Edit property", kind: "properties", fullWidth: true, children: submenuChildren("Number") } }),
+        mount(CollectionMenu, { target: element.querySelector("[data-sort-target]")!, props: { label: "Sort", kind: "sort", fullWidth: true, children: submenuChildren("Ascending") } }),
+      );
+    },
+  }));
+  component = mount(CollectionMenu, { target: row, props: { label: "Priority", kind: "property", children } });
+  await open(row);
+  const parent = dialog.querySelector<HTMLElement>('[role="dialog"][aria-label="Priority"]')!;
+  return {
+    dialog, parent,
+    rows: {
+      edit: parent.querySelector<HTMLButtonElement>('button[aria-label="Edit property"]')!,
+      sort: parent.querySelector<HTMLButtonElement>('button[aria-label="Sort"]')!,
+    },
+  };
+}
+
+/** Rest the mouse on an element inside a menu. */
+function hover(element: Element): void {
+  element.dispatchEvent(new PointerEvent("pointerenter", { pointerType: "mouse" }));
+  element.dispatchEvent(new PointerEvent("pointerover", { pointerType: "mouse", bubbles: true }));
+}
+
+function submenuPanel(parent: HTMLElement, label: string): HTMLElement | null {
+  return parent.querySelector<HTMLElement>(`[role="dialog"][aria-label="${label}"]`);
+}
+
+describe("Collection submenus", () => {
+  afterEach(async () => {
+    for (const submenu of submenus.splice(0)) await unmount(submenu);
+    vi.useRealTimers();
+  });
+
+  it("opens beside the parent after the mouse rests on its row without moving focus", async () => {
+    const { parent, rows } = await openWithSubmenus();
+    vi.useFakeTimers();
+    vi.spyOn(parent, "getBoundingClientRect").mockReturnValue(new DOMRect(100, 50, 240, 200));
+    vi.spyOn(rows.edit, "getBoundingClientRect").mockReturnValue(new DOMRect(106, 90, 228, 32));
+    const focused = document.activeElement;
+    hover(rows.edit);
+    await vi.advanceTimersByTimeAsync(50);
+    expect(submenuPanel(parent, "Edit property")).toBeNull();
+    await vi.advanceTimersByTimeAsync(100);
+    const panel = submenuPanel(parent, "Edit property")!;
+    expect(panel).not.toBeNull();
+    expect(panel.style.left).toBe("344px");
+    expect(rows.edit.getAttribute("aria-expanded")).toBe("true");
+    expect(document.activeElement).toBe(focused);
+    expect(panel.querySelector('button[aria-label="Close"]')).toBeNull();
+  });
+
+  it("closes a hover-opened submenu when the mouse settles on another row and replaces it with a sibling", async () => {
+    const { parent, rows } = await openWithSubmenus();
+    vi.useFakeTimers();
+    hover(rows.edit);
+    await vi.advanceTimersByTimeAsync(150);
+    const edit = submenuPanel(parent, "Edit property")!;
+    hover(edit.querySelector("button")!);
+    hover(parent.querySelector("button")!);
+    await vi.advanceTimersByTimeAsync(100);
+    hover(edit.querySelector("button")!);
+    await vi.advanceTimersByTimeAsync(300);
+    expect(edit.isConnected).toBe(true);
+
+    hover(parent.querySelector("button")!);
+    await vi.advanceTimersByTimeAsync(300);
+    expect(edit.isConnected).toBe(false);
+
+    hover(rows.edit);
+    await vi.advanceTimersByTimeAsync(150);
+    rows.sort.click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(submenuPanel(parent, "Edit property")).toBeNull();
+    expect(submenuPanel(parent, "Sort")).not.toBeNull();
+    expect(parent.isConnected).toBe(true);
+  });
+
+  it("moves focus into a hover-opened submenu when its row is clicked and keeps it open while focused", async () => {
+    const { parent, rows } = await openWithSubmenus();
+    vi.useFakeTimers();
+    hover(rows.edit);
+    await vi.advanceTimersByTimeAsync(150);
+    rows.edit.click();
+    await vi.advanceTimersByTimeAsync(0);
+    const panel = submenuPanel(parent, "Edit property")!;
+    expect(document.activeElement).toBe(panel.querySelector("button"));
+    hover(parent.querySelector("button")!);
+    await vi.advanceTimersByTimeAsync(300);
+    expect(panel.isConnected).toBe(true);
+  });
+
+  it("enters with ArrowRight and returns to its row with ArrowLeft while the parent stays open", async () => {
+    const { parent, rows } = await openWithSubmenus();
+    rows.edit.focus();
+    rows.edit.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true, cancelable: true }));
+    await tick();
+    expect(document.activeElement).toBe(rows.sort);
+    expect(submenuPanel(parent, "Edit property")).toBeNull();
+
+    rows.edit.focus();
+    rows.edit.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true, cancelable: true }));
+    await tick();
+    await tick();
+    const panel = submenuPanel(parent, "Edit property")!;
+    expect(document.activeElement).toBe(panel.querySelector("button"));
+    document.activeElement!.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true, cancelable: true }));
+    await tick();
+    expect(panel.isConnected).toBe(false);
+    expect(parent.isConnected).toBe(true);
+    expect(document.activeElement).toBe(rows.edit);
+  });
+
+  it("ignores touch hover so taps open submenus by click", async () => {
+    const { parent, rows } = await openWithSubmenus();
+    vi.useFakeTimers();
+    rows.edit.dispatchEvent(new PointerEvent("pointerenter", { pointerType: "touch" }));
+    await vi.advanceTimersByTimeAsync(300);
+    expect(submenuPanel(parent, "Edit property")).toBeNull();
+    rows.edit.click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(document.activeElement).toBe(submenuPanel(parent, "Edit property")?.querySelector("button"));
   });
 });

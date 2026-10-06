@@ -9,13 +9,13 @@
   } = $props();
 </script>
 
-<div {...attributes} bind:this={element} role="dialog" aria-label={label} tabindex="-1" data-floating-root data-app-floating-surface data-app-shortcuts="ignore" class={cn("collection-panel flex min-h-0 flex-col overflow-hidden rounded-md border border-border bg-popover text-xs text-popover-foreground shadow-sm", className)}>
+<div {...attributes} bind:this={element} role="dialog" aria-label={label} tabindex="-1" data-floating-root data-app-floating-surface data-app-shortcuts="ignore" class={cn("collection-panel flex min-h-0 flex-col overflow-hidden rounded-md border border-border bg-popover text-paragraph text-popover-foreground shadow-sm", className)}>
   {@render children()}
 </div>
 
 <style>
   .collection-panel {
-    --collection-row-height: 1.75rem;
+    --collection-row-height: calc(var(--paragraph-font-size) * 1.5 + 0.5rem);
   }
   .collection-panel :global(:disabled) { opacity: 1; }
   .collection-panel :global([data-collection-menu-body] .grid) {
@@ -29,8 +29,8 @@
     flex-shrink: 0;
     padding: 0.25rem 0.5rem;
     gap: 0.375rem;
-    font-size: 0.75rem;
-    line-height: 1.25rem;
+    font-size: var(--paragraph-font-size);
+    line-height: 1.5;
     white-space: nowrap;
   }
   .collection-panel :global([data-collection-menu-body] button.collection-menu-control) {
@@ -50,9 +50,12 @@
   .collection-panel :global([data-collection-menu-body] button > svg),
   .collection-panel :global([data-collection-settings-page] button > svg),
   .collection-panel :global(.collection-menu-trigger > svg) {
-    width: 0.875rem;
-    height: 0.875rem;
+    width: 1rem;
+    height: 1rem;
     flex-shrink: 0;
+  }
+  .collection-panel :global(:is(input, select, textarea)) {
+    font-size: var(--paragraph-font-size);
   }
   .collection-panel :global([role="listbox"][data-app-floating-surface]) {
     padding-inline: 0.375rem;

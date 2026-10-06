@@ -212,7 +212,7 @@
       aria-label={t("projects.actions.openTaskDetails", task.title)}
       onclick={() => onOpenTask(task)}
     >
-      <div class="truncate text-[0.866667rem]">{task.title}</div>
+      <div class="truncate">{task.title}</div>
       {#if sectionName || subtasks.length > 0}
         <div class="mt-0.5 flex min-w-0 flex-wrap items-center gap-1 text-[0.733333rem] text-muted-foreground">
           {#if sectionName}

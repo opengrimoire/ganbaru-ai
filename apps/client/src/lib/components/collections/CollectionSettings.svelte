@@ -181,7 +181,7 @@
     {#if activePage}
       <button type="button" class="collection-settings-control flex size-7 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground" aria-label={t("common.back")} onclick={back}><ArrowLeft class="size-3.5" /></button>
     {/if}
-    <h3 class="min-w-0 flex-1 truncate px-1 text-[0.8125rem] font-medium">{activePage?.label ?? label}</h3>
+    <h3 class="min-w-0 flex-1 truncate px-1 font-medium">{activePage?.label ?? label}</h3>
     <button type="button" class="collection-settings-control flex size-7 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground" aria-label={t("common.close")} onclick={close}><X class="size-3.5" /></button>
   </div>
   <div class="min-h-0 overflow-x-hidden overflow-y-auto">

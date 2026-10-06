@@ -111,6 +111,8 @@
   let schema = $state<NotesDataSourceSchema | null>(null);
   let schemaViewId = $state<string | null>(null);
   let editorSourceId = $state<string | null>(null);
+  /** The data source whose property a column's Edit property submenu shows. */
+  let propertyEditorSourceId = $state<string | null>(null);
   let editingLocked = $state(untrack(() => block.child_database.editing_locked ?? false));
   const retainedSchemaDrafts = new Map<string, { properties: NotesDataSourceSchemaPropertyDraft[]; dirty: boolean; selectedPropertyId: string | null }>();
   let schemaLoadPromise: Promise<void> | null = null;
@@ -212,12 +214,23 @@
     return schemaLoadPromise;
   }
 
-  /** Reveal schema editing and select the property requested by a table header. */
-  function openProperties(propertyId?: string, anchor?: HTMLElement | null, scope?: NotesDatabaseSourceEditingScope): void {
+  /** Reveal the full schema editor from view settings. */
+  function openProperties(anchor?: HTMLElement | null, scope?: NotesDatabaseSourceEditingScope): void {
     if (editingLocked || saving) return;
-    const request = ++schemaRequestId;
     schemaAnchor = anchor ?? titleInput;
     expanded = true;
+    selectSchemaProperty(undefined, scope);
+  }
+
+  /** Load the schema a column's Edit property submenu edits and select that column's property. */
+  function preparePropertyEditor(propertyId: string, scope?: NotesDatabaseSourceEditingScope): void {
+    propertyEditorSourceId = scope?.dataSourceId ?? schemaDataSourceId;
+    if (!editingLocked && !saving) selectSchemaProperty(propertyId, scope);
+  }
+
+  /** Load the scope's schema when it is not the one being edited, then select the requested property. */
+  function selectSchemaProperty(propertyId: string | undefined, scope?: NotesDatabaseSourceEditingScope): void {
+    const request = ++schemaRequestId;
     if (schema && (!scope || scope.dataSourceId === editorSourceId)) {
       loading = false;
       if (propertyId && properties.some((property) => property.id === propertyId)) selectedPropertyId = propertyId;
@@ -766,6 +779,8 @@
       initialViewId={viewId}
       {onSelectPage}
       onEditProperties={openProperties}
+      {propertyEditor}
+      onLoadPropertyEditor={preparePropertyEditor}
       onCreateLinkedDatabaseView={() => { void createLinkedView(); }}
       onAddProperty={addPropertyFromView}
       onPropertyAction={applyPropertyAction}
@@ -783,376 +798,399 @@
   {/if}
 </section>
 
+{#snippet schemaStatus()}
+  <div class="flex min-w-0 flex-wrap items-center gap-2 text-[0.8rem] text-muted-foreground">
+    <span class="min-w-0 flex-1 truncate" role="status">
+      {#if error}
+        {schema
+          ? t("notes.databaseSchemaSaveFailed", error)
+          : t("notes.databaseSchemaLoadFailed", error)}
+      {:else}
+        {statusMessage()}
+      {/if}
+    </span>
+    <button
+      type="button"
+      class="inline-flex h-8 items-center gap-1 rounded-md px-2 hover:bg-accent disabled:pointer-events-none"
+      disabled={loading || saving}
+      aria-label={t("notes.databaseSchemaReload")}
+      title={t("notes.databaseSchemaReload")}
+      onclick={() => {
+        void loadSchema();
+      }}
+    >
+      <RefreshCw class="size-3.5" aria-hidden="true" />
+    </button>
+    <button
+      type="button"
+      class="inline-flex h-8 items-center gap-1 rounded-md bg-primary px-2 text-primary-foreground disabled:pointer-events-none"
+      disabled={loading || saving || !dirty}
+      onclick={() => {
+        void saveSchema();
+      }}
+    >
+      <Save class="size-3.5" aria-hidden="true" />
+      <span>{t("notes.databaseSchemaSave")}</span>
+    </button>
+  </div>
+{/snippet}
+
+{#snippet propertyFields(property: NotesDataSourceSchemaPropertyDraft, standalone: boolean)}
+  <div class="grid min-w-0 gap-3 @container">
+    <div class={["grid min-w-0 gap-2", standalone ? "@lg:grid-cols-[minmax(7rem,1fr)_minmax(7rem,12rem)_auto]" : "grid-cols-[minmax(0,1fr)_auto]"]}>
+      {#if standalone}
+        <label class="min-w-0 text-[0.733333rem] text-muted-foreground">
+          <span class="mb-1 block">{t("notes.databaseSchemaName")}</span>
+          <input
+            class="h-8 w-full min-w-0 rounded-md border border-input bg-background px-2 text-[0.866667rem] text-foreground outline-none focus:border-ring"
+            value={property.name}
+            aria-label={t("notes.databaseSchemaName")}
+            disabled={loading || saving || editingLocked}
+            oninput={(event) => {
+              updateProperty(property.id, {
+                name: event.currentTarget.value,
+              });
+            }}
+          />
+        </label>
+      {/if}
+      <div class="min-w-0 text-[0.733333rem] text-muted-foreground">
+        <span class="mb-1 block">{t("notes.databaseSchemaType")}</span>
+        <Select
+          inline
+          appearance="quiet"
+          contentAlign="start"
+          class="w-full min-w-0"
+          ariaLabel={t("notes.databaseSchemaType")}
+          value={String(property.type ?? "")}
+          disabled={loading || saving || editingLocked || property.type === "title"}
+          options={NOTES_DATA_SOURCE_PROPERTY_TYPES.filter((type) => property.type === "title" ? type === "title" : type !== "title").map((type) => ({ value: type, label: propertyTypeLabel(type) }))}
+          onChange={(nextValue) => {
+            updateProperty(property.id, {
+                type: nextValue as NotesDataSourcePropertyType,
+            });
+          }}
+        />
+      </div>
+      <div class="flex min-w-0 items-end justify-end gap-1">
+        <button
+          type="button"
+          class="inline-flex size-8 items-center justify-center rounded-md text-destructive hover:bg-destructive/10 disabled:pointer-events-none"
+          disabled={loading || saving || editingLocked || property.type === "title"}
+          aria-label={t("notes.databaseSchemaDelete")}
+          title={t("notes.databaseSchemaDelete")}
+          onclick={() => deleteProperty(property.id)}
+        >
+          <Trash2 class="size-3.5" aria-hidden="true" />
+        </button>
+      </div>
+    </div>
+
+    <label class="min-w-0 text-[0.733333rem] text-muted-foreground">
+      <span class="mb-1 block">{t("notes.databaseSchemaDescription")}</span>
+      <input
+        class="h-8 w-full min-w-0 rounded-md border border-input bg-background px-2 text-[0.866667rem] text-foreground outline-none focus:border-ring"
+        value={property.description}
+        placeholder={t("notes.databaseSchemaDescriptionPlaceholder")}
+        disabled={loading || saving || editingLocked}
+        oninput={(event) => {
+          updateProperty(property.id, {
+            description: event.currentTarget.value,
+          });
+        }}
+      />
+    </label>
+
+    {#if property.type === "number"}
+      <div class="min-w-0 text-[0.733333rem] text-muted-foreground">
+        <span class="mb-1 block">{t("notes.databaseSchemaNumberFormat")}</span>
+        <Select
+          inline
+          appearance="quiet"
+          contentAlign="start"
+          class="w-full min-w-0"
+          ariaLabel={t("notes.databaseSchemaNumberFormat")}
+          value={String(property.numberFormat ?? "")}
+          options={[...(NOTES_DATA_SOURCE_NUMBER_FORMATS).map((format) => ({ value: String(format), label: String(format) }))]}
+          onChange={(nextValue) => {
+            updateProperty(property.id, {
+                numberFormat: nextValue as NotesDataSourceNumberFormat,
+            });
+          }}
+        />
+      </div>
+    {:else if property.type === "unique_id"}
+      <label class="min-w-0 text-[0.733333rem] text-muted-foreground">
+        <span class="mb-1 block">{t("notes.databaseSchemaUniquePrefix")}</span>
+        <input
+          class="h-8 w-full min-w-0 rounded-md border border-input bg-background px-2 text-[0.866667rem] text-foreground outline-none focus:border-ring"
+          value={property.uniquePrefix}
+          placeholder={t("notes.databaseSchemaUniquePrefixPlaceholder")}
+          oninput={(event) => {
+            updateProperty(property.id, {
+              uniquePrefix: event.currentTarget.value,
+            });
+          }}
+        />
+      </label>
+    {:else if property.type === "relation"}
+      <div class="grid min-w-0 gap-2 @lg:grid-cols-3">
+        <div class="min-w-0 text-[0.733333rem] text-muted-foreground">
+          <span class="mb-1 block">{t("notes.databaseSchemaRelationTarget")}</span>
+          <Select
+            inline
+            appearance="quiet"
+            contentAlign="start"
+            class="w-full min-w-0"
+            ariaLabel={t("notes.databaseSchemaRelationTarget")}
+            value={String(property.relationDataSourceId ?? "")}
+            options={[...(property.relationDataSourceId && !availableDataSources.some((source) => source.id === property.relationDataSourceId) ? [{ value: String(property.relationDataSourceId), label: String(property.relationDataSourceId) }] : []),
+              ...(availableDataSources).map((source) => ({ value: String(source.id), label: String(dataSourceTitle(source)) }))]}
+            onChange={(nextValue) => {
+              updateProperty(property.id, {
+                  relationDataSourceId: nextValue,
+              });
+            }}
+          />
+        </div>
+        <label class="min-w-0 text-[0.733333rem] text-muted-foreground">
+          <span class="mb-1 block">{t("notes.databaseSchemaRelationSyncedPropertyId")}</span>
+          <input
+            class="h-8 w-full min-w-0 rounded-md border border-input bg-background px-2 text-[0.866667rem] text-foreground outline-none focus:border-ring"
+            value={property.relationSyncedPropertyId}
+            placeholder={t("notes.databaseSchemaRelationSyncedPropertyIdPlaceholder")}
+            oninput={(event) => {
+              updateProperty(property.id, {
+                relationSyncedPropertyId: event.currentTarget.value,
+              });
+            }}
+          />
+        </label>
+        <label class="min-w-0 text-[0.733333rem] text-muted-foreground">
+          <span class="mb-1 block">{t("notes.databaseSchemaRelationSyncedPropertyName")}</span>
+          <input
+            class="h-8 w-full min-w-0 rounded-md border border-input bg-background px-2 text-[0.866667rem] text-foreground outline-none focus:border-ring"
+            value={property.relationSyncedPropertyName}
+            placeholder={t("notes.databaseSchemaRelationSyncedPropertyNamePlaceholder")}
+            oninput={(event) => {
+              updateProperty(property.id, {
+                relationSyncedPropertyName: event.currentTarget.value,
+              });
+            }}
+          />
+        </label>
+      </div>
+    {:else if property.type === "rollup"}
+      <NotesDatabaseRollupSchemaControls
+        {property}
+        relations={notesDataSourceRollupRelationOptions(properties, property.id)}
+        targets={notesDataSourceRollupTargetOptions(
+          property,
+          properties,
+          schemaDataSourceId,
+          rollupDataSources(),
+        )}
+        {saving}
+        onRelationChange={(relationId) => updateRollupRelation(property, relationId)}
+        onTargetChange={(targetId) => updateRollupTarget(property, targetId)}
+        onFunctionChange={(rollupFunction) => updateProperty(property.id, { rollupFunction })}
+      />
+    {:else if property.type === "formula"}
+      <label class="min-w-0 text-[0.733333rem] text-muted-foreground">
+        <span class="mb-1 block">{t("notes.databaseSchemaFormulaExpression")}</span>
+        <textarea
+          class="min-h-20 w-full min-w-0 resize-y rounded-md border border-input bg-background px-2 py-1.5 font-mono text-[0.8rem] text-foreground outline-none focus:border-ring"
+          value={property.formulaExpression}
+          placeholder={t("notes.databaseSchemaFormulaExpressionPlaceholder")}
+          disabled={loading || saving || editingLocked}
+          oninput={(event) => {
+            updateProperty(property.id, {
+              formulaExpression: event.currentTarget.value,
+            });
+          }}
+        ></textarea>
+      </label>
+    {:else if property.type === "button"}
+      <div class="grid min-w-0 gap-2 @lg:grid-cols-3">
+        <label class="min-w-0 text-[0.733333rem] text-muted-foreground">
+          <span class="mb-1 block">{t("notes.databaseSchemaButtonLabel")}</span>
+          <input
+            class="h-8 w-full min-w-0 rounded-md border border-input bg-background px-2 text-[0.866667rem] text-foreground outline-none focus:border-ring"
+            value={property.buttonLabel}
+            placeholder={t("notes.databaseSchemaButtonDefaultLabel")}
+            oninput={(event) => {
+              updateProperty(property.id, {
+                buttonLabel: event.currentTarget.value,
+              });
+            }}
+          />
+        </label>
+        <div class="min-w-0 text-[0.733333rem] text-muted-foreground">
+          <span class="mb-1 block">{t("notes.databaseSchemaButtonTarget")}</span>
+          <Select
+            inline
+            appearance="quiet"
+            contentAlign="start"
+            class="w-full min-w-0"
+            ariaLabel={t("notes.databaseSchemaButtonTarget")}
+            value={String(property.buttonActionPropertyId ?? "")}
+            options={[{ value: "", label: t("notes.databaseSchemaButtonNoAction") },
+              ...(notesDataSourceButtonTargetOptions(properties, property.id)).map((target) => ({ value: String(target.id), label: String(target.name) }))]}
+            onChange={(nextValue) => updateButtonTarget(property, nextValue)}
+          />
+        </div>
+        <label class="flex min-w-0 items-end gap-2 text-[0.733333rem] text-muted-foreground">
+          <input
+            class="mb-2"
+            type="checkbox"
+            checked={property.buttonRequiresConfirmation}
+            onchange={(event) => {
+              updateProperty(property.id, {
+                buttonRequiresConfirmation: event.currentTarget.checked,
+              });
+            }}
+          />
+          <span class="pb-1">{t("notes.databaseSchemaButtonConfirm")}</span>
+        </label>
+        {#if property.buttonActionPropertyId}
+          {#if property.buttonActionPropertyType === "checkbox"}
+            <div class="min-w-0 text-[0.733333rem] text-muted-foreground">
+              <span class="mb-1 block">{t("notes.databaseSchemaButtonValue")}</span>
+              <Select
+                inline
+                appearance="quiet"
+                contentAlign="start"
+                class="w-full min-w-0"
+                ariaLabel={t("notes.databaseSchemaButtonValue")}
+                value={String(property.buttonActionValue === false ? "false" : "true")}
+                options={[{ value: "true", label: t("notes.databaseSchemaButtonValueChecked") },
+                  { value: "false", label: t("notes.databaseSchemaButtonValueUnchecked") }]}
+                onChange={(nextValue) => updateButtonValue(property, nextValue === "true")}
+              />
+            </div>
+          {:else}
+            <label class="min-w-0 text-[0.733333rem] text-muted-foreground @lg:col-span-2">
+              <span class="mb-1 block">{t("notes.databaseSchemaButtonValue")}</span>
+              <input
+                class="h-8 w-full min-w-0 rounded-md border border-input bg-background px-2 text-[0.866667rem] text-foreground outline-none focus:border-ring"
+                value={buttonActionValueText(property.buttonActionValue)}
+                placeholder={t("notes.databaseSchemaButtonValuePlaceholder")}
+                oninput={(event) => updateButtonValue(property, event.currentTarget.value)}
+              />
+            </label>
+          {/if}
+        {/if}
+      </div>
+    {:else if property.type === "select" || property.type === "multi_select" || property.type === "status"}
+      <div class="space-y-2">
+        {#each property.options as option (option.id)}
+          <div class="grid min-w-0 gap-2 @lg:grid-cols-[minmax(7rem,1fr)_minmax(7rem,10rem)_minmax(7rem,10rem)_auto]">
+            <label class="min-w-0 text-[0.733333rem] text-muted-foreground">
+              <span class="mb-1 block">{t("notes.databaseSchemaOptionName")}</span>
+              <input
+                class="h-8 w-full min-w-0 rounded-md border border-input bg-background px-2 text-[0.866667rem] text-foreground outline-none focus:border-ring"
+                value={option.name}
+                oninput={(event) => {
+                  updateOption(property.id, option.id, {
+                    name: event.currentTarget.value,
+                  });
+                }}
+              />
+            </label>
+            <div class="min-w-0 text-[0.733333rem] text-muted-foreground">
+              <span class="mb-1 block">{t("notes.databaseSchemaOptionColor")}</span>
+              <Select
+                inline
+                appearance="quiet"
+                contentAlign="start"
+                class="w-full min-w-0"
+                ariaLabel={t("notes.databaseSchemaOptionColor")}
+                value={String(option.color ?? "")}
+                options={[...(NOTES_DATA_SOURCE_SELECT_COLORS).map((color) => ({ value: String(color), label: String(color) }))]}
+                onChange={(nextValue) => {
+                  updateOption(property.id, option.id, {
+                      color: nextValue as NotesDataSourceSelectColor,
+                  });
+                }}
+              />
+            </div>
+            {#if property.type === "status"}
+              <div class="min-w-0 text-[0.733333rem] text-muted-foreground">
+                <span class="mb-1 block">{t("notes.databaseSchemaOptionGroup")}</span>
+                <Select
+                  inline
+                  appearance="quiet"
+                  contentAlign="start"
+                  class="w-full min-w-0"
+                  ariaLabel={t("notes.databaseSchemaOptionGroup")}
+                  value={String(option.group ?? "")}
+                  options={[...(NOTES_DATA_SOURCE_STATUS_GROUPS).map((group) => ({ value: String(group), label: String(group) }))]}
+                  onChange={(nextValue) => {
+                    updateOption(property.id, option.id, {
+                        group: nextValue as NotesDataSourceStatusGroup,
+                    });
+                  }}
+                />
+              </div>
+            {/if}
+            <div class="flex items-end justify-end">
+              <button
+                type="button"
+                class="inline-flex size-8 items-center justify-center rounded-md text-destructive hover:bg-destructive/10"
+                aria-label={t("notes.databaseSchemaDeleteOption")}
+                title={t("notes.databaseSchemaDeleteOption")}
+                onclick={() => deleteOption(property.id, option.id)}
+              >
+                <Trash2 class="size-3.5" aria-hidden="true" />
+              </button>
+            </div>
+          </div>
+        {/each}
+        <button
+          type="button"
+          class="inline-flex h-8 items-center gap-1 rounded-md px-2 text-[0.8rem] hover:bg-accent"
+          onclick={() => addOption(property.id)}
+        >
+          <Plus class="size-3.5" aria-hidden="true" />
+          <span>{t("notes.databaseSchemaAddOption")}</span>
+        </button>
+      </div>
+    {:else if property.type === "title"}
+      <p class="text-[0.8rem] text-muted-foreground">{t("notes.databaseSchemaReadOnlyTitle")}</p>
+    {:else}
+      <p class="text-[0.8rem] text-muted-foreground">
+        {t("notes.databaseSchemaReadonlyPlaceholder")}
+      </p>
+    {/if}
+  </div>
+{/snippet}
+
+{#snippet propertyEditor(propertyId: string)}
+  <fieldset disabled={loading || saving || editingLocked} class="m-0 min-w-0 space-y-2 border-0 p-0" data-schema-property-id={propertyId}>
+    <legend class="sr-only">{t("collections.property.editProperty")}</legend>
+    {#if editingLocked}<p class="text-muted-foreground">{t("notes.databaseEditingLockDescription")}</p>{/if}
+    {#if schema && editorSourceId === propertyEditorSourceId}
+      {#each properties.filter((property) => property.id === propertyId) as property (property.id)}
+        {@render propertyFields(property, false)}
+      {/each}
+    {/if}
+    {@render schemaStatus()}
+  </fieldset>
+{/snippet}
+
 {#if isLocalDatabase && expanded}
   <CollectionSettings label={t("notes.databaseViewEditProperties")} anchor={schemaAnchor} preferredWidth={384} onClose={() => { expanded = false; }}>
       {#if editingLocked}<p class="text-muted-foreground">{t("notes.databaseEditingLockDescription")}</p>{/if}
       <fieldset disabled={loading || saving || editingLocked} class="m-0 min-w-0 space-y-2 border-0 p-0">
       <legend class="sr-only">{t("notes.databaseViewEditProperties")}</legend>
-      <div class="flex min-w-0 flex-wrap items-center gap-2 text-[0.8rem] text-muted-foreground">
-        <span class="min-w-0 flex-1 truncate" role="status">
-          {#if error}
-            {schema
-              ? t("notes.databaseSchemaSaveFailed", error)
-              : t("notes.databaseSchemaLoadFailed", error)}
-          {:else}
-            {statusMessage()}
-          {/if}
-        </span>
-        <button
-          type="button"
-          class="inline-flex h-8 items-center gap-1 rounded-md px-2 hover:bg-accent disabled:pointer-events-none"
-          disabled={loading || saving}
-          aria-label={t("notes.databaseSchemaReload")}
-          title={t("notes.databaseSchemaReload")}
-          onclick={() => {
-            void loadSchema();
-          }}
-        >
-          <RefreshCw class="size-3.5" aria-hidden="true" />
-        </button>
-        <button
-          type="button"
-          class="inline-flex h-8 items-center gap-1 rounded-md bg-primary px-2 text-primary-foreground disabled:pointer-events-none"
-          disabled={loading || saving || !dirty}
-          onclick={() => {
-            void saveSchema();
-          }}
-        >
-          <Save class="size-3.5" aria-hidden="true" />
-          <span>{t("notes.databaseSchemaSave")}</span>
-        </button>
-      </div>
+      {@render schemaStatus()}
 
       <Select inline appearance="quiet" class="w-full min-w-0" ariaLabel={t("notes.databaseSchemaToggle")}
         value={selectedPropertyId ?? ""} options={properties.map((property) => ({ value: property.id, label: property.name || t("notes.databaseSchemaName") }))}
         onChange={(propertyId) => { selectedPropertyId = propertyId; }} />
       <div class="space-y-2">
         {#each properties.filter((property) => property.id === selectedPropertyId) as property (property.id)}
-          <div class="grid min-w-0 gap-3 @container">
-            <div class="grid min-w-0 gap-2 @lg:grid-cols-[minmax(7rem,1fr)_minmax(7rem,12rem)_auto]">
-              <label class="min-w-0 text-[0.733333rem] text-muted-foreground">
-                <span class="mb-1 block">{t("notes.databaseSchemaName")}</span>
-                <input
-                  class="h-8 w-full min-w-0 rounded-md border border-input bg-background px-2 text-[0.866667rem] text-foreground outline-none focus:border-ring"
-                  value={property.name}
-                  aria-label={t("notes.databaseSchemaName")}
-                  disabled={loading || saving || editingLocked}
-                  oninput={(event) => {
-                    updateProperty(property.id, {
-                      name: event.currentTarget.value,
-                    });
-                  }}
-                />
-              </label>
-              <div class="min-w-0 text-[0.733333rem] text-muted-foreground">
-                <span class="mb-1 block">{t("notes.databaseSchemaType")}</span>
-                <Select
-                  inline
-                  appearance="quiet"
-                  contentAlign="start"
-                  class="w-full min-w-0"
-                  ariaLabel={t("notes.databaseSchemaType")}
-                  value={String(property.type ?? "")}
-                  disabled={loading || saving || editingLocked || property.type === "title"}
-                  options={NOTES_DATA_SOURCE_PROPERTY_TYPES.filter((type) => property.type === "title" ? type === "title" : type !== "title").map((type) => ({ value: type, label: propertyTypeLabel(type) }))}
-                  onChange={(nextValue) => {
-                    updateProperty(property.id, {
-                        type: nextValue as NotesDataSourcePropertyType,
-                    });
-                  }}
-                />
-              </div>
-              <div class="flex min-w-0 items-end justify-end gap-1">
-                <button
-                  type="button"
-                  class="inline-flex size-8 items-center justify-center rounded-md text-destructive hover:bg-destructive/10 disabled:pointer-events-none"
-                  disabled={loading || saving || editingLocked || property.type === "title"}
-                  aria-label={t("notes.databaseSchemaDelete")}
-                  title={t("notes.databaseSchemaDelete")}
-                  onclick={() => deleteProperty(property.id)}
-                >
-                  <Trash2 class="size-3.5" aria-hidden="true" />
-                </button>
-              </div>
-            </div>
-
-            <label class="min-w-0 text-[0.733333rem] text-muted-foreground">
-              <span class="mb-1 block">{t("notes.databaseSchemaDescription")}</span>
-              <input
-                class="h-8 w-full min-w-0 rounded-md border border-input bg-background px-2 text-[0.866667rem] text-foreground outline-none focus:border-ring"
-                value={property.description}
-                placeholder={t("notes.databaseSchemaDescriptionPlaceholder")}
-                disabled={loading || saving || editingLocked}
-                oninput={(event) => {
-                  updateProperty(property.id, {
-                    description: event.currentTarget.value,
-                  });
-                }}
-              />
-            </label>
-
-            {#if property.type === "number"}
-              <div class="min-w-0 text-[0.733333rem] text-muted-foreground">
-                <span class="mb-1 block">{t("notes.databaseSchemaNumberFormat")}</span>
-                <Select
-                  inline
-                  appearance="quiet"
-                  contentAlign="start"
-                  class="w-full min-w-0"
-                  ariaLabel={t("notes.databaseSchemaNumberFormat")}
-                  value={String(property.numberFormat ?? "")}
-                  options={[...(NOTES_DATA_SOURCE_NUMBER_FORMATS).map((format) => ({ value: String(format), label: String(format) }))]}
-                  onChange={(nextValue) => {
-                    updateProperty(property.id, {
-                        numberFormat: nextValue as NotesDataSourceNumberFormat,
-                    });
-                  }}
-                />
-              </div>
-            {:else if property.type === "unique_id"}
-              <label class="min-w-0 text-[0.733333rem] text-muted-foreground">
-                <span class="mb-1 block">{t("notes.databaseSchemaUniquePrefix")}</span>
-                <input
-                  class="h-8 w-full min-w-0 rounded-md border border-input bg-background px-2 text-[0.866667rem] text-foreground outline-none focus:border-ring"
-                  value={property.uniquePrefix}
-                  placeholder={t("notes.databaseSchemaUniquePrefixPlaceholder")}
-                  oninput={(event) => {
-                    updateProperty(property.id, {
-                      uniquePrefix: event.currentTarget.value,
-                    });
-                  }}
-                />
-              </label>
-            {:else if property.type === "relation"}
-              <div class="grid min-w-0 gap-2 @lg:grid-cols-3">
-                <div class="min-w-0 text-[0.733333rem] text-muted-foreground">
-                  <span class="mb-1 block">{t("notes.databaseSchemaRelationTarget")}</span>
-                  <Select
-                    inline
-                    appearance="quiet"
-                    contentAlign="start"
-                    class="w-full min-w-0"
-                    ariaLabel={t("notes.databaseSchemaRelationTarget")}
-                    value={String(property.relationDataSourceId ?? "")}
-                    options={[...(property.relationDataSourceId && !availableDataSources.some((source) => source.id === property.relationDataSourceId) ? [{ value: String(property.relationDataSourceId), label: String(property.relationDataSourceId) }] : []),
-                      ...(availableDataSources).map((source) => ({ value: String(source.id), label: String(dataSourceTitle(source)) }))]}
-                    onChange={(nextValue) => {
-                      updateProperty(property.id, {
-                          relationDataSourceId: nextValue,
-                      });
-                    }}
-                  />
-                </div>
-                <label class="min-w-0 text-[0.733333rem] text-muted-foreground">
-                  <span class="mb-1 block">{t("notes.databaseSchemaRelationSyncedPropertyId")}</span>
-                  <input
-                    class="h-8 w-full min-w-0 rounded-md border border-input bg-background px-2 text-[0.866667rem] text-foreground outline-none focus:border-ring"
-                    value={property.relationSyncedPropertyId}
-                    placeholder={t("notes.databaseSchemaRelationSyncedPropertyIdPlaceholder")}
-                    oninput={(event) => {
-                      updateProperty(property.id, {
-                        relationSyncedPropertyId: event.currentTarget.value,
-                      });
-                    }}
-                  />
-                </label>
-                <label class="min-w-0 text-[0.733333rem] text-muted-foreground">
-                  <span class="mb-1 block">{t("notes.databaseSchemaRelationSyncedPropertyName")}</span>
-                  <input
-                    class="h-8 w-full min-w-0 rounded-md border border-input bg-background px-2 text-[0.866667rem] text-foreground outline-none focus:border-ring"
-                    value={property.relationSyncedPropertyName}
-                    placeholder={t("notes.databaseSchemaRelationSyncedPropertyNamePlaceholder")}
-                    oninput={(event) => {
-                      updateProperty(property.id, {
-                        relationSyncedPropertyName: event.currentTarget.value,
-                      });
-                    }}
-                  />
-                </label>
-              </div>
-            {:else if property.type === "rollup"}
-              <NotesDatabaseRollupSchemaControls
-                {property}
-                relations={notesDataSourceRollupRelationOptions(properties, property.id)}
-                targets={notesDataSourceRollupTargetOptions(
-                  property,
-                  properties,
-                  schemaDataSourceId,
-                  rollupDataSources(),
-                )}
-                {saving}
-                onRelationChange={(relationId) => updateRollupRelation(property, relationId)}
-                onTargetChange={(targetId) => updateRollupTarget(property, targetId)}
-                onFunctionChange={(rollupFunction) => updateProperty(property.id, { rollupFunction })}
-              />
-            {:else if property.type === "formula"}
-              <label class="min-w-0 text-[0.733333rem] text-muted-foreground">
-                <span class="mb-1 block">{t("notes.databaseSchemaFormulaExpression")}</span>
-                <textarea
-                  class="min-h-20 w-full min-w-0 resize-y rounded-md border border-input bg-background px-2 py-1.5 font-mono text-[0.8rem] text-foreground outline-none focus:border-ring"
-                  value={property.formulaExpression}
-                  placeholder={t("notes.databaseSchemaFormulaExpressionPlaceholder")}
-                  disabled={loading || saving || editingLocked}
-                  oninput={(event) => {
-                    updateProperty(property.id, {
-                      formulaExpression: event.currentTarget.value,
-                    });
-                  }}
-                ></textarea>
-              </label>
-            {:else if property.type === "button"}
-              <div class="grid min-w-0 gap-2 @lg:grid-cols-3">
-                <label class="min-w-0 text-[0.733333rem] text-muted-foreground">
-                  <span class="mb-1 block">{t("notes.databaseSchemaButtonLabel")}</span>
-                  <input
-                    class="h-8 w-full min-w-0 rounded-md border border-input bg-background px-2 text-[0.866667rem] text-foreground outline-none focus:border-ring"
-                    value={property.buttonLabel}
-                    placeholder={t("notes.databaseSchemaButtonDefaultLabel")}
-                    oninput={(event) => {
-                      updateProperty(property.id, {
-                        buttonLabel: event.currentTarget.value,
-                      });
-                    }}
-                  />
-                </label>
-                <div class="min-w-0 text-[0.733333rem] text-muted-foreground">
-                  <span class="mb-1 block">{t("notes.databaseSchemaButtonTarget")}</span>
-                  <Select
-                    inline
-                    appearance="quiet"
-                    contentAlign="start"
-                    class="w-full min-w-0"
-                    ariaLabel={t("notes.databaseSchemaButtonTarget")}
-                    value={String(property.buttonActionPropertyId ?? "")}
-                    options={[{ value: "", label: t("notes.databaseSchemaButtonNoAction") },
-                      ...(notesDataSourceButtonTargetOptions(properties, property.id)).map((target) => ({ value: String(target.id), label: String(target.name) }))]}
-                    onChange={(nextValue) => updateButtonTarget(property, nextValue)}
-                  />
-                </div>
-                <label class="flex min-w-0 items-end gap-2 text-[0.733333rem] text-muted-foreground">
-                  <input
-                    class="mb-2"
-                    type="checkbox"
-                    checked={property.buttonRequiresConfirmation}
-                    onchange={(event) => {
-                      updateProperty(property.id, {
-                        buttonRequiresConfirmation: event.currentTarget.checked,
-                      });
-                    }}
-                  />
-                  <span class="pb-1">{t("notes.databaseSchemaButtonConfirm")}</span>
-                </label>
-                {#if property.buttonActionPropertyId}
-                  {#if property.buttonActionPropertyType === "checkbox"}
-                    <div class="min-w-0 text-[0.733333rem] text-muted-foreground">
-                      <span class="mb-1 block">{t("notes.databaseSchemaButtonValue")}</span>
-                      <Select
-                        inline
-                        appearance="quiet"
-                        contentAlign="start"
-                        class="w-full min-w-0"
-                        ariaLabel={t("notes.databaseSchemaButtonValue")}
-                        value={String(property.buttonActionValue === false ? "false" : "true")}
-                        options={[{ value: "true", label: t("notes.databaseSchemaButtonValueChecked") },
-                          { value: "false", label: t("notes.databaseSchemaButtonValueUnchecked") }]}
-                        onChange={(nextValue) => updateButtonValue(property, nextValue === "true")}
-                      />
-                    </div>
-                  {:else}
-                    <label class="min-w-0 text-[0.733333rem] text-muted-foreground @lg:col-span-2">
-                      <span class="mb-1 block">{t("notes.databaseSchemaButtonValue")}</span>
-                      <input
-                        class="h-8 w-full min-w-0 rounded-md border border-input bg-background px-2 text-[0.866667rem] text-foreground outline-none focus:border-ring"
-                        value={buttonActionValueText(property.buttonActionValue)}
-                        placeholder={t("notes.databaseSchemaButtonValuePlaceholder")}
-                        oninput={(event) => updateButtonValue(property, event.currentTarget.value)}
-                      />
-                    </label>
-                  {/if}
-                {/if}
-              </div>
-            {:else if property.type === "select" || property.type === "multi_select" || property.type === "status"}
-              <div class="space-y-2">
-                {#each property.options as option (option.id)}
-                  <div class="grid min-w-0 gap-2 @lg:grid-cols-[minmax(7rem,1fr)_minmax(7rem,10rem)_minmax(7rem,10rem)_auto]">
-                    <label class="min-w-0 text-[0.733333rem] text-muted-foreground">
-                      <span class="mb-1 block">{t("notes.databaseSchemaOptionName")}</span>
-                      <input
-                        class="h-8 w-full min-w-0 rounded-md border border-input bg-background px-2 text-[0.866667rem] text-foreground outline-none focus:border-ring"
-                        value={option.name}
-                        oninput={(event) => {
-                          updateOption(property.id, option.id, {
-                            name: event.currentTarget.value,
-                          });
-                        }}
-                      />
-                    </label>
-                    <div class="min-w-0 text-[0.733333rem] text-muted-foreground">
-                      <span class="mb-1 block">{t("notes.databaseSchemaOptionColor")}</span>
-                      <Select
-                        inline
-                        appearance="quiet"
-                        contentAlign="start"
-                        class="w-full min-w-0"
-                        ariaLabel={t("notes.databaseSchemaOptionColor")}
-                        value={String(option.color ?? "")}
-                        options={[...(NOTES_DATA_SOURCE_SELECT_COLORS).map((color) => ({ value: String(color), label: String(color) }))]}
-                        onChange={(nextValue) => {
-                          updateOption(property.id, option.id, {
-                              color: nextValue as NotesDataSourceSelectColor,
-                          });
-                        }}
-                      />
-                    </div>
-                    {#if property.type === "status"}
-                      <div class="min-w-0 text-[0.733333rem] text-muted-foreground">
-                        <span class="mb-1 block">{t("notes.databaseSchemaOptionGroup")}</span>
-                        <Select
-                          inline
-                          appearance="quiet"
-                          contentAlign="start"
-                          class="w-full min-w-0"
-                          ariaLabel={t("notes.databaseSchemaOptionGroup")}
-                          value={String(option.group ?? "")}
-                          options={[...(NOTES_DATA_SOURCE_STATUS_GROUPS).map((group) => ({ value: String(group), label: String(group) }))]}
-                          onChange={(nextValue) => {
-                            updateOption(property.id, option.id, {
-                                group: nextValue as NotesDataSourceStatusGroup,
-                            });
-                          }}
-                        />
-                      </div>
-                    {/if}
-                    <div class="flex items-end justify-end">
-                      <button
-                        type="button"
-                        class="inline-flex size-8 items-center justify-center rounded-md text-destructive hover:bg-destructive/10"
-                        aria-label={t("notes.databaseSchemaDeleteOption")}
-                        title={t("notes.databaseSchemaDeleteOption")}
-                        onclick={() => deleteOption(property.id, option.id)}
-                      >
-                        <Trash2 class="size-3.5" aria-hidden="true" />
-                      </button>
-                    </div>
-                  </div>
-                {/each}
-                <button
-                  type="button"
-                  class="inline-flex h-8 items-center gap-1 rounded-md px-2 text-[0.8rem] hover:bg-accent"
-                  onclick={() => addOption(property.id)}
-                >
-                  <Plus class="size-3.5" aria-hidden="true" />
-                  <span>{t("notes.databaseSchemaAddOption")}</span>
-                </button>
-              </div>
-            {:else if property.type === "title"}
-              <p class="text-[0.8rem] text-muted-foreground">{t("notes.databaseSchemaReadOnlyTitle")}</p>
-            {:else}
-              <p class="text-[0.8rem] text-muted-foreground">
-                {t("notes.databaseSchemaReadonlyPlaceholder")}
-              </p>
-            {/if}
-          </div>
+          {@render propertyFields(property, true)}
         {/each}
       </div>
 

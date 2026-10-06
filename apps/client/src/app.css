@@ -131,6 +131,8 @@
   --default-type-scale: 1.066667;
   --font-scale: 1;
   --type-scale: calc(var(--default-type-scale) * var(--font-scale));
+  /* Notes paragraph size, shared by database panels and tables so they read at body text size. */
+  --paragraph-font-size: calc(1rem * var(--font-scale));
   --radius: 0.5rem;
   --explorer-width: 17rem;
   --icon-stroke-width: 1.6;
@@ -298,6 +300,8 @@ svg.lucide[stroke-width="1.5"]:not(.app-title-bar *, .explorer-sidebar *) {
   --text-sm--line-height: calc(1.25rem * var(--type-scale));
   --text-base: calc(1rem * var(--type-scale));
   --text-base--line-height: calc(1.5rem * var(--type-scale));
+  --text-paragraph: var(--paragraph-font-size);
+  --text-paragraph--line-height: 1.5;
   --text-identity: calc(0.875rem * var(--type-scale));
   --text-identity--line-height: calc(1.25rem * var(--type-scale));
   --text-lg: calc(1.125rem * var(--type-scale));
@@ -532,7 +536,7 @@ svg.lucide[stroke-width="1.5"]:not(.app-title-bar *, .explorer-sidebar *) {
   [class~="text-[2.5rem]"] { font-size: calc(2.5rem * var(--type-scale)); }
 
   .notes-editor-body-text {
-    font-size: calc(1rem * var(--font-scale));
+    font-size: var(--paragraph-font-size);
   }
 
   .notes-heading-1 { --notes-heading-size: 1.875rem; }

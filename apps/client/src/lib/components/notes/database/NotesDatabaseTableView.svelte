@@ -116,6 +116,8 @@
     onReady = () => {},
     onAddProperty,
     onEditProperties,
+    propertyEditor,
+    onLoadPropertyEditor,
     onPropertyAction,
     newRowRequest = 0,
     settingsOpen = false,
@@ -132,7 +134,12 @@
     onSavingChange?: (saving: boolean) => void;
     onReady?: () => void;
     onAddProperty: (type: NotesDataSourcePropertyType, name: string) => Promise<void>;
-    onEditProperties: (propertyId?: string) => void;
+    /** Opens the full source schema editor from view settings. */
+    onEditProperties: () => void;
+    /** Renders one property's schema fields in its column's Edit property submenu; the submenu is hidden without it. */
+    propertyEditor?: Snippet<[string]>;
+    /** Loads the schema that {@link propertyEditor} edits when the submenu opens. */
+    onLoadPropertyEditor?: (propertyId: string) => void;
     onPropertyAction?: (request: NotesDatabasePropertyActionRequest) => Promise<void>;
     newRowRequest?: number;
     settingsOpen?: boolean;
@@ -1215,12 +1222,17 @@
                   {@const kind = notesPropertyKind(column.type)}
                   {@const KindIcon = COLLECTION_PROPERTY_ICONS[kind]}
                   <CollectionMenu label={column.name} kind="property" fullWidth showHeader={false} dismissOnAction
-                    triggerClass="h-auto justify-start rounded-none px-2 text-[0.8rem] font-normal" triggerAttributes={{ "data-collection-cell-primary": "" }} disabled={mutating || editingLocked}>
+                    triggerClass="h-auto justify-start rounded-none px-2 font-normal" triggerAttributes={{ "data-collection-cell-primary": "" }} disabled={mutating || editingLocked}>
                     {#snippet leading()}<KindIcon class="size-3.5 shrink-0 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />{/snippet}
                     <div class="grid gap-0 font-normal">
                       <CollectionPropertyNameField propertyId={column.id} name={column.name} {kind} editable={!editingLocked && Boolean(onPropertyAction)}
                         maxLength={NOTES_DATA_SOURCE_PROPERTY_NAME_MAX_CHARACTERS} onRename={(name) => renameProperty(column.id, name)} />
-                      <CollectionMenuItem icon={Settings2} label={t("collections.property.editProperty")} disabled={mutating} onclick={() => onEditProperties(column.id)} />
+                      {#if propertyEditor}
+                        <CollectionMenu label={t("collections.property.editProperty")} kind="properties" icon={Settings2} fullWidth disabled={mutating}
+                          onOpenChange={(open) => { if (open) onLoadPropertyEditor?.(column.id); }}>
+                          {@render propertyEditor(column.id)}
+                        </CollectionMenu>
+                      {/if}
                       <div class="mx-1 my-1 border-t border-border"></div>
                       {#if notesDatabaseFilterConditions(column).length > 0}
                         <CollectionMenu label={t("collections.property.filter")} kind="filter" fullWidth activeCount={notesDatabaseFilterCount(filters, column.id)}>

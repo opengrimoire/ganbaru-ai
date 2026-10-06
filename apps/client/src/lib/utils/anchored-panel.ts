@@ -57,6 +57,40 @@ export function anchoredPanelStyle(
   ].join("; ");
 }
 
+/** Bounds for a submenu that opens beside the menu containing its trigger row. */
+export interface AnchoredSidePanelInput extends AnchoredPanelInput {
+  /** The menu that contains the trigger row. */
+  parentRect: { top: number; right: number; bottom: number; left: number };
+  /** Distance from the submenu's top edge to its first row, so that row lines up with the trigger. */
+  alignOffset?: number;
+}
+
+/**
+ * Place a submenu beside its parent menu, aligned with the trigger row.
+ * It opens to the right, flips to the left when the right side lacks room, and opens below the trigger when neither side fits.
+ */
+export function anchoredSidePanelStyle(input: AnchoredSidePanelInput): string {
+  const margin = input.margin ?? 8;
+  const gap = input.gap ?? 4;
+  const width = anchoredPanelWidth(input);
+  const rightLeft = input.parentRect.right + gap;
+  const leftLeft = input.parentRect.left - gap - width;
+  const left = rightLeft + width <= input.viewportWidth - margin ? rightLeft
+    : leftLeft >= margin ? leftLeft
+      : null;
+  if (left === null) return anchoredPanelStyle(input);
+  const maxHeight = Math.max(0, Math.min(input.preferredMaxHeight ?? 448, input.viewportHeight - margin * 2));
+  const height = Math.max(0, Math.min(input.contentHeight ?? maxHeight, maxHeight));
+  const top = clamp(input.triggerRect.top - (input.alignOffset ?? 0), margin, Math.max(margin, input.viewportHeight - margin - height));
+  return [
+    "position:fixed",
+    `left:${Math.round(left)}px`,
+    `top:${Math.round(top)}px`,
+    `width:${Math.round(width)}px`,
+    `max-height:${Math.round(maxHeight)}px`,
+  ].join("; ");
+}
+
 function clamp(value: number, min: number, max: number): number {
   if (!Number.isFinite(value)) return min;
   return Math.min(max, Math.max(min, value));
