@@ -32,12 +32,12 @@
 <div class="grid gap-2 font-normal">
   {#each sorts as sort, index}
     <div class="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-1">
-      <Select inline appearance="quiet" contentAlign="start" class="w-full min-w-0"
+      <Select textSize="paragraph" inline appearance="quiet" contentAlign="start" class="w-full min-w-0"
         ariaLabel={t("notes.databaseTableSortProperty")} value={sort.property_id} disabled={pending}
         options={properties.filter((property) => !sorts.some((candidate, sortIndex) => sortIndex !== index && candidate.property_id === property.id))
           .map((property) => ({ value: property.id, label: property.name }))}
         onChange={(property_id) => update(index, { property_id })} triggerProps={{ "onkeydown": (event) => event.stopPropagation() }} />
-      <Select inline appearance="quiet" contentAlign="start" class="w-full min-w-0"
+      <Select textSize="paragraph" inline appearance="quiet" contentAlign="start" class="w-full min-w-0"
         ariaLabel={t("notes.databaseTableSortDirection")} value={sort.direction} disabled={pending}
         options={[{ value: "ascending", label: t("notes.databaseTableSortAscending") }, { value: "descending", label: t("notes.databaseTableSortDescending") }]}
         onChange={(direction) => update(index, { direction: direction === "descending" ? "descending" : "ascending" })}

@@ -52,6 +52,7 @@
     emptyLabel,
     contentAlign = "end",
     triggerProps = {},
+    textSize = "compact",
   }: {
     value: string;
     options: readonly Option[];
@@ -84,9 +85,12 @@
     contentAlign?: "start" | "end";
     /** Native trigger metadata and focus/navigation handlers for labels and editable grids. */
     triggerProps?: Omit<HTMLButtonAttributes, "children" | "onclick" | "class" | "disabled">;
+    /** Text size of the trigger and menu: compact for settings controls, paragraph for collection cells that read at body size. */
+    textSize?: "compact" | "paragraph";
   } = $props();
 
   const { t } = getLocalization();
+  const textClass = $derived(textSize === "paragraph" ? "text-paragraph" : "text-[0.8rem]");
 
   const ESTIMATED_DROPDOWN_HEIGHT = 240;
   const DEFAULT_POPOVER_GEOMETRY: SelectPopoverGeometry = {
@@ -311,6 +315,7 @@
       aria-label={ariaLabel ?? label}
       class={cn(
         "flex h-7 w-full max-w-full items-center gap-2 rounded-md font-medium text-foreground transition-colors disabled:cursor-not-allowed max-[480px]:w-full",
+        textClass,
         appearance === "quiet"
           ? "justify-end px-1.5 hover:bg-accent/60 disabled:opacity-45 disabled:hover:bg-transparent"
           : "justify-between border border-border bg-card px-2.5 hover:bg-accent disabled:hover:bg-card dark:bg-transparent dark:disabled:hover:bg-transparent",
@@ -345,7 +350,7 @@
             value={query}
             aria-label={searchPlaceholder}
             placeholder={searchPlaceholder}
-            class="sticky top-0 mb-1 min-h-9 w-full border-b border-border bg-popover px-3 outline-none"
+            class={cn("sticky top-0 mb-1 min-h-9 w-full border-b border-border bg-popover px-3 outline-none", textClass)}
             oninput={(event) => {
               localSearch = event.currentTarget.value;
               onSearchChange?.(event.currentTarget.value);
@@ -363,6 +368,7 @@
             onclick={() => select(option.value)}
             class={cn(
               "flex w-full items-center justify-between gap-3 px-2.5 py-1.5 text-left transition-colors disabled:cursor-not-allowed disabled:text-muted-foreground disabled:hover:bg-transparent",
+              textClass,
               isActive
                 ? "bg-accent/60 text-foreground"
                 : "text-foreground hover:bg-accent/40",

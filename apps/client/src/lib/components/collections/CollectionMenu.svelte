@@ -20,7 +20,7 @@
 
   /**
    * A collection toolbar menu, settings row, or column menu.
-   * A full-width row inside another floating menu is a submenu: it opens beside that menu on hover or ArrowRight instead of covering it.
+   * A full-width row inside another floating menu is a submenu: it opens beside its row on hover or ArrowRight instead of covering it.
    */
   let { label, ariaLabel, kind = "layout", iconOnly = false, fullWidth = false, primary = false, showHeader, activeCount = 0, dismissOnAction = false, summary, leading, icon, triggerClass, triggerAttributes, disabled = false, onOpenChange, children }: {
     label: string;
@@ -192,7 +192,7 @@
       if (node.style.width !== width) node.style.width = width;
       const contentHeight = anchoredPanelContentHeight(node, content ? [content] : []);
       const style = parentSurface
-        ? anchoredSidePanelStyle({ ...input, contentHeight, parentRect: parentSurface.getBoundingClientRect(), alignOffset: firstRowOffset() })
+        ? anchoredSidePanelStyle({ ...input, contentHeight, alignOffset: firstRowOffset() })
         : anchoredPanelStyle({ ...input, contentHeight });
       if (style !== previousStyle) {
         node.style.cssText = style;

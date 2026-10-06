@@ -488,7 +488,7 @@
     </div>
       {#if statusMenuOpen}
         <div
-          class="absolute left-0 top-full z-30 mt-1 w-44 rounded-lg border border-border bg-popover p-1 text-[0.8rem] text-popover-foreground shadow-sm"
+          class="absolute left-0 top-full z-30 mt-1 w-44 rounded-lg border border-border bg-popover p-1 text-paragraph text-popover-foreground shadow-sm"
           role="menu"
         >
           {#each statuses as nextStatus (nextStatus.id)}
@@ -526,14 +526,14 @@
       onclick={onTogglePriorityMenu}
     ></button>
     <div class="pointer-events-none relative z-10 min-w-0 max-w-full">
-      <span class="flex min-w-0 items-center gap-1.5 text-[0.8rem] text-foreground">
+      <span class="flex min-w-0 items-center gap-1.5 text-foreground">
         <PriorityFlagIcon color={selectedPriorityColor} theme={theme.current} size={13} class="shrink-0" />
         <span class="min-w-0 truncate">{selectedPriorityLabel}</span>
       </span>
     </div>
       {#if priorityMenuOpen}
         <div
-          class="absolute left-0 top-full z-30 mt-1 w-44 rounded-lg border border-border bg-popover p-1 text-[0.8rem] text-popover-foreground shadow-sm"
+          class="absolute left-0 top-full z-30 mt-1 w-44 rounded-lg border border-border bg-popover p-1 text-paragraph text-popover-foreground shadow-sm"
           role="menu"
         >
           {#each priorities as priority (priority.id)}
@@ -544,7 +544,7 @@
               aria-checked={task.priority === priority.id}
               onclick={() => onSetPriority(priority.id)}
             >
-              <span class="flex min-w-0 items-center gap-1.5 text-[0.8rem] text-foreground">
+              <span class="flex min-w-0 items-center gap-1.5 text-foreground">
                 <PriorityFlagIcon color={priority.color} theme={theme.current} size={13} class="shrink-0" />
                 <span class="min-w-0 truncate">{priority.name}</span>
               </span>
@@ -587,7 +587,7 @@
           else onToggleDueDateMenu();
         }}
       ></button>
-      <span class={cn("pointer-events-none relative z-10 block min-w-0 truncate text-[0.8rem]", dateValue ? "text-foreground" : "text-muted-foreground")}>
+      <span class={cn("pointer-events-none relative z-10 block min-w-0 truncate", dateValue ? "text-foreground" : "text-muted-foreground")}>
         {dateButtonText(dateValue, timeValue, emptyDateLabel)}
       </span>
       {#if dateMenuOpen}
@@ -722,7 +722,7 @@
           {#if context?.query.listPresentation.wrappedColumns.includes(column)}
             <textarea data-collection-cell-primary
               value={customFieldInputValue(customField, customValue)}
-              class="min-h-9 min-w-0 flex-1 resize-y rounded border border-transparent bg-transparent px-1 py-1 text-[0.8rem] outline-none"
+              class="min-h-9 min-w-0 flex-1 resize-y rounded border border-transparent bg-transparent px-1 py-1 outline-none"
               aria-label={customField.name}
               placeholder={t("projects.customFields.emptyValue")}
               disabled={Boolean(task.archivedAt)}
@@ -733,7 +733,7 @@
             type={projectCustomFieldInputType(customField.fieldType)}
             inputmode={projectCustomFieldTextInputMode(customField.fieldType)}
             value={customFieldInputValue(customField, customValue)}
-            class="h-7 min-w-0 flex-1 rounded-md border border-transparent bg-transparent px-1 text-[0.8rem] text-foreground outline-none transition-colors placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-60"
+            class="h-7 min-w-0 flex-1 rounded-md border border-transparent bg-transparent px-1 text-foreground outline-none transition-colors placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-60"
             placeholder={t("projects.customFields.emptyValue")}
             title={customDisplayValue}
             disabled={Boolean(task.archivedAt)}
@@ -753,7 +753,7 @@
             event.currentTarget.setCustomValidity("");
             valueSaveError = null;
           }}
-          class="relative z-10 h-7 min-w-0 flex-1 rounded-md border border-transparent bg-transparent px-1 text-[0.8rem] text-foreground outline-none transition-colors placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-60"
+          class="relative z-10 h-7 min-w-0 flex-1 rounded-md border border-transparent bg-transparent px-1 text-foreground outline-none transition-colors placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-60"
           placeholder={t("projects.customFields.emptyValue")}
           title={customDisplayValue}
           disabled={Boolean(task.archivedAt) || numericSaving}
@@ -783,7 +783,7 @@
             bind:this={customFieldTriggerEl} data-collection-cell-primary
             type="button"
             class={cn(
-              "flex h-7 min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded-md px-1 text-left text-[0.8rem] disabled:cursor-not-allowed disabled:opacity-60",
+              "flex h-7 min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded-md px-1 text-left disabled:cursor-not-allowed disabled:opacity-60",
               customValue?.dateValue ? "text-foreground" : "text-muted-foreground",
             )}
             aria-haspopup="dialog"
@@ -834,7 +834,7 @@
             bind:this={customFieldTriggerEl} data-collection-cell-primary
             type="button"
             class={cn(
-              "flex h-7 min-w-0 max-w-full cursor-pointer items-center justify-between gap-2 rounded-md px-1.5 text-left text-[0.8rem] disabled:cursor-not-allowed disabled:opacity-60",
+              "flex h-7 min-w-0 max-w-full cursor-pointer items-center justify-between gap-2 rounded-md px-1.5 text-left disabled:cursor-not-allowed disabled:opacity-60",
               selectedOptionIds.length > 0 ? "text-foreground" : "text-muted-foreground",
             )}
             aria-haspopup="menu"
@@ -848,7 +848,7 @@
           </button>
           {#if customFieldPanelOpen}
             <div
-              class="fixed z-40 min-w-44 rounded-lg border border-border bg-popover p-1 text-[0.8rem] text-popover-foreground shadow-sm"
+              class="fixed z-40 min-w-44 rounded-lg border border-border bg-popover p-1 text-paragraph text-popover-foreground shadow-sm"
               role="menu"
               aria-label={customField.name}
               use:positionCustomFieldPanel

@@ -409,10 +409,9 @@ describe("Collection submenus", () => {
     vi.useRealTimers();
   });
 
-  it("opens beside the parent after the mouse rests on its row without moving focus", async () => {
+  it("opens beside its row after the mouse rests on it without moving focus", async () => {
     const { parent, rows } = await openWithSubmenus();
     vi.useFakeTimers();
-    vi.spyOn(parent, "getBoundingClientRect").mockReturnValue(new DOMRect(100, 50, 240, 200));
     vi.spyOn(rows.edit, "getBoundingClientRect").mockReturnValue(new DOMRect(106, 90, 228, 32));
     const focused = document.activeElement;
     hover(rows.edit);
@@ -421,7 +420,7 @@ describe("Collection submenus", () => {
     await vi.advanceTimersByTimeAsync(100);
     const panel = submenuPanel(parent, "Edit property")!;
     expect(panel).not.toBeNull();
-    expect(panel.style.left).toBe("344px");
+    expect(panel.style.left).toBe("338px");
     expect(rows.edit.getAttribute("aria-expanded")).toBe("true");
     expect(document.activeElement).toBe(focused);
     expect(panel.querySelector('button[aria-label="Close"]')).toBeNull();

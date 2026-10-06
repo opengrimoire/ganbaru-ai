@@ -856,7 +856,7 @@
       {/if}
       <div class="min-w-0 text-[0.733333rem] text-muted-foreground">
         <span class="mb-1 block">{t("notes.databaseSchemaType")}</span>
-        <Select
+        <Select textSize="paragraph"
           inline
           appearance="quiet"
           contentAlign="start"
@@ -904,7 +904,7 @@
     {#if property.type === "number"}
       <div class="min-w-0 text-[0.733333rem] text-muted-foreground">
         <span class="mb-1 block">{t("notes.databaseSchemaNumberFormat")}</span>
-        <Select
+        <Select textSize="paragraph"
           inline
           appearance="quiet"
           contentAlign="start"
@@ -937,7 +937,7 @@
       <div class="grid min-w-0 gap-2 @lg:grid-cols-3">
         <div class="min-w-0 text-[0.733333rem] text-muted-foreground">
           <span class="mb-1 block">{t("notes.databaseSchemaRelationTarget")}</span>
-          <Select
+          <Select textSize="paragraph"
             inline
             appearance="quiet"
             contentAlign="start"
@@ -1027,7 +1027,7 @@
         </label>
         <div class="min-w-0 text-[0.733333rem] text-muted-foreground">
           <span class="mb-1 block">{t("notes.databaseSchemaButtonTarget")}</span>
-          <Select
+          <Select textSize="paragraph"
             inline
             appearance="quiet"
             contentAlign="start"
@@ -1056,7 +1056,7 @@
           {#if property.buttonActionPropertyType === "checkbox"}
             <div class="min-w-0 text-[0.733333rem] text-muted-foreground">
               <span class="mb-1 block">{t("notes.databaseSchemaButtonValue")}</span>
-              <Select
+              <Select textSize="paragraph"
                 inline
                 appearance="quiet"
                 contentAlign="start"
@@ -1099,7 +1099,7 @@
             </label>
             <div class="min-w-0 text-[0.733333rem] text-muted-foreground">
               <span class="mb-1 block">{t("notes.databaseSchemaOptionColor")}</span>
-              <Select
+              <Select textSize="paragraph"
                 inline
                 appearance="quiet"
                 contentAlign="start"
@@ -1117,7 +1117,7 @@
             {#if property.type === "status"}
               <div class="min-w-0 text-[0.733333rem] text-muted-foreground">
                 <span class="mb-1 block">{t("notes.databaseSchemaOptionGroup")}</span>
-                <Select
+                <Select textSize="paragraph"
                   inline
                   appearance="quiet"
                   contentAlign="start"
@@ -1185,7 +1185,7 @@
       <legend class="sr-only">{t("notes.databaseViewEditProperties")}</legend>
       {@render schemaStatus()}
 
-      <Select inline appearance="quiet" class="w-full min-w-0" ariaLabel={t("notes.databaseSchemaToggle")}
+      <Select textSize="paragraph" inline appearance="quiet" class="w-full min-w-0" ariaLabel={t("notes.databaseSchemaToggle")}
         value={selectedPropertyId ?? ""} options={properties.map((property) => ({ value: property.id, label: property.name || t("notes.databaseSchemaName") }))}
         onChange={(propertyId) => { selectedPropertyId = propertyId; }} />
       <div class="space-y-2">
@@ -1195,7 +1195,7 @@
       </div>
 
       <div class="flex min-w-0 flex-wrap items-center gap-2 border-t border-border pt-3">
-        <Select
+        <Select textSize="paragraph"
           inline
           appearance="quiet"
           contentAlign="start"

@@ -58,7 +58,7 @@
           aria-label={t("projects.actions.openTaskDetails", subtask.title)}
           onclick={() => onOpenTask(subtask)}
         >
-          <span class="block truncate text-[0.8rem]">{subtask.title}</span>
+          <span class="block truncate">{subtask.title}</span>
         </button>
         <ProjectStatusBadge
           status={subtaskStatus}

@@ -1002,12 +1002,12 @@
               <CollectionMenu label={t("notes.databaseLayout")} summary={t("notes.databaseViewTable")} fullWidth>
                 <div class="grid gap-2">
                   <span>{t("notes.databaseTableOpenMode")}</span>
-                  <Select inline appearance="quiet" contentAlign="start" class="w-full min-w-0" ariaLabel={t("notes.databaseTableOpenMode")} value={String(rowOpenMode ?? "")} disabled={loading || mutating || !table} options={[{ value: "full_page", label: String(rowOpenModeLabel("full_page")) }, { value: "side_panel", label: String(rowOpenModeLabel("side_panel")) }]} onChange={(nextValue) => updateRowOpenMode(nextValue as NotesDatabaseTableRowOpenMode)} triggerProps={{ "onkeydown": (event) => event.stopPropagation() }} />
+                  <Select textSize="paragraph" inline appearance="quiet" contentAlign="start" class="w-full min-w-0" ariaLabel={t("notes.databaseTableOpenMode")} value={String(rowOpenMode ?? "")} disabled={loading || mutating || !table} options={[{ value: "full_page", label: String(rowOpenModeLabel("full_page")) }, { value: "side_panel", label: String(rowOpenModeLabel("side_panel")) }]} onChange={(nextValue) => updateRowOpenMode(nextValue as NotesDatabaseTableRowOpenMode)} triggerProps={{ "onkeydown": (event) => event.stopPropagation() }} />
                 </div>
               </CollectionMenu>
               <CollectionMenu label={t("notes.databaseTablePresentation.groupBy")} kind="group" summary={columns.find((column) => column.id === tableConfiguration?.group_property_id)?.name ?? t("notes.databaseTablePresentation.noGroup")} fullWidth>
                 <div class="grid gap-2">
-                  <Select inline appearance="quiet" contentAlign="start" class="w-full min-w-0" ariaLabel={t("notes.databaseTablePresentation.groupBy")} value={tableConfiguration?.group_property_id ?? ""} disabled={mutating}
+                  <Select textSize="paragraph" inline appearance="quiet" contentAlign="start" class="w-full min-w-0" ariaLabel={t("notes.databaseTablePresentation.groupBy")} value={tableConfiguration?.group_property_id ?? ""} disabled={mutating}
                     options={[{ value: "", label: t("notes.databaseTablePresentation.noGroup") }, ...notesTableGroupableColumns(columns).map((column) => ({ value: column.id, label: column.name }))]}
                     onChange={(id) => updateGrouping(id || null)} />
                   <label class="flex min-h-8 items-center gap-2"><input type="checkbox" checked={tableConfiguration?.hide_empty_groups ?? false} disabled={mutating} onchange={(event) => { void persistTable(columns, rowOpenMode, filters, sorts, { ...tableConfiguration, hide_empty_groups: event.currentTarget.checked }); }} />{t("notes.databaseTablePresentation.hideEmptyGroups")}</label>
@@ -1062,12 +1062,12 @@
             {#each tableConfiguration?.presentation?.color_rules ?? [] as rule (rule.id)}
               <div class="grid gap-2 rounded border border-border p-2">
                 <div class="flex items-center gap-2">
-                  <Select inline appearance="quiet" class="min-w-0 flex-1" ariaLabel={t("notes.databaseTablePresentation.target")} value={rule.property_id ?? ""} disabled={mutating}
+                  <Select textSize="paragraph" inline appearance="quiet" class="min-w-0 flex-1" ariaLabel={t("notes.databaseTablePresentation.target")} value={rule.property_id ?? ""} disabled={mutating}
                     options={[{ value: "", label: t("notes.databaseTablePresentation.rowColor") }, ...columns.map((column) => ({ value: column.id, label: column.name }))]}
                     onChange={(value) => updateColorRule(rule.id, { property_id: value || null })} />
                   <button type="button" class="flex size-7 items-center justify-center rounded text-muted-foreground hover:bg-accent" aria-label={t("notes.databaseTablePresentation.removeColorRule")} disabled={mutating} onclick={() => saveColorRules((tableConfiguration?.presentation?.color_rules ?? []).filter((candidate) => candidate.id !== rule.id))}><Trash2 class="size-3.5" /></button>
                 </div>
-                <Select inline appearance="quiet" class="w-full" ariaLabel={t("notes.databaseTablePresentation.color")} value={rule.color} disabled={mutating}
+                <Select textSize="paragraph" inline appearance="quiet" class="w-full" ariaLabel={t("notes.databaseTablePresentation.color")} value={rule.color} disabled={mutating}
                   options={NOTES_TEXT_COLORS.filter((color) => color !== "default").map((color) => ({ value: color, label: t(`notes.blockColor.${color}`) }))}
                   onChange={(value) => updateColorRule(rule.id, { color: value as NotesDatabaseTableColorRule["color"] })} />
                 <NotesDatabaseFilterControls properties={columns} filters={rule.filters} pending={mutating} onChange={(next) => { if (next.length) updateColorRule(rule.id, { filters: next }); }} />
@@ -1081,7 +1081,7 @@
           <div class="mt-2 grid min-w-0 gap-2 @lg:grid-cols-[minmax(8rem,1fr)_minmax(8rem,1fr)_auto]">
             <div class="min-w-0 text-muted-foreground">
               <span class="mb-1 block">{t("notes.databaseTemplatesUse")}</span>
-              <Select
+              <Select textSize="paragraph"
                 inline
                 appearance="quiet"
                 contentAlign="start"
@@ -1112,7 +1112,7 @@
             </label>
             <div class="min-w-0 text-muted-foreground">
               <span class="mb-1 block">{t("notes.databaseTemplatesSourceRow")}</span>
-              <Select
+              <Select textSize="paragraph"
                 inline
                 appearance="quiet"
                 contentAlign="start"
@@ -1394,7 +1394,7 @@
                         />
                       </label>
                     {:else if column.type === "select" || column.type === "status"}
-                      <Select
+                      <Select textSize="paragraph"
                         inline
                         appearance="quiet"
                         contentAlign="start"

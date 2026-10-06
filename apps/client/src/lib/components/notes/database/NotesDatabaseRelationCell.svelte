@@ -123,7 +123,7 @@
   {#if targetDataSourceId}
     <div class="flex min-w-0 items-center gap-1">
       <Plus class="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
-      <Select
+      <Select textSize="paragraph"
         inline
         appearance="quiet"
         contentAlign="start"

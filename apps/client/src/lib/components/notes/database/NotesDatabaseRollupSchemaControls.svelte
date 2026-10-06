@@ -35,7 +35,7 @@
   <div class="grid min-w-0 gap-2 @lg:grid-cols-3">
     <div class="min-w-0 text-[0.733333rem] text-muted-foreground">
       <span class="mb-1 block">{t("notes.databaseSchemaRollupRelation")}</span>
-      <Select
+      <Select textSize="paragraph"
         inline
         appearance="quiet"
         contentAlign="start"
@@ -52,7 +52,7 @@
     </div>
     <div class="min-w-0 text-[0.733333rem] text-muted-foreground">
       <span class="mb-1 block">{t("notes.databaseSchemaRollupTargetProperty")}</span>
-      <Select
+      <Select textSize="paragraph"
         inline
         appearance="quiet"
         contentAlign="start"
@@ -69,7 +69,7 @@
     </div>
     <div class="min-w-0 text-[0.733333rem] text-muted-foreground">
       <span class="mb-1 block">{t("notes.databaseSchemaRollupFunction")}</span>
-      <Select
+      <Select textSize="paragraph"
         inline
         appearance="quiet"
         contentAlign="start"

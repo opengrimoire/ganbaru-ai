@@ -57,24 +57,22 @@ export function anchoredPanelStyle(
   ].join("; ");
 }
 
-/** Bounds for a submenu that opens beside the menu containing its trigger row. */
+/** Bounds for a submenu that opens beside the menu row that invokes it. */
 export interface AnchoredSidePanelInput extends AnchoredPanelInput {
-  /** The menu that contains the trigger row. */
-  parentRect: { top: number; right: number; bottom: number; left: number };
   /** Distance from the submenu's top edge to its first row, so that row lines up with the trigger. */
   alignOffset?: number;
 }
 
 /**
- * Place a submenu beside its parent menu, aligned with the trigger row.
+ * Place a submenu beside its trigger row, aligned with that row.
  * It opens to the right, flips to the left when the right side lacks room, and opens below the trigger when neither side fits.
  */
 export function anchoredSidePanelStyle(input: AnchoredSidePanelInput): string {
   const margin = input.margin ?? 8;
   const gap = input.gap ?? 4;
   const width = anchoredPanelWidth(input);
-  const rightLeft = input.parentRect.right + gap;
-  const leftLeft = input.parentRect.left - gap - width;
+  const rightLeft = input.triggerRect.right + gap;
+  const leftLeft = input.triggerRect.left - gap - width;
   const left = rightLeft + width <= input.viewportWidth - margin ? rightLeft
     : leftLeft >= margin ? leftLeft
       : null;

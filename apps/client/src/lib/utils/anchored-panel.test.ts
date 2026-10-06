@@ -69,7 +69,6 @@ describe("Anchored floating panel geometry", () => {
 
 const SUBMENU: AnchoredSidePanelInput = {
   triggerRect: { top: 200, right: 380, bottom: 228, left: 140 },
-  parentRect: { top: 120, right: 386, bottom: 520, left: 134 },
   viewportWidth: 1200,
   viewportHeight: 800,
   preferredWidth: 240,
@@ -79,16 +78,16 @@ const SUBMENU: AnchoredSidePanelInput = {
 };
 
 describe("Anchored submenu geometry", () => {
-  it("opens beside the parent menu with its first row level with the trigger", () => {
-    expect(anchoredSidePanelStyle(SUBMENU)).toBe("position:fixed; left:390px; top:193px; width:240px; max-height:560px");
+  it("opens beside its trigger row with its first row level with the trigger", () => {
+    expect(anchoredSidePanelStyle(SUBMENU)).toBe("position:fixed; left:384px; top:193px; width:240px; max-height:560px");
   });
 
-  it("flips to the left of the parent menu when the right side lacks room", () => {
-    const style = anchoredSidePanelStyle({ ...SUBMENU, triggerRect: { top: 200, right: 1100, bottom: 228, left: 860 }, parentRect: { top: 120, right: 1106, bottom: 520, left: 854 } });
-    expect(style).toContain("left:610px");
+  it("flips to the left of its trigger row when the right side lacks room", () => {
+    const style = anchoredSidePanelStyle({ ...SUBMENU, triggerRect: { top: 200, right: 1100, bottom: 228, left: 860 } });
+    expect(style).toContain("left:616px");
   });
 
-  it("opens below the trigger when neither side of the parent menu has room", () => {
+  it("opens below the trigger when neither side of its row has room", () => {
     const narrow = { ...SUBMENU, viewportWidth: 400 };
     expect(anchoredSidePanelStyle(narrow)).toBe(anchoredPanelStyle(narrow));
   });

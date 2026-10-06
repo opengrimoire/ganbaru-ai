@@ -1,6 +1,10 @@
 import { clsx, type ClassValue } from "clsx";
-import { twMerge } from "tailwind-merge";
+import { extendTailwindMerge } from "tailwind-merge";
 
+/** Class merging that knows the app's custom `--text-*` theme sizes, so they are not mistaken for text colors. */
+const twMerge = extendTailwindMerge({ extend: { theme: { text: ["identity", "paragraph"] } } });
+
+/** Join conditional class names, letting later Tailwind utilities override conflicting earlier ones. */
 export function cn(...inputs: ClassValue[]) {
 	return twMerge(clsx(inputs));
 }
