@@ -13,44 +13,6 @@ import {
 
 const KEYBOARD_SCROLL_PX = 48;
 
-/** Class of the Projects list scroll container. */
-export const PROJECT_LIST_SCROLL_CLASS = "project-list-scroll";
-/** Class of rows that stay in place while the list scrolls horizontally. */
-export const PROJECT_LIST_STICKY_ROW_CLASS = "project-list-sticky-row";
-
-const stickyOffsets = new WeakMap<HTMLElement, number>();
-
-function setStickyRowOffset(row: HTMLElement, scrollLeft: number): void {
-  row.style.setProperty("--project-list-scroll-left", `${scrollLeft}px`);
-  row.style.setProperty("--project-list-scroll-left-negative", `${-scrollLeft}px`);
-}
-
-/**
- * Counter-translates every sticky row by the horizontal scroll offset.
- *
- * The offset is written on the sticky rows rather than on the container, because an inherited custom property on the container restyles every task cell on each scroll step.
- *
- * @param container Projects list scroll container.
- * @param scrollLeft Clamped horizontal scroll offset in pixels.
- */
-export function setProjectListStickyRowsOffset(container: HTMLElement, scrollLeft: number): void {
-  stickyOffsets.set(container, scrollLeft);
-  for (const row of container.getElementsByClassName(PROJECT_LIST_STICKY_ROW_CLASS)) {
-    if (row instanceof HTMLElement) setStickyRowOffset(row, scrollLeft);
-  }
-}
-
-/**
- * Starts a sticky row that mounts after the list has scrolled at the current offset.
- *
- * @param node Sticky row element inside the Projects list scroll container.
- */
-export function projectListStickyRow(node: HTMLElement): void {
-  const container = node.closest<HTMLElement>(`.${PROJECT_LIST_SCROLL_CLASS}`);
-  const scrollLeft = container ? stickyOffsets.get(container) : undefined;
-  if (scrollLeft) setStickyRowOffset(node, scrollLeft);
-}
-
 export interface ProjectListViewportControllerContext {
   getColumnWidths: () => ProjectTaskListColumnWidths;
   getGridInput: (widths: ProjectTaskListColumnWidths) => ProjectTaskListGridInput;
@@ -122,17 +84,17 @@ export class ProjectListViewportController {
     const element = this.container;
     if (!element) return scrollLeft;
     const nextScrollLeft = Math.max(0, Math.min(this.maxHorizontalScrollLeft(), scrollLeft));
-    setProjectListStickyRowsOffset(element, nextScrollLeft);
     if (element.scrollLeft !== nextScrollLeft) element.scrollLeft = nextScrollLeft;
     return nextScrollLeft;
   };
 
-  syncCounterScroll = (): void => {
+  /** Clamps the horizontal offset after columns or content shrink. */
+  clampHorizontalScroll = (): void => {
     if (this.container) this.setHorizontalScroll(this.container.scrollLeft);
   };
 
   syncAfterRender(): void {
-    void tick().then(this.syncCounterScroll);
+    void tick().then(this.clampHorizontalScroll);
   }
 
   startResize = (event: PointerEvent, column: ProjectTaskListResizableColumn): void => {

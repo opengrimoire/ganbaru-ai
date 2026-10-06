@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { projectListStickyRow } from "./viewport-controller.svelte";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import ProjectListSelectionButton from "./ProjectListSelectionButton.svelte";
 
@@ -29,7 +28,6 @@
 <div
   class="project-list-divider project-list-sticky-row group/list-group-header grid min-h-(--collection-table-row-height) items-center px-1"
   style={`grid-template-columns: ${gridTemplate}; min-width: ${gridMinWidth};`}
-  use:projectListStickyRow
 >
   <div
     class="project-list-leading-row grid min-h-(--collection-table-row-height) items-center"

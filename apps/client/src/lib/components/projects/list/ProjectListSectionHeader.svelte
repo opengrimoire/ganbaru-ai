@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { projectListStickyRow } from "./viewport-controller.svelte";
   import Archive from "@lucide/svelte/icons/archive";
   import ArchiveRestore from "@lucide/svelte/icons/archive-restore";
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
@@ -83,7 +82,6 @@
     canDrag && "cursor-grab active:cursor-grabbing",
   )}
   style={`grid-template-columns: ${gridTemplate}; min-width: ${gridMinWidth};`}
-  use:projectListStickyRow
   role="group"
   aria-label={section.name}
   draggable={canDrag}

@@ -205,10 +205,6 @@
     },
   });
 
-  $effect(() => {
-    if (!mobileLayout && viewport.container) viewport.syncCounterScroll();
-  });
-
   function handleHorizontalKeydown(event: KeyboardEvent): void {
     if (event.key === "Escape" && quickAdd.hasActiveDraft()) {
       event.preventDefault();
@@ -489,7 +485,6 @@
   }
 
   function handleScroll(event: Event): void {
-    if (!mobileLayout) viewport.syncCounterScroll();
     const target = event.currentTarget as HTMLElement;
     if (target.scrollHeight - target.scrollTop - target.clientHeight < 600) onNeedMore();
   }
@@ -813,11 +808,6 @@
     pointer-events: none;
   }
 
-  :global(.project-list-scroll .project-list-sticky-row.project-list-divider)::after {
-    transform: translateX(var(--project-list-scroll-left-negative, 0px));
-    will-change: transform;
-  }
-
   :global(.project-list-scroll .project-list-inline-divider) {
     position: relative;
     --project-list-divider-left: 3.25rem;
@@ -838,9 +828,13 @@
   :global(.project-list-scroll .project-list-sticky-row) {
     position: relative;
     z-index: 1;
-    transform: translateX(var(--project-list-scroll-left, 0px));
     background-color: var(--cal-bg);
-    will-change: transform;
+  }
+
+  /* Native sticky positioning moves with the scroll in the same frame; a transform written from script lags behind compositor scrolling. */
+  :global(.project-list-scroll .project-list-leading-row) {
+    position: sticky;
+    left: var(--project-list-content-inset);
   }
 
   :global(.project-list-scroll .project-list-add-row-caret) {
@@ -891,17 +885,7 @@
     touch-action: pan-x pan-y pinch-zoom;
   }
 
-  .project-list-scroll[data-mobile-layout="true"] :global(.project-list-sticky-row) {
-    transform: none;
-  }
-
-  .project-list-scroll[data-mobile-layout="true"] :global(.project-list-sticky-row.project-list-divider)::after {
-    transform: none;
-  }
-
   .project-list-scroll[data-mobile-layout="true"] :global(.project-list-leading-row) {
-    position: sticky;
-    left: 1rem;
     z-index: 2;
     width: min(22rem, calc(100vw - 2rem));
     background-color: var(--cal-bg);

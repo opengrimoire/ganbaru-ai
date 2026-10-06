@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { projectListStickyRow } from "./viewport-controller.svelte";
   import type { MaybePromise } from "$lib/utils";
   import Plus from "@lucide/svelte/icons/plus";
   import { getLocalization } from "$lib/i18n/translator.svelte";
@@ -34,7 +33,6 @@
 <div
   class="project-list-sticky-row grid min-h-(--collection-table-row-height) cursor-text items-center px-1 text-collection"
   data-add-section-row="true"
-  use:projectListStickyRow
   style={`grid-template-columns: ${gridTemplate}; min-width: max(100%, ${gridMinWidth});`}
   use:projectListAddRowInputFocus={{
     selector: "[data-add-section-input='true']",
@@ -52,7 +50,7 @@
     >
       <div></div>
       <div></div>
-      <div class="relative min-w-0 px-2">
+      <div class="relative flex min-w-0 items-center gap-2 px-2">
         {#if !draft.trim() && !active}
           <div
             class="pointer-events-none absolute inset-y-0 left-2 flex items-center gap-2 text-muted-foreground"
@@ -71,7 +69,7 @@
           onfocus={() => onActiveChange(true)}
           onblur={() => onActiveChange(false)}
           oninput={(event) => onDraftChange(event.currentTarget.value)}
-          class="min-h-8 w-full min-w-0 bg-transparent text-foreground"
+          class="min-h-8 min-w-0 flex-1 bg-transparent text-foreground"
         />
         {#if active && !draft.trim()}
           <span
@@ -79,17 +77,15 @@
             aria-hidden="true"
           ></span>
         {/if}
+        {#if draft.trim()}
+          <button
+            type="submit"
+            class="flex h-7 shrink-0 cursor-pointer items-center justify-center rounded-md border border-border bg-card px-2 text-[0.733333rem] text-muted-foreground hover:bg-accent hover:text-foreground"
+          >
+            {t("projects.list.saveWithEnter")}
+          </button>
+        {/if}
       </div>
     </div>
-    {#if draft.trim()}
-      <div class="relative z-10 flex min-w-0 items-center px-2" style="grid-column: 4;">
-        <button
-          type="submit"
-          class="flex h-7 shrink-0 cursor-pointer items-center justify-center rounded-md border border-border bg-card px-2 text-[0.733333rem] text-muted-foreground hover:bg-accent hover:text-foreground"
-        >
-          {t("projects.list.saveWithEnter")}
-        </button>
-      </div>
-    {/if}
   </form>
 </div>
