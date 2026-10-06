@@ -317,6 +317,36 @@ describe("Shared collection menus", () => {
     expect(document.activeElement).toBe(trigger);
   });
 
+  it("closes the owning property menu when a nested creator that dismisses on action completes", async () => {
+    const { dialog, row } = host();
+    const create = vi.fn();
+    const creatorChildren = createRawSnippet(() => ({
+      render: () => '<div><button type="button">Number</button></div>',
+      setup: (element) => { element.querySelector("button")?.addEventListener("click", create); },
+    }));
+    const children = createRawSnippet(() => ({
+      render: () => '<div data-insert-target></div>',
+      setup: (element) => {
+        nested = mount(CollectionMenu, { target: element, props: {
+          label: "Insert right", kind: "new", showHeader: false, dismissOnAction: true, children: creatorChildren,
+        } });
+      },
+    }));
+    component = mount(CollectionMenu, { target: row, props: {
+      label: "Priority", kind: "property", dismissOnAction: true, children,
+    } });
+    const trigger = await open(row);
+    const property = dialog.querySelector<HTMLElement>('[role="dialog"][aria-label="Priority"]')!;
+    property.querySelector<HTMLButtonElement>('[aria-label="Insert right"]')!.click();
+    await vi.waitFor(() => expect(property.querySelector('[role="dialog"][aria-label="Insert right"]')).not.toBeNull());
+    property.querySelector<HTMLElement>('[role="dialog"][aria-label="Insert right"]')!.querySelector<HTMLButtonElement>("[data-collection-menu-body] button")!.click();
+    await tick();
+    await tick();
+    expect(create).toHaveBeenCalledOnce();
+    expect(property.isConnected).toBe(false);
+    expect(document.activeElement).toBe(trigger);
+  });
+
   it("closes the New template picker after a template is chosen", async () => {
     const { dialog, row } = host();
     const applyTemplate = vi.fn();

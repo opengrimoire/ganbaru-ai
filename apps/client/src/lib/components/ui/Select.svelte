@@ -310,7 +310,7 @@
       aria-controls={open ? menuId : undefined}
       aria-label={ariaLabel ?? label}
       class={cn(
-        "flex h-7 w-full max-w-full items-center gap-2 rounded-md text-[0.8rem] font-medium text-foreground transition-colors disabled:cursor-not-allowed max-[480px]:w-full",
+        "flex h-7 w-full max-w-full items-center gap-2 rounded-md font-medium text-foreground transition-colors disabled:cursor-not-allowed max-[480px]:w-full",
         appearance === "quiet"
           ? "justify-end px-1.5 hover:bg-accent/60 disabled:opacity-45 disabled:hover:bg-transparent"
           : "justify-between border border-border bg-card px-2.5 hover:bg-accent disabled:hover:bg-card dark:bg-transparent dark:disabled:hover:bg-transparent",
@@ -345,7 +345,7 @@
             value={query}
             aria-label={searchPlaceholder}
             placeholder={searchPlaceholder}
-            class="sticky top-0 mb-1 min-h-9 w-full border-b border-border bg-popover px-3 text-[0.8rem] outline-none"
+            class="sticky top-0 mb-1 min-h-9 w-full border-b border-border bg-popover px-3 outline-none"
             oninput={(event) => {
               localSearch = event.currentTarget.value;
               onSearchChange?.(event.currentTarget.value);
@@ -362,7 +362,7 @@
             disabled={option.disabled}
             onclick={() => select(option.value)}
             class={cn(
-              "flex w-full items-center justify-between gap-3 px-2.5 py-1.5 text-left text-[0.8rem] transition-colors disabled:cursor-not-allowed disabled:text-muted-foreground disabled:hover:bg-transparent",
+              "flex w-full items-center justify-between gap-3 px-2.5 py-1.5 text-left transition-colors disabled:cursor-not-allowed disabled:text-muted-foreground disabled:hover:bg-transparent",
               isActive
                 ? "bg-accent/60 text-foreground"
                 : "text-foreground hover:bg-accent/40",
@@ -387,7 +387,7 @@
             {/if}
           </button>
         {:else}
-          {#if emptyLabel}<p class="px-3 py-2 text-[0.8rem] text-muted-foreground">{emptyLabel}</p>{/if}
+          {#if emptyLabel}<p class={cn("px-3 py-2 text-muted-foreground", textClass)}>{emptyLabel}</p>{/if}
         {/each}
         </div>
       </div>

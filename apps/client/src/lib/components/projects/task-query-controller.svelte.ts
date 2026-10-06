@@ -603,10 +603,14 @@ export class ProjectTaskQueryController {
     } finally { if (generation === this.#presentationWriteGeneration) this.#presentationWriteProjectId = null; }
   }
 
-  /** Create or duplicate schema, then insert its new stable column beside the invoking property. */
-  async addColumnProperty(name: string, fieldType: ProjectCustomFieldType, after: "name" | ProjectTaskListColumn, source?: ProjectCustomField): Promise<void> {
+  /**
+   * Create or duplicate schema, then insert its new stable column on the requested side of the invoking property.
+   * The name column stays first, so insertions beside it always land right after it.
+   * @returns Whether the property was created; failures are reported through `propertyError` or `listColumnsError`.
+   */
+  async addColumnProperty(name: string, fieldType: ProjectCustomFieldType, anchor: "name" | ProjectTaskListColumn, side: "left" | "right" = "right", source?: ProjectCustomField): Promise<boolean> {
     const projectId = this.projectId;
-    if (!projectId || this.propertySaving || this.listColumnsSaving) return;
+    if (!projectId || this.propertySaving || this.listColumnsSaving) return false;
     const generation = ++this.#propertyWriteGeneration;
     this.#propertyWriteProjectId = projectId;
     this.#propertyWriteError = null;
@@ -614,13 +618,15 @@ export class ProjectTaskQueryController {
       if (!name.trim()) throw new Error(this.#translate("projects.columns.nameRequired"));
       if (this.customFields.some((field) => field.name.toLocaleLowerCase() === name.trim().toLocaleLowerCase())) throw new Error(this.#translate("projects.columns.nameExists"));
       const created = source ? await this.#projects.duplicateCustomField(source, name) : await this.#projects.addCustomField(projectId, name, fieldType);
-      if (!created || this.projectId !== projectId || generation !== this.#propertyWriteGeneration) return;
+      if (!created || this.projectId !== projectId || generation !== this.#propertyWriteGeneration) return false;
       const column = customTaskListColumn(created.id);
       const next = this.listColumns.filter((entry) => entry !== column);
-      next.splice(after === "name" ? 0 : Math.max(0, next.indexOf(after) + 1), 0, column);
-      await this.#persistListColumns(projectId, next);
+      const anchorIndex = anchor === "name" ? -1 : next.indexOf(anchor);
+      next.splice(side === "left" ? Math.max(0, anchorIndex) : anchorIndex + 1, 0, column);
+      return await this.#persistListColumns(projectId, next) === null;
     } catch (error: unknown) {
       if (this.projectId === projectId && generation === this.#propertyWriteGeneration) this.#propertyWriteError = {projectId, message: this.#translate("projects.columns.propertyFailed", error instanceof Error ? error.message : String(error))};
+      return false;
     } finally { if (generation === this.#propertyWriteGeneration) this.#propertyWriteProjectId = null; }
   }
 

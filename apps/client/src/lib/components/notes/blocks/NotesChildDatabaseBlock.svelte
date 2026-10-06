@@ -16,6 +16,7 @@
   } from "$lib/api/notes";
   import NotesDatabaseRollupSchemaControls from "$lib/components/notes/database/NotesDatabaseRollupSchemaControls.svelte";
   import NotesDatabaseViewSurface from "$lib/components/notes/database/NotesDatabaseViewSurface.svelte";
+  import { notesPropertyTypeLabel } from "$lib/components/notes/database/property-kinds";
   import {
     createNotesDataSourcePropertyDraft,
     defaultNotesDataSourcePropertyName,
@@ -28,6 +29,7 @@
     notesDataSourceSchemaDraftFromDto,
     notesDataSourceSchemaUpdateFromDraft,
     notesDataSourceDuplicatePropertyName,
+    notesDataSourceRenameProperty,
     notesDataSourceSyncPropertyReferences,
     type NotesDataSourceSchemaOptionDraft,
     type NotesDataSourceSchemaPropertyDraft,
@@ -263,12 +265,7 @@
       selectedPropertyId = retained?.selectedPropertyId ?? properties[0]?.id ?? null;
       dirty = retained?.dirty ?? false;
       saved = false;
-      tableReloadKey += 1;
-      boardReloadKey += 1;
-      galleryReloadKey += 1;
-      listReloadKey += 1;
-      calendarReloadKey += 1;
-      timelineReloadKey += 1;
+      reloadViews();
     } catch (caught) {
       if (request === schemaRequestId) error = caught instanceof Error ? caught.message : String(caught);
     } finally {
@@ -287,12 +284,7 @@
       properties = notesDataSourceSchemaDraftFromDto(updated.data_source, updated.view);
       dirty = false;
       saved = true;
-      tableReloadKey += 1;
-      boardReloadKey += 1;
-      galleryReloadKey += 1;
-      listReloadKey += 1;
-      calendarReloadKey += 1;
-      timelineReloadKey += 1;
+      reloadViews();
       return true;
     } catch (caught) {
       error = caught instanceof Error ? caught.message : String(caught);
@@ -456,13 +448,8 @@
       const canonicalDrafts = notesDataSourceSchemaDraftFromDto(updated.data_source, updated.view);
       const created = canonicalDrafts.find((candidate) => candidate.id === property.id);
       if (!created) throw new Error(t("notes.databaseSchemaSaveFailed", property.name));
-      mergeCreatedProperty(updated, created);
-      tableReloadKey += 1;
-      boardReloadKey += 1;
-      galleryReloadKey += 1;
-      listReloadKey += 1;
-      calendarReloadKey += 1;
-      timelineReloadKey += 1;
+      mergeCanonicalSchema(updated, (drafts) => [...drafts, created]);
+      reloadViews();
     } catch (caught: unknown) {
       error = caught instanceof Error ? caught.message : String(caught);
       throw new Error(error);
@@ -471,25 +458,63 @@
     }
   }
 
-  /** Merge a canonical addition into the correct source draft without saving its local edits. */
-  function mergeCreatedProperty(updated: NotesDataSourceSchema, created: NotesDataSourceSchemaPropertyDraft): void {
+  /** Adopt a canonical schema change in the matching source draft, applying it to unsaved local drafts instead of discarding them. */
+  function mergeCanonicalSchema(updated: NotesDataSourceSchema, applyToDrafts: (drafts: NotesDataSourceSchemaPropertyDraft[]) => NotesDataSourceSchemaPropertyDraft[]): void {
     const sourceId = updated.data_source.id;
     if (!editorSourceId || editorSourceId === sourceId) {
       const shouldRetainDrafts = editorSourceId === sourceId && dirty;
       schema = updated;
       editorSourceId = sourceId;
       schemaViewId = updated.view.id;
-      properties = shouldRetainDrafts ? [...properties, created] : notesDataSourceSchemaDraftFromDto(updated.data_source, updated.view);
+      properties = shouldRetainDrafts ? applyToDrafts(properties) : notesDataSourceSchemaDraftFromDto(updated.data_source, updated.view);
       dirty = shouldRetainDrafts;
       saved = !shouldRetainDrafts;
     } else {
       const retained = retainedSchemaDrafts.get(sourceId);
-      if (retained?.dirty) retainedSchemaDrafts.set(sourceId, { ...retained, properties: [...retained.properties, created] });
+      if (retained?.dirty) retainedSchemaDrafts.set(sourceId, { ...retained, properties: applyToDrafts(retained.properties) });
+    }
+  }
+
+  /** Make every rendered view read its source again after a schema change. */
+  function reloadViews(): void {
+    tableReloadKey += 1;
+    boardReloadKey += 1;
+    galleryReloadKey += 1;
+    listReloadKey += 1;
+    calendarReloadKey += 1;
+    timelineReloadKey += 1;
+  }
+
+  /**
+   * Rename one canonical property from its header, keeping its ID and any unsaved property editor drafts.
+   * Failures are rethrown without a block error because the header name field shows them beside the draft.
+   */
+  async function renamePropertyFromView(propertyId: string, rawName: string, scope: NotesDatabaseSourceEditingScope): Promise<void> {
+    if (saving || editingLocked) throw new Error(t("notes.databaseSaving"));
+    if (schemaLoadPromise) await schemaLoadPromise;
+    saving = true;
+    try {
+      const canonical = await getNotesDataSourceSchema(scope.dataSourceId, scope);
+      const renamed = notesDataSourceRenameProperty(notesDataSourceSchemaDraftFromDto(canonical.data_source, canonical.view), propertyId, rawName);
+      if (renamed.status !== "renamed") {
+        if (renamed.status === "unchanged") return;
+        throw new Error(renamed.status === "duplicate" ? t("collections.property.nameExists") : t("notes.databaseSchemaSaveFailed", propertyId));
+      }
+      const name = renamed.properties.find((property) => property.id === propertyId)?.name ?? rawName.trim();
+      const sources = [canonical.data_source, ...availableDataSources.filter((source) => source.id !== canonical.data_source.id)];
+      const synced = notesDataSourceSyncPropertyReferences(renamed.properties, scope.dataSourceId, sources);
+      const updated = await updateNotesDataSourceSchema(scope.dataSourceId, notesDataSourceSchemaUpdateFromDraft(synced), scope);
+      mergeCanonicalSchema(updated, (drafts) => notesDataSourceSyncPropertyReferences(
+        drafts.map((property) => property.id === propertyId ? { ...property, name } : property), scope.dataSourceId, sources));
+      reloadViews();
+    } finally {
+      saving = false;
     }
   }
 
   /** Apply a header schema change and its requested placement in one native transaction. */
   async function applyPropertyAction(request: NotesDatabasePropertyActionRequest, scope: NotesDatabaseSourceEditingScope): Promise<void> {
+    if (request.type === "rename") return renamePropertyFromView(request.propertyId, request.name, scope);
     if (saving || editingLocked) throw new Error(t("notes.databaseSaving"));
     if (schemaLoadPromise) await schemaLoadPromise;
     saving = true;
@@ -520,13 +545,8 @@
       const result = await applyNotesDataSourcePropertyAction(scope.dataSourceId, scope.databaseId, scope.viewId, action);
       const created = notesDataSourceSchemaDraftFromDto(result.schema.data_source, result.schema.view).find((property) => property.id === result.property_id);
       if (!created) throw new Error(t("notes.databaseSchemaSaveFailed", result.property_id));
-      mergeCreatedProperty(result.schema, created);
-      tableReloadKey += 1;
-      boardReloadKey += 1;
-      galleryReloadKey += 1;
-      listReloadKey += 1;
-      calendarReloadKey += 1;
-      timelineReloadKey += 1;
+      mergeCanonicalSchema(result.schema, (drafts) => [...drafts, created]);
+      reloadViews();
     } catch (caught: unknown) {
       error = caught instanceof Error ? caught.message : String(caught);
       throw new Error(error);
@@ -576,54 +596,7 @@
   }
 
   function propertyTypeLabel(type: NotesDataSourcePropertyType): string {
-    switch (type) {
-      case "title":
-        return t("notes.databaseSchemaPropertyType.title");
-      case "rich_text":
-        return t("notes.databaseSchemaPropertyType.richText");
-      case "number":
-        return t("notes.databaseSchemaPropertyType.number");
-      case "select":
-        return t("notes.databaseSchemaPropertyType.select");
-      case "multi_select":
-        return t("notes.databaseSchemaPropertyType.multiSelect");
-      case "status":
-        return t("notes.databaseSchemaPropertyType.status");
-      case "date":
-        return t("notes.databaseSchemaPropertyType.date");
-      case "checkbox":
-        return t("notes.databaseSchemaPropertyType.checkbox");
-      case "url":
-        return t("notes.databaseSchemaPropertyType.url");
-      case "email":
-        return t("notes.databaseSchemaPropertyType.email");
-      case "phone_number":
-        return t("notes.databaseSchemaPropertyType.phoneNumber");
-      case "files":
-        return t("notes.databaseSchemaPropertyType.files");
-      case "people":
-        return t("notes.databaseSchemaPropertyType.people");
-      case "created_time":
-        return t("notes.databaseSchemaPropertyType.createdTime");
-      case "created_by":
-        return t("notes.databaseSchemaPropertyType.createdBy");
-      case "last_edited_time":
-        return t("notes.databaseSchemaPropertyType.lastEditedTime");
-      case "last_edited_by":
-        return t("notes.databaseSchemaPropertyType.lastEditedBy");
-      case "unique_id":
-        return t("notes.databaseSchemaPropertyType.uniqueId");
-      case "place":
-        return t("notes.databaseSchemaPropertyType.place");
-      case "relation":
-        return t("notes.databaseSchemaPropertyType.relation");
-      case "rollup":
-        return t("notes.databaseSchemaPropertyType.rollup");
-      case "formula":
-        return t("notes.databaseSchemaPropertyType.formula");
-      case "button":
-        return t("notes.databaseSchemaPropertyType.button");
-    }
+    return notesPropertyTypeLabel(type, t);
   }
 
   function updateButtonTarget(
@@ -1202,7 +1175,7 @@
           onclick={addProperty}
         >
           <Plus class="size-3.5" aria-hidden="true" />
-          <span>{t("notes.databaseSchemaAddProperty")}</span>
+          <span>{t("collections.property.add")}</span>
         </button>
       </div>
 

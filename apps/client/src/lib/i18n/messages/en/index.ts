@@ -1,6 +1,7 @@
 import { benchmark } from "./benchmark";
 import { calendar } from "./calendar";
 import { chat } from "./chat";
+import { collections } from "./collections";
 import { common } from "./common";
 import { diagnostics } from "./diagnostics";
 import { focusDialog, pomodoroNotification, pomodoroOverlay } from "./focus";
@@ -31,6 +32,7 @@ export const en = {
   pomodoroNotification,
   calendar,
   chat,
+  collections,
   settings,
   updates,
   diagnostics,

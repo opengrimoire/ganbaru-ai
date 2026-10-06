@@ -5,6 +5,7 @@ import {
   notesDataSourceDuplicatePropertyName,
   notesDataSourceButtonTargetOptions,
   notesDataSourceDefaultButtonPatch,
+  notesDataSourceRenameProperty,
   notesDataSourceSchemaDraftFromDto,
   notesDataSourceSchemaUpdateFromDraft,
   notesDataSourceSyncPropertyReferences,
@@ -314,5 +315,40 @@ describe("data source schema helpers", () => {
         }],
       },
     });
+  });
+});
+
+describe("notesDataSourceRenameProperty", () => {
+  const properties = [
+    createNotesDataSourcePropertyDraft("title", "Name", "title"),
+    createNotesDataSourcePropertyDraft("number", "Points", "points"),
+    createNotesDataSourcePropertyDraft("checkbox", "Done", "done"),
+  ];
+
+  it("renames only the chosen property and keeps its ID", () => {
+    const result = notesDataSourceRenameProperty(properties, "points", "  Effort ");
+    expect(result.status).toBe("renamed");
+    if (result.status !== "renamed") return;
+    expect(result.properties.map(({ id, name }) => ({ id, name }))).toEqual([
+      { id: "title", name: "Name" }, { id: "points", name: "Effort" }, { id: "done", name: "Done" },
+    ]);
+    expect(properties[1].name).toBe("Points");
+  });
+
+  it("leaves blank and unchanged names alone and reports unknown properties", () => {
+    expect(notesDataSourceRenameProperty(properties, "points", "   ")).toEqual({ status: "unchanged" });
+    expect(notesDataSourceRenameProperty(properties, "points", " Points ")).toEqual({ status: "unchanged" });
+    expect(notesDataSourceRenameProperty(properties, "missing", "Effort")).toEqual({ status: "missing" });
+  });
+
+  it("rejects another property's name in any letter case but allows changing only the case", () => {
+    expect(notesDataSourceRenameProperty(properties, "points", "done")).toEqual({ status: "duplicate" });
+    const result = notesDataSourceRenameProperty(properties, "points", "POINTS");
+    expect(result.status === "renamed" && result.properties[1].name).toBe("POINTS");
+  });
+
+  it("limits the name to the native character limit", () => {
+    const result = notesDataSourceRenameProperty(properties, "points", "😀".repeat(NOTES_DATA_SOURCE_PROPERTY_NAME_MAX_CHARACTERS + 5));
+    expect(result.status === "renamed" && Array.from(result.properties[1].name)).toHaveLength(NOTES_DATA_SOURCE_PROPERTY_NAME_MAX_CHARACTERS);
   });
 });

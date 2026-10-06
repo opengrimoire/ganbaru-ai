@@ -294,13 +294,27 @@ describe("Project task query controller policy", () => {
     const source = { ...createdField, id: "source", name: "Original" };
     fields.push(source);
     controller.listColumns = ["status", "custom:source", "due"];
-    await controller.addColumnProperty("Original copy", "number", "custom:source", source);
+    await controller.addColumnProperty("Original copy", "number", "custom:source", "right", source);
     expect(duplicateCustomField).toHaveBeenCalledWith(source, "Original copy");
     expect(addCustomField).not.toHaveBeenCalled();
     expect(controller.listColumns).toEqual(["status", "custom:source", "custom:created", "due"]);
     await controller.addColumnProperty(" original ", "number", "name");
     expect(controller.propertyError).toContain("projects.columns.nameExists");
     expect(addCustomField).not.toHaveBeenCalled();
+  });
+
+  it("inserts a created property on the requested side of its anchor and reports the outcome", async () => {
+    const left = createController();
+    left.controller.listColumns = ["status", "due"];
+    await expect(left.controller.addColumnProperty("Points", "number", "due", "left")).resolves.toBe(true);
+    expect(left.controller.listColumns).toEqual(["status", "custom:created", "due"]);
+
+    const afterName = createController();
+    afterName.controller.listColumns = ["status", "due"];
+    await expect(afterName.controller.addColumnProperty("Points", "number", "name")).resolves.toBe(true);
+    expect(afterName.controller.listColumns).toEqual(["custom:created", "status", "due"]);
+    await expect(afterName.controller.addColumnProperty("  ", "number", "status")).resolves.toBe(false);
+    expect(afterName.controller.propertyError).toContain("projects.columns.nameRequired");
   });
 
   it("withholds old calculations as soon as the canonical query changes", async () => {

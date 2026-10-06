@@ -7,6 +7,11 @@
   import CollectionQuickAdd from "$lib/components/collections/CollectionQuickAdd.svelte";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import CollectionMenu from "$lib/components/collections/CollectionMenu.svelte";
+  import CollectionMenuItem from "$lib/components/collections/CollectionMenuItem.svelte";
+  import CollectionPropertyCreator from "$lib/components/collections/CollectionPropertyCreator.svelte";
+  import CollectionPropertyNameField from "$lib/components/collections/CollectionPropertyNameField.svelte";
+  import { COLLECTION_PROPERTY_ICONS } from "$lib/components/collections/property-icons";
+  import { notesPropertyKind, notesPropertyTypeOptions } from "./property-kinds";
   import NotesDatabaseFilterControls from "./NotesDatabaseFilterControls.svelte";
   import NotesDatabaseSortControls from "./NotesDatabaseSortControls.svelte";
   import NotesDatabaseQueryBar from "./NotesDatabaseQueryBar.svelte";
@@ -20,7 +25,7 @@
   import { onDestroy, tick, untrack, type Snippet } from "svelte";
   import { databaseResource, notesDatabaseSession, rememberDatabaseScroll } from "$lib/notes/database/session.svelte";
   import { createNotesDatabaseRowCreation } from "$lib/notes/database/row-creation.svelte";
-  import type { NotesDatabasePropertyActionRequest } from "$lib/notes/database/data-source-schema";
+  import { NOTES_DATA_SOURCE_PROPERTY_NAME_MAX_CHARACTERS, type NotesDatabasePropertyActionRequest } from "$lib/notes/database/data-source-schema";
   import { notesTableColumnPresentation, notesTableCompatibleCalculations, notesTableFrozenOffset, notesTableGroupableColumns, notesTableGroups, notesTableViewSettings } from "$lib/notes/database/table-presentation";
   import CollectionSettings from "$lib/components/collections/CollectionSettings.svelte";
   import {
@@ -65,7 +70,6 @@
     retryNotesEditorPanel,
     type LoadedNotesEditorPanel,
   } from "$lib/components/notes/editor-component-registry";
-  import { NOTES_DATA_SOURCE_PROPERTY_TYPES } from "$lib/notes/types";
   import type {
     NotesDatabaseTableFilter,
     NotesDatabaseTableCalculation,
@@ -86,30 +90,22 @@
   import ArrowLeft from "@lucide/svelte/icons/arrow-left";
   import ArrowRight from "@lucide/svelte/icons/arrow-right";
   import ArrowUp from "@lucide/svelte/icons/arrow-up";
-  import AlignLeft from "@lucide/svelte/icons/align-left";
-  import ArrowUpRight from "@lucide/svelte/icons/arrow-up-right";
-  import AtSign from "@lucide/svelte/icons/at-sign";
-  import CalendarDays from "@lucide/svelte/icons/calendar-days";
   import Copy from "@lucide/svelte/icons/copy";
   import ExternalLink from "@lucide/svelte/icons/external-link";
   import Eye from "@lucide/svelte/icons/eye";
   import EyeOff from "@lucide/svelte/icons/eye-off";
   import FileText from "@lucide/svelte/icons/file-text";
-  import Fingerprint from "@lucide/svelte/icons/fingerprint";
-  import Hash from "@lucide/svelte/icons/hash";
-  import Link from "@lucide/svelte/icons/link";
-  import List from "@lucide/svelte/icons/list";
-  import MapPin from "@lucide/svelte/icons/map-pin";
-  import MousePointerClick from "@lucide/svelte/icons/mouse-pointer-click";
-  import Paperclip from "@lucide/svelte/icons/paperclip";
-  import Phone from "@lucide/svelte/icons/phone";
   import Plus from "@lucide/svelte/icons/plus";
-  import Search from "@lucide/svelte/icons/search";
-  import SlidersHorizontal from "@lucide/svelte/icons/sliders-horizontal";
   import Sigma from "@lucide/svelte/icons/sigma";
-  import SquareCheck from "@lucide/svelte/icons/square-check";
   import Trash2 from "@lucide/svelte/icons/trash-2";
-  import Users from "@lucide/svelte/icons/users";
+  import ArrowLeftToLine from "@lucide/svelte/icons/arrow-left-to-line";
+  import ArrowRightToLine from "@lucide/svelte/icons/arrow-right-to-line";
+  import CalendarCog from "@lucide/svelte/icons/calendar-cog";
+  import Clock from "@lucide/svelte/icons/clock";
+  import Pin from "@lucide/svelte/icons/pin";
+  import PinOff from "@lucide/svelte/icons/pin-off";
+  import Settings2 from "@lucide/svelte/icons/settings-2";
+  import TextWrap from "@lucide/svelte/icons/text-wrap";
 
   let {
     dataSourceId,
@@ -154,31 +150,18 @@
     "notes.file-export",
   );
   const rowIndentPixels = 12;
-  const propertyIcons = {
-    title: AlignLeft,
-    rich_text: AlignLeft,
-    number: Hash,
-    select: List,
-    multi_select: List,
-    status: List,
-    date: CalendarDays,
-    checkbox: SquareCheck,
-    url: Link,
-    email: AtSign,
-    phone_number: Phone,
-    files: Paperclip,
-    people: Users,
-    created_time: CalendarDays,
-    created_by: Users,
-    last_edited_time: CalendarDays,
-    last_edited_by: Users,
-    unique_id: Fingerprint,
-    place: MapPin,
-    relation: ArrowUpRight,
-    rollup: Search,
-    formula: Sigma,
-    button: MousePointerClick,
-  } satisfies Record<NotesDataSourcePropertyType, typeof AlignLeft>;
+  const DATE_FORMATS = [
+    { value: "locale", label: "notes.databaseTablePresentation.locale" },
+    { value: "iso", label: "notes.databaseTablePresentation.iso" },
+    { value: "relative", label: "notes.databaseTablePresentation.relative" },
+  ] as const satisfies readonly { value: NotesDatabaseTableColumnPresentation["date_format"]; label: string }[];
+  const TIME_FORMATS = [
+    { value: "locale", label: "notes.databaseTablePresentation.locale" },
+    { value: "12_hour", label: "notes.databaseTablePresentation.hour12" },
+    { value: "24_hour", label: "notes.databaseTablePresentation.hour24" },
+    { value: "hidden", label: "notes.databaseTablePresentation.hiddenTime" },
+  ] as const satisfies readonly { value: NotesDatabaseTableColumnPresentation["time_format"]; label: string }[];
+  const propertyTypeOptions = $derived(notesPropertyTypeOptions(t));
 
   let tableRoot: HTMLDivElement | null = $state(null);
   let tableViewportWidth = $state<number | undefined>();
@@ -214,6 +197,7 @@
     return () => onSavingChange(false);
   });
   let error = $state<string | null>(null);
+  let newPropertyName = $state("");
   let addRowKey = $state<string | null>(null);
   let columnResize = $state<{ id: string; pointerId: number; startX: number; startWidth: number; width: number } | null>(null);
   let pendingColumnWidth = $state<{ id: string; width: number } | null>(null);
@@ -247,8 +231,6 @@
     event.stopPropagation();
     updateColumnWidth(column.id, (event.key === "ArrowRight" ? 1 : -1) * (event.shiftKey ? 32 : 8));
   }
-  let propertyName = $state("");
-  let propertySearch = $state("");
   let handledNewRowRequest = $state(0);
   let templateName = $state("");
   let templateSourceRowId = $state("");
@@ -347,39 +329,6 @@
   const selectedPanelRow = $derived(
     visibleRows.find((row) => row.id === selectedPanelRowId) ?? null,
   );
-  const propertyTypes = $derived(NOTES_DATA_SOURCE_PROPERTY_TYPES.filter((type) =>
-    type !== "title" && propertyTypeLabel(type).toLocaleLowerCase().includes(propertySearch.toLocaleLowerCase()),
-  ));
-
-  function propertyTypeLabel(type: NotesDataSourcePropertyType): string {
-    const keys = {
-      title: "notes.databaseSchemaPropertyType.title",
-      rich_text: "notes.databaseSchemaPropertyType.richText",
-      number: "notes.databaseSchemaPropertyType.number",
-      select: "notes.databaseSchemaPropertyType.select",
-      multi_select: "notes.databaseSchemaPropertyType.multiSelect",
-      status: "notes.databaseSchemaPropertyType.status",
-      date: "notes.databaseSchemaPropertyType.date",
-      checkbox: "notes.databaseSchemaPropertyType.checkbox",
-      url: "notes.databaseSchemaPropertyType.url",
-      email: "notes.databaseSchemaPropertyType.email",
-      phone_number: "notes.databaseSchemaPropertyType.phoneNumber",
-      files: "notes.databaseSchemaPropertyType.files",
-      people: "notes.databaseSchemaPropertyType.people",
-      created_time: "notes.databaseSchemaPropertyType.createdTime",
-      created_by: "notes.databaseSchemaPropertyType.createdBy",
-      last_edited_time: "notes.databaseSchemaPropertyType.lastEditedTime",
-      last_edited_by: "notes.databaseSchemaPropertyType.lastEditedBy",
-      unique_id: "notes.databaseSchemaPropertyType.uniqueId",
-      place: "notes.databaseSchemaPropertyType.place",
-      relation: "notes.databaseSchemaPropertyType.relation",
-      rollup: "notes.databaseSchemaPropertyType.rollup",
-      formula: "notes.databaseSchemaPropertyType.formula",
-      button: "notes.databaseSchemaPropertyType.button",
-    } as const;
-    return t(keys[type]);
-  }
-
   $effect(() => {
     if (newRowRequest <= handledNewRowRequest) return;
     if (loading || mutating || !table) return;
@@ -389,14 +338,14 @@
     }
   });
 
-  async function addNewProperty(type: NotesDataSourcePropertyType): Promise<void> {
+  /** Add a property after the last column; a blank name lets the schema owner choose a default name. */
+  async function addNewProperty(type: NotesDataSourcePropertyType, name: string): Promise<void> {
     if (mutating || editingLocked) return;
     mutating = true;
     error = null;
     try {
-      await onAddProperty(type, propertyName);
-      propertyName = "";
-      propertySearch = "";
+      await onAddProperty(type, name);
+      newPropertyName = "";
     } catch (caught) {
       error = caught instanceof Error ? caught.message : String(caught);
     } finally {
@@ -410,11 +359,21 @@
     error = null;
     try {
       await onPropertyAction(request);
-      propertyName = "";
-      propertySearch = "";
       await loadTable(false);
     } catch (caught) {
       error = caught instanceof Error ? caught.message : String(caught);
+    } finally {
+      mutating = false;
+    }
+  }
+
+  /** Rename a property from its column menu; rejections reach the name field, which keeps the draft and shows them. */
+  async function renameProperty(propertyId: string, name: string): Promise<void> {
+    if (mutating || editingLocked || !onPropertyAction) throw new Error(t("notes.databaseSaving"));
+    mutating = true;
+    try {
+      await onPropertyAction({ type: "rename", propertyId, name });
+      await loadTable(false);
     } finally {
       mutating = false;
     }
@@ -1251,91 +1210,75 @@
                 style={frozenOffset(column.id) !== null ? `left: ${frozenOffset(column.id)}px` : undefined}
                 onpointerdown={(event) => startColumnResize(event, column)} onkeydown={(event) => resizeColumnKey(event, column)}>
                 {#snippet actions()}
+                  {@const presentation = notesTableColumnPresentation(tableConfiguration?.presentation, column.id)}
+                  {@const frozen = tableConfiguration?.presentation?.frozen_property_id === column.id}
+                  {@const kind = notesPropertyKind(column.type)}
+                  {@const KindIcon = COLLECTION_PROPERTY_ICONS[kind]}
                   <CollectionMenu label={column.name} kind="property" fullWidth showHeader={false} dismissOnAction
                     triggerClass="h-auto justify-start rounded-none px-2 text-[0.8rem] font-normal" triggerAttributes={{ "data-collection-cell-primary": "" }} disabled={mutating || editingLocked}>
-                    {#snippet leading()}{@const Icon = propertyIcons[column.type]}<Icon class="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />{/snippet}
+                    {#snippet leading()}<KindIcon class="size-3.5 shrink-0 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />{/snippet}
                     <div class="grid gap-0 font-normal">
-                      <button type="button" class="flex min-h-8 items-center gap-2 rounded-sm px-2 text-left hover:bg-accent" disabled={mutating} onclick={() => onEditProperties(column.id)}>
-                        <SlidersHorizontal class="size-3.5 shrink-0" aria-hidden="true" />{t("notes.databasePropertyEdit")}
-                      </button>
-                      {#if onPropertyAction}
-                        {#each propertyInsertionSides(column) as side}
-                          <CollectionMenu label={t(side === "left" ? "notes.databaseTablePresentation.insertLeft" : "notes.databaseTablePresentation.insertRight")} kind="new" fullWidth showHeader={false} dismissOnAction>
-                            <input class="mb-1.5 h-8 w-full rounded border border-border bg-background px-2 text-[length:inherit] outline-none focus:border-ring" aria-label={t("notes.databaseSchemaName")} placeholder={t("notes.databasePropertyNamePlaceholder")} bind:value={propertyName} onkeydown={(event) => event.stopPropagation()} />
-                            <div class="grid gap-0">
-                              {#each propertyTypes as type}
-                                {@const Icon = propertyIcons[type]}
-                                <button type="button" class="flex min-h-8 items-center gap-2 rounded px-2 text-left hover:bg-accent" disabled={mutating} onclick={() => { void performPropertyAction({ type: "insert", propertyId: column.id, side, propertyType: type, name: propertyName }); }}><Icon class="size-3.5 shrink-0" />{propertyTypeLabel(type)}</button>
-                              {/each}
-                            </div>
-                          </CollectionMenu>
-                        {/each}
-                        {#if column.type !== "title"}<button type="button" class="flex min-h-8 items-center gap-2 rounded-sm px-2 text-left hover:bg-accent" disabled={mutating} onclick={() => { void performPropertyAction({ type: "duplicate", propertyId: column.id }); }}><Copy class="size-3.5" />{t("notes.databaseTablePresentation.duplicateEmpty")}</button>{/if}
-                      {/if}
+                      <CollectionPropertyNameField propertyId={column.id} name={column.name} {kind} editable={!editingLocked && Boolean(onPropertyAction)}
+                        maxLength={NOTES_DATA_SOURCE_PROPERTY_NAME_MAX_CHARACTERS} onRename={(name) => renameProperty(column.id, name)} />
+                      <CollectionMenuItem icon={Settings2} label={t("collections.property.editProperty")} disabled={mutating} onclick={() => onEditProperties(column.id)} />
                       <div class="mx-1 my-1 border-t border-border"></div>
-                      <label class="flex min-h-8 items-center gap-2 rounded-sm px-2 hover:bg-accent"><input type="checkbox" checked={notesTableColumnPresentation(tableConfiguration?.presentation, column.id).wrap} disabled={mutating} onchange={(event) => updateColumnPresentation(column.id, { wrap: event.currentTarget.checked })} />{t("notes.databaseTablePresentation.wrap")}</label>
-                      <button type="button" class="flex min-h-8 items-center gap-2 rounded-sm px-2 text-left hover:bg-accent" disabled={mutating} onclick={() => freezeThrough(tableConfiguration?.presentation?.frozen_property_id === column.id ? null : column.id)}>{t(tableConfiguration?.presentation?.frozen_property_id === column.id ? "notes.databaseTablePresentation.unfreeze" : "notes.databaseTablePresentation.freeze")}</button>
-                      <CollectionMenu label={t("notes.databaseTablePresentation.calculate")} summary={notesTableColumnPresentation(tableConfiguration?.presentation, column.id).calculation ? calculationLabel(notesTableColumnPresentation(tableConfiguration?.presentation, column.id).calculation!) : t("notes.databaseTablePresentation.none")} fullWidth>
-                        <Select inline appearance="quiet" class="w-full" ariaLabel={t("notes.databaseTablePresentation.calculate")} disabled={mutating} value={notesTableColumnPresentation(tableConfiguration?.presentation, column.id).calculation ?? ""}
-                          options={[{ value: "", label: t("notes.databaseTablePresentation.none") }, ...notesTableCompatibleCalculations(column).map((calculation) => ({ value: calculation, label: calculationLabel(calculation) }))]}
-                          onChange={(value) => updateColumnPresentation(column.id, { calculation: value ? value as NotesDatabaseTableCalculation : null })} />
+                      {#if notesDatabaseFilterConditions(column).length > 0}
+                        <CollectionMenu label={t("collections.property.filter")} kind="filter" fullWidth activeCount={notesDatabaseFilterCount(filters, column.id)}>
+                          <NotesDatabaseFilterControls properties={columns} {filters} propertyId={column.id} pending={mutating} onChange={saveFilters} />
+                        </CollectionMenu>
+                      {/if}
+                      <CollectionMenuItem icon={ArrowUp} label={t("collections.property.sortAscending")} disabled={sortUnavailable}
+                        checked={sorts.some((sort) => sort.property_id === column.id && sort.direction === "ascending")} onclick={() => sortColumn(column.id, "ascending")} />
+                      <CollectionMenuItem icon={ArrowDown} label={t("collections.property.sortDescending")} disabled={sortUnavailable}
+                        checked={sorts.some((sort) => sort.property_id === column.id && sort.direction === "descending")} onclick={() => sortColumn(column.id, "descending")} />
+                      <CollectionMenu label={t("collections.property.calculate")} kind="properties" icon={Sigma} fullWidth summary={presentation.calculation ? calculationLabel(presentation.calculation) : undefined}>
+                        <CollectionMenuItem label={t("notes.databaseTablePresentation.none")} checked={presentation.calculation === null} disabled={mutating} onclick={() => updateColumnPresentation(column.id, { calculation: null })} />
+                        {#each notesTableCompatibleCalculations(column) as calculation}
+                          <CollectionMenuItem label={calculationLabel(calculation)} checked={presentation.calculation === calculation} disabled={mutating} onclick={() => updateColumnPresentation(column.id, { calculation })} />
+                        {/each}
                       </CollectionMenu>
-                      {#if ["date", "created_time", "last_edited_time"].includes(column.type)}
-                        <CollectionMenu label={t("notes.databaseTablePresentation.dateFormat")} fullWidth>
-                          <div class="grid gap-2">
-                            <Select inline appearance="quiet" class="w-full" ariaLabel={t("notes.databaseTablePresentation.dateFormat")} disabled={mutating} value={notesTableColumnPresentation(tableConfiguration?.presentation, column.id).date_format}
-                              options={[{ value: "locale", label: t("notes.databaseTablePresentation.locale") }, { value: "iso", label: t("notes.databaseTablePresentation.iso") }, { value: "relative", label: t("notes.databaseTablePresentation.relative") }]}
-                              onChange={(value) => updateColumnPresentation(column.id, { date_format: value as NotesDatabaseTableColumnPresentation["date_format"] })} />
-                            <Select inline appearance="quiet" class="w-full" ariaLabel={t("notes.databaseTablePresentation.timeFormat")} disabled={mutating} value={notesTableColumnPresentation(tableConfiguration?.presentation, column.id).time_format}
-                              options={[{ value: "locale", label: t("notes.databaseTablePresentation.locale") }, { value: "12_hour", label: t("notes.databaseTablePresentation.hour12") }, { value: "24_hour", label: t("notes.databaseTablePresentation.hour24") }, { value: "hidden", label: t("notes.databaseTablePresentation.hiddenTime") }]}
-                              onChange={(value) => updateColumnPresentation(column.id, { time_format: value as NotesDatabaseTableColumnPresentation["time_format"] })} />
-                          </div>
+                      {#if column.type === "date" || column.type === "created_time" || column.type === "last_edited_time"}
+                        <CollectionMenu label={t("notes.databaseTablePresentation.dateFormat")} kind="properties" icon={CalendarCog} fullWidth>
+                          {#each DATE_FORMATS as format (format.value)}
+                            <CollectionMenuItem label={t(format.label)} checked={presentation.date_format === format.value} disabled={mutating} onclick={() => updateColumnPresentation(column.id, { date_format: format.value })} />
+                          {/each}
+                        </CollectionMenu>
+                        <CollectionMenu label={t("notes.databaseTablePresentation.timeFormat")} kind="properties" icon={Clock} fullWidth>
+                          {#each TIME_FORMATS as format (format.value)}
+                            <CollectionMenuItem label={t(format.label)} checked={presentation.time_format === format.value} disabled={mutating} onclick={() => updateColumnPresentation(column.id, { time_format: format.value })} />
+                          {/each}
                         </CollectionMenu>
                       {/if}
                       <div class="mx-1 my-1 border-t border-border"></div>
-                      {#if notesDatabaseFilterConditions(column).length > 0}
-                      <CollectionMenu label={t("notes.databasePropertyFilter")} kind="filter" fullWidth
-                        activeCount={notesDatabaseFilterCount(filters, column.id)}>
-
-                        <NotesDatabaseFilterControls properties={columns} {filters} propertyId={column.id} pending={mutating} onChange={saveFilters} />
-        </CollectionMenu>
-                      {/if}
-                      <button type="button" class="flex min-h-8 items-center gap-2 rounded-sm px-2 text-left hover:bg-accent" disabled={sortUnavailable} onclick={() => sortColumn(column.id, "ascending")}>
-                        <ArrowUp class="size-3.5 shrink-0" aria-hidden="true" />{t("notes.databasePropertySortAscending")}
-                        {#if sorts.some((sort) => sort.property_id === column.id && sort.direction === "ascending")}<Check class="ml-auto size-3.5 shrink-0" aria-hidden="true" />{/if}
-                      </button>
-                      <button type="button" class="flex min-h-8 items-center gap-2 rounded-sm px-2 text-left hover:bg-accent" disabled={sortUnavailable} onclick={() => sortColumn(column.id, "descending")}>
-                        <ArrowDown class="size-3.5 shrink-0" aria-hidden="true" />{t("notes.databasePropertySortDescending")}
-                        {#if sorts.some((sort) => sort.property_id === column.id && sort.direction === "descending")}<Check class="ml-auto size-3.5 shrink-0" aria-hidden="true" />{/if}
-                      </button>
+                      <CollectionMenuItem icon={frozen ? PinOff : Pin} label={t(frozen ? "collections.property.unfreeze" : "collections.property.freeze")} disabled={mutating} onclick={() => freezeThrough(frozen ? null : column.id)} />
+                      {#if column.type !== "title"}<CollectionMenuItem icon={EyeOff} label={t("collections.property.hide")} disabled={mutating} onclick={() => updateColumnVisibility(column.id, true)} />{/if}
+                      <CollectionMenuItem icon={TextWrap} label={t("collections.property.wrap")} checked={presentation.wrap} disabled={mutating} onclick={() => updateColumnPresentation(column.id, { wrap: !presentation.wrap })} />
+                      <div class="mx-1 my-1 border-t border-border"></div>
                       {#if column.type !== "title"}
-                        <div class="mx-1 my-1 border-t border-border"></div>
-                        <button type="button" class="flex min-h-8 items-center gap-2 rounded-sm px-2 text-left text-muted-foreground hover:bg-accent hover:text-foreground disabled:text-muted-foreground/50" disabled={mutating || columnIndex < 2} onclick={() => moveColumn(column, -1)}>
-                          <ArrowLeft class="size-3.5 shrink-0" aria-hidden="true" />{t("notes.databasePropertyMoveLeft")}
-                        </button>
-                        <button type="button" class="flex min-h-8 items-center gap-2 rounded-sm px-2 text-left text-muted-foreground hover:bg-accent hover:text-foreground disabled:text-muted-foreground/50" disabled={mutating || columnIndex === visibleColumns.length - 1} onclick={() => moveColumn(column, 1)}>
-                          <ArrowRight class="size-3.5 shrink-0" aria-hidden="true" />{t("notes.databasePropertyMoveRight")}
-                        </button>
-                        <button type="button" class="flex min-h-8 items-center gap-2 rounded-sm px-2 text-left hover:bg-accent" disabled={mutating} onclick={() => updateColumnVisibility(column.id, true)}>
-                          <EyeOff class="size-3.5 shrink-0" aria-hidden="true" />{t("notes.databasePropertyHide")}
-                        </button>
+                        <CollectionMenuItem icon={ArrowLeft} label={t("collections.property.moveLeft")} disabled={mutating || columnIndex < 2} onclick={() => moveColumn(column, -1)} />
+                        <CollectionMenuItem icon={ArrowRight} label={t("collections.property.moveRight")} disabled={mutating || columnIndex === visibleColumns.length - 1} onclick={() => moveColumn(column, 1)} />
+                      {/if}
+                      {#if onPropertyAction}
+                        {#each propertyInsertionSides(column) as side (side)}
+                          <CollectionMenu label={t(side === "left" ? "collections.property.insertLeft" : "collections.property.insertRight")} kind="new" icon={side === "left" ? ArrowLeftToLine : ArrowRightToLine}
+                            fullWidth showHeader={false} dismissOnAction disabled={mutating}>
+                            <CollectionPropertyCreator types={propertyTypeOptions} pending={mutating} maxLength={NOTES_DATA_SOURCE_PROPERTY_NAME_MAX_CHARACTERS}
+                              onCreate={(propertyType, name) => { void performPropertyAction({ type: "insert", propertyId: column.id, side, propertyType, name }); }} />
+                          </CollectionMenu>
+                        {/each}
+                        {#if column.type !== "title"}<CollectionMenuItem icon={Copy} label={t("collections.property.duplicate")} disabled={mutating} onclick={() => { void performPropertyAction({ type: "duplicate", propertyId: column.id }); }} />{/if}
                       {/if}
                     </div>
                   </CollectionMenu>
                 {/snippet}
               </CollectionColumnHeader>
             {/each}
-            <div role="columnheader" class="grid min-h-11 min-w-0 justify-items-start self-stretch font-normal">
-                <CollectionMenu label={t("notes.databaseSchemaAddProperty")} kind="new" showHeader={false} dismissOnAction triggerClass="h-auto text-[0.8rem]" triggerAttributes={{ "data-collection-hover-target": "" }} disabled={mutating || editingLocked}>
-                  <input class="mb-1.5 h-8 w-full rounded border border-border bg-background px-2 text-[length:inherit] outline-none focus:border-ring" aria-label={t("notes.databaseSchemaName")} placeholder={t("notes.databasePropertyNamePlaceholder")} bind:value={propertyName} onkeydown={(event) => event.stopPropagation()} />
-                  <input class="mb-1.5 h-8 w-full rounded border border-border bg-background px-2 text-[length:inherit] outline-none focus:border-ring" aria-label={t("notes.databasePropertySearchType")} placeholder={t("notes.databasePropertySearchType")} bind:value={propertySearch} onkeydown={(event) => event.stopPropagation()} />
-                  <div class="grid gap-0">
-                    {#each propertyTypes as type}
-                      {@const Icon = propertyIcons[type]}
-                      <button type="button" class="flex min-h-8 items-center gap-2 rounded px-2 text-left text-foreground hover:bg-accent" onclick={() => { void addNewProperty(type); }}><Icon class="size-3.5 shrink-0 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />{propertyTypeLabel(type)}</button>
-                    {/each}
-                  </div>
-                </CollectionMenu>
+            <div role="columnheader" class="grid min-h-11 min-w-0 items-center justify-items-start self-stretch font-normal text-muted-foreground">
+              <CollectionMenu label={t("collections.property.add")} kind="new" iconOnly showHeader={false} dismissOnAction disabled={mutating || editingLocked}
+                triggerClass="size-9 justify-center px-0" triggerAttributes={{ "data-collection-hover-target": "" }}>
+                <CollectionPropertyCreator types={propertyTypeOptions} bind:name={newPropertyName} pending={mutating} maxLength={NOTES_DATA_SOURCE_PROPERTY_NAME_MAX_CHARACTERS}
+                  onCreate={(type, name) => { void addNewProperty(type, name); }} />
+              </CollectionMenu>
             </div>
           </CollectionRow>
             {#each tableItems as item (item.id)}

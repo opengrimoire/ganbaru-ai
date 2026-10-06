@@ -1,5 +1,6 @@
 <script lang="ts">
   import ProjectListPropertyMenu from "./ProjectListPropertyMenu.svelte";
+  import ProjectListAddPropertyMenu from "./ProjectListAddPropertyMenu.svelte";
   import { getProjectListTableContext } from "./table-context";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import type {
@@ -54,6 +55,6 @@
     {@render columnHeaderCell(taskListColumnLabel(column), column)}
   {/each}
   <div class="grid min-h-11 min-w-0 place-items-center self-stretch text-muted-foreground">
-    <ProjectListPropertyMenu column={taskListColumns.at(-1) ?? "name"} label={t("projects.columns.insertProperty")} addOnly />
+    {#if context}<ProjectListAddPropertyMenu query={context.query} anchor={taskListColumns.at(-1) ?? "name"} label={t("collections.property.add")} variant="button" />{/if}
   </div>
 </CollectionRow>

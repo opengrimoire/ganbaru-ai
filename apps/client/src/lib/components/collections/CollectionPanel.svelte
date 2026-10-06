@@ -33,6 +33,10 @@
     line-height: 1.25rem;
     white-space: nowrap;
   }
+  .collection-panel :global([data-collection-menu-body] button.collection-menu-control) {
+    justify-content: center;
+    padding: 0;
+  }
   .collection-panel :global(.collection-menu-row) {
     height: var(--collection-row-height);
     min-height: var(--collection-row-height);

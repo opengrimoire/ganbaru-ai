@@ -1,3 +1,5 @@
+import { formatNumber } from "$lib/i18n/formatters";
+import type { AppLocale } from "$lib/i18n/locales";
 import type {
   ProjectCustomField,
   ProjectCustomFieldType,
@@ -69,4 +71,19 @@ export function projectCustomFieldDisplayText(
     return value.checkboxValue ? "true" : "false";
   }
   return undefined;
+}
+
+/**
+ * Return `base`, or `base (n)` with the first localized number from 2 that no existing field name uses, ignoring case.
+ * Duplicates and properties created without a name use it so the new field never collides with the project's schema.
+ */
+export function uniqueProjectCustomFieldName(
+  base: string,
+  fields: readonly Pick<ProjectCustomField, "name">[],
+  locale: AppLocale,
+): string {
+  const taken = new Set(fields.map((field) => field.name.trim().toLocaleLowerCase()));
+  let name = base.trim();
+  for (let suffix = 2; taken.has(name.toLocaleLowerCase()); suffix += 1) name = `${base.trim()} (${formatNumber(locale, suffix)})`;
+  return name;
 }

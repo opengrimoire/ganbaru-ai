@@ -51,6 +51,7 @@
   const VIEWPORT_HEIGHT_FRACTION = 0.7;
   const icons = { layout: SlidersHorizontal, filter: ListFilter, sort: ArrowDownUp, properties: Columns3, property: Columns3, group: Group, actions: Ellipsis, new: Plus, "new-options": ChevronDown };
   const Icon = $derived(icon ?? icons[kind]);
+  const dismisses = $derived(kind === "actions" || dismissOnAction);
   let open = $state(false);
   let trigger: HTMLButtonElement | undefined = $state();
   let panel: HTMLDivElement | null = $state(null);
@@ -76,6 +77,16 @@
   function close(): void {
     open = false;
     trigger?.focus({ preventScroll: true });
+  }
+
+  /** Whether an action closes this panel: it is in the panel itself, or in nested menus that all close after their own actions. */
+  function actionReachesPanel(target: Element, node: HTMLElement): boolean {
+    let surface = target.closest("[data-app-floating-surface]");
+    while (surface && surface !== node) {
+      if (!surface.hasAttribute("data-collection-menu-dismiss")) return false;
+      surface = surface.parentElement?.closest("[data-app-floating-surface]") ?? null;
+    }
+    return surface === node;
   }
 
   /** Keep settings outside clipped rows, with nested dropdowns inside the owning dialog. */
@@ -143,8 +154,7 @@
       buttons[next]?.focus({ preventScroll: true });
     };
     const closeAfterAction = (event: MouseEvent) => {
-      if ((kind !== "actions" && !dismissOnAction) || !(event.target instanceof Element)) return;
-      if (event.target.closest("[data-app-floating-surface]") !== node) return;
+      if (!dismisses || !(event.target instanceof Element) || !actionReachesPanel(event.target, node)) return;
       const button = event.target.closest("button");
       if (!button || button.disabled || button.hasAttribute("aria-haspopup") || button.hasAttribute("data-collection-menu-keep-open")) return;
       // Let delegated action handlers run before their panel is removed.
@@ -219,7 +229,7 @@
     {:else if countLabel}<span class="rounded bg-accent px-1 text-[0.733333rem] tabular-nums">{countLabel}</span>{/if}
   </button>
   {#if open && !settingsRow}
-    <CollectionPanel bind:element={panel} {label} id={id} class="fixed z-80 max-w-[calc(100vw-1rem)]">
+    <CollectionPanel bind:element={panel} {label} id={id} data-collection-menu-dismiss={dismisses ? "" : undefined} class="fixed z-80 max-w-[calc(100vw-1rem)]">
       <div class="min-h-0 overflow-x-hidden overflow-y-auto">
         <div data-collection-menu-content class="@container flow-root h-max p-1.5">
           {#if headerVisible}

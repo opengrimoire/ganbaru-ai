@@ -1,72 +1,65 @@
 <script lang="ts">
   import { untrack } from "svelte";
+  import ArrowDown from "@lucide/svelte/icons/arrow-down";
   import ArrowLeft from "@lucide/svelte/icons/arrow-left";
   import ArrowRight from "@lucide/svelte/icons/arrow-right";
   import ArrowUp from "@lucide/svelte/icons/arrow-up";
-  import ArrowDown from "@lucide/svelte/icons/arrow-down";
-  import Check from "@lucide/svelte/icons/check";
+  import CalendarCog from "@lucide/svelte/icons/calendar-cog";
+  import Clock from "@lucide/svelte/icons/clock";
   import Copy from "@lucide/svelte/icons/copy";
   import EyeOff from "@lucide/svelte/icons/eye-off";
+  import Hash from "@lucide/svelte/icons/hash";
   import Pin from "@lucide/svelte/icons/pin";
+  import PinOff from "@lucide/svelte/icons/pin-off";
   import Plus from "@lucide/svelte/icons/plus";
-  import WrapText from "@lucide/svelte/icons/wrap-text";
+  import Settings2 from "@lucide/svelte/icons/settings-2";
+  import Sigma from "@lucide/svelte/icons/sigma";
+  import TextWrap from "@lucide/svelte/icons/text-wrap";
   import CollectionMenu from "$lib/components/collections/CollectionMenu.svelte";
-  import Select from "$lib/components/ui/Select.svelte";
+  import CollectionMenuItem from "$lib/components/collections/CollectionMenuItem.svelte";
+  import CollectionPropertyNameField from "$lib/components/collections/CollectionPropertyNameField.svelte";
+  import { COLLECTION_PROPERTY_ICONS } from "$lib/components/collections/property-icons";
   import { getLocalization } from "$lib/i18n/translator.svelte";
-  import { formatNumber } from "$lib/i18n/formatters";
-  import { projectCustomFieldTypeLabel } from "$lib/projects/display";
   import { getProjects } from "$lib/stores/projects.svelte";
+  import { projectCustomFieldUsesOptions, uniqueProjectCustomFieldName } from "$lib/projects/custom-fields";
   import { customFieldIdFromTaskListColumn } from "$lib/projects/tasks/list-columns";
   import { projectColumnCalculationOptions, projectListColumnSortMode, PROJECT_COLUMN_DATE_FORMATS, PROJECT_COLUMN_TIME_FORMATS, PROJECT_COLUMN_NUMBER_FORMATS } from "$lib/projects/list/presentation";
-  import { PROJECT_CUSTOM_FIELD_TYPES, type ProjectCustomFieldType } from "$lib/projects/types";
   import type { ProjectTaskListResizableColumn } from "$lib/projects/list/view";
   import { getProjectListTableContext } from "./table-context";
+  import ProjectListAddPropertyMenu from "./ProjectListAddPropertyMenu.svelte";
   import ProjectListColumnFilters from "./ProjectListColumnFilters.svelte";
+  import { projectListColumnKind } from "./property-kinds";
 
-  let { column, label, addOnly = false }: { column: ProjectTaskListResizableColumn; label: string; addOnly?: boolean } = $props();
+  /** Column header menu for the Projects task table, laid out like the Notes table column menu. */
+  let { column, label }: { column: ProjectTaskListResizableColumn; label: string } = $props();
   const context = getProjectListTableContext();
   const query = context?.query;
   const projects = getProjects();
   const localization = getLocalization();
   const { t } = localization;
   const field = $derived(column === "name" ? undefined : query?.customFields.find((candidate) => candidate.id === customFieldIdFromTaskListColumn(column)));
+  const kind = $derived(projectListColumnKind(column, field));
+  const KindIcon = $derived(COLLECTION_PROPERTY_ICONS[kind]);
   const pending = $derived(Boolean(query?.propertySaving || query?.presentationSaving || query?.listColumnsSaving));
   const sortMode = $derived(projectListColumnSortMode(column));
   const wrapped = $derived(query?.listPresentation.wrappedColumns.includes(column) ?? false);
   const frozen = $derived(query?.listPresentation.frozenThrough === column);
   const index = $derived(column === "name" ? -1 : query?.listColumns.indexOf(column) ?? -1);
-  let newName = $state("");
-  let newType = $state<ProjectCustomFieldType>("text");
-  let nameDraft = $state(untrack(() => field?.name ?? ""));
-  let draftFieldId = $state(untrack(() => field?.id ?? null));
-  let draftCanonicalName = $state(untrack(() => field?.name ?? ""));
-  let nameEditing = $state(false);
   let optionDraft = $state("");
-  let editSaving = $state(false);
-  let editError = $state<string | null>(null);
-  let editWriteGeneration = 0;
+  let optionFieldId = $state(untrack(() => field?.id ?? null));
+  let optionSaving = $state(false);
+  let optionError = $state<string | null>(null);
+  let optionWriteGeneration = 0;
 
   $effect(() => {
-    const currentField = field;
-    const editing = nameEditing;
-    const saving = editSaving;
-    const error = editError;
-    if (!currentField) return;
-    const canonicalName = currentField.name;
+    const currentId = field?.id ?? null;
     untrack(() => {
-      if (currentField.id !== draftFieldId) {
-        editWriteGeneration += 1;
-        draftFieldId = currentField.id;
-        draftCanonicalName = canonicalName;
-        nameDraft = canonicalName;
-        nameEditing = false;
-        optionDraft = "";
-        editSaving = false;
-        editError = null;
-      } else if (!editing && !saving && error === null && nameDraft === draftCanonicalName) {
-        nameDraft = canonicalName;
-        draftCanonicalName = canonicalName;
-      }
+      if (currentId === optionFieldId) return;
+      optionWriteGeneration += 1;
+      optionFieldId = currentId;
+      optionDraft = "";
+      optionSaving = false;
+      optionError = null;
     });
   });
 
@@ -85,144 +78,108 @@
     query.sortDirection = direction;
   }
 
-  /** Rename the property, keeping the name draft when validation or the native write fails. */
-  async function saveName(): Promise<void> {
-    if (!field || editSaving) return;
+  /** Rename the custom field; rejections are shown by the name field, which keeps the draft. */
+  async function rename(name: string): Promise<void> {
+    if (!field) return;
     const target = field;
-    const name = nameDraft.trim();
-    const generation = ++editWriteGeneration;
-    editSaving = true;
-    editError = null;
-    try {
-      if (!name) throw new Error(t("projects.columns.nameRequired"));
-      if (query?.customFields.some((candidate) => candidate.id !== target.id && candidate.name.toLocaleLowerCase() === name.toLocaleLowerCase())) throw new Error(t("projects.columns.nameExists"));
-      await projects.updateCustomField(target, { name });
-      if (generation === editWriteGeneration) {
-        nameDraft = name;
-        draftCanonicalName = name;
-      }
-    } catch (error: unknown) {
-      if (generation === editWriteGeneration) editError = t("projects.columns.propertyFailed", error instanceof Error ? error.message : String(error));
-    } finally { if (generation === editWriteGeneration) editSaving = false; }
+    if (query?.customFields.some((candidate) => candidate.id !== target.id && candidate.name.toLocaleLowerCase() === name.toLocaleLowerCase())) throw new Error(t("projects.columns.nameExists"));
+    await projects.updateCustomField(target, { name });
   }
 
   /** Add an option without modifying any existing task value. */
   async function addOption(): Promise<void> {
-    if (!field || editSaving || !optionDraft.trim()) return;
+    if (!field || optionSaving || !optionDraft.trim()) return;
     const target = field;
     const name = optionDraft;
-    const generation = ++editWriteGeneration;
-    editSaving = true;
-    editError = null;
+    const generation = ++optionWriteGeneration;
+    optionSaving = true;
+    optionError = null;
     try {
       if (projects.customFieldOptionsForField(target.id).some((candidate) => candidate.name.toLocaleLowerCase() === name.trim().toLocaleLowerCase())) throw new Error(t("projects.customFields.optionNameExists"));
       await projects.addCustomFieldOption(target.id, name);
-      if (generation === editWriteGeneration) optionDraft = "";
-    }
-    catch (error: unknown) {
-      if (generation === editWriteGeneration) editError = t("projects.columns.propertyFailed", error instanceof Error ? error.message : String(error));
-    } finally { if (generation === editWriteGeneration) editSaving = false; }
+      if (generation === optionWriteGeneration) optionDraft = "";
+    } catch (error: unknown) {
+      if (generation === optionWriteGeneration) optionError = t("projects.columns.propertyFailed", error instanceof Error ? error.message : String(error));
+    } finally { if (generation === optionWriteGeneration) optionSaving = false; }
   }
 
   /** Use a unique copy name while keeping the source property's values independent. */
   function duplicate(): void {
     if (!query || !field) return;
-    const base = t("projects.columns.copyName", field.name);
-    let name = base;
-    let suffix = 2;
-    while (query.customFields.some((candidate) => candidate.name.toLocaleLowerCase() === name.toLocaleLowerCase())) name = `${base} (${formatNumber(localization.locale, suffix++)})`;
-    void query.addColumnProperty(name, field.fieldType, column, field);
+    void query.addColumnProperty(uniqueProjectCustomFieldName(t("projects.columns.copyName", field.name), query.customFields, localization.locale), field.fieldType, column, "right", field);
   }
 </script>
 
 {#if query}
-  <CollectionMenu label={label} kind={addOnly ? "new" : "property"} fullWidth={!addOnly} showHeader={false} dismissOnAction={!addOnly}
-    iconOnly={addOnly}
-    disabled={pending} triggerClass={addOnly ? "size-9 justify-center px-0" : "h-auto justify-start rounded-none px-2 font-normal"}
-    triggerAttributes={addOnly ? { "data-collection-hover-target": "" } : { "data-collection-cell-primary": "" }}>
-    <div class="grid gap-0.5">
-      {#if !addOnly}
-        {#if field}
-          <CollectionMenu label={t("projects.columns.editProperty")} kind="properties" fullWidth>
-            <form class="grid gap-2" onsubmit={(event) => { event.preventDefault(); void saveName(); }}>
-              <input class="h-8 min-w-0 rounded border border-input bg-transparent px-2" aria-label={t("projects.columns.propertyName")} bind:value={nameDraft} disabled={editSaving} onfocus={() => { nameEditing = true; }} onblur={() => { nameEditing = false; }} />
-              <p class="text-muted-foreground">{projectCustomFieldTypeLabel(field.fieldType, t)}</p>
-              <button type="submit" class="min-h-8 rounded px-2 text-left hover:bg-accent" disabled={editSaving}>{t("common.save")}</button>
+  <CollectionMenu {label} kind="property" fullWidth showHeader={false} dismissOnAction disabled={pending}
+    triggerClass="h-auto justify-start rounded-none px-2 font-normal" triggerAttributes={{ "data-collection-cell-primary": "" }}>
+    {#snippet leading()}<KindIcon class="size-3.5 shrink-0 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />{/snippet}
+    <div class="grid gap-0">
+      <CollectionPropertyNameField propertyId={column} name={field?.name ?? label} {kind} editable={Boolean(field)} onRename={rename} />
+      {#if field && projectCustomFieldUsesOptions(field.fieldType)}
+        <CollectionMenu label={t("collections.property.editProperty")} kind="properties" icon={Settings2} fullWidth>
+          <div class="grid gap-1">
+            {#each projects.customFieldOptionsForField(field.id) as option (option.id)}<span class="truncate px-2 py-1">{option.name}</span>{/each}
+            <form class="flex min-w-0 gap-1" onsubmit={(event) => { event.preventDefault(); void addOption(); }}>
+              <input class="h-8 min-w-0 flex-1 rounded border border-input bg-transparent px-2" aria-label={t("projects.customFields.optionName")} placeholder={t("projects.customFields.optionName")} bind:value={optionDraft} disabled={optionSaving} />
+              <button type="submit" class="collection-menu-control inline-flex items-center justify-center rounded hover:bg-accent" aria-label={t("projects.columns.addOption")} disabled={optionSaving || !optionDraft.trim()}><Plus class="size-3.5" aria-hidden="true" /></button>
             </form>
-            {#if field.fieldType === "select" || field.fieldType === "multi_select" || field.fieldType === "status"}
-              <div class="mt-2 grid gap-1">
-                {#each projects.customFieldOptionsForField(field.id) as option (option.id)}<span class="px-2 py-1">{option.name}</span>{/each}
-                <form class="flex min-w-0 gap-1" onsubmit={(event) => { event.preventDefault(); void addOption(); }}>
-                  <input class="h-8 min-w-0 flex-1 rounded border border-input px-2" aria-label={t("projects.customFields.optionName")} bind:value={optionDraft} disabled={editSaving} />
-                  <button type="submit" class="size-8 rounded hover:bg-accent" aria-label={t("projects.columns.addOption")} disabled={editSaving || !optionDraft.trim()}><Plus class="size-3.5" /></button>
-                </form>
-              </div>
-            {/if}
-            {#if editError}<p role="alert" class="py-1 text-destructive">{editError}</p>{/if}
-          </CollectionMenu>
-        {/if}
-        {#if sortMode}
-          <button class="property-action" type="button" onclick={() => sort("asc")}><ArrowUp class="size-3.5" />{t("projects.columns.sortAscending")}{#if query.sortMode === sortMode && query.sortDirection === "asc"}<Check class="ml-auto size-3.5" />{/if}</button>
-          <button class="property-action" type="button" onclick={() => sort("desc")}><ArrowDown class="size-3.5" />{t("projects.columns.sortDescending")}{#if query.sortMode === sortMode && query.sortDirection === "desc"}<Check class="ml-auto size-3.5" />{/if}</button>
-        {/if}
-        <ProjectListColumnFilters {query} {column} />
-        <button class="property-action" type="button" disabled={pending} onclick={toggleWrap}><WrapText class="size-3.5" />{t("projects.columns.wrap")}{#if wrapped}<Check class="ml-auto size-3.5" />{/if}</button>
-        <button class="property-action" type="button" disabled={pending} onclick={() => void query.savePresentation({ ...query.listPresentation, frozenThrough: frozen ? null : column })}><Pin class="size-3.5" />{t(frozen ? "projects.columns.unfreeze" : "projects.columns.freezeThrough")}</button>
-        {#if column === "start" || column === "due" || field?.fieldType === "date"}
-          <CollectionMenu label={t("projects.columns.dateFormat")} kind="properties" fullWidth>
-            {#each PROJECT_COLUMN_DATE_FORMATS as format}
-              <button class="property-action" disabled={pending} aria-pressed={(query.listPresentation.dateFormats[column] ?? "locale") === format} onclick={() => void query.savePresentation({ ...query.listPresentation, dateFormats: { ...query.listPresentation.dateFormats, [column]: format } })}>{t("projects.columns.dateFormatLabel", format)}</button>
-            {/each}
-          </CollectionMenu>
-        {/if}
-        {#if column === "start" || column === "due"}
-          <CollectionMenu label={t("projects.columns.timeFormat")} kind="properties" fullWidth>
-            {#each PROJECT_COLUMN_TIME_FORMATS as format}
-              <button class="property-action" disabled={pending} aria-pressed={(query.listPresentation.timeFormats[column] ?? "locale") === format} onclick={() => void query.savePresentation({ ...query.listPresentation, timeFormats: { ...query.listPresentation.timeFormats, [column]: format } })}>{t("projects.columns.timeFormatLabel", format)}</button>
-            {/each}
-          </CollectionMenu>
-        {/if}
-        {#if field?.fieldType === "number"}
-          <CollectionMenu label={t("projects.columns.numberFormat")} kind="properties" fullWidth>
-            {#each PROJECT_COLUMN_NUMBER_FORMATS as format}
-              <button class="property-action" disabled={pending} aria-pressed={(query.listPresentation.numberFormats[column] ?? "number") === format} onclick={() => void query.savePresentation({ ...query.listPresentation, numberFormats: { ...query.listPresentation.numberFormats, [column]: format } })}>{t("projects.columns.numberFormatLabel", format)}</button>
-            {/each}
-          </CollectionMenu>
-        {/if}
-        <CollectionMenu label={t("projects.columns.calculate")} kind="properties" fullWidth>
-          {#each projectColumnCalculationOptions(column, query.customFields) as calculation}
-            <button class="property-action" type="button" disabled={pending} aria-pressed={(query.listPresentation.calculations[column] ?? "none") === calculation}
-              onclick={() => void query.savePresentation({ ...query.listPresentation, calculations: { ...query.listPresentation.calculations, [column]: calculation } })}>
-              {t("projects.columns.calculation", calculation)}{#if (query.listPresentation.calculations[column] ?? "none") === calculation}<Check class="ml-auto size-3.5" />{/if}
-            </button>
+            {#if optionError}<p role="alert" class="px-1 py-1 text-destructive">{optionError}</p>{/if}
+          </div>
+        </CollectionMenu>
+      {/if}
+      <div class="mx-1 my-1 border-t border-border"></div>
+      <ProjectListColumnFilters {query} {column} />
+      {#if sortMode}
+        <CollectionMenuItem icon={ArrowUp} label={t("collections.property.sortAscending")} checked={query.sortMode === sortMode && query.sortDirection === "asc"} onclick={() => sort("asc")} />
+        <CollectionMenuItem icon={ArrowDown} label={t("collections.property.sortDescending")} checked={query.sortMode === sortMode && query.sortDirection === "desc"} onclick={() => sort("desc")} />
+      {/if}
+      <CollectionMenu label={t("collections.property.calculate")} kind="properties" icon={Sigma} fullWidth
+        summary={(query.listPresentation.calculations[column] ?? "none") === "none" ? undefined : t("projects.columns.calculation", query.listPresentation.calculations[column] ?? "none")}>
+        {#each projectColumnCalculationOptions(column, query.customFields) as calculation}
+          <CollectionMenuItem label={t("projects.columns.calculation", calculation)} checked={(query.listPresentation.calculations[column] ?? "none") === calculation} disabled={pending}
+            onclick={() => void query.savePresentation({ ...query.listPresentation, calculations: { ...query.listPresentation.calculations, [column]: calculation } })} />
+        {/each}
+      </CollectionMenu>
+      {#if column === "start" || column === "due" || field?.fieldType === "date"}
+        <CollectionMenu label={t("projects.columns.dateFormat")} kind="properties" icon={CalendarCog} fullWidth>
+          {#each PROJECT_COLUMN_DATE_FORMATS as format}
+            <CollectionMenuItem label={t("projects.columns.dateFormatLabel", format)} checked={(query.listPresentation.dateFormats[column] ?? "locale") === format} disabled={pending}
+              onclick={() => void query.savePresentation({ ...query.listPresentation, dateFormats: { ...query.listPresentation.dateFormats, [column]: format } })} />
           {/each}
         </CollectionMenu>
-        {#if column !== "name"}
-          <button class="property-action" type="button" disabled={pending || index <= 0} onclick={() => void query.moveColumn(column, -1)}><ArrowLeft class="size-3.5" />{t("projects.columns.moveLeft")}</button>
-          <button class="property-action" type="button" disabled={pending || index < 0 || index >= query.listColumns.length - 1} onclick={() => void query.moveColumn(column, 1)}><ArrowRight class="size-3.5" />{t("projects.columns.moveRight")}</button>
-          <button class="property-action" type="button" disabled={pending} onclick={() => void query.toggleColumn(column)}><EyeOff class="size-3.5" />{t("projects.columns.hide")}</button>
-        {/if}
-        {#if field}<button class="property-action" type="button" disabled={pending} onclick={duplicate}><Copy class="size-3.5" />{t("projects.columns.duplicateEmpty")}</button>{/if}
       {/if}
-      <CollectionMenu label={t("projects.columns.insertProperty")} kind="new" fullWidth showHeader={!addOnly}>
-        <form class="grid gap-2" onsubmit={(event) => { event.preventDefault(); void query.addColumnProperty(newName, newType, column); }}>
-          <input class="h-8 rounded border border-input bg-transparent px-2" aria-label={t("projects.columns.propertyName")} placeholder={t("projects.columns.propertyName")} bind:value={newName} disabled={pending} />
-          <Select inline appearance="quiet" ariaLabel={t("projects.columns.propertyType")} value={newType} disabled={pending}
-            options={PROJECT_CUSTOM_FIELD_TYPES.map((type) => ({ value: type, label: projectCustomFieldTypeLabel(type, t) }))}
-            onChange={(value) => { const type = PROJECT_CUSTOM_FIELD_TYPES.find((candidate) => candidate === value); if (type) newType = type; }} />
-          <button class="property-action" type="submit" disabled={pending || !newName.trim()}><Plus class="size-3.5" />{t("projects.columns.insertProperty")}</button>
-        </form>
-        {#if query.propertyError}<p role="alert" class="py-1 text-destructive">{query.propertyError}</p>{/if}
-        {#if query.listColumnsError}<p role="alert" class="py-1 text-destructive">{query.listColumnsError}</p>{/if}
-      </CollectionMenu>
+      {#if column === "start" || column === "due"}
+        <CollectionMenu label={t("projects.columns.timeFormat")} kind="properties" icon={Clock} fullWidth>
+          {#each PROJECT_COLUMN_TIME_FORMATS as format}
+            <CollectionMenuItem label={t("projects.columns.timeFormatLabel", format)} checked={(query.listPresentation.timeFormats[column] ?? "locale") === format} disabled={pending}
+              onclick={() => void query.savePresentation({ ...query.listPresentation, timeFormats: { ...query.listPresentation.timeFormats, [column]: format } })} />
+          {/each}
+        </CollectionMenu>
+      {/if}
+      {#if field?.fieldType === "number"}
+        <CollectionMenu label={t("projects.columns.numberFormat")} kind="properties" icon={Hash} fullWidth>
+          {#each PROJECT_COLUMN_NUMBER_FORMATS as format}
+            <CollectionMenuItem label={t("projects.columns.numberFormatLabel", format)} checked={(query.listPresentation.numberFormats[column] ?? "number") === format} disabled={pending}
+              onclick={() => void query.savePresentation({ ...query.listPresentation, numberFormats: { ...query.listPresentation.numberFormats, [column]: format } })} />
+          {/each}
+        </CollectionMenu>
+      {/if}
+      <div class="mx-1 my-1 border-t border-border"></div>
+      <CollectionMenuItem icon={frozen ? PinOff : Pin} label={t(frozen ? "collections.property.unfreeze" : "collections.property.freeze")} disabled={pending}
+        onclick={() => void query.savePresentation({ ...query.listPresentation, frozenThrough: frozen ? null : column })} />
+      {#if column !== "name"}<CollectionMenuItem icon={EyeOff} label={t("collections.property.hide")} disabled={pending} onclick={() => void query.toggleColumn(column)} />{/if}
+      <CollectionMenuItem icon={TextWrap} label={t("collections.property.wrap")} checked={wrapped} disabled={pending} onclick={toggleWrap} />
+      <div class="mx-1 my-1 border-t border-border"></div>
+      {#if column !== "name"}
+        <CollectionMenuItem icon={ArrowLeft} label={t("collections.property.moveLeft")} disabled={pending || index <= 0} onclick={() => void query.moveColumn(column, -1)} />
+        <CollectionMenuItem icon={ArrowRight} label={t("collections.property.moveRight")} disabled={pending || index < 0 || index >= query.listColumns.length - 1} onclick={() => void query.moveColumn(column, 1)} />
+        <ProjectListAddPropertyMenu {query} anchor={column} side="left" label={t("collections.property.insertLeft")} variant="row" />
+      {/if}
+      <ProjectListAddPropertyMenu {query} anchor={column} side="right" label={t("collections.property.insertRight")} variant="row" />
+      {#if field}<CollectionMenuItem icon={Copy} label={t("collections.property.duplicate")} disabled={pending} onclick={duplicate} />{/if}
     </div>
   </CollectionMenu>
 {:else}
   <span class="truncate">{label}</span>
 {/if}
-
-<style>
-  .property-action { display: flex; min-height: 2rem; align-items: center; gap: 0.5rem; border-radius: 0.25rem; padding: 0.375rem 0.5rem; text-align: left; }
-  .property-action:hover { background: var(--accent); }
-  .property-action:disabled { cursor: not-allowed; color: var(--muted-foreground); }
-</style>

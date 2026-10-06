@@ -133,7 +133,7 @@ async function addHeaderProperty(name: string, typeLabel = "Number"): Promise<vo
   await tick();
   await tick();
   const picker = document.querySelector<HTMLElement>('[role="dialog"][aria-label="Add property"]')!;
-  const nameInput = picker.querySelector<HTMLInputElement>('input[aria-label="Name"]')!;
+  const nameInput = picker.querySelector<HTMLInputElement>('input[aria-label="Property name"]')!;
   nameInput.value = name;
   nameInput.dispatchEvent(new Event("input", { bubbles: true }));
   await tick();
@@ -188,11 +188,11 @@ describe("Notes database property editor selection", () => {
       document.querySelector<HTMLButtonElement>('[role="columnheader"] button[aria-label="Priority"]')!.click();
       await tick();
       await tick();
-      document.querySelector<HTMLButtonElement>('button[aria-label="Insert property right"]')!.click();
+      document.querySelector<HTMLButtonElement>('button[aria-label="Insert right"]')!.click();
       await tick();
       await tick();
-      const panel = document.querySelector<HTMLElement>('[role="dialog"][aria-label="Insert property right"]')!;
-      const name = panel.querySelector<HTMLInputElement>('input[aria-label="Name"]')!;
+      const panel = document.querySelector<HTMLElement>('[role="dialog"][aria-label="Insert right"]')!;
+      const name = panel.querySelector<HTMLInputElement>('input[aria-label="Property name"]')!;
       name.value = "Total";
       name.dispatchEvent(new Event("input", { bubbles: true }));
       await tick();
@@ -392,7 +392,53 @@ describe("Notes database property editor selection", () => {
     document.querySelector<HTMLButtonElement>('[role="columnheader"] button[aria-label="Add property"]')!.click();
     await tick();
     await tick();
-    expect(document.querySelector<HTMLInputElement>('[role="dialog"][aria-label="Add property"] input[aria-label="Name"]')?.value)
+    expect(document.querySelector<HTMLInputElement>('[role="dialog"][aria-label="Add property"] input[aria-label="Property name"]')?.value)
       .toBe("Estimate");
   });
+
+  it("renames a property from its column menu and applies the canonical name to an unsaved editor draft", async () => {
+    const initial = fixture().table;
+    vi.mocked(getNotesDataSourceSchema).mockResolvedValue({ data_source: initial.data_source, view: initial.view });
+    vi.mocked(updateNotesDataSourceSchema).mockImplementation(async (_sourceId, update) => {
+      const table: NotesDataSourceTableView = { ...initial, data_source: { ...initial.data_source, properties: update.properties } };
+      vi.mocked(getNotesDataSourceTableView).mockResolvedValue(table);
+      return { data_source: table.data_source, view: table.view };
+    });
+    await open();
+    await draftPriorityName("Draft priority");
+    const name = await openColumnNameField("Name");
+    name.value = "  Task  ";
+    name.dispatchEvent(new Event("input", { bubbles: true }));
+    name.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    await vi.waitFor(() => expect(updateNotesDataSourceSchema).toHaveBeenCalledOnce());
+    const update = vi.mocked(updateNotesDataSourceSchema).mock.calls[0][1];
+    expect(update.properties.Task).toMatchObject({ id: "title", type: "title" });
+    expect(update.properties).not.toHaveProperty("Name");
+    expect(update.properties.Priority).toMatchObject({ id: "priority", name: "Priority" });
+    await vi.waitFor(() => expect(document.querySelector('[role="columnheader"] button[aria-label="Task"]')).not.toBeNull());
+    await editProperty("Priority");
+    await vi.waitFor(() => expect(propertyNameInput()?.value).toBe("Draft priority"));
+  });
+
+  it("keeps a duplicate column rename in its field with an explicit error and leaves the schema unchanged", async () => {
+    const initial = fixture().table;
+    vi.mocked(getNotesDataSourceSchema).mockResolvedValue({ data_source: initial.data_source, view: initial.view });
+    await open();
+    const name = await openColumnNameField("Priority");
+    name.value = "name";
+    name.dispatchEvent(new Event("input", { bubbles: true }));
+    name.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    await vi.waitFor(() => expect(document.querySelector('[role="dialog"][aria-label="Priority"] [role="alert"]')?.textContent)
+      .toBe("Could not rename property: A property with that name already exists."));
+    expect(name.value).toBe("name");
+    expect(updateNotesDataSourceSchema).not.toHaveBeenCalled();
+    expect(document.querySelector('[role="columnheader"] button[aria-label="Priority"]')).not.toBeNull();
+  });
 });
+
+/** Open a column menu and return its focused property name field. */
+async function openColumnNameField(name: string): Promise<HTMLInputElement> {
+  document.querySelector<HTMLButtonElement>(`[role="columnheader"] button[aria-label="${name}"]`)!.click();
+  await vi.waitFor(() => expect(document.activeElement).toBe(document.querySelector(`[role="dialog"][aria-label="${name}"] input[aria-label="Property name"]`)));
+  return document.activeElement as HTMLInputElement;
+}

@@ -1,23 +1,13 @@
 <script lang="ts">
   import { tick } from "svelte";
-  import Binary from "@lucide/svelte/icons/binary";
-  import CalendarDays from "@lucide/svelte/icons/calendar-days";
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
-  import CircleCheck from "@lucide/svelte/icons/circle-check";
-  import Link2 from "@lucide/svelte/icons/link-2";
-  import List from "@lucide/svelte/icons/list";
-  import ListChecks from "@lucide/svelte/icons/list-checks";
-  import Mail from "@lucide/svelte/icons/mail";
-  import Paperclip from "@lucide/svelte/icons/paperclip";
-  import Phone from "@lucide/svelte/icons/phone";
-  import SquareCheckBig from "@lucide/svelte/icons/square-check-big";
-  import TextAlignStart from "@lucide/svelte/icons/text-align-start";
-  import UserRound from "@lucide/svelte/icons/user-round";
   import {
     pickSelectPopoverGeometry,
     type SelectPopoverGeometry,
     type SelectPopoverRect,
   } from "$lib/utils/select-popover-position";
+  import { COLLECTION_PROPERTY_ICONS } from "$lib/components/collections/property-icons";
+  import { projectCustomFieldKind } from "$lib/components/projects/list/property-kinds";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import { projectCustomFieldTypeLabel } from "$lib/projects/display";
   import {
@@ -168,31 +158,8 @@
 </script>
 
 {#snippet fieldTypeIcon(fieldType: ProjectCustomFieldType)}
-  {#if fieldType === "text"}
-    <TextAlignStart size={14} strokeWidth={1.8} />
-  {:else if fieldType === "number"}
-    <Binary size={15.5} strokeWidth={1.8} />
-  {:else if fieldType === "select"}
-    <List size={14} strokeWidth={1.8} />
-  {:else if fieldType === "multi_select"}
-    <ListChecks size={14} strokeWidth={1.8} />
-  {:else if fieldType === "status"}
-    <CircleCheck size={14} strokeWidth={1.8} />
-  {:else if fieldType === "date"}
-    <CalendarDays size={14} strokeWidth={1.8} />
-  {:else if fieldType === "person"}
-    <UserRound size={14} strokeWidth={1.8} />
-  {:else if fieldType === "files"}
-    <Paperclip size={14} strokeWidth={1.8} />
-  {:else if fieldType === "checkbox"}
-    <SquareCheckBig size={14} strokeWidth={1.8} />
-  {:else if fieldType === "url"}
-    <Link2 size={14} strokeWidth={1.8} />
-  {:else if fieldType === "phone"}
-    <Phone size={14} strokeWidth={1.8} />
-  {:else}
-    <Mail size={14} strokeWidth={1.8} />
-  {/if}
+  {@const Icon = COLLECTION_PROPERTY_ICONS[projectCustomFieldKind(fieldType)]}
+  <Icon size={14} strokeWidth={1.8} />
 {/snippet}
 
 <div class={cn("relative min-w-0", containerClass)}>

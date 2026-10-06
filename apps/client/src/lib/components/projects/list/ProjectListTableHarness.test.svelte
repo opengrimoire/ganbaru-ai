@@ -13,5 +13,6 @@
     taskListColumns={query.listColumns} taskListColumnLabel={(column) => query.columnLabel(column)} onResizePointerDown={() => undefined} onResizeDoubleClick={() => undefined} onResizeKeydown={() => undefined} />
   <ProjectListCalculationFooter {query} gridTemplate="1.5rem 1.75rem 24rem 8rem 8rem 2.25rem" gridMinWidth="45.5rem" columns={query.listColumns} columnLabel={(column) => query.columnLabel(column)} />
   {#if query.presentationError}<p role="alert">{query.presentationError}</p>{/if}
+  {#if query.propertyError}<p role="alert">{query.propertyError}</p>{/if}
   {#if query.listColumnsError}<p role="alert">{query.listColumnsError}</p>{/if}
 </div>

@@ -48,7 +48,7 @@
       </CollectionMenu>
     {:else}
     {#each filterProperties as property (property.id)}
-      <CollectionMenu label={property.name} ariaLabel={`${t("notes.databasePropertyFilter")}: ${property.name}`} kind="filter" disabled={pending}
+      <CollectionMenu label={property.name} ariaLabel={`${t("collections.property.filter")}: ${property.name}`} kind="filter" disabled={pending}
         activeCount={property.count > 1 ? property.count : 0}
         triggerClass="h-7 rounded-full bg-primary/8 text-primary hover:bg-primary/12 font-normal">
         <NotesDatabaseFilterControls {properties} {filters} propertyId={property.id} {pending} onChange={onFiltersChange} />

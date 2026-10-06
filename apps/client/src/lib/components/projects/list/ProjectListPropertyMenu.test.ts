@@ -25,18 +25,13 @@ function button(label: string, owner: ParentNode = document): HTMLButtonElement 
   return result;
 }
 
-/** Open the actual property detail panel after its initial focus settles. */
+/** Open the actual property menu and return its header name field after initial focus settles there. */
 async function openName(label: string): Promise<HTMLInputElement> {
   button(label).click();
   await vi.waitFor(() => {
     const panel = document.querySelector(`[data-app-floating-surface][aria-label="${label}"]`);
-    expect(panel).not.toBeNull();
-    expect(document.activeElement).toBe(panel?.querySelector("button:not(:disabled)"));
-  });
-  button("Edit property").click();
-  await vi.waitFor(() => {
-    const input = document.querySelector<HTMLInputElement>('[aria-label="Property name"]');
-    expect(input).not.toBeNull();
+    const input = panel?.querySelector<HTMLInputElement>('[aria-label="Property name"]');
+    expect(input).toBeTruthy();
     expect(document.activeElement).toBe(input);
   });
   return document.querySelector<HTMLInputElement>('[aria-label="Property name"]')!;
@@ -68,8 +63,9 @@ describe("Projects property-name drafts", () => {
     input.value = "Unsaved correction";
     input.dispatchEvent(new Event("input", {bubbles: true}));
     await tick();
-    input.form?.dispatchEvent(new Event("submit", {bubbles: true, cancelable: true}));
-    await vi.waitFor(() => expect(document.querySelector('[role="alert"]')?.textContent).toContain("Disk full"));
+    input.dispatchEvent(new KeyboardEvent("keydown", {key: "Enter", bubbles: true, cancelable: true}));
+    await vi.waitFor(() => expect(document.querySelector('[role="alert"]')?.textContent).toBe("Could not rename property: Disk full"));
+    expect(store.updateCustomField).toHaveBeenCalledWith(expect.objectContaining({id: "points"}), {name: "Unsaved correction"});
     instance.setField({...initialField, name: "Renamed elsewhere"});
     await tick();
     expect(input.value).toBe("Unsaved correction");

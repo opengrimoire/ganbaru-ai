@@ -22,7 +22,13 @@ export const NOTES_DATA_SOURCE_PROPERTY_NAME_MAX_CHARACTERS = 120;
 /** Contextual schema action requested by a property header in the active table. */
 export type NotesDatabasePropertyActionRequest =
   | { type: "insert"; propertyId: string; side: "left" | "right"; propertyType: NotesDataSourcePropertyType; name: string }
-  | { type: "duplicate"; propertyId: string };
+  | { type: "duplicate"; propertyId: string }
+  | { type: "rename"; propertyId: string; name: string };
+
+/** Outcome of renaming one property draft from a table header. */
+export type NotesDataSourcePropertyRename =
+  | { status: "unchanged" | "missing" | "duplicate" }
+  | { status: "renamed"; properties: NotesDataSourceSchemaPropertyDraft[] };
 
 /** Source and saved view that originated a nonmodal property action. */
 export interface NotesDatabaseSourceEditingScope {
@@ -811,4 +817,23 @@ export function notesDataSourceSchemaUpdateFromDraft(
   return {
     properties: record,
   };
+}
+
+/**
+ * Rename one property draft by ID, so views, values, and references that use the ID follow it.
+ * The name is trimmed and limited to the native character limit; a blank or unchanged name leaves the schema as is,
+ * and another property's name is rejected ignoring case, matching schema saves.
+ */
+export function notesDataSourceRenameProperty(
+  properties: readonly NotesDataSourceSchemaPropertyDraft[],
+  propertyId: string,
+  rawName: string,
+): NotesDataSourcePropertyRename {
+  const target = properties.find((property) => property.id === propertyId);
+  if (!target) return { status: "missing" };
+  const name = Array.from(rawName.trim()).slice(0, NOTES_DATA_SOURCE_PROPERTY_NAME_MAX_CHARACTERS).join("").trim();
+  if (!name || name === target.name) return { status: "unchanged" };
+  const key = name.toLocaleLowerCase();
+  if (properties.some((property) => property.id !== propertyId && property.name.trim().toLocaleLowerCase() === key)) return { status: "duplicate" };
+  return { status: "renamed", properties: properties.map((property) => property.id === propertyId ? { ...property, name } : property) };
 }

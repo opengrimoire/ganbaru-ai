@@ -52,14 +52,31 @@ function button(label: string, owner: ParentNode = document): HTMLButtonElement 
   return result;
 }
 
-/** Open the property panel after its initial focus settles. */
-async function openPoints(): Promise<void> {
+/** Open the property panel after initial focus settles in its header name field. */
+async function openPoints(): Promise<HTMLElement> {
   button("Points").click();
   await vi.waitFor(() => {
     const panel = document.querySelector('[data-app-floating-surface][aria-label="Points"]');
     expect(panel).not.toBeNull();
-    expect(document.activeElement).toBe(panel?.querySelector("button:not(:disabled)"));
+    expect(document.activeElement).toBe(panel?.querySelector('[aria-label="Property name"]'));
   });
+  return document.querySelector<HTMLElement>('[data-app-floating-surface][aria-label="Points"]')!;
+}
+
+/** Open the insert-right creator from the column menu and return its panel. */
+async function openInsertRight(panel: HTMLElement): Promise<HTMLElement> {
+  button("Insert right", panel).click();
+  await vi.waitFor(() => expect(document.querySelector('[data-app-floating-surface][aria-label="Insert right"]')).not.toBeNull());
+  return document.querySelector<HTMLElement>('[data-app-floating-surface][aria-label="Insert right"]')!;
+}
+
+/** Type a property name in a creator panel and choose a type from its grid. */
+async function createProperty(creator: HTMLElement, name: string, type: string): Promise<void> {
+  const input = creator.querySelector<HTMLInputElement>('[aria-label="Property name"]')!;
+  input.value = name;
+  input.dispatchEvent(new Event("input", {bubbles: true}));
+  await tick();
+  creator.querySelector<HTMLButtonElement>(`[data-property-type="${type}"]`)!.click();
 }
 
 describe("Projects table property configuration", () => {
@@ -67,10 +84,9 @@ describe("Projects table property configuration", () => {
     const {query, savePresentation} = await renderTable();
     let rejectWrite!: (error: unknown) => void;
     savePresentation.mockImplementationOnce(() => new Promise<void>((_resolve, reject) => { rejectWrite = reject; }));
-    await openPoints();
-    const panel = document.querySelector('[data-app-floating-surface][aria-label="Points"]');
-    expect(panel?.parentElement?.closest("[data-floating-root]")).toBe(target.firstElementChild);
-    button("Wrap column content").click();
+    const panel = await openPoints();
+    expect(panel.parentElement?.closest("[data-floating-root]")).toBe(target.firstElementChild);
+    button("Wrap content").click();
     await tick();
     expect(query.listPresentation.wrappedColumns).toEqual(["custom:points"]);
     expect(button("Points").disabled).toBe(true);
@@ -81,24 +97,27 @@ describe("Projects table property configuration", () => {
     expect(button("Points").disabled).toBe(false);
   });
 
-  it("retains property drafts after creation failures and inserts a retry beside the invoking column", async () => {
+  it("creates the chosen type beside the invoking column and reports a failed creation", async () => {
     const {query, addField, saveColumns} = await renderTable();
     addField.mockRejectedValueOnce(new Error("Vault unavailable"));
-    await openPoints();
-    const panel = document.querySelector('[data-app-floating-surface][aria-label="Points"]')!;
-    button("Insert property", panel).click();
-    await vi.waitFor(() => expect(document.querySelector<HTMLInputElement>('[aria-label="Property name"]')).not.toBeNull());
-    const input = document.querySelector<HTMLInputElement>('[aria-label="Property name"]')!;
-    input.value = "Budget";
-    input.dispatchEvent(new Event("input", {bubbles: true}));
-    await tick();
-    input.form?.dispatchEvent(new Event("submit", {bubbles: true, cancelable: true}));
+    await createProperty(await openInsertRight(await openPoints()), "Budget", "number");
     await vi.waitFor(() => expect(query.propertySaving).toBe(false));
-    expect(document.querySelector('[role="alert"]')?.textContent).toContain("Vault unavailable");
-    expect(input.value).toBe("Budget");
-    input.form?.dispatchEvent(new Event("submit", {bubbles: true, cancelable: true}));
+    expect(addField).toHaveBeenCalledWith("project", "Budget", "number");
+    expect(target.querySelector('[role="alert"]')?.textContent).toContain("Vault unavailable");
+    expect(saveColumns).not.toHaveBeenCalled();
+    await createProperty(await openInsertRight(await openPoints()), "Budget", "number");
     await vi.waitFor(() => expect(saveColumns).toHaveBeenCalledWith("project", ["custom:points", "custom:created", "due"]));
     expect(query.propertyError).toBeNull();
+  });
+
+  it("names a blank property after its type and inserts it to the left", async () => {
+    const {addField, saveColumns} = await renderTable();
+    const panel = await openPoints();
+    button("Insert left", panel).click();
+    await vi.waitFor(() => expect(document.querySelector('[data-app-floating-surface][aria-label="Insert left"]')).not.toBeNull());
+    await createProperty(document.querySelector<HTMLElement>('[data-app-floating-surface][aria-label="Insert left"]')!, "  ", "text");
+    await vi.waitFor(() => expect(saveColumns).toHaveBeenCalledWith("project", ["custom:created", "custom:points", "due"]));
+    expect(addField).toHaveBeenCalledWith("project", "Text", "text");
   });
 
   it("shows complete native reductions instead of deriving totals from loaded rows", async () => {
@@ -112,31 +131,23 @@ describe("Projects table property configuration", () => {
     expect(target.textContent).toContain("Loading");
   });
 
-  it("keeps parent column actions disabled after closing a pending property creation panel", async () => {
+  it("closes the column menu after a nested creation and locks the column until the property is saved", async () => {
     const {query, addField, saveColumns} = await renderTable();
     let finishCreation!: (field: ProjectCustomField) => void;
     addField.mockImplementationOnce(() => new Promise<ProjectCustomField>((resolve) => { finishCreation = resolve; }));
-    await openPoints();
-    const panel = document.querySelector('[data-app-floating-surface][aria-label="Points"]')!;
-    button("Insert property", panel).click();
-    await vi.waitFor(() => expect(document.querySelector<HTMLInputElement>('[aria-label="Property name"]')).not.toBeNull());
-    const input = document.querySelector<HTMLInputElement>('[aria-label="Property name"]')!;
-    input.value = "Budget";
-    input.dispatchEvent(new Event("input", {bubbles: true}));
+    const panel = await openPoints();
+    const creator = await openInsertRight(panel);
+    await createProperty(creator, "Budget", "number");
+    await vi.waitFor(() => expect(panel.isConnected).toBe(false));
+    expect(creator.isConnected).toBe(false);
+    expect(document.activeElement).toBe(button("Points"));
+    expect(button("Points").disabled).toBe(true);
+    button("Points").click();
     await tick();
-    input.form?.dispatchEvent(new Event("submit", {bubbles: true, cancelable: true}));
-    await vi.waitFor(() => expect(input.disabled).toBe(true));
-    input.dispatchEvent(new KeyboardEvent("keydown", {key: "Escape", bubbles: true}));
-    await vi.waitFor(() => expect(input.isConnected).toBe(false));
-    expect(panel.isConnected).toBe(true);
-    expect(button("Hide column", panel).disabled).toBe(true);
-    expect(button("Move column right", panel).disabled).toBe(true);
-    expect(button("Wrap column content", panel).disabled).toBe(true);
-    button("Hide column", panel).click();
-    expect(saveColumns).not.toHaveBeenCalled();
+    expect(document.querySelector('[data-app-floating-surface][aria-label="Points"]')).toBeNull();
     finishCreation({id: "created", projectId: "project", name: "Budget", fieldType: "number", sortOrder: 100, createdAt: "", updatedAt: ""});
     await vi.waitFor(() => expect(query.propertySaving).toBe(false));
     expect(saveColumns).toHaveBeenCalledExactlyOnceWith("project", ["custom:points", "custom:created", "due"]);
-    expect(button("Hide column", panel).disabled).toBe(false);
+    expect(button("Points").disabled).toBe(false);
   });
 });

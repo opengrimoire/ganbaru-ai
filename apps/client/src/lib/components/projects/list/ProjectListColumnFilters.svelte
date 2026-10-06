@@ -37,7 +37,7 @@
 {/snippet}
 
 {#if column === "name" || column === "status" || column === "priority" || column === "due" || column === "scheduled" || field}
-  <CollectionMenu label={t("projects.filters.title")} kind="filter" fullWidth>
+  <CollectionMenu label={t("collections.property.filter")} kind="filter" fullWidth>
     {#if column === "name"}
       <input class="h-8 w-full rounded border border-input bg-transparent px-2" aria-label={t("projects.header.searchPlaceholder")} bind:value={query.search} />
     {:else if column === "status"}
