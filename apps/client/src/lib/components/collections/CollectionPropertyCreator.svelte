@@ -41,7 +41,7 @@
 </script>
 
 <div class="grid gap-1" data-collection-property-creator>
-  <input class="h-8 w-full rounded border border-border bg-background px-2 text-[length:inherit] outline-none focus:border-ring" aria-label={t("collections.property.name")}
+  <input class="h-8 w-full rounded border border-border bg-background px-2 text-[length:inherit] outline-none" aria-label={t("collections.property.name")}
     placeholder={t("collections.property.namePlaceholder")} maxlength={maxLength} disabled={pending} bind:value={name} onkeydown={createFirstMatch} />
   <div class="flex min-h-7 items-center gap-1.5 pl-2 text-[0.75rem] text-muted-foreground">
     {#if searching}
