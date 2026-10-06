@@ -321,7 +321,9 @@
   function frozenOffset(columnId: string): number | null {
     return notesTableFrozenOffset(renderedColumns, tableConfiguration?.presentation?.frozen_property_id, columnId, tableViewportWidth);
   }
-  const gridTemplate = $derived(`1.5rem 1.75rem ${renderedColumns.map((column) => `${column.width}px`).join(" ")} minmax(10rem, 1fr)`);
+  /** Minimum width of the trailing track, which only holds the add property button (`size-9`). */
+  const ADD_PROPERTY_TRACK_MIN = "2.25rem";
+  const gridTemplate = $derived(`1.5rem 1.75rem ${renderedColumns.map((column) => `${column.width}px`).join(" ")} minmax(${ADD_PROPERTY_TRACK_MIN}, 1fr)`);
   const filters = $derived(table ? notesDatabaseTableFiltersFromView(table.view) : []);
   const sorts = $derived(table ? notesDatabaseTableSortsFromView(table.view) : []);
   const rowOpenMode = $derived(
