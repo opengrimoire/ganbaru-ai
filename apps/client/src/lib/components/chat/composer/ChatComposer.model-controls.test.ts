@@ -152,15 +152,15 @@ describe("ChatComposer model controls", () => {
     });
     modelList.dispatchEvent(new Event("scroll"));
     await tick();
-    expect(modelList.classList.contains("model-list-scroll-bottom")).toBe(true);
+    expect(modelList.getAttribute("data-scroll-fade")).toBe("bottom");
     modelList.scrollTop = 200;
     modelList.dispatchEvent(new Event("scroll"));
     await tick();
-    expect(modelList.classList.contains("model-list-scroll-both")).toBe(true);
+    expect(modelList.getAttribute("data-scroll-fade")).toBe("both");
     modelList.scrollTop = 400;
     modelList.dispatchEvent(new Event("scroll"));
     await tick();
-    expect(modelList.classList.contains("model-list-scroll-top")).toBe(true);
+    expect(modelList.getAttribute("data-scroll-fade")).toBe("top");
     expect(document.querySelector<HTMLInputElement>(".model-search input")?.placeholder).toBe("Search models...");
     expect(document.querySelector(".model-flyout")?.textContent).not.toContain("gpt-5.6-sol");
     expect(document.querySelector(".model-flyout")?.textContent).not.toContain("GPT-5.4 Deprecated");

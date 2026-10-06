@@ -106,13 +106,13 @@ describe("Music playlist launcher", () => {
     const popover = document.body.querySelector<HTMLElement>(".playlist-launcher-popover");
     if (!popover) throw new Error("Expected playlist chooser");
     expect(popover.parentElement).toBe(document.body);
-    expect(popover.style.width).toBe("248px");
+    expect(popover.style.width).toBe("320px");
     expect(popover.style.maxHeight).toBe("520px");
-    expect(popover.classList.contains("shadow-lg")).toBe(true);
+    expect(popover.classList.contains("surface-floating")).toBe(true);
     expect(popover.classList.contains("shadow-2xl")).toBe(false);
     const searchRow = popover.querySelector<HTMLElement>("[data-music-playlist-search]");
-    expect(searchRow?.classList.contains("sticky")).toBe(true);
-    expect(searchRow?.querySelector("div")?.classList.contains("bg-muted/20")).toBe(true);
+    expect(searchRow?.closest("[data-music-scrollable]")).toBeNull();
+    expect(searchRow?.querySelector("div")?.classList.contains("field")).toBe(true);
     expect(popover.textContent).toContain("♪");
     expect(popover.textContent).not.toContain("playable of");
     const search = popover.querySelector<HTMLInputElement>('input[placeholder="Search playlists"]');

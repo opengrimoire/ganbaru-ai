@@ -34,13 +34,13 @@
 
 <div
   id={menuId}
-  class="absolute left-1 top-full z-30 mt-1 w-min min-w-56 max-w-72 overflow-hidden rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-lg"
+  class="surface-floating surface-floating-body absolute left-1 top-full z-30 mt-1 w-floating overflow-hidden"
   role="listbox"
   aria-label={t("notes.mentionMenu")}
   aria-live="polite"
 >
   {#if targets.length === 0}
-    <div class="px-2 py-2 text-[0.8rem] text-muted-foreground" role="status">
+    <div class="px-2 py-2 text-muted-foreground" role="status">
       {t("notes.noMentionResults")}
     </div>
   {:else}
@@ -48,14 +48,13 @@
       <button
         id={notesMentionOptionDomId(blockId, index)}
         type="button"
-        class={`flex min-h-9 w-full min-w-0 items-center gap-2 rounded px-2 py-1.5 text-left text-[0.866667rem] ${
-          index === activeIndex ? "bg-accent text-accent-foreground" : "hover:bg-accent"
-        }`}
+        class="menu-item min-w-0"
+        data-highlighted={index === activeIndex ? "" : undefined}
         role="option"
         aria-selected={index === activeIndex}
         onclick={() => onSelect(target)}
       >
-        <span class="flex size-5 shrink-0 items-center justify-center rounded bg-muted text-[0.8rem] text-muted-foreground">
+        <span class="flex size-5 shrink-0 items-center justify-center rounded-floating-item bg-muted text-panel-detail text-muted-foreground">
           {#if target.kind === "date" && target.reminder}
             <Bell class="size-3.5" aria-hidden="true" />
           {:else if target.kind === "date"}
@@ -83,7 +82,7 @@
         <span class="min-w-0 flex-1">
           <span class="block truncate text-foreground">{target.title}</span>
           {#if target.subtitle}
-            <span class="block truncate text-[0.733333rem] text-muted-foreground">{target.subtitle}</span>
+            <span class="block truncate text-panel-detail text-muted-foreground">{target.subtitle}</span>
           {/if}
         </span>
       </button>

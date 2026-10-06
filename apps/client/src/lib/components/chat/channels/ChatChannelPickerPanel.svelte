@@ -9,6 +9,7 @@
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import { getMobileBackStack } from "$lib/stores/mobile-back-stack.svelte";
   import { cn, type MaybePromise } from "$lib/utils";
+  import { scrollEdgeFadeAction } from "$lib/utils/scroll-edge-fade";
 
 
   let {
@@ -89,8 +90,8 @@
 <div
   bind:this={rootElement}
   class={cn(
-    "chat-channel-picker-panel flex min-h-0 flex-col overflow-hidden bg-popover text-popover-foreground shadow-lg ring-1 ring-border/60",
-    mobileLayout ? "h-full rounded-2xl" : "rounded-md",
+    "chat-channel-picker-panel surface-floating flex min-h-0 flex-col overflow-hidden",
+    mobileLayout && "h-full rounded-2xl",
     className,
     zIndexClass,
   )}
@@ -128,8 +129,8 @@
     {/if}
     {#if showSearch}
     <div class={cn(
-      "flex items-center gap-1.5 border border-border/70 bg-muted/20",
-      mobileLayout ? "min-h-12 rounded-xl px-3" : "min-h-8 rounded-md px-2",
+      "field flex items-center gap-1.5",
+      mobileLayout ? "min-h-12 rounded-xl px-3" : "py-0",
     )}>
       <Search size={iconSize} strokeWidth={iconStrokeWidth} class="shrink-0 text-popover-foreground/60" />
       <input
@@ -137,8 +138,8 @@
         placeholder={t("chat.channels.search")}
         aria-label={t("chat.channels.search")}
         class={cn(
-          "min-w-0 flex-1 bg-transparent text-popover-foreground placeholder:text-popover-foreground/45",
-          mobileLayout ? "h-12 text-base" : "text-[0.8rem]",
+          "field-bare text-popover-foreground",
+          mobileLayout && "h-12 text-base",
         )}
       />
       {#if mobileLayout && normalizedSearch}
@@ -157,9 +158,9 @@
   {/if}
 
   <div class="relative flex min-h-0 flex-auto flex-col">
-    <div bind:this={scrollElement} class={cn("hide-scrollbar min-h-0 flex-auto overflow-y-auto", mobileLayout ? "overscroll-contain px-2 py-2" : "p-1")}>
+    <div bind:this={scrollElement} use:scrollEdgeFadeAction class={cn("hide-scrollbar min-h-0 flex-auto overflow-y-auto", mobileLayout ? "overscroll-contain px-2 py-2" : "surface-floating-body")}>
       {#if visibleChannels.length === 0}
-        <p class="px-3 py-2 text-[0.8rem] text-popover-foreground/60">
+        <p class="px-3 py-2 text-panel-detail text-popover-foreground/60">
           {normalizedSearch ? t("chat.channels.noResults") : t("chat.channels.empty")}
         </p>
       {:else}
@@ -168,8 +169,8 @@
             <button
               type="button"
               class={cn(
-                "flex w-full items-center gap-2 rounded-md text-left text-popover-foreground transition-colors hover:bg-accent hover:text-accent-foreground",
-                mobileLayout ? "min-h-12 px-3 text-sm active:bg-accent" : "min-h-8 px-2 text-[0.8rem]",
+                "menu-item gap-2 text-popover-foreground",
+                mobileLayout && "min-h-12 rounded-xl px-3 text-sm active:bg-accent",
                 selectedChannelId === channel.id && "font-medium",
               )}
               aria-current={selectedChannelId === channel.id ? "page" : undefined}
@@ -193,8 +194,8 @@
     <button
       type="button"
       class={cn(
-        "flex w-full items-center justify-center gap-1.5 text-popover-foreground transition-colors hover:bg-accent hover:text-accent-foreground",
-        mobileLayout ? "min-h-12 rounded-xl text-sm active:bg-accent" : "min-h-8 rounded-md text-[0.8rem]",
+        "menu-item justify-center gap-1.5 text-popover-foreground",
+        mobileLayout && "min-h-12 rounded-xl text-sm active:bg-accent",
       )}
       onclick={() => { void onCreateChannel(); }}
     >

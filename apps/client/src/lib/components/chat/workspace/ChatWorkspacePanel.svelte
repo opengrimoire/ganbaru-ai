@@ -77,6 +77,8 @@
   import ChatReviewPanel from "$lib/components/chat/review/ChatReviewPanel.svelte";
   import ChatSourceControlPanel from "./ChatSourceControlPanel.svelte";
   import ChatTerminalView from "./ChatTerminalView.svelte";
+  import { FLOATING_WIDTH } from "$lib/components/ui/floating-width";
+  import { scrollEdgeFadeAction } from "$lib/utils/scroll-edge-fade";
 
   let {
     placement,
@@ -107,6 +109,7 @@
   let panelPickerOpen = $state(false);
   let panelPickerReady = $state(false);
   let panelPickerTrigger: HTMLButtonElement | undefined = $state();
+  let panelPickerList: HTMLDivElement | undefined = $state();
   let panelPicker: HTMLDivElement | undefined = $state();
   let panelPickerGeometry = $state<SelectPopoverGeometry>(DEFAULT_PICKER_GEOMETRY);
   let fadedTerminalIds: string[] = $state([]);
@@ -647,6 +650,12 @@
     };
   }
 
+  /** Full picker height including rows hidden by the inner scroll list, so placement stays correct after a max height applies. */
+  function panelPickerContentHeight(): number | null {
+    if (!panelPicker || !panelPickerList) return null;
+    return panelPickerList.scrollHeight + panelPicker.offsetHeight - panelPicker.clientHeight;
+  }
+
   function positionPanelPicker(): void {
     if (!panelPickerTrigger) return;
     const triggerRect = panelPickerTrigger.getBoundingClientRect();
@@ -660,16 +669,16 @@
         width: window.innerWidth,
         height: window.innerHeight,
       },
-      contentHeight: panelPicker?.scrollHeight ?? 300,
-      contentWidth: panelPicker?.scrollWidth ?? 272,
-      horizontalAlign: triggerRect.left + 272 <= window.innerWidth - 8 ? "start" : "end",
+      contentHeight: panelPickerContentHeight() ?? 300,
+      contentWidth: panelPicker?.scrollWidth ?? FLOATING_WIDTH.md,
+      horizontalAlign: triggerRect.left + FLOATING_WIDTH.md <= window.innerWidth - 8 ? "start" : "end",
     });
     panelPickerReady = true;
   }
 
   function panelPickerStyle(): string {
     if (!panelPickerReady) return "visibility:hidden;top:0;left:0;";
-    const width = Math.min(272, panelPickerGeometry.maxWidth);
+    const width = Math.min(FLOATING_WIDTH.md, panelPickerGeometry.maxWidth);
     return `visibility:visible;top:${panelPickerGeometry.top}px;left:${panelPickerGeometry.left}px;width:${width}px;max-height:${panelPickerGeometry.maxHeight}px;`;
   }
 
@@ -794,7 +803,7 @@
       <div
         bind:this={panelPicker}
         use:portal
-        class="panel-picker"
+        class="panel-picker surface-floating flex flex-col overflow-hidden"
         role="menu"
         tabindex="-1"
         aria-label={t("chat.inspector.addPanel")}
@@ -803,18 +812,20 @@
         style={panelPickerStyle()}
         onkeydown={handlePanelPickerKeydown}
       >
-        <p>{t("chat.inspector.addPanel")}</p>
-        <button type="button" role="menuitem" onclick={openOrAddTerminal}>
-          <SquareTerminal size={15} />
-          <span><strong>{t("chat.inspector.terminal")}</strong><small>{t("chat.inspector.terminalDescription")}</small></span>
-        </button>
-        {#each panelTabs as tab (tab.id)}
-          {@const Icon = tab.icon}
-          <button type="button" role="menuitem" onclick={() => openPanel(tab.id)}>
-            <Icon size={15} />
-            <span><strong>{t(`chat.inspector.${tab.label}`)}</strong><small>{t(`chat.inspector.${tab.label}Description`)}</small></span>
+        <div bind:this={panelPickerList} class="surface-floating-body min-h-0 flex-1 overflow-y-auto" use:scrollEdgeFadeAction>
+          <p class="menu-label">{t("chat.inspector.addPanel")}</p>
+          <button type="button" class="menu-item" role="menuitem" onclick={openOrAddTerminal}>
+            <SquareTerminal size={15} />
+            <span><strong>{t("chat.inspector.terminal")}</strong><small>{t("chat.inspector.terminalDescription")}</small></span>
           </button>
-        {/each}
+          {#each panelTabs as tab (tab.id)}
+            {@const Icon = tab.icon}
+            <button type="button" class="menu-item" role="menuitem" onclick={() => openPanel(tab.id)}>
+              <Icon size={15} />
+              <span><strong>{t(`chat.inspector.${tab.label}`)}</strong><small>{t(`chat.inspector.${tab.label}Description`)}</small></span>
+            </button>
+          {/each}
+        </div>
       </div>
     {/if}
 
@@ -822,7 +833,7 @@
       <div
         bind:this={tabController.renamePanel}
         use:portal
-        class="tab-rename-panel"
+        class="tab-rename-panel surface-floating"
         role="dialog"
         tabindex="-1"
         aria-labelledby={`${placement}-tab-rename-title`}
@@ -834,6 +845,7 @@
           <label id={`${placement}-tab-rename-title`} for={`${placement}-tab-rename-input`}>{t("chat.inspector.renameTab")}</label>
           <input
             bind:this={tabController.renameInput}
+            class="field w-full"
             id={`${placement}-tab-rename-input`}
             data-app-shortcuts="ignore"
             maxlength={CHAT_WORKSPACE_PANEL_TAB_NAME_MAX_LENGTH}
@@ -972,21 +984,17 @@
   .terminal-split[data-direction="vertical"] { grid-template-columns: 1fr; grid-template-rows: repeat(auto-fit, minmax(min(12rem, 100%), 1fr)); }
   .terminal-split > section { display: flex; min-width: 0; min-height: 0; flex-direction: column; overflow: hidden; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); }
   .terminal-split > section > header { min-height: 1.65rem; flex: 0 0 auto; overflow: hidden; border-bottom: 1px solid var(--border); padding: 0.3rem 0.45rem; text-overflow: ellipsis; white-space: nowrap; color: var(--muted-foreground); font-size: calc(0.65rem * var(--type-scale)); }
-  .panel-picker { position: fixed; z-index: 80; overflow-y: auto; border: 1px solid var(--border); border-radius: 0.65rem; background: var(--popover); padding: 0.35rem; color: var(--popover-foreground); box-shadow: 0 12px 32px rgb(0 0 0 / 0.2); }
-  .panel-picker > p { padding: 0.35rem 0.55rem; color: var(--muted-foreground); font-size: calc(0.666667rem * var(--type-scale)); font-weight: 600; }
-  .panel-picker button { display: flex; width: 100%; align-items: flex-start; gap: 0.65rem; border-radius: 0.45rem; padding: 0.55rem; text-align: left; }
-  .panel-picker button:hover { background: var(--accent); }
+  .panel-picker { position: fixed; z-index: 80; }
+  .panel-picker button { align-items: flex-start; gap: 0.65rem; padding-block: 0.45rem; }
   .panel-picker button > :global(svg) { margin-top: 0.1rem; flex: 0 0 auto; }
   .panel-picker span { display: grid; min-width: 0; gap: 0.1rem; }
-  .panel-picker strong { font-size: calc(0.733333rem * var(--type-scale)); font-weight: 500; }
-  .panel-picker small { color: var(--muted-foreground); font-size: calc(0.666667rem * var(--type-scale)); line-height: 1.3; }
-  .tab-rename-panel { position: fixed; z-index: 90; overflow-y: auto; border: 1px solid var(--border); border-radius: 0.6rem; background: var(--popover); padding: 0.6rem; color: var(--popover-foreground); box-shadow: none; }
-  .tab-rename-panel label { display: block; margin-bottom: 0.4rem; font-size: calc(0.733333rem * var(--type-scale)); font-weight: 500; }
-  .tab-rename-panel input { width: 100%; border: 1px solid var(--border); border-radius: 0.4rem; background: var(--background); padding: 0.4rem 0.5rem; color: var(--foreground); font-size: calc(0.733333rem * var(--type-scale)); outline: none; }
-  .tab-rename-panel input:focus { border-color: var(--ring); }
+  .panel-picker strong { font-weight: 500; }
+  .panel-picker small { color: var(--muted-foreground); font-size: var(--panel-detail-font-size); line-height: 1.3; }
+  .tab-rename-panel { position: fixed; z-index: 90; overflow-y: auto; padding: 0.6rem; }
+  .tab-rename-panel label { display: block; margin-bottom: 0.4rem; font-weight: 500; }
   .tab-rename-actions { display: flex; align-items: center; gap: 0.25rem; margin-top: 0.55rem; }
   .tab-rename-actions > span { flex: 1; }
-  .tab-rename-actions > button { border-radius: 0.4rem; padding: 0.35rem 0.5rem; font-size: calc(0.666667rem * var(--type-scale)); }
+  .tab-rename-actions > button { border-radius: var(--floating-item-radius); padding: 0.35rem 0.5rem; font-size: var(--panel-detail-font-size); }
   .tab-rename-actions > button:hover { background: var(--accent); }
   .tab-rename-actions > button.primary { background: var(--primary); color: var(--primary-foreground); }
   .tab-rename-actions > button.primary:hover { background: color-mix(in srgb, var(--primary) 88%, transparent); }

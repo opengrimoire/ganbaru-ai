@@ -18,6 +18,8 @@
   import Eye from "@lucide/svelte/icons/eye";
   import Upload from "@lucide/svelte/icons/upload";
   import NotesRoundTripDiagnostics from "$lib/components/notes/NotesRoundTripDiagnostics.svelte";
+  import Checkbox from "$lib/components/ui/Checkbox.svelte";
+  import { scrollEdgeFadeAction } from "$lib/utils/scroll-edge-fade";
 
   let {
     dataSourceId,
@@ -147,12 +149,11 @@
         />
       </label>
       <label class="inline-flex min-w-0 items-center gap-2 text-muted-foreground">
-        <input
-          type="checkbox"
+        <Checkbox
           checked={hasHeader}
           disabled={disabled || runningAction !== null}
-          onchange={(event) => {
-            hasHeader = event.currentTarget.checked;
+          onChange={(checked) => {
+            hasHeader = checked;
             result = null;
           }}
           onkeydown={(event) => event.stopPropagation()}
@@ -164,7 +165,7 @@
     <label class="min-w-0 text-muted-foreground">
       <span class="mb-1 block">{t("notes.databaseCsvImportText")}</span>
       <textarea
-        class="min-h-28 w-full min-w-0 resize-y rounded-md border border-input bg-background px-2 py-1.5 font-mono text-[0.8rem] text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
+        class="field min-h-28 w-full min-w-0 resize-y font-mono text-foreground"
         value={csvText}
         placeholder={t("notes.databaseCsvImportPlaceholder")}
         disabled={disabled || runningAction !== null}
@@ -216,7 +217,7 @@
         </p>
         <div class="grid gap-1">
           <h4 class="text-[0.8rem] font-medium text-foreground">{t("notes.databaseCsvImportColumns")}</h4>
-          <ul class="grid max-h-32 gap-1 overflow-auto text-muted-foreground">
+          <ul class="grid max-h-32 gap-1 overflow-auto text-muted-foreground" use:scrollEdgeFadeAction>
             {#each result.columns as column (column.source_index)}
               <li class="flex min-w-0 items-center gap-2">
                 <span class="min-w-0 flex-1 truncate">

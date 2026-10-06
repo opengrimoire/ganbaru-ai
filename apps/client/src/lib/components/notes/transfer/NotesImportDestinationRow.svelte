@@ -176,10 +176,7 @@
   <button
     bind:this={triggerEl}
     type="button"
-    class={cn(
-      "flex h-7 w-72 max-w-full items-center justify-between gap-2 rounded-md border border-border bg-card px-2.5 text-left text-[0.8rem] font-medium text-foreground outline-none transition-colors hover:bg-accent focus:border-ring dark:bg-transparent max-[560px]:w-full",
-      open && "border-ring",
-    )}
+    class="field flex w-72 max-w-full items-center justify-between gap-2 text-left text-panel font-medium text-foreground transition-colors hover:bg-accent max-[560px]:w-full"
     aria-label={t("notes.importDestinationLabel")}
     aria-haspopup="dialog"
     aria-expanded={open}

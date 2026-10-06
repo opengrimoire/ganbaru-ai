@@ -11,7 +11,7 @@ describe("Notes row context menu geometry", () => {
       clientY: 80,
       viewportWidth: 800,
       viewportHeight: 600,
-    })).toEqual({ left: 120, top: 80, width: 180, maxHeight: 330 });
+    })).toEqual({ left: 120, top: 80, width: 240, maxHeight: 330 });
   });
 
   it("clamps the menu to the right and bottom edges", () => {
@@ -20,7 +20,7 @@ describe("Notes row context menu geometry", () => {
       clientY: 590,
       viewportWidth: 800,
       viewportHeight: 600,
-    })).toEqual({ left: 612, top: 262, width: 180, maxHeight: 330 });
+    })).toEqual({ left: 552, top: 262, width: 240, maxHeight: 330 });
   });
 
   it("shrinks within a compact viewport", () => {

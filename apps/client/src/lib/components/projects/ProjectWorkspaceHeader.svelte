@@ -1,6 +1,7 @@
 <script lang="ts">
   import CollectionViewButton from "$lib/components/collections/CollectionViewButton.svelte";
   import ArrowUpDown from "@lucide/svelte/icons/arrow-up-down";
+  import Check from "@lucide/svelte/icons/check";
   import Columns3 from "@lucide/svelte/icons/columns-3";
   import Layers from "@lucide/svelte/icons/layers";
   import ListFilter from "@lucide/svelte/icons/list-filter";
@@ -37,6 +38,7 @@
   import WorkspaceBreadcrumbTerminalIcon from "$lib/components/ui/WorkspaceBreadcrumbTerminalIcon.svelte";
   import ProjectNavigator from "./ProjectNavigator.svelte";
   import ProjectPickerMobileDialog from "$lib/components/projects/pickers/ProjectPickerMobileDialog.svelte";
+  import Select from "$lib/components/ui/Select.svelte";
 
   let {
     selectedProject,
@@ -423,7 +425,7 @@
           <!-- svelte-ignore a11y_no_static_element_interactions -->
           <div class="fixed inset-0 z-40" onclick={closeMobileMenus}></div>
           <div
-            class="absolute right-0 top-full z-50 mt-1 w-52 rounded-md border border-border bg-card p-1.5 text-card-foreground shadow-lg"
+            class="surface-floating surface-floating-body absolute right-0 top-full z-50 mt-1 w-floating-sm"
             role="menu"
             aria-label={t("projects.toolbar.views")}
           >
@@ -433,15 +435,11 @@
                 type="button"
                 role="menuitemradio"
                 aria-checked={projects.activeView === view}
-                class={cn(
-                  "flex min-h-12 w-full items-center gap-3 rounded-md px-3 text-left text-sm hover:bg-accent",
-                  projects.activeView === view
-                    ? "bg-accent text-foreground"
-                    : "text-muted-foreground",
-                )}
+                class="menu-item"
                 onclick={() => selectMobileView(view)}
               >
-                <span>{label}</span>
+                <span class="min-w-0 flex-1 truncate">{label}</span>
+                {#if projects.activeView === view}<Check class="size-3.5 shrink-0" aria-hidden="true" />{/if}
               </button>
             {/each}
           </div>
@@ -472,7 +470,7 @@
           <!-- svelte-ignore a11y_no_static_element_interactions -->
           <div class="fixed inset-0 z-40" onclick={closeMobileMenus}></div>
           <div
-            class="absolute right-0 top-full z-50 mt-1 w-52 rounded-md border border-border bg-card p-1.5 text-card-foreground shadow-lg"
+            class="surface-floating surface-floating-body absolute right-0 top-full z-50 mt-1 w-floating-sm"
             role="menu"
             aria-label={t("projects.toolbar.customization")}
           >
@@ -483,14 +481,12 @@
               <button
                 type="button"
                 role="menuitem"
-                class={cn(
-                  "flex min-h-12 w-full items-center gap-3 rounded-md px-3 text-left text-sm hover:bg-accent",
-                  active ? "bg-accent text-foreground" : "text-muted-foreground",
-                )}
+                class="menu-item"
                 onclick={() => selectMobileCustomization(panel)}
               >
-                <Icon size={16} strokeWidth={1.75} />
-                <span>{label}</span>
+                <Icon class="text-muted-foreground" size={16} strokeWidth={1.75} />
+                <span class="min-w-0 flex-1 truncate">{label}</span>
+                {#if active}<Check class="size-3.5 shrink-0" aria-hidden="true" />{/if}
               </button>
             {/each}
           </div>
@@ -532,21 +528,18 @@
           <MessageSquare size={14} strokeWidth={1.75} />
         </button>
         {#if projectWorkingFolders.length > 1}
-          <select
-            class="h-7 max-w-28 rounded-md border border-border bg-background px-1 text-[0.68rem] text-muted-foreground"
-            aria-label={t("projects.header.chatFolder")}
+          <Select
+            inline
+            class="w-auto max-w-32"
             value=""
-            onchange={(event) => {
-              const workingFolderId = event.currentTarget.value;
-              event.currentTarget.value = "";
+            triggerLabel={t("projects.header.chatFolder")}
+            ariaLabel={t("projects.header.chatFolder")}
+            popoverAlign="end"
+            options={projectWorkingFolders.map((folder) => ({ value: folder.id, label: folder.displayName }))}
+            onChange={(workingFolderId) => {
               if (workingFolderId) void openProjectChat(workingFolderId);
             }}
-          >
-            <option value="">{t("projects.header.chatFolder")}</option>
-            {#each projectWorkingFolders as folder (folder.id)}
-              <option value={folder.id}>{folder.displayName}</option>
-            {/each}
-          </select>
+          />
         {/if}
       {/if}
       <button

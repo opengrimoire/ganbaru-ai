@@ -94,6 +94,8 @@
   import { provideNotesEditor } from "./editor-context";
   import { getMobileBackStack } from "$lib/stores/mobile-back-stack.svelte";
   import { cn } from "$lib/utils";
+  import { FLOATING_WIDTH } from "$lib/components/ui/floating-width";
+  import { scrollEdgeFadeAction } from "$lib/utils/scroll-edge-fade";
   import { dismissOnOutside } from "$lib/utils/dismiss-on-outside";
   import { portal } from "$lib/utils/portal";
   import NotesBlockList from "$lib/components/notes/blocks/NotesBlockList.svelte";
@@ -116,9 +118,9 @@
   const FOCUSED_BLOCK_SCROLL_PADDING_PX = 16;
   const PAGE_PANEL_VIEWPORT_MARGIN_PX = 8;
   const PAGE_PANEL_TRIGGER_GAP_PX = 4;
-  const PAGE_MENU_WIDTH_PX = 240;
+  const PAGE_MENU_WIDTH_PX = FLOATING_WIDTH.sm;
   const PAGE_MENU_MAX_HEIGHT_PX = 640;
-  const ACTIVITY_PANEL_WIDTH_PX = 320;
+  const ACTIVITY_PANEL_WIDTH_PX = FLOATING_WIDTH.lg;
   const PAGE_DETAILS_PANEL_WIDTH_PX = 704;
   const PAGE_DETAILS_PANEL_MAX_HEIGHT_PX = 512;
   const COMMENTS_PANEL_WIDTH_PX = 400;
@@ -632,11 +634,7 @@
   }
 
   function menuItemClass(destructive = false): string {
-    return cn(
-      "flex w-full items-center gap-2 rounded px-2.5 text-left text-[0.8rem] hover:bg-accent",
-      mobileLayout ? "min-h-12 py-2" : "py-1.5",
-      destructive ? "text-destructive" : "text-popover-foreground",
-    );
+    return cn("menu-item", destructive && "menu-item-destructive");
   }
 
   $effect(() => {
@@ -1118,16 +1116,16 @@
           {#if activityPanelOpen}
             <div
               id={activityPanelId}
-              class="fixed z-80 overflow-hidden rounded-lg border border-border bg-popover text-popover-foreground shadow-md"
+              class="surface-floating fixed z-80 overflow-hidden"
               style={activityPanelStyle}
               role="dialog"
               aria-label={t("notes.activity")}
               data-app-floating-surface
             >
-              <div class="border-b border-border px-4 py-3 text-[0.8rem] font-medium text-muted-foreground">
+              <div class="border-b border-border px-4 py-3 text-panel-detail font-medium text-muted-foreground">
                 {t("notes.activity")}
               </div>
-              <div class="flex flex-col gap-3 px-4 py-3 text-[0.8rem]">
+              <div class="flex flex-col gap-3 px-4 py-3">
                 <div class="flex min-w-0 items-center justify-between gap-4">
                   <span class="min-w-0 truncate text-foreground">{activityEditedByLabel}</span>
                   <span class="shrink-0 text-muted-foreground">{editedDateLabel}</span>
@@ -1176,231 +1174,235 @@
           </button>
           {#if pageMenuOpen}
             <div
-              class="fixed z-80 overflow-y-auto rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-lg"
+              class="surface-floating fixed z-80 flex flex-col overflow-hidden"
               style={pageMenuStyle}
               role="menu"
               data-app-floating-surface
             >
-              {#if mobileLayout}
-                <button class={menuItemClass()} type="button" role="menuitem" aria-haspopup="dialog" onclick={() => {
-                  openIconPicker("action", pageMenuButton);
-                  closePageMenu();
-                }}>
-                  <SmilePlus class="size-4" strokeWidth={noteActionIconStrokeWidth} />
-                  <span>{page.icon ? t("notes.changePageIcon") : t("notes.addPageIcon")}</span>
-                </button>
-                <button class={`${menuItemClass()} disabled:opacity-50`} type="button" role="menuitem" aria-haspopup="dialog" disabled={coverPosition !== null} onclick={() => {
-                  if (pageMenuButton) openCoverMenu(pageMenuButton);
-                }}>
-                  <ImagePlus class="size-4" strokeWidth={noteActionIconStrokeWidth} />
-                  <span>{page.cover ? t("notes.changePageCover") : t("notes.addPageCover")}</span>
-                </button>
-                <button class={menuItemClass()} type="button" role="menuitem" aria-haspopup="dialog" onclick={() => openPageDiscussion("menu")}>
-                  <MessageSquare class="size-4" strokeWidth={noteActionIconStrokeWidth} />
-                  <span>{t("notes.addComment")}</span>
-                </button>
-                <div class="my-1 border-t border-border" role="separator"></div>
-              {/if}
-              <button class={menuItemClass()} type="button" role="menuitem" onclick={() => focusTitleInput()}>
-                <Pencil class="size-4" />
-                <span>{t("notes.renamePage")}</span>
-              </button>
-              <button class={menuItemClass()} type="button" role="menuitem" onclick={duplicateCurrentPage}>
-                <Copy class="size-4" />
-                <span>{t("notes.duplicatePage")}</span>
-              </button>
-              {#if hasPanelMenuItems}
-                <div class="my-1 border-t border-border" role="separator"></div>
-                {#if linksBadgeCount > 0}
-                  <button class={menuItemClass()} type="button" role="menuitem" onclick={() => togglePanel("links")}>
-                    <Link2 class="size-4" strokeWidth={noteActionIconStrokeWidth} />
-                    <span>{t("notes.noteLinks")}</span>
-                    <span class="ml-auto text-[0.7rem] text-muted-foreground">{linksBadgeCount}</span>
+              <div class="surface-floating-body flex min-h-0 flex-1 flex-col overflow-y-auto" use:scrollEdgeFadeAction>
+                {#if mobileLayout}
+                  <button class={menuItemClass()} type="button" role="menuitem" aria-haspopup="dialog" onclick={() => {
+                    openIconPicker("action", pageMenuButton);
+                    closePageMenu();
+                  }}>
+                    <SmilePlus class="size-4" strokeWidth={noteActionIconStrokeWidth} />
+                    <span>{page.icon ? t("notes.changePageIcon") : t("notes.addPageIcon")}</span>
                   </button>
-                {/if}
-                {#if openCommentCount > 0}
-                  <button class={menuItemClass()} type="button" role="menuitem" onclick={() => togglePanel("comments")}>
+                  <button class={menuItemClass()} type="button" role="menuitem" aria-haspopup="dialog" disabled={coverPosition !== null} onclick={() => {
+                    if (pageMenuButton) openCoverMenu(pageMenuButton);
+                  }}>
+                    <ImagePlus class="size-4" strokeWidth={noteActionIconStrokeWidth} />
+                    <span>{page.cover ? t("notes.changePageCover") : t("notes.addPageCover")}</span>
+                  </button>
+                  <button class={menuItemClass()} type="button" role="menuitem" aria-haspopup="dialog" onclick={() => openPageDiscussion("menu")}>
                     <MessageSquare class="size-4" strokeWidth={noteActionIconStrokeWidth} />
-                    <span>{t("notes.commentsCount", openCommentCount)}</span>
-                    {#if unreadCommentCount > 0}
-                      <span class="ml-auto text-[0.7rem] font-semibold text-primary">{commentsBadgeCount}</span>
-                    {/if}
+                    <span>{t("notes.addComment")}</span>
                   </button>
+                  <div class="menu-separator" role="separator"></div>
                 {/if}
-                {#if openSuggestionCount > 0}
-                  <button class={menuItemClass()} type="button" role="menuitem" onclick={() => togglePanel("suggestions")}>
-                    <PencilLine class="size-4" strokeWidth={noteActionIconStrokeWidth} />
-                    <span>{t("notes.suggestionsCount", openSuggestionCount)}</span>
-                  </button>
-                {/if}
-                <div class="my-1 border-t border-border" role="separator"></div>
-              {/if}
-              <button
-                class={menuItemClass()}
-                type="button"
-                role="menuitem"
-                aria-expanded={moveMenuOpen}
-                onclick={() => {
-                  moveMenuOpen = !moveMenuOpen;
-                  if (moveMenuOpen) {
-                    void notes.ensureOptionalSubsystem("destinations").catch((error) => {
-                      console.error("load notes move destinations failed", error);
-                    });
-                  }
-                  folderMoveMenuOpen = false;
-                }}
-              >
-                <FolderInput class="size-4" />
-                <span>{t("notes.movePageTo")}</span>
-              </button>
-              {#if moveMenuOpen}
-                <div class="my-1 max-h-72 overflow-auto border-y border-border bg-muted/25 py-1">
-                  {#if panelLoadStates["destination-picker"]?.status === "ready" && panelLoadStates["destination-picker"].component.kind === "destination-picker"}
-                    {@const NotesDestinationPickerList = panelLoadStates["destination-picker"].component.component}
-                    <NotesDestinationPickerList
-                    targets={moveTargets}
-                    searchLabel={t("notes.moveDestinationSearch")}
-                    searchPlaceholder={t("notes.moveDestinationSearchPlaceholder")}
-                    recentLabel={t("notes.recentDestinations")}
-                    pagesLabel={t("notes.allPages")}
-                    emptyLabel={t("notes.noPageMoveTargets")}
-                    optionLabel={(target) => t("notes.movePageToTarget", target.title)}
-                    onSelect={moveToTarget}
-                    onClose={() => {
-                      moveMenuOpen = false;
-                    }}
-                    />
-                  {:else if panelLoadStates["destination-picker"]?.status === "failed"}
-                    <button class="m-2 min-h-8 rounded-md border border-border px-2 text-[0.8rem] hover:bg-accent" type="button" onclick={() => requestEditorPanel("destination-picker", true)}>{t("common.retry")}</button>
-                  {:else}
-                    <div class="p-2 text-[0.8rem] text-muted-foreground" aria-busy="true">{t("common.loading")}</div>
+                <button class={menuItemClass()} type="button" role="menuitem" onclick={() => focusTitleInput()}>
+                  <Pencil class="size-4" />
+                  <span>{t("notes.renamePage")}</span>
+                </button>
+                <button class={menuItemClass()} type="button" role="menuitem" onclick={duplicateCurrentPage}>
+                  <Copy class="size-4" />
+                  <span>{t("notes.duplicatePage")}</span>
+                </button>
+                {#if hasPanelMenuItems}
+                  <div class="menu-separator" role="separator"></div>
+                  {#if linksBadgeCount > 0}
+                    <button class={menuItemClass()} type="button" role="menuitem" onclick={() => togglePanel("links")}>
+                      <Link2 class="size-4" strokeWidth={noteActionIconStrokeWidth} />
+                      <span>{t("notes.noteLinks")}</span>
+                      <span class="ml-auto text-panel-detail text-muted-foreground">{linksBadgeCount}</span>
+                    </button>
                   {/if}
-                </div>
-              {/if}
-              {#if folderMoveTargets.length > 0}
+                  {#if openCommentCount > 0}
+                    <button class={menuItemClass()} type="button" role="menuitem" onclick={() => togglePanel("comments")}>
+                      <MessageSquare class="size-4" strokeWidth={noteActionIconStrokeWidth} />
+                      <span>{t("notes.commentsCount", openCommentCount)}</span>
+                      {#if unreadCommentCount > 0}
+                        <span class="ml-auto text-panel-detail font-semibold text-primary">{commentsBadgeCount}</span>
+                      {/if}
+                    </button>
+                  {/if}
+                  {#if openSuggestionCount > 0}
+                    <button class={menuItemClass()} type="button" role="menuitem" onclick={() => togglePanel("suggestions")}>
+                      <PencilLine class="size-4" strokeWidth={noteActionIconStrokeWidth} />
+                      <span>{t("notes.suggestionsCount", openSuggestionCount)}</span>
+                    </button>
+                  {/if}
+                  <div class="menu-separator" role="separator"></div>
+                {/if}
                 <button
                   class={menuItemClass()}
                   type="button"
                   role="menuitem"
-                  aria-expanded={folderMoveMenuOpen}
+                  aria-expanded={moveMenuOpen}
                   onclick={() => {
-                    folderMoveMenuOpen = !folderMoveMenuOpen;
-                    if (folderMoveMenuOpen) {
+                    moveMenuOpen = !moveMenuOpen;
+                    if (moveMenuOpen) {
                       void notes.ensureOptionalSubsystem("destinations").catch((error) => {
-                        console.error("load notes folder destinations failed", error);
+                        console.error("load notes move destinations failed", error);
                       });
                     }
-                    moveMenuOpen = false;
+                    folderMoveMenuOpen = false;
                   }}
                 >
-                  <FolderTree class="size-4" />
-                  <span>{t("notes.movePageToFolder")}</span>
+                  <FolderInput class="size-4" />
+                  <span>{t("notes.movePageTo")}</span>
                 </button>
-                {#if folderMoveMenuOpen}
-                  <div class="my-1 max-h-72 overflow-auto border-y border-border bg-muted/25 py-1">
+                {#if moveMenuOpen}
+                  <div class="my-1 max-h-72 overflow-auto border-y border-border bg-muted/25 py-1" use:scrollEdgeFadeAction>
                     {#if panelLoadStates["destination-picker"]?.status === "ready" && panelLoadStates["destination-picker"].component.kind === "destination-picker"}
                       {@const NotesDestinationPickerList = panelLoadStates["destination-picker"].component.component}
                       <NotesDestinationPickerList
-                      targets={folderMoveTargets}
+                      targets={moveTargets}
                       searchLabel={t("notes.moveDestinationSearch")}
                       searchPlaceholder={t("notes.moveDestinationSearchPlaceholder")}
                       recentLabel={t("notes.recentDestinations")}
-                      pagesLabel={t("notes.folders")}
-                      emptyLabel={t("notes.noFolderMoveTargets")}
-                      optionLabel={(target) => t("notes.movePageToFolderTarget", target.title)}
-                      onSelect={moveToFolderTarget}
+                      pagesLabel={t("notes.allPages")}
+                      emptyLabel={t("notes.noPageMoveTargets")}
+                      optionLabel={(target) => t("notes.movePageToTarget", target.title)}
+                      onSelect={moveToTarget}
                       onClose={() => {
-                        folderMoveMenuOpen = false;
+                        moveMenuOpen = false;
                       }}
                       />
                     {:else if panelLoadStates["destination-picker"]?.status === "failed"}
-                      <button class="m-2 min-h-8 rounded-md border border-border px-2 text-[0.8rem] hover:bg-accent" type="button" onclick={() => requestEditorPanel("destination-picker", true)}>{t("common.retry")}</button>
+                      <button class="m-2 min-h-8 rounded-floating-item border border-border px-2 hover:bg-accent" type="button" onclick={() => requestEditorPanel("destination-picker", true)}>{t("common.retry")}</button>
                     {:else}
-                      <div class="p-2 text-[0.8rem] text-muted-foreground" aria-busy="true">{t("common.loading")}</div>
+                      <div class="p-2 text-muted-foreground" aria-busy="true">{t("common.loading")}</div>
                     {/if}
                   </div>
                 {/if}
-              {/if}
-              {#if fileExportAvailable}
-                <button
-                  class={menuItemClass()}
-                  type="button"
-                  role="menuitem"
-                  onclick={() => {
-                    htmlExportOpen = true;
-                    closePageMenu();
-                  }}
-                >
-                  <Download class="size-4" />
-                  <span>{t("notes.htmlExportOpen")}</span>
+                {#if folderMoveTargets.length > 0}
+                  <button
+                    class={menuItemClass()}
+                    type="button"
+                    role="menuitem"
+                    aria-expanded={folderMoveMenuOpen}
+                    onclick={() => {
+                      folderMoveMenuOpen = !folderMoveMenuOpen;
+                      if (folderMoveMenuOpen) {
+                        void notes.ensureOptionalSubsystem("destinations").catch((error) => {
+                          console.error("load notes folder destinations failed", error);
+                        });
+                      }
+                      moveMenuOpen = false;
+                    }}
+                  >
+                    <FolderTree class="size-4" />
+                    <span>{t("notes.movePageToFolder")}</span>
+                  </button>
+                  {#if folderMoveMenuOpen}
+                    <div class="my-1 max-h-72 overflow-auto border-y border-border bg-muted/25 py-1" use:scrollEdgeFadeAction>
+                      {#if panelLoadStates["destination-picker"]?.status === "ready" && panelLoadStates["destination-picker"].component.kind === "destination-picker"}
+                        {@const NotesDestinationPickerList = panelLoadStates["destination-picker"].component.component}
+                        <NotesDestinationPickerList
+                        targets={folderMoveTargets}
+                        searchLabel={t("notes.moveDestinationSearch")}
+                        searchPlaceholder={t("notes.moveDestinationSearchPlaceholder")}
+                        recentLabel={t("notes.recentDestinations")}
+                        pagesLabel={t("notes.folders")}
+                        emptyLabel={t("notes.noFolderMoveTargets")}
+                        optionLabel={(target) => t("notes.movePageToFolderTarget", target.title)}
+                        onSelect={moveToFolderTarget}
+                        onClose={() => {
+                          folderMoveMenuOpen = false;
+                        }}
+                        />
+                      {:else if panelLoadStates["destination-picker"]?.status === "failed"}
+                        <button class="m-2 min-h-8 rounded-floating-item border border-border px-2 hover:bg-accent" type="button" onclick={() => requestEditorPanel("destination-picker", true)}>{t("common.retry")}</button>
+                      {:else}
+                        <div class="p-2 text-muted-foreground" aria-busy="true">{t("common.loading")}</div>
+                      {/if}
+                    </div>
+                  {/if}
+                {/if}
+                {#if fileExportAvailable}
+                  <button
+                    class={menuItemClass()}
+                    type="button"
+                    role="menuitem"
+                    onclick={() => {
+                      htmlExportOpen = true;
+                      closePageMenu();
+                    }}
+                  >
+                    <Download class="size-4" />
+                    <span>{t("notes.htmlExportOpen")}</span>
+                  </button>
+                  <button
+                    class={menuItemClass()}
+                    type="button"
+                    role="menuitem"
+                    onclick={() => {
+                      agentBridgeExportOpen = true;
+                      closePageMenu();
+                    }}
+                  >
+                    <GitBranch class="size-4" />
+                    <span>{t("notes.agentBridgeExportOpen")}</span>
+                  </button>
+                {/if}
+                <button class={menuItemClass()} type="button" role="menuitem" onclick={openPageHistory}>
+                  <History class="size-4" />
+                  <span>{t("notes.pageHistory")}</span>
                 </button>
-                <button
-                  class={menuItemClass()}
-                  type="button"
-                  role="menuitem"
-                  onclick={() => {
-                    agentBridgeExportOpen = true;
-                    closePageMenu();
-                  }}
-                >
-                  <GitBranch class="size-4" />
-                  <span>{t("notes.agentBridgeExportOpen")}</span>
+                <button class={menuItemClass()} type="button" role="menuitem" onclick={archiveCurrentPage}>
+                  <Archive class="size-4" />
+                  <span>{t("notes.archivePage")}</span>
                 </button>
-              {/if}
-              <button class={menuItemClass()} type="button" role="menuitem" onclick={openPageHistory}>
-                <History class="size-4" />
-                <span>{t("notes.pageHistory")}</span>
-              </button>
-              <button class={menuItemClass()} type="button" role="menuitem" onclick={archiveCurrentPage}>
-                <Archive class="size-4" />
-                <span>{t("notes.archivePage")}</span>
-              </button>
-              <button class={menuItemClass(true)} type="button" role="menuitem" onclick={trashCurrentPage}>
-                <Trash2 class="size-4" />
-                <span>{t("notes.moveToTrash")}</span>
-              </button>
+                <button class={menuItemClass(true)} type="button" role="menuitem" onclick={trashCurrentPage}>
+                  <Trash2 class="size-4" />
+                  <span>{t("notes.moveToTrash")}</span>
+                </button>
+              </div>
             </div>
           {/if}
         </div>
 
         {#if activePanel}
           <div
-            class={activePanel === "comments"
-              ? "fixed z-80 flex min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-xl"
-              : "fixed z-80 overflow-auto rounded-md border border-border bg-popover p-2 text-popover-foreground shadow-lg"}
+            class="surface-floating fixed z-80 flex min-h-0 flex-col overflow-hidden"
             style={pageDetailsPanelStyle}
             role="dialog"
             aria-label={activePanel === "comments" ? t("notes.pageDiscussion") : activePanel === "links" ? t("notes.noteLinks") : t("notes.suggestedEdits")}
             data-app-floating-surface
           >
             {#if activePanel === "links"}
-              <div class="flex min-w-0 flex-col gap-2">
-                {#if panelLoadStates.backlinks?.status === "ready" && panelLoadStates.backlinks.component.kind === "backlinks"}
-                  {@const NotesBacklinks = panelLoadStates.backlinks.component.component}
-                  <NotesBacklinks embedded />
-                {/if}
-                {#if panelLoadStates["page-links"]?.status === "ready" && panelLoadStates["page-links"].component.kind === "page-links"}
-                  {@const NotesPageLinks = panelLoadStates["page-links"].component.component}
-                  <NotesPageLinks embedded />
-                {/if}
-                {#if panelLoadStates.backlinks?.status === "failed" || panelLoadStates["page-links"]?.status === "failed"}
-                  <button class="min-h-8 rounded-md border border-border px-2 text-[0.8rem] hover:bg-accent" type="button" onclick={() => { if (panelLoadStates.backlinks?.status === "failed") requestEditorPanel("backlinks", true); if (panelLoadStates["page-links"]?.status === "failed") requestEditorPanel("page-links", true); }}>{t("common.retry")}</button>
-                {/if}
+              <div class="min-h-0 flex-1 overflow-auto p-2" use:scrollEdgeFadeAction>
+                <div class="flex min-w-0 flex-col gap-2">
+                  {#if panelLoadStates.backlinks?.status === "ready" && panelLoadStates.backlinks.component.kind === "backlinks"}
+                    {@const NotesBacklinks = panelLoadStates.backlinks.component.component}
+                    <NotesBacklinks embedded />
+                  {/if}
+                  {#if panelLoadStates["page-links"]?.status === "ready" && panelLoadStates["page-links"].component.kind === "page-links"}
+                    {@const NotesPageLinks = panelLoadStates["page-links"].component.component}
+                    <NotesPageLinks embedded />
+                  {/if}
+                  {#if panelLoadStates.backlinks?.status === "failed" || panelLoadStates["page-links"]?.status === "failed"}
+                    <button class="min-h-8 rounded-floating-item border border-border px-2 hover:bg-accent" type="button" onclick={() => { if (panelLoadStates.backlinks?.status === "failed") requestEditorPanel("backlinks", true); if (panelLoadStates["page-links"]?.status === "failed") requestEditorPanel("page-links", true); }}>{t("common.retry")}</button>
+                  {/if}
+                </div>
               </div>
             {:else if activePanel === "comments"}
               {#if panelLoadStates.comments?.status === "ready" && panelLoadStates.comments.component.kind === "comments"}
                 {@const NotesComments = panelLoadStates.comments.component.component}
                 <NotesComments embedded />
               {:else if panelLoadStates.comments?.status === "failed"}
-                <button class="min-h-8 rounded-md border border-border px-2 text-[0.8rem] hover:bg-accent" type="button" onclick={() => requestEditorPanel("comments", true)}>{t("common.retry")}</button>
+                <button class="min-h-8 rounded-floating-item border border-border px-2 hover:bg-accent" type="button" onclick={() => requestEditorPanel("comments", true)}>{t("common.retry")}</button>
               {/if}
             {:else if activePanel === "suggestions"}
-              {#if panelLoadStates.suggestions?.status === "ready" && panelLoadStates.suggestions.component.kind === "suggestions"}
-                {@const NotesSuggestions = panelLoadStates.suggestions.component.component}
-                <NotesSuggestions embedded />
-              {:else if panelLoadStates.suggestions?.status === "failed"}
-                <button class="min-h-8 rounded-md border border-border px-2 text-[0.8rem] hover:bg-accent" type="button" onclick={() => requestEditorPanel("suggestions", true)}>{t("common.retry")}</button>
-              {/if}
+              <div class="min-h-0 flex-1 overflow-auto p-2" use:scrollEdgeFadeAction>
+                {#if panelLoadStates.suggestions?.status === "ready" && panelLoadStates.suggestions.component.kind === "suggestions"}
+                  {@const NotesSuggestions = panelLoadStates.suggestions.component.component}
+                  <NotesSuggestions embedded />
+                {:else if panelLoadStates.suggestions?.status === "failed"}
+                  <button class="min-h-8 rounded-floating-item border border-border px-2 hover:bg-accent" type="button" onclick={() => requestEditorPanel("suggestions", true)}>{t("common.retry")}</button>
+                {/if}
+              </div>
             {/if}
           </div>
         {/if}
@@ -1435,7 +1437,7 @@
               onFocalPoint={coverPosition ? (point) => { if (coverPosition && !coverPositionSaving) coverPosition.focal = point; } : undefined}
               onStatus={(status) => { coverStatus = status; }} />
           {:else if panelLoadStates["page-cover"]?.status === "failed"}
-            <button class="m-2 min-h-8 rounded-md border border-border bg-popover px-2 text-[0.8rem]" type="button" onclick={() => requestEditorPanel("page-cover", true)}>{t("common.retry")}</button>
+            <button class="m-2 min-h-8 rounded-floating-item border border-border bg-popover px-2" type="button" onclick={() => requestEditorPanel("page-cover", true)}>{t("common.retry")}</button>
           {:else}
             <NotesLoadingSkeleton kind="cover" />
           {/if}
@@ -1488,7 +1490,7 @@
             />
           {/key}
         {:else if panelLoadStates["cover-menu"]?.status === "failed"}
-          <button class="min-h-8 rounded-md border border-border px-2 text-[0.8rem] hover:bg-accent" type="button" onclick={() => requestEditorPanel("cover-menu", true)}>{t("common.retry")}</button>
+          <button class="min-h-8 rounded-floating-item border border-border px-2 hover:bg-accent" type="button" onclick={() => requestEditorPanel("cover-menu", true)}>{t("common.retry")}</button>
         {/if}
       {/if}
 
@@ -1661,7 +1663,7 @@
       }}
       />
     {:else if panelLoadStates["html-export"]?.status === "failed"}
-      <button class="fixed inset-0 z-50 m-auto h-10 rounded-md border border-border bg-popover px-3" type="button" onclick={() => requestEditorPanel("html-export", true)}>{t("common.retry")}</button>
+      <button class="surface-floating fixed inset-0 z-50 m-auto h-10 px-3" type="button" onclick={() => requestEditorPanel("html-export", true)}>{t("common.retry")}</button>
     {/if}
   {/if}
 
@@ -1676,7 +1678,7 @@
       }}
       />
     {:else if panelLoadStates["agent-export"]?.status === "failed"}
-      <button class="fixed inset-0 z-50 m-auto h-10 rounded-md border border-border bg-popover px-3" type="button" onclick={() => requestEditorPanel("agent-export", true)}>{t("common.retry")}</button>
+      <button class="surface-floating fixed inset-0 z-50 m-auto h-10 px-3" type="button" onclick={() => requestEditorPanel("agent-export", true)}>{t("common.retry")}</button>
     {/if}
   {/if}
 
@@ -1691,7 +1693,7 @@
       }}
       />
     {:else if panelLoadStates["page-history"]?.status === "failed"}
-      <button class="fixed inset-0 z-50 m-auto h-10 rounded-md border border-border bg-popover px-3" type="button" onclick={() => requestEditorPanel("page-history", true)}>{t("common.retry")}</button>
+      <button class="surface-floating fixed inset-0 z-50 m-auto h-10 px-3" type="button" onclick={() => requestEditorPanel("page-history", true)}>{t("common.retry")}</button>
     {/if}
   {/if}
 
@@ -1709,7 +1711,7 @@
       }}
       />
     {:else if panelLoadStates["confirm-dialog"]?.status === "failed"}
-      <button class="fixed inset-0 z-50 m-auto h-10 rounded-md border border-border bg-popover px-3" type="button" onclick={() => requestEditorPanel("confirm-dialog", true)}>{t("common.retry")}</button>
+      <button class="surface-floating fixed inset-0 z-50 m-auto h-10 px-3" type="button" onclick={() => requestEditorPanel("confirm-dialog", true)}>{t("common.retry")}</button>
     {/if}
   {/if}
 
@@ -1727,7 +1729,7 @@
       }}
       />
     {:else if panelLoadStates["confirm-dialog"]?.status === "failed"}
-      <button class="fixed inset-0 z-50 m-auto h-10 rounded-md border border-border bg-popover px-3" type="button" onclick={() => requestEditorPanel("confirm-dialog", true)}>{t("common.retry")}</button>
+      <button class="surface-floating fixed inset-0 z-50 m-auto h-10 px-3" type="button" onclick={() => requestEditorPanel("confirm-dialog", true)}>{t("common.retry")}</button>
     {/if}
   {/if}
 {:else}

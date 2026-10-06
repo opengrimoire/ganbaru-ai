@@ -33,13 +33,13 @@
 </script>
 
 {#snippet choice(label: string, selected: boolean, select: () => void)}
-  <button type="button" class="flex min-h-8 w-full items-center justify-between gap-2 rounded px-2 text-left hover:bg-accent" aria-pressed={selected} onclick={select}>{label}{#if selected}<Check class="size-3.5" />{/if}</button>
+  <button type="button" class="menu-item min-w-0 justify-between" aria-pressed={selected} onclick={select}><span class="min-w-0 truncate">{label}</span>{#if selected}<Check class="size-3.5 shrink-0" aria-hidden="true" />{/if}</button>
 {/snippet}
 
 {#if column === "name" || column === "status" || column === "priority" || column === "due" || column === "scheduled" || field}
   <CollectionMenu label={t("collections.property.filter")} kind="filter" fullWidth>
     {#if column === "name"}
-      <input class="h-8 w-full rounded border border-input bg-transparent px-2" aria-label={t("projects.header.searchPlaceholder")} bind:value={query.search} />
+      <input class="field w-full" aria-label={t("projects.header.searchPlaceholder")} bind:value={query.search} />
     {:else if column === "status"}
       {#each statusOptions as option}
         {@render choice(option === "all" ? t("projects.filters.allStatuses") : option === "open" ? t("projects.filters.open") : option === "blocked" ? t("projects.filters.blocked") : t("projects.filters.done"), query.statusFilter === option, () => { query.statusFilter = option; })}

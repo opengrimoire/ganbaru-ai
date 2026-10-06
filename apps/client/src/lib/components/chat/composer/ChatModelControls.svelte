@@ -39,11 +39,15 @@
   import { formatNumber } from "$lib/i18n/formatters";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import { trapTabFocus } from "$lib/chat/focus-navigation";
+  import { isPointerAimingAtSubmenu, SUBMENU_AIM_TOLERANCES } from "$lib/utils/menu-aim";
   import { portal } from "$lib/utils/portal";
   import { getChat } from "$lib/stores/chat.svelte";
   import { getSettingsLauncher } from "$lib/stores/settings-launcher.svelte";
   import ChatProviderIcon from "$lib/components/chat/identity/ChatProviderIcon.svelte";
   import ChatProviderForkDialog from "./ChatProviderForkDialog.svelte";
+  import Checkbox from "$lib/components/ui/Checkbox.svelte";
+  import { scrollEdgeFadeAction } from "$lib/utils/scroll-edge-fade";
+  import { cn } from "$lib/utils";
 
   interface PendingProviderModelSelection {
     providerInstanceId: string;
@@ -102,11 +106,6 @@
   let effortHandleHovered = $state(false);
   let modelSearch: HTMLInputElement | undefined = $state();
   let modelListElement: HTMLDivElement | undefined = $state();
-  let modelListContentElement: HTMLDivElement | undefined = $state();
-  let modelListScrollable = $state(false);
-  let modelListCanScrollUp = $state(false);
-  let modelListCanScrollDown = $state(false);
-  let modelListScrollFrame: number | null = null;
   let providerForkDialog: HTMLDivElement | undefined = $state();
   let pendingProviderModel = $state<PendingProviderModelSelection | null>(null);
   let modelQuery = $state("");
@@ -246,22 +245,6 @@
   });
 
   $effect(() => {
-    const element = modelListElement;
-    if (!element) return;
-    const resizeObserver = new ResizeObserver(requestModelListScrollStateRefresh);
-    resizeObserver.observe(element);
-    if (modelListContentElement) resizeObserver.observe(modelListContentElement);
-    requestModelListScrollStateRefresh();
-    return () => {
-      resizeObserver.disconnect();
-      if (modelListScrollFrame !== null) {
-        cancelAnimationFrame(modelListScrollFrame);
-        modelListScrollFrame = null;
-      }
-    };
-  });
-
-  $effect(() => {
     if (!pickerOpen) return;
     const closeOnOutsidePointer = (event: PointerEvent) => {
       if (!(event.target instanceof Node)) return;
@@ -336,26 +319,6 @@
     if (next.has(sectionId)) next.delete(sectionId);
     else next.add(sectionId);
     collapsedModelSections = next;
-  }
-
-  function refreshModelListScrollState(): void {
-    modelListScrollFrame = null;
-    const element = modelListElement;
-    if (!element) {
-      modelListScrollable = false;
-      modelListCanScrollUp = false;
-      modelListCanScrollDown = false;
-      return;
-    }
-    const maxScrollTop = element.scrollHeight - element.clientHeight;
-    modelListScrollable = maxScrollTop > 1;
-    modelListCanScrollUp = element.scrollTop > 1;
-    modelListCanScrollDown = element.scrollTop < maxScrollTop - 1;
-  }
-
-  function requestModelListScrollStateRefresh(): void {
-    if (modelListScrollFrame !== null) cancelAnimationFrame(modelListScrollFrame);
-    modelListScrollFrame = requestAnimationFrame(refreshModelListScrollState);
   }
 
   function openPicker(): void {
@@ -633,13 +596,32 @@
     activeFlyoutTrigger = null;
   }
 
-  function handleOptionPointerEnter(definition: KnownModelOption, event: PointerEvent): void {
+  /** Whether the pointer is travelling from the open flyout's row toward the flyout, so rows it crosses do not replace it. */
+  function pointerAimingAtFlyout(event: PointerEvent): boolean {
+    if (!activeFlyoutTrigger || !flyoutPanel) return false;
+    const row = activeFlyoutTrigger.getBoundingClientRect();
+    const panel = flyoutPanel.getBoundingClientRect();
+    if (panel.width === 0 || panel.height === 0) return false;
+    return isPointerAimingAtSubmenu({
+      origin: { x: row.left + row.width / 2, y: row.top + row.height / 2 },
+      point: { x: event.clientX, y: event.clientY },
+      submenu: panel,
+      side: panel.left >= row.right ? "right" : "left",
+      ...SUBMENU_AIM_TOLERANCES,
+    });
+  }
+
+  function handleOptionPointer(definition: KnownModelOption, event: PointerEvent): void {
     if (!(event.currentTarget instanceof HTMLElement)) return;
+    if (flyout === "option" && optionViewKey === definition.key) return;
+    if (flyout && pointerAimingAtFlyout(event)) return;
     openOption(definition, event.currentTarget);
   }
 
-  function handleNamedFlyoutPointerEnter(next: FlyoutView, event: PointerEvent): void {
+  function handleNamedFlyoutPointer(next: FlyoutView, event: PointerEvent): void {
     if (!(event.currentTarget instanceof HTMLElement)) return;
+    if (flyout === next) return;
+    if (flyout && pointerAimingAtFlyout(event)) return;
     openFlyout(next, event.currentTarget);
   }
 
@@ -848,7 +830,7 @@
     <div
       bind:this={pickerPanel}
       use:portal={controlled ? "body" : pickerRoot ?? "body"}
-      class="model-popover"
+      class="model-popover surface-floating w-floating"
       class:portaled={controlled}
       class:below={controlled && pickerPlacement === "below"}
       class:positioned={!controlled || pickerPosition !== null}
@@ -896,18 +878,18 @@
         <div bind:this={advancedPanel} class="picker-view advanced-view" class:active={view === "advanced"} inert={view !== "advanced"} aria-hidden={view !== "advanced"}>
           <button bind:this={advancedHeading} type="button" class="advanced-heading" onclick={() => setPickerView("overview")}><span>{t("chat.composer.advanced")}</span><span class="advanced-chevron" class:expanded={view === "advanced"}><ChevronRight size={15} /></span></button>
           <div class="advanced-list">
-            <button type="button" onpointerenter={(event) => handleNamedFlyoutPointerEnter("models", event)} onfocus={(event) => openFlyout("models", event.currentTarget)} onclick={(event) => { openFlyout("models", event.currentTarget); void tick().then(() => modelSearch?.focus()); }}><span>{t("chat.hero.model")}</span><small>{selection.providerManaged ? t("chat.composer.providerManagedModel") : displayModelName(selectedModel)}</small><ChevronRight size={15} /></button>
-            {#if effortDefinition}<button type="button" onpointerenter={(event) => handleOptionPointerEnter(effortDefinition, event)} onfocus={(event) => openOption(effortDefinition, event.currentTarget)} onclick={(event) => openOption(effortDefinition, event.currentTarget)}><span>{t("chat.composer.effort")}</span><small>{selectedOptionLabel(effortDefinition)}</small><ChevronRight size={15} /></button>
-            {:else if !provider}<button type="button" disabled title={t("chat.composer.providerRequiredForModelOptions")}><span>{t("chat.composer.effort")}</span><small></small><ChevronRight size={15} /></button>{/if}
-            {#if speedDefinition}<button type="button" onpointerenter={(event) => handleOptionPointerEnter(speedDefinition, event)} onfocus={(event) => openOption(speedDefinition, event.currentTarget)} onclick={(event) => openOption(speedDefinition, event.currentTarget)}><span>{t("chat.composer.speed")}</span><small>{isFastSelected() ? t("chat.composer.fast") : t("chat.composer.standard")}</small><ChevronRight size={15} /></button>
-            {:else if !provider}<button type="button" disabled title={t("chat.composer.providerRequiredForModelOptions")}><span>{t("chat.composer.speed")}</span><small></small><ChevronRight size={15} /></button>{/if}
-            {#each otherDefinitions as definition}<button type="button" onpointerenter={(event) => handleOptionPointerEnter(definition, event)} onfocus={(event) => openOption(definition, event.currentTarget)} onclick={(event) => openOption(definition, event.currentTarget)}><span>{definition.label}</span><small>{selectedOptionLabel(definition)}</small><ChevronRight size={15} /></button>{/each}
+            <button type="button" class="menu-item" aria-expanded={flyout === "models"} onpointerenter={(event) => handleNamedFlyoutPointer("models", event)} onpointermove={(event) => handleNamedFlyoutPointer("models", event)} onfocus={(event) => openFlyout("models", event.currentTarget)} onclick={(event) => { openFlyout("models", event.currentTarget); void tick().then(() => modelSearch?.focus()); }}><span>{t("chat.hero.model")}</span><small>{selection.providerManaged ? t("chat.composer.providerManagedModel") : displayModelName(selectedModel)}</small><ChevronRight size={15} /></button>
+            {#if effortDefinition}<button type="button" class="menu-item" aria-expanded={flyout === "option" && optionViewKey === effortDefinition.key} onpointerenter={(event) => handleOptionPointer(effortDefinition, event)} onpointermove={(event) => handleOptionPointer(effortDefinition, event)} onfocus={(event) => openOption(effortDefinition, event.currentTarget)} onclick={(event) => openOption(effortDefinition, event.currentTarget)}><span>{t("chat.composer.effort")}</span><small>{selectedOptionLabel(effortDefinition)}</small><ChevronRight size={15} /></button>
+            {:else if !provider}<button type="button" class="menu-item" disabled title={t("chat.composer.providerRequiredForModelOptions")}><span>{t("chat.composer.effort")}</span><small></small><ChevronRight size={15} /></button>{/if}
+            {#if speedDefinition}<button type="button" class="menu-item" aria-expanded={flyout === "option" && optionViewKey === speedDefinition.key} onpointerenter={(event) => handleOptionPointer(speedDefinition, event)} onpointermove={(event) => handleOptionPointer(speedDefinition, event)} onfocus={(event) => openOption(speedDefinition, event.currentTarget)} onclick={(event) => openOption(speedDefinition, event.currentTarget)}><span>{t("chat.composer.speed")}</span><small>{isFastSelected() ? t("chat.composer.fast") : t("chat.composer.standard")}</small><ChevronRight size={15} /></button>
+            {:else if !provider}<button type="button" class="menu-item" disabled title={t("chat.composer.providerRequiredForModelOptions")}><span>{t("chat.composer.speed")}</span><small></small><ChevronRight size={15} /></button>{/if}
+            {#each otherDefinitions as definition}<button type="button" class="menu-item" aria-expanded={flyout === "option" && optionViewKey === definition.key} onpointerenter={(event) => handleOptionPointer(definition, event)} onpointermove={(event) => handleOptionPointer(definition, event)} onfocus={(event) => openOption(definition, event.currentTarget)} onclick={(event) => openOption(definition, event.currentTarget)}><span>{definition.label}</span><small>{selectedOptionLabel(definition)}</small><ChevronRight size={15} /></button>{/each}
           </div>
         </div>
       </div>
 
         {#if view === "advanced" && flyout}
-          <div bind:this={flyoutPanel} use:portal class="model-flyout" class:positioned={flyoutPosition !== null} class:model-picker-flyout={flyout === "models"} style:left={flyoutPosition === null ? undefined : `${flyoutPosition.left}px`} style:top={flyoutPosition === null ? undefined : `${flyoutPosition.top}px`} role="dialog" tabindex="-1" aria-label={flyout === "models" ? t("chat.hero.model") : optionViewDefinition?.label} data-app-floating-surface onkeydown={handlePickerKeydown}>
+          <div bind:this={flyoutPanel} use:portal class={cn("model-flyout surface-floating", flyout === "models" ? "w-floating-lg" : "w-floating")} class:positioned={flyoutPosition !== null} class:model-picker-flyout={flyout === "models"} style:left={flyoutPosition === null ? undefined : `${flyoutPosition.left}px`} style:top={flyoutPosition === null ? undefined : `${flyoutPosition.top}px`} role="dialog" tabindex="-1" aria-label={flyout === "models" ? t("chat.hero.model") : optionViewDefinition?.label} data-app-floating-surface onkeydown={handlePickerKeydown}>
             {#if flyout === "models"}
               <div class="model-picker-shell">
                 <div class="model-picker-main">
@@ -915,14 +897,11 @@
                   <div
                     bind:this={modelListElement}
                     class="selection-list model-list hide-scrollbar"
-                    class:model-list-scroll-both={modelListScrollable && modelListCanScrollUp && modelListCanScrollDown}
-                    class:model-list-scroll-top={modelListScrollable && modelListCanScrollUp && !modelListCanScrollDown}
-                    class:model-list-scroll-bottom={modelListScrollable && !modelListCanScrollUp && modelListCanScrollDown}
-                    onscroll={refreshModelListScrollState}
+                    use:scrollEdgeFadeAction
                   >
-                    <div bind:this={modelListContentElement} class="model-list-content">
+                    <div class="model-list-content">
                     <div class="model-search-row">
-                      <label class="model-search"><Search size={16} /><input bind:this={modelSearch} bind:value={modelQuery} placeholder={t("chat.composer.modelSearch")} /></label>
+                      <label class="model-search"><Search size={16} /><input class="field-bare" bind:this={modelSearch} bind:value={modelQuery} placeholder={t("chat.composer.modelSearch")} /></label>
                     </div>
                     <section class="model-company-section favorite-company-section" aria-labelledby="favorite-models-heading">
                       <button id="favorite-models-heading" type="button" class="model-company-heading" aria-expanded={!isModelSectionCollapsed("favorites")} aria-controls="favorite-models-content" onclick={() => toggleModelSection("favorites")}><Star size={14} fill="currentColor" /><span>{t("chat.composer.favorites")}</span><ChevronDown size={13} class={isModelSectionCollapsed("favorites") ? "collapsed" : undefined} /></button>
@@ -951,7 +930,7 @@
                         <div id={`model-company-${section.company.id}-content`} class="model-company-content" class:collapsed={sectionCollapsed} inert={sectionCollapsed} aria-hidden={sectionCollapsed}>
                           <div class="model-company-content-inner">
                             {#each section.managedProviders as managedProvider (managedProvider.configuration.instanceId)}
-                              <button type="button" disabled={!isProviderAvailable(managedProvider)} title={probeStatus(managedProvider)} onclick={() => chooseModel(managedProvider, null, true)}>
+                              <button type="button" class="menu-item" disabled={!isProviderAvailable(managedProvider)} title={probeStatus(managedProvider)} onclick={() => chooseModel(managedProvider, null, true)}>
                                 <span><strong>{t("chat.composer.providerManagedModel")}</strong></span>
                                 {#if managedProvider.configuration.instanceId === provider?.configuration.instanceId && selection.providerManaged}<Check size={14} />{/if}
                               </button>
@@ -967,7 +946,7 @@
                               </div>
                             {/each}
                             {#each section.setupFamilies as family (family.familyId)}
-                              <button type="button" class="company-setup" onclick={openProviderSettings}><span><strong>{t("chat.composer.configureProvider")} {section.company.name}</strong></span><Plus size={14} /></button>
+                              <button type="button" class="company-setup menu-item" onclick={openProviderSettings}><span><strong>{t("chat.composer.configureProvider")} {section.company.name}</strong></span><Plus size={14} /></button>
                             {/each}
                           </div>
                         </div>
@@ -982,25 +961,25 @@
                 </div>
               </div>
             {:else if optionViewDefinition}
-              <div class="selection-list option-list">
+              <div class="selection-list option-list surface-floating-body" use:scrollEdgeFadeAction>
                 {#if optionViewDefinition.kind === "choice"}
                   {#each optionViewDefinition.options as choice}
                     {@const description = choiceDescription(optionViewDefinition, choice.value, choice.description)}
-                    <button type="button" onclick={() => updateOption(optionViewDefinition.key, { kind: "choice", value: choice.value })}><span><strong>{humanizeOptionLabel(choice.label)}</strong>{#if description && modelOptionRole(optionViewDefinition) !== "effort"}<small>{description}</small>{/if}</span>{#if choiceValue(optionViewDefinition.key) === choice.value}<Check size={14} />{/if}</button>
+                    <button type="button" class="menu-item" onclick={() => updateOption(optionViewDefinition.key, { kind: "choice", value: choice.value })}><span><strong>{humanizeOptionLabel(choice.label)}</strong>{#if description && modelOptionRole(optionViewDefinition) !== "effort"}<small>{description}</small>{/if}</span>{#if choiceValue(optionViewDefinition.key) === choice.value}<Check size={14} />{/if}</button>
                   {/each}
                 {:else if optionViewDefinition.kind === "boolean"}
                   {#if modelOptionRole(optionViewDefinition) === "speed"}
-                    <button type="button" onclick={() => setFastMode(false)}><span><strong>{t("chat.composer.standard")}</strong><small>{t("chat.composer.standardSpeedDescription")}</small></span>{#if !booleanValue(optionViewDefinition.key)}<Check size={14} />{/if}</button>
-                    <button type="button" onclick={() => setFastMode(true)}><span><strong>{t("chat.composer.fast")}</strong><small>{optionViewDefinition.description?.trim() || t("chat.composer.fastSpeedDescription")}</small></span>{#if booleanValue(optionViewDefinition.key)}<Check size={14} />{/if}</button>
+                    <button type="button" class="menu-item" onclick={() => setFastMode(false)}><span><strong>{t("chat.composer.standard")}</strong><small>{t("chat.composer.standardSpeedDescription")}</small></span>{#if !booleanValue(optionViewDefinition.key)}<Check size={14} />{/if}</button>
+                    <button type="button" class="menu-item" onclick={() => setFastMode(true)}><span><strong>{t("chat.composer.fast")}</strong><small>{optionViewDefinition.description?.trim() || t("chat.composer.fastSpeedDescription")}</small></span>{#if booleanValue(optionViewDefinition.key)}<Check size={14} />{/if}</button>
                   {:else}
-                    <button type="button" onclick={() => updateOption(optionViewDefinition.key, { kind: "boolean", value: !booleanValue(optionViewDefinition.key) })}><span><strong>{optionViewDefinition.label}</strong>{#if optionViewDefinition.description && modelOptionRole(optionViewDefinition) !== "effort"}<small>{optionViewDefinition.description}</small>{/if}</span>{#if booleanValue(optionViewDefinition.key)}<Check size={14} />{/if}</button>
+                    <button type="button" class="menu-item" onclick={() => updateOption(optionViewDefinition.key, { kind: "boolean", value: !booleanValue(optionViewDefinition.key) })}><span><strong>{optionViewDefinition.label}</strong>{#if optionViewDefinition.description && modelOptionRole(optionViewDefinition) !== "effort"}<small>{optionViewDefinition.description}</small>{/if}</span>{#if booleanValue(optionViewDefinition.key)}<Check size={14} />{/if}</button>
                   {/if}
                 {:else if optionViewDefinition.kind === "multiple_choice"}
-                  {#each optionViewDefinition.options as choice}<label><input type="checkbox" checked={multipleIncludes(optionViewDefinition.key, choice.value)} onchange={(event) => toggleMultiple(optionViewDefinition.key, choice.value, event.currentTarget.checked)} /><span><strong>{choice.label}</strong>{#if choice.description}<small>{choice.description}</small>{/if}</span></label>{/each}
+                  {#each optionViewDefinition.options as choice}<label class="menu-item"><Checkbox checked={multipleIncludes(optionViewDefinition.key, choice.value)} onChange={(next) => toggleMultiple(optionViewDefinition.key, choice.value, next)} /><span><strong>{choice.label}</strong>{#if choice.description}<small>{choice.description}</small>{/if}</span></label>{/each}
                 {:else if optionViewDefinition.kind === "integer_range"}
                   <label class="range-option"><span>{formatNumber(localization.locale, integerValue(optionViewDefinition.key, optionViewDefinition.defaultValue ?? optionViewDefinition.minimum))}</span><input type="range" min={optionViewDefinition.minimum} max={optionViewDefinition.maximum} step={optionViewDefinition.step} value={integerValue(optionViewDefinition.key, optionViewDefinition.defaultValue ?? optionViewDefinition.minimum)} oninput={(event) => updateOption(optionViewDefinition.key, { kind: "integer", value: event.currentTarget.valueAsNumber })} /></label>
                 {:else if optionViewDefinition.kind === "text"}
-                  <label class="text-option"><span>{optionViewDefinition.label}</span><input type="text" value={textValue(optionViewDefinition.key)} oninput={(event) => updateOption(optionViewDefinition.key, { kind: "text", value: event.currentTarget.value })} /></label>
+                  <label class="text-option"><span>{optionViewDefinition.label}</span><input type="text" class="field" value={textValue(optionViewDefinition.key)} oninput={(event) => updateOption(optionViewDefinition.key, { kind: "text", value: event.currentTarget.value })} /></label>
                 {/if}
               </div>
             {/if}
@@ -1035,7 +1014,7 @@
   .effort-name { flex: 0 0 auto; color: var(--primary); transition: color 260ms ease; }
   .model-control.controlled .effort-name:not(.ultra) { color: var(--foreground); }
   .effort-name.ultra { color: #7c3aed; }
-  .model-popover { position: absolute; right: 0; bottom: calc(100% + 0.45rem); z-index: 45; width: min(18.5rem, calc(100vw - 1rem)); overflow: visible; border: 1px solid var(--border); border-radius: 0.8rem; background: var(--popover); padding: 0.65rem 0.6rem 0.5rem; color: var(--popover-foreground); font-size: calc(0.875rem * var(--type-scale)); box-shadow: 0 2px 6px rgb(0 0 0 / 0.06); }
+  .model-popover { position: absolute; right: 0; bottom: calc(100% + 0.45rem); z-index: 45; overflow: visible; padding: 0.65rem 0.6rem 0.5rem; }
   .model-popover.portaled { position: fixed; right: auto; bottom: auto; z-index: 80; }
   .model-popover.portaled:not(.positioned) { visibility: hidden; }
   .model-popover.portaled.positioned { animation: model-popover-enter 180ms cubic-bezier(0.22, 0.75, 0.18, 1); }
@@ -1079,7 +1058,7 @@
   .effort-guidance { display: flex; align-items: center; justify-content: space-between; padding-inline: 0.15rem; color: var(--muted-foreground); opacity: 0; pointer-events: none; transform: translateY(0.28rem); transition: opacity 170ms ease, transform 210ms cubic-bezier(0.2, 0.8, 0.2, 1); }
   .effort-footer.holding .quick-actions { opacity: 0; pointer-events: none; transform: translateY(0.22rem); }
   .effort-footer.holding .effort-guidance { opacity: 1; transform: translateY(0); }
-  .advanced-toggle, .advanced-heading { display: flex; min-height: 2rem; align-items: center; gap: 0.2rem; border-radius: 0.5rem; padding: 0.3rem 0.2rem; color: var(--muted-foreground); text-align: left; }
+  .advanced-toggle, .advanced-heading { display: flex; min-height: 2rem; align-items: center; gap: 0.2rem; border-radius: var(--floating-item-radius); padding: 0.3rem 0.2rem; color: var(--muted-foreground); text-align: left; }
   .advanced-toggle { width: 100%; min-width: 0; flex: 1 1 auto; }
   .advanced-toggle:hover, .advanced-heading:hover { background: color-mix(in srgb, var(--accent) 65%, transparent); color: var(--foreground); }
   .advanced-heading { width: 100%; }
@@ -1096,38 +1075,30 @@
   :global(.dark) .fast-button.active { background: rgb(22 129 220 / 0.16); color: #3b9aeb; }
   :global(.dark) .fast-button.active.ultra { background: rgb(167 139 250 / 0.15); color: #b794ff; }
   .advanced-list { padding-top: 0.3rem; }
-  .advanced-list button { display: grid; width: 100%; grid-template-columns: minmax(0, 1fr) minmax(0, auto) 1rem; align-items: center; gap: 0.5rem; border-radius: 0.55rem; padding: 0.5rem 0.2rem; text-align: left; }
-  .advanced-list button:hover, .advanced-list button:focus-visible { background: color-mix(in srgb, var(--accent) 70%, transparent); outline: none; }
+  .advanced-list button { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, auto) 1rem; gap: 0.5rem; }
   .advanced-list button:disabled { cursor: not-allowed; opacity: 0.48; }
-  .advanced-list button:disabled:hover { background: transparent; }
-  .advanced-list small { overflow: hidden; max-width: 9rem; color: var(--muted-foreground); font-size: calc(0.8125rem * var(--type-scale)); text-overflow: ellipsis; white-space: nowrap; }
-  .model-flyout { position: fixed; z-index: 80; width: min(16.5rem, calc(100vw - 1rem)); max-height: min(28rem, 72vh); overflow: hidden auto; border: 1px solid var(--border); border-radius: 0.8rem; background: var(--popover); padding: 0.35rem; color: var(--popover-foreground); font-size: calc(0.875rem * var(--type-scale)); box-shadow: 0 2px 6px rgb(0 0 0 / 0.07); }
+  .advanced-list small { overflow: hidden; max-width: 9rem; color: var(--muted-foreground); font-size: var(--panel-detail-font-size); text-overflow: ellipsis; white-space: nowrap; }
+  .model-flyout { position: fixed; z-index: 80; display: flex; max-height: min(28rem, 72vh); flex-direction: column; overflow: hidden; }
   .model-flyout:not(.positioned) { visibility: hidden; }
-  .model-flyout.model-picker-flyout { width: min(16.5rem, calc(100vw - 1rem)); overflow: hidden; padding: 0; }
   .model-picker-shell { width: 100%; height: min(24rem, 72vh); min-height: min(18rem, 72vh); }
   .model-picker-main { display: flex; width: 100%; height: 100%; min-width: 0; min-height: 0; flex-direction: column; overflow: hidden; padding: 0.5rem 0.55rem; }
-  .selection-list { padding-top: 0.3rem; }
-  .selection-list > button, .model-company-content-inner > button { display: grid; width: 100%; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 0.45rem; border-radius: 0.55rem; padding: 0.5rem 0.55rem; text-align: left; }
-  .selection-list > button:hover, .selection-list > button:focus-visible, .model-company-content-inner > button:hover, .model-company-content-inner > button:focus-visible { background: var(--accent); outline: none; }
+  .option-list { min-height: 0; flex: 1 1 auto; overflow-y: auto; }
+  .selection-list > button, .model-company-content-inner > button { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 0.45rem; }
   .selection-list > button:disabled, .model-company-content-inner > button:disabled { opacity: 0.55; }
   .selection-list > button > span, .model-company-content-inner > button > span { min-width: 0; }
   .selection-list strong, .selection-list small { display: block; }
-  .selection-list strong { font-size: calc(0.875rem * var(--type-scale)); font-weight: 500; }
-  .selection-list small { overflow: hidden; margin-top: 0.1rem; color: var(--muted-foreground); font-size: calc(0.75rem * var(--type-scale)); text-overflow: ellipsis; white-space: nowrap; }
-  .model-list-content > p, .model-company-content-inner > p { padding: 0.38rem 0.5rem; color: var(--muted-foreground); font-size: calc(0.75rem * var(--type-scale)); }
-  .model-search-row { display: flex; flex: 0 0 auto; align-items: center; gap: 0.35rem; border-bottom: 1px solid var(--border); margin: 0 0.15rem 0.2rem; transition: border-color 150ms ease; }
-  .model-search-row:focus-within { border-color: var(--primary); }
+  .selection-list strong { font-weight: 500; }
+  .selection-list small { overflow: hidden; margin-top: 0.1rem; color: var(--muted-foreground); font-size: var(--panel-detail-font-size); text-overflow: ellipsis; white-space: nowrap; }
+  .model-list-content > p, .model-company-content-inner > p { padding: 0.38rem 0.5rem; color: var(--muted-foreground); font-size: var(--panel-detail-font-size); }
+  .model-search-row { display: flex; flex: 0 0 auto; align-items: center; gap: 0.35rem; border-bottom: 1px solid var(--border); margin: 0 0.15rem 0.2rem; }
   .model-search { display: flex; min-width: 0; flex: 1; align-items: center; gap: 0.45rem; padding: 0.5rem 0.15rem; color: var(--muted-foreground); }
   .model-search:focus-within { color: var(--foreground); }
-  .model-search input { min-width: 0; flex: 1; user-select: text; background: transparent; color: var(--foreground); font-size: calc(0.875rem * var(--type-scale)); outline: none; }
+  .model-search input { user-select: text; color: var(--foreground); }
   .model-list-frame { --cal-scrollbar-thumb: color-mix(in srgb, var(--popover-foreground) 18%, var(--popover)); --cal-scrollbar-thumb-hover: var(--cal-scrollbar-thumb); position: relative; min-height: 0; flex: 1; margin-right: -0.55rem; }
-  .model-list { --model-list-scroll-fade-size: 2rem; height: 100%; min-height: 0; overflow-y: auto; padding: 0 0.55rem 0 0; transition: -webkit-mask-image 120ms ease, mask-image 120ms ease; }
-  .model-list-scroll-top { -webkit-mask-image: linear-gradient(to bottom, transparent, black var(--model-list-scroll-fade-size), black); mask-image: linear-gradient(to bottom, transparent, black var(--model-list-scroll-fade-size), black); }
-  .model-list-scroll-bottom { -webkit-mask-image: linear-gradient(to bottom, black, black calc(100% - var(--model-list-scroll-fade-size)), transparent); mask-image: linear-gradient(to bottom, black, black calc(100% - var(--model-list-scroll-fade-size)), transparent); }
-  .model-list-scroll-both { -webkit-mask-image: linear-gradient(to bottom, transparent, black var(--model-list-scroll-fade-size), black calc(100% - var(--model-list-scroll-fade-size)), transparent); mask-image: linear-gradient(to bottom, transparent, black var(--model-list-scroll-fade-size), black calc(100% - var(--model-list-scroll-fade-size)), transparent); }
+  .model-list { height: 100%; min-height: 0; overflow-y: auto; padding: 0 0.55rem 0 0; }
   .model-company-section { padding: 0.38rem 0; }
   .model-company-section + .model-company-section { border-top: 1px solid color-mix(in srgb, var(--border) 72%, transparent); }
-  .model-company-heading { display: grid; width: 100%; min-width: 0; min-height: 2rem; grid-template-columns: 0.875rem minmax(0, 1fr) 1rem; align-items: center; gap: 0.35rem; border-radius: 0.55rem; padding: 0.38rem 0.5rem; color: var(--muted-foreground); font-size: calc(0.6875rem * var(--type-scale)); font-weight: 550; text-align: left; }
+  .model-company-heading { display: grid; width: 100%; min-width: 0; min-height: 2rem; grid-template-columns: 0.875rem minmax(0, 1fr) 1rem; align-items: center; gap: 0.35rem; border-radius: var(--floating-item-radius); padding: 0.38rem 0.5rem; color: var(--muted-foreground); font-size: var(--panel-detail-font-size); font-weight: 550; text-align: left; }
   .model-company-heading:hover { background: transparent; }
   .model-company-heading:focus-visible { outline: 1px solid color-mix(in srgb, var(--ring) 55%, transparent); outline-offset: -2px; }
   .model-company-heading :global(svg:last-child) { color: var(--muted-foreground); transition: transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1); }
@@ -1137,28 +1108,26 @@
   .model-company-content.collapsed { grid-template-rows: 0fr; opacity: 0; }
   .model-company-content-inner { min-height: 0; overflow: hidden; }
   .company-setup { color: var(--muted-foreground); }
-  .model-row { display: grid; grid-template-columns: minmax(0, 1fr) 2rem; align-items: center; border-radius: 0.55rem; }
+  .model-row { display: grid; grid-template-columns: minmax(0, 1fr) 2rem; align-items: center; border-radius: var(--floating-item-radius); }
   .model-row:hover, .model-row:has(:focus-visible) { background: var(--accent); }
-  .model-choice { display: grid; min-width: 0; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 0.4rem; padding: 0.38rem 0.5rem; text-align: left; }
+  .model-choice { display: grid; min-width: 0; min-height: var(--panel-row-height); grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 0.4rem; padding: 0.38rem 0.5rem; text-align: left; }
   .model-choice:focus-visible, .model-favorite:focus-visible { outline: 1px solid color-mix(in srgb, var(--ring) 55%, transparent); outline-offset: -2px; }
   .model-choice:disabled { opacity: 0.55; }
   .model-choice > span { min-width: 0; }
   .model-choice > .favorite-model-label { display: flex; align-items: center; gap: 0.45rem; }
   .favorite-model-label :global(svg) { color: var(--muted-foreground); }
-  .model-favorite { display: grid; width: 2rem; height: 2rem; place-items: center; border-radius: 0.45rem; color: var(--muted-foreground); }
+  .model-favorite { display: grid; width: 2rem; height: 2rem; place-items: center; border-radius: var(--floating-item-radius); color: var(--muted-foreground); }
   .model-favorite:hover, .model-favorite:focus-visible, .model-favorite.active { color: var(--foreground); }
   .model-picker-error { color: var(--destructive) !important; }
-  .option-list > label { display: flex; align-items: center; gap: 0.55rem; border-radius: 0.5rem; padding: 0.5rem; }
-  .option-list > label:hover { background: var(--accent); }
   .option-list > label > span { min-width: 0; flex: 1; }
-  .range-option, .text-option { flex-direction: column; align-items: stretch !important; }
+  .range-option, .text-option { display: flex; flex-direction: column; gap: 0.35rem; padding: 0.375rem 0.5rem; }
   .range-option input, .text-option input { width: 100%; }
-  .text-option input { user-select: text; border-radius: 0.45rem; background: var(--muted); padding: 0.4rem 0.5rem; color: var(--foreground); outline: none; }
+  .text-option input { user-select: text; color: var(--foreground); }
   @keyframes ultra-color-flow { from { background-position: 0 0; } to { background-position: 100% 0; } }
   @keyframes galaxy-drift { from { background-position: 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0; } to { background-position: -83px 0, -107px 0, -131px 0, -157px 0, -191px 0, -223px 0, -269px 0, -311px 0; } }
   @keyframes galaxy-stream { from { background-position: 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0, 0 0; } to { background-position: -83px 0, -107px 0, -131px 0, -157px 0, -191px 0, -223px 0, -269px 0, -311px 0; } }
   @keyframes model-popover-enter { from { opacity: 0; transform: translateY(var(--model-popover-enter-y, 0.25rem)); } to { opacity: 1; transform: translateY(0); } }
   @container chat-composer (max-width: 460px) { .model-trigger { max-width: 11rem; } .effort-name { display: none; } }
   @container chat-composer (max-width: 330px) { .model-trigger { max-width: 7.5rem; padding-inline: 0.45rem; } }
-  @media (prefers-reduced-motion: reduce) { .picker-stage, .picker-view, .quick-actions, .effort-guidance, .model-company-content, .model-list { transition-duration: 0.01ms; } .model-popover.portaled.positioned { animation: none; } .effort-fill::before, .effort-particles { animation: none; background-position: 50% 0; } }
+  @media (prefers-reduced-motion: reduce) { .picker-stage, .picker-view, .quick-actions, .effort-guidance, .model-company-content { transition-duration: 0.01ms; } .model-popover.portaled.positioned { animation: none; } .effort-fill::before, .effort-particles { animation: none; background-position: 50% 0; } }
 </style>

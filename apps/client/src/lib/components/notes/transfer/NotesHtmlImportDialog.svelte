@@ -2,12 +2,13 @@
   import { onMount, tick } from "svelte";
   import Upload from "@lucide/svelte/icons/upload";
   import { getLocalization } from "$lib/i18n/translator.svelte";
+  import { scrollEdgeFadeAction } from "$lib/utils/scroll-edge-fade";
   import {
     roundTripWarningCount,
     toRoundTripDiagnosticItem,
   } from "$lib/notes/round-trip-diagnostics";
   import type { NotesHtmlImportResult } from "$lib/notes/types";
-  import NotesCheckboxField from "$lib/components/notes/NotesCheckboxField.svelte";
+  import Checkbox from "$lib/components/ui/Checkbox.svelte";
   import NotesImportDestinationRow from "./NotesImportDestinationRow.svelte";
   import NotesRoundTripDiagnostics from "$lib/components/notes/NotesRoundTripDiagnostics.svelte";
   import NotesTransferFieldRow from "./NotesTransferFieldRow.svelte";
@@ -156,7 +157,7 @@
     {/if}
   </div>
 
-  <div class={embedded ? "px-4 py-3" : "min-h-0 flex-1 overflow-auto px-4 py-3"}>
+  <div class={embedded ? "px-4 py-3" : "min-h-0 flex-1 overflow-auto px-4 py-3"} use:scrollEdgeFadeAction>
     <div class="grid gap-3">
       <NotesImportDestinationRow bind:projectId />
 
@@ -167,7 +168,7 @@
       >
         <input
           id="notes-html-import-title"
-          class="h-7 w-72 max-w-full rounded-md border border-border bg-card px-2.5 text-[0.8rem] text-foreground outline-none focus:border-ring dark:bg-transparent max-[560px]:w-full"
+          class="field w-72 max-w-full text-panel text-foreground max-[560px]:w-full"
           bind:value={title}
           placeholder={t("notes.htmlImportTitlePlaceholder")}
         />
@@ -180,7 +181,7 @@
       >
         <input
           id="notes-html-import-source"
-          class="h-7 w-72 max-w-full rounded-md border border-border bg-card px-2.5 text-[0.8rem] text-foreground outline-none focus:border-ring dark:bg-transparent max-[560px]:w-full"
+          class="field w-72 max-w-full text-panel text-foreground max-[560px]:w-full"
           bind:value={sourceName}
           placeholder={t("notes.htmlImportSourcePlaceholder")}
         />
@@ -219,7 +220,7 @@
         <textarea
           id="notes-html-import-html"
           bind:this={textareaEl}
-          class="min-h-52 w-full resize-y rounded-md border border-border bg-card px-2.5 py-2 font-mono text-[0.8rem] leading-relaxed text-foreground outline-none focus:border-ring dark:bg-transparent"
+          class="field min-h-52 w-full resize-y py-2 font-mono text-panel leading-relaxed text-foreground"
           bind:value={html}
           spellcheck="false"
         ></textarea>
@@ -229,7 +230,7 @@
         label={t("notes.htmlImportKeepExternalMedia")}
         description={t("notes.htmlImportKeepExternalMediaDescription")}
       >
-        <NotesCheckboxField
+        <Checkbox
           bind:checked={keepExternalFileReferences}
           label={t("notes.htmlImportKeepExternalMedia")}
         />
@@ -295,11 +296,11 @@
       onCancel();
     }}
   >
-    <div class="absolute inset-0 bg-black/50"></div>
+    <div class="surface-backdrop absolute inset-0"></div>
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div
       bind:this={dialogEl}
-      class="relative z-10 flex max-h-[min(92vh,44rem)] w-[min(42rem,100%)] flex-col rounded-md border border-border bg-card text-card-foreground shadow-lg outline-none"
+      class="relative z-10 flex max-h-[min(92vh,44rem)] w-[min(42rem,100%)] flex-col surface-dialog outline-none"
       role="dialog"
       aria-modal="true"
       aria-label={t("notes.htmlImportDialogTitle")}

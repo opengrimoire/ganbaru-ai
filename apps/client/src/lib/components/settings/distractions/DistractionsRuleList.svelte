@@ -81,7 +81,7 @@
       </button>
     {:else}
       <form
-        class="flex min-w-0 items-center gap-2 border-b border-border/70 py-1.5 focus-within:border-ring"
+        class="flex min-w-0 items-center gap-2 border-b border-border/70 py-1.5"
         onsubmit={submitAdd}
       >
         <input

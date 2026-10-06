@@ -57,6 +57,8 @@
   import { requireActiveVaultIdentity } from "$lib/vault/active-vault";
   import { BUILD_PLATFORM_PROFILE, platformHasCapability } from "$lib/platform";
   import ChatParticipantAvatar from "$lib/components/chat/identity/ChatParticipantAvatar.svelte";
+  import Select from "$lib/components/ui/Select.svelte";
+  import { scrollEdgeFadeAction } from "$lib/utils/scroll-edge-fade";
 
   type ScheduleMenuComponent = typeof import("./ChatMessageScheduleMenu.svelte").default;
 
@@ -250,6 +252,14 @@
     teammateAccess,
     assignmentTargets,
   ));
+  const executionTargetOptions = $derived([
+    { value: "", label: t("chat.organization.automaticTarget") },
+    ...assignmentTargets.flatMap((target) => target.executionTarget ? [{
+      value: target.executionTarget.executionEnvironmentId,
+      label: `${target.displayName}${target.isDefault ? ` · ${t("chat.organization.defaultTarget")}` : ""}`,
+      disabled: !target.eligible,
+    }] : []),
+  ]);
   const pickerGroups = $derived.by(() => groupReferenceCandidates(pickerEntries));
   const nextScheduledMessage = $derived(
     scheduledMessages.find((message) => message.state !== "failed") ?? scheduledMessages[0] ?? null,
@@ -1270,7 +1280,7 @@
           {#if ScheduleMenu}
             {@const LoadedScheduledMessagesMenu = ScheduleMenu}
             <LoadedScheduledMessagesMenu mode="manage" align="right" {scheduledMessages} onMessagesChange={updateScheduledMessages} onClose={() => { scheduledMessagesOpen = false; }} />
-          {:else}<div class="composer-menu schedule-loading align-right" role="status">{t("chat.status.working")}</div>{/if}
+          {:else}<div class="composer-menu schedule-loading align-right surface-floating surface-floating-body" role="status">{t("chat.status.working")}</div>{/if}
         {/if}
       </div>
     </div>
@@ -1285,16 +1295,18 @@
       </div>
       {#if inferredTarget}<span class="approval-pill">{runtimeApprovalLabel(inferredTarget.effectiveRuntimeApproval)}</span>{/if}
       {#if assignmentTargets.length > 0}
-        <select aria-label={t("chat.organization.executionTarget")} value={executionTarget?.executionEnvironmentId ?? ""} onchange={(event) => {
-          const selected = assignmentTargets.find((target) => target.executionTarget?.executionEnvironmentId === event.currentTarget.value);
-          executionTarget = selected?.executionTarget ? structuredClone(selected.executionTarget) : null;
-          persist();
-        }}>
-          <option value="">{t("chat.organization.automaticTarget")}</option>
-          {#each assignmentTargets as target (target.executionTarget?.executionEnvironmentId ?? target.kind)}
-            {#if target.executionTarget}<option value={target.executionTarget.executionEnvironmentId} disabled={!target.eligible}>{target.displayName}{target.isDefault ? ` · ${t("chat.organization.defaultTarget")}` : ""}</option>{/if}
-          {/each}
-        </select>
+        <Select
+          inline
+          class="assignment-target-select"
+          ariaLabel={t("chat.organization.executionTarget")}
+          value={executionTarget?.executionEnvironmentId ?? ""}
+          options={executionTargetOptions}
+          onChange={(value) => {
+            const selected = assignmentTargets.find((target) => target.executionTarget?.executionEnvironmentId === value);
+            executionTarget = selected?.executionTarget ? structuredClone(selected.executionTarget) : null;
+            persist();
+          }}
+        />
       {/if}
     </section>
   {/if}
@@ -1327,31 +1339,33 @@
     </div>
 
     {#if pickerOpen}
-      <div bind:this={pickerRoot} id="chat-reference-picker" class="reference-picker" role="listbox" aria-label={pickerTrigger?.kind === "channel" ? t("chat.organization.referenceChannel") : t("chat.organization.referencePeopleAndResources")}>
-        {#if pickerLoading}<p role="status">{t("chat.status.working")}</p>
-        {:else if pickerEntries.length === 0}<p>{t("chat.organization.noReferenceResults")}</p>
-        {:else}
-          {#each pickerGroups as group, groupIndex (group.label)}
-            <div role="group" aria-labelledby={`chat-reference-group-${groupIndex}`}>
-              <div id={`chat-reference-group-${groupIndex}`} class="picker-group">{group.label}</div>
-              {#each group.entries as entry (entry.candidate.key)}
-                {@const candidate = entry.candidate}
-                {@const index = entry.index}
-                <button id={`chat-reference-${index}`} data-reference-index={index} type="button" role="option" tabindex="-1" aria-selected={pickerIndex === index} disabled={candidateIsDisabled(candidate)} class:active={pickerIndex === index} onpointerenter={() => { if (!candidateIsDisabled(candidate)) pickerIndex = index; }} onpointerdown={(event) => event.preventDefault()} onclick={() => void chooseReferenceCandidate(candidate)}>
-                  <span class="candidate-icon">
-                    {#if candidate.kind === "participant"}<ChatParticipantAvatar participant={candidate.participant} teammate={candidate.teammate ?? undefined} size={28} />
-                    {:else if candidate.kind === "channel"}<Hash size={15} />
-                    {:else if candidate.kind === "workingFolder"}<Folder size={15} />
-                    {:else if candidate.kind === "workspacePath"}{#if candidate.path.kind === "directory"}<Folder size={15} />{:else}<File size={15} />{/if}
-                    {:else}<GitBranch size={15} />{/if}
-                  </span>
-                  <span><strong>{candidate.label}</strong><small>{candidate.description}</small></span>
-                  {#if candidate.kind === "participant" && candidate.needsMembership}<Plus size={13} />{/if}
-                </button>
-              {/each}
-            </div>
-          {/each}
-        {/if}
+      <div bind:this={pickerRoot} id="chat-reference-picker" class="reference-picker surface-floating" role="listbox" aria-label={pickerTrigger?.kind === "channel" ? t("chat.organization.referenceChannel") : t("chat.organization.referencePeopleAndResources")}>
+        <div class="reference-picker-scroll surface-floating-body" use:scrollEdgeFadeAction>
+          {#if pickerLoading}<p role="status">{t("chat.status.working")}</p>
+          {:else if pickerEntries.length === 0}<p>{t("chat.organization.noReferenceResults")}</p>
+          {:else}
+            {#each pickerGroups as group, groupIndex (group.label)}
+              <div role="group" aria-labelledby={`chat-reference-group-${groupIndex}`}>
+                <div id={`chat-reference-group-${groupIndex}`} class="picker-group menu-label">{group.label}</div>
+                {#each group.entries as entry (entry.candidate.key)}
+                  {@const candidate = entry.candidate}
+                  {@const index = entry.index}
+                  <button id={`chat-reference-${index}`} data-reference-index={index} type="button" role="option" tabindex="-1" aria-selected={pickerIndex === index} disabled={candidateIsDisabled(candidate)} class="menu-item" data-highlighted={pickerIndex === index ? "" : undefined} onpointerenter={() => { if (!candidateIsDisabled(candidate)) pickerIndex = index; }} onpointerdown={(event) => event.preventDefault()} onclick={() => void chooseReferenceCandidate(candidate)}>
+                    <span class="candidate-icon">
+                      {#if candidate.kind === "participant"}<ChatParticipantAvatar participant={candidate.participant} teammate={candidate.teammate ?? undefined} size={28} />
+                      {:else if candidate.kind === "channel"}<Hash size={15} />
+                      {:else if candidate.kind === "workingFolder"}<Folder size={15} />
+                      {:else if candidate.kind === "workspacePath"}{#if candidate.path.kind === "directory"}<Folder size={15} />{:else}<File size={15} />{/if}
+                      {:else}<GitBranch size={15} />{/if}
+                    </span>
+                    <span class="candidate-copy"><strong>{candidate.label}</strong><small>{candidate.description}</small></span>
+                    {#if candidate.kind === "participant" && candidate.needsMembership}<Plus size={13} />{/if}
+                  </button>
+                {/each}
+              </div>
+            {/each}
+          {/if}
+        </div>
       </div>
     {/if}
 
@@ -1365,7 +1379,7 @@
       <div class="composer-tools">
         <div bind:this={addMenuAnchor} class="menu-anchor">
           <button type="button" class="tool-button" aria-label={t("chat.organization.addContext")} aria-expanded={addMenuOpen} onclick={() => { addMenuOpen = !addMenuOpen; scheduleMenuOpen = false; scheduledMessagesOpen = false; }}><Plus size={16} /></button>
-          {#if addMenuOpen}<div class="composer-menu add-menu">{#if localExecutionAvailable}<button type="button" onclick={() => void pickImages()}><Image size={14} />{t("chat.composer.attachImages")}</button>{/if}<button type="button" onclick={() => { addMenuOpen = false; insertReferenceTrigger("@"); }}><AtSign size={14} />{t("chat.organization.peopleAndResources")}</button><button type="button" onclick={() => { addMenuOpen = false; insertReferenceTrigger("#"); }}><Hash size={14} />{t("chat.organization.channels")}</button></div>{/if}
+          {#if addMenuOpen}<div class="composer-menu add-menu surface-floating surface-floating-body w-floating-sm">{#if localExecutionAvailable}<button type="button" class="menu-item" onclick={() => void pickImages()}><Image size={14} />{t("chat.composer.attachImages")}</button>{/if}<button type="button" class="menu-item" onclick={() => { addMenuOpen = false; insertReferenceTrigger("@"); }}><AtSign size={14} />{t("chat.organization.peopleAndResources")}</button><button type="button" class="menu-item" onclick={() => { addMenuOpen = false; insertReferenceTrigger("#"); }}><Hash size={14} />{t("chat.organization.channels")}</button></div>{/if}
         </div>
         <button type="button" class="tool-button" class:active={isBoldActive} aria-label={t("chat.organization.bold")} aria-pressed={isBoldActive} onclick={() => editorController?.toggleMark("bold")}><Bold size={15} /></button>
         <button type="button" class="tool-button" class:active={isItalicActive} aria-label={t("chat.organization.italic")} aria-pressed={isItalicActive} onclick={() => editorController?.toggleMark("italic")}><Italic size={15} /></button>
@@ -1377,7 +1391,7 @@
             {#if ScheduleMenu}
               {@const LoadedScheduleMenu = ScheduleMenu}
               <LoadedScheduleMenu mode="choose" selectedScheduledFor={scheduledFor} disabled={sending} onSelect={selectSchedule} onClear={clearSchedule} onClose={() => { scheduleMenuOpen = false; }} />
-            {:else}<div class="composer-menu schedule-loading" role="status">{t("chat.status.working")}</div>{/if}
+            {:else}<div class="composer-menu schedule-loading surface-floating surface-floating-body" role="status">{t("chat.status.working")}</div>{/if}
           {/if}
         </div>
         {#if threadComposer}<button type="button" class="tool-button" class:active={alsoSendToChannel} aria-label={t("chat.organization.shareReplyToChannel", channelName)} aria-pressed={alsoSendToChannel} title={t("chat.organization.shareReplyToChannel", channelName)} onclick={() => { alsoSendToChannel = !alsoSendToChannel; }}><MessageSquareShare size={15} /></button>{/if}
@@ -1412,31 +1426,30 @@
   .assignment-preview > div { display:grid; min-width:0; }
   .assignment-preview strong,.assignment-preview span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .assignment-preview strong { color:var(--foreground); font-size:calc(0.68rem * var(--type-scale)); }.assignment-preview span { font-size:calc(0.6rem * var(--type-scale)); }
-  .assignment-preview select { max-width:12rem; border:1px solid var(--border); border-radius:0.38rem; background:var(--background); padding:0.25rem; font-size:calc(0.62rem * var(--type-scale)); }
+  .assignment-preview :global(.assignment-target-select) { width:auto; max-width:12rem; }
   .approval-pill { border-radius:999px; background:var(--accent); padding:0.18rem 0.4rem; color:var(--foreground); }
   .organizational-composer { position:relative; width:100%; border:1px solid color-mix(in srgb,var(--border) 88%,transparent); border-radius:1.3rem; background:var(--card); box-shadow:0 8px 22px -18px rgb(0 0 0 / 0.24),0 1px 4px -3px rgb(0 0 0 / 0.16); }
   .editor-frame { max-height:8.2rem; overflow-y:auto; padding:1rem 1.25rem 0.4rem; }
   .organizational-editor { min-height:2.625rem; outline:none; white-space:pre-wrap; overflow-wrap:anywhere; font-size:var(--chat-conversation-font-size,calc(0.875rem * var(--type-scale))); line-height:var(--chat-conversation-line-height,calc(1.3125rem * var(--type-scale))); }
   .organizational-editor.empty::before { pointer-events:none; content:attr(data-placeholder); color:color-mix(in srgb,var(--muted-foreground) 52%,transparent); }
   .organizational-editor :global(.chat-reference-atom) { display:inline-block; border-radius:0.3rem; background:color-mix(in srgb,var(--primary) 13%,transparent); padding-inline:0.12rem; color:color-mix(in srgb,var(--primary) 78%,var(--foreground)); box-decoration-break:clone; cursor:default; user-select:all; }
-  .reference-picker { position:absolute; z-index:100; right:0.6rem; bottom:3rem; left:0.6rem; max-height:min(22rem,55vh); overflow-y:auto; border:1px solid color-mix(in srgb,var(--border) 92%,var(--foreground)); border-radius:0.7rem; background:var(--popover); padding:0.3rem; box-shadow:0 18px 40px rgb(0 0 0 / 0.18); }
-  .reference-picker > p { padding:0.8rem; color:var(--muted-foreground); font-size:calc(0.72rem * var(--type-scale)); }
-  .picker-group { position:sticky; top:-0.3rem; z-index:1; background:var(--popover); padding:0.5rem 0.5rem 0.25rem; color:var(--muted-foreground); font-size:calc(0.58rem * var(--type-scale)); font-weight:650; text-transform:uppercase; }
-  .reference-picker [role="group"] > button { display:grid; width:100%; min-height:2.9rem; grid-template-columns:2rem minmax(0,1fr) auto; align-items:center; gap:0.45rem; border-radius:0.45rem; padding:0.3rem 0.45rem; text-align:left; }
-  .reference-picker [role="group"] > button:is(:hover,.active) { background:var(--accent); }
-  .reference-picker [role="group"] > button:disabled { opacity:0.5; }
-  .candidate-icon { display:grid; place-items:center; color:var(--muted-foreground); }.reference-picker [role="group"] > button > span:nth-child(2) { display:grid; min-width:0; }
-  .reference-picker strong,.reference-picker small { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }.reference-picker strong { font-size:calc(0.72rem * var(--type-scale)); }.reference-picker small { color:var(--muted-foreground); font-size:calc(0.62rem * var(--type-scale)); }
+  .reference-picker { position:absolute; z-index:100; right:0.6rem; bottom:3rem; left:0.6rem; display:flex; max-height:min(22rem,55vh); flex-direction:column; overflow:hidden; }
+  .reference-picker-scroll { min-height:0; flex:1 1 auto; overflow-y:auto; }
+  .reference-picker-scroll > p { padding:0.5rem; color:var(--muted-foreground); font-size:var(--panel-detail-font-size); }
+  .picker-group { position:sticky; top:calc(-1 * var(--floating-padding)); z-index:1; background:var(--popover); }
+  .candidate-icon { display:grid; width:2rem; flex:0 0 auto; place-items:center; color:var(--muted-foreground); }
+  .candidate-copy { display:grid; min-width:0; flex:1 1 0%; }
+  .reference-picker strong,.reference-picker small { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }.reference-picker strong { font-weight:500; }.reference-picker small { color:var(--muted-foreground); font-size:var(--panel-detail-font-size); }
   .context-chips { display:flex; flex-wrap:wrap; gap:0.3rem; padding:0 0.75rem 0.35rem; }.context-chips button { display:flex; max-width:14rem; align-items:center; gap:0.25rem; border-radius:999px; background:var(--accent); padding:0.22rem 0.45rem; font-size:calc(0.68rem * var(--type-scale)); }.context-chips button span { color:var(--muted-foreground); }
   .composer-footer { display:flex; min-height:2.6rem; align-items:center; justify-content:space-between; gap:0.5rem; padding:0 0.75rem 0.5rem; }.composer-tools { display:flex; align-items:center; gap:0.3rem; }
   .tool-button { display:grid; width:1.9rem; height:1.9rem; place-items:center; border-radius:0.5rem; color:var(--muted-foreground); }.tool-button:hover,.tool-button.active { background:var(--accent); color:var(--foreground); }
   .send-button { display:grid; width:2rem; height:2rem; flex:0 0 auto; place-items:center; border-radius:999px; background:color-mix(in srgb,var(--primary) 92%,transparent); color:var(--primary-foreground); box-shadow:0 2px 7px color-mix(in srgb,var(--primary) 22%,transparent); transition:transform 120ms ease,filter 120ms ease; }.send-button:hover:not(:disabled) { filter:brightness(1.04); transform:scale(1.04); }.send-button:disabled,.send-button[aria-disabled="true"] { opacity:0.45; }
-  .composer-menu { position:absolute; z-index:110; min-width:14rem; border:1px solid var(--border); border-radius:0.5rem; background:var(--popover); padding:0.3rem; box-shadow:0 10px 30px rgb(0 0 0 / 0.16); }.composer-menu > button { display:flex; width:100%; min-height:2rem; align-items:center; gap:0.45rem; border-radius:0.35rem; padding:0.35rem 0.5rem; text-align:left; font-size:calc(0.75rem * var(--type-scale)); }.composer-menu > button:hover { background:var(--accent); }.add-menu,.schedule-loading { bottom:calc(100% + 0.35rem); left:0; }.schedule-loading.align-right { right:0; left:auto; }
+  .composer-menu { position:absolute; z-index:110; max-width:calc(100vw - 1rem); }.add-menu,.schedule-loading { bottom:calc(100% + 0.35rem); left:0; }.schedule-loading.align-right { right:0; left:auto; }
   .composer-blocker { display:flex; gap:0.45rem; margin:0 0.65rem 0.5rem; border-radius:0.5rem; background:color-mix(in srgb,var(--destructive) 8%,transparent); padding:0.45rem 0.55rem; color:var(--destructive); outline:none; }.composer-blocker:focus-visible { outline:2px solid var(--ring); }.composer-blocker > div { display:grid; gap:0.2rem; }.composer-blocker p { font-size:calc(0.68rem * var(--type-scale)); }.composer-blocker span { display:flex; flex-wrap:wrap; gap:0.25rem; }.composer-blocker button { min-height:1.75rem; border-radius:0.35rem; padding:0.2rem 0.4rem; font-size:calc(0.62rem * var(--type-scale)); font-weight:600; }.composer-blocker button:hover { background:color-mix(in srgb,var(--destructive) 10%,transparent); }
   .composer-error { padding:0 0.75rem 0.5rem; color:var(--destructive); font-size:calc(0.7rem * var(--type-scale)); }
   .sr-only { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; }
-  @media (max-width:42rem) { .assignment-preview { grid-template-columns:auto minmax(0,1fr); }.assignment-preview select,.approval-pill { grid-column:2; }.reference-picker { right:0.3rem; left:0.3rem; }.composer-tools { gap:0.05rem; } }
-  @media (pointer:coarse) { .tool-button,.send-button,.reference-picker [role="group"] > button,.composer-menu > button { min-width:2.75rem; min-height:2.75rem; } }
+  @media (max-width:42rem) { .assignment-preview { grid-template-columns:auto minmax(0,1fr); }.assignment-preview :global(.assignment-target-select),.approval-pill { grid-column:2; }.reference-picker { right:0.3rem; left:0.3rem; }.composer-tools { gap:0.05rem; } }
+  @media (pointer:coarse) { .tool-button,.send-button { min-width:2.75rem; min-height:2.75rem; } }
   @media (prefers-reduced-motion:reduce) { .send-button { transition:none; } }
-  @media (forced-colors:active) { .organizational-composer,.composer-menu,.reference-picker { border:1px solid CanvasText; } }
+  @media (forced-colors:active) { .organizational-composer { border:1px solid CanvasText; } }
 </style>

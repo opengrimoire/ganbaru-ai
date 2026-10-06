@@ -662,7 +662,7 @@
                 </button>
               {/snippet}
             </IconPicker>
-            <input bind:this={newPlaylistNameInput} bind:value={viewState.newPlaylistName} aria-label={t("music.builder.inlinePlaylistName")} class="h-8 min-w-0 flex-1 rounded-md border border-border/70 bg-background px-2.5 text-xs outline-none focus:border-primary" placeholder={t("music.builder.inlinePlaylistName")} />
+            <input bind:this={newPlaylistNameInput} bind:value={viewState.newPlaylistName} aria-label={t("music.builder.inlinePlaylistName")} class="field h-8 min-w-0 flex-1 px-2.5 text-xs" placeholder={t("music.builder.inlinePlaylistName")} />
           </div>
           {#if selectionMode ? bulk.createError : review.createError}<p class="mt-1.5 text-[0.65rem] text-destructive" role="alert">{selectionMode ? bulk.createError : review.createError}</p>{/if}
           <div class="mt-2 flex justify-end gap-2">

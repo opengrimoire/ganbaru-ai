@@ -118,7 +118,7 @@
         />
         <input
           value={priorityNameDraftValue(priority)}
-          class="h-7 min-w-0 rounded-md border border-border bg-background px-2 text-[0.8rem] text-foreground outline-none transition-colors focus:border-ring placeholder:text-muted-foreground"
+          class="field min-w-0 text-foreground"
           aria-label={t("projects.settings.priorityName")}
           onpointerdown={moveTextInputCaretToPointer}
           oninput={(event) => setPriorityNameDraft(priority.id, event.currentTarget.value)}
@@ -151,7 +151,7 @@
       />
       <input
         bind:value={newPriorityName}
-        class="h-7 min-w-0 rounded-md border border-border bg-background px-2 text-[0.8rem] text-foreground outline-none transition-colors focus:border-ring placeholder:text-muted-foreground"
+        class="field min-w-0 text-foreground"
         placeholder={t("projects.settings.newPriorityPlaceholder")}
         onpointerdown={moveTextInputCaretToPointer}
         onkeydown={(event) => {

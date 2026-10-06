@@ -33,6 +33,8 @@
   import { getProjects } from "$lib/stores/projects.svelte";
   import { onActiveVaultIdentityChange } from "$lib/vault/active-vault";
   import { overflowTooltip } from "$lib/utils/overflow-tooltip";
+  import { scrollEdgeFadeAction } from "$lib/utils/scroll-edge-fade";
+  import { SUBMENU_CLOSE_DELAY_MS, SUBMENU_OPEN_DELAY_MS } from "$lib/utils/menu-aim";
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
   import ChatChannelSetupDialog from "./ChatChannelSetupDialog.svelte";
 
@@ -73,6 +75,7 @@
   let moveMenuElement = $state<HTMLElement | null>(null);
   let moveMenuOpen = $state(false);
   let moveMenuPosition = $state<{ x: number; y: number } | null>(null);
+  let moveMenuHoverTimer: ReturnType<typeof setTimeout> | null = null;
   let setupChannel = $state<ChatChannelRead | null | undefined>(undefined);
   let setupSectionId = $state<string | null>(null);
   let sections = $state<ChatSidebarSection[]>([]);
@@ -346,7 +349,24 @@
     channelContextMenuElement.querySelector<HTMLButtonElement>("button")?.focus();
   }
 
+  function clearMoveMenuHoverTimer(): void {
+    if (moveMenuHoverTimer !== null) clearTimeout(moveMenuHoverTimer);
+    moveMenuHoverTimer = null;
+  }
+
+  /** Open or close the move submenu after the shared hover delay, so a passing pointer does not toggle it. */
+  function scheduleMoveMenu(open: boolean): void {
+    clearMoveMenuHoverTimer();
+    if (moveMenuOpen === open) return;
+    moveMenuHoverTimer = setTimeout(() => {
+      moveMenuHoverTimer = null;
+      if (open) void showMoveMenu();
+      else hideMoveMenu();
+    }, open ? SUBMENU_OPEN_DELAY_MS : SUBMENU_CLOSE_DELAY_MS);
+  }
+
   function hideMoveMenu(): void {
+    clearMoveMenuHoverTimer();
     moveMenuOpen = false;
     moveMenuPosition = null;
   }
@@ -357,6 +377,7 @@
   }
 
   async function showMoveMenu(focusFirst = false): Promise<void> {
+    clearMoveMenuHoverTimer();
     if (!channelContextMenu) return;
     moveMenuOpen = true;
     await tick();
@@ -491,6 +512,7 @@
       window.removeEventListener("ganbaru-ai:chat-focus-search", focusSearch);
       document.removeEventListener("pointerdown", closeOpenMenus);
       unsubscribeVault();
+      clearMoveMenuHoverTimer();
     };
   });
 </script>
@@ -504,7 +526,7 @@
 
     {#if creatingSection}
       <form class="mx-2 mb-2 flex gap-1" onsubmit={(event) => { event.preventDefault(); createSection(); }}>
-        <input bind:this={sectionInput} class="min-h-8 min-w-0 flex-1 rounded-md border border-border bg-background px-2 text-xs" bind:value={newSectionName} maxlength="80" placeholder={t("chat.channels.sectionName")} aria-label={t("chat.channels.sectionName")} onkeydown={(event) => { if (event.key === "Escape") { event.stopPropagation(); toggleSectionDraft(); } }} />
+        <input bind:this={sectionInput} class="field min-w-0 flex-1 text-xs" bind:value={newSectionName} maxlength="80" placeholder={t("chat.channels.sectionName")} aria-label={t("chat.channels.sectionName")} onkeydown={(event) => { if (event.key === "Escape") { event.stopPropagation(); toggleSectionDraft(); } }} />
         <button type="submit" class="explorer-icon" disabled={!newSectionName.trim()} aria-label={t("chat.channels.add")}><Plus size={16} /></button>
       </form>
     {/if}
@@ -593,7 +615,7 @@
 {#if sectionContextMenu}
   <div
     bind:this={sectionContextMenuElement}
-    class="section-context-menu fixed z-90 min-w-36 rounded-md border border-border bg-popover py-1 text-popover-foreground shadow-lg"
+    class="section-context-menu surface-floating surface-floating-body fixed z-90 w-floating-sm"
     class:explorer-touch={presentation === "surface"}
     role="menu"
     tabindex="-1"
@@ -608,10 +630,10 @@
     }}
   >
     {#if sectionContextMenu.section === null}
-      <button type="button" role="menuitem" disabled={!projects.selectedProjectId} class="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[0.8rem] hover:bg-accent focus-visible:bg-accent" onclick={createSectionFromContextMenu}><FolderPlus class="size-4" /><span>{t("chat.channels.newSection")}</span></button>
+      <button type="button" role="menuitem" disabled={!projects.selectedProjectId} class="menu-item" onclick={createSectionFromContextMenu}><FolderPlus class="size-4" /><span>{t("chat.channels.newSection")}</span></button>
     {:else}
-      <button type="button" role="menuitem" class="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[0.8rem] hover:bg-accent focus-visible:bg-accent" onclick={renameSectionFromContextMenu}><Pencil class="size-4" /><span>{t("chat.rename")}</span></button>
-      <button type="button" role="menuitem" class="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[0.8rem] text-destructive hover:bg-accent focus-visible:bg-accent" onclick={deleteSectionFromContextMenu}><Trash2 class="size-4" /><span>{t("chat.channels.deleteSectionConfirm")}</span></button>
+      <button type="button" role="menuitem" class="menu-item" onclick={renameSectionFromContextMenu}><Pencil class="size-4" /><span>{t("chat.rename")}</span></button>
+      <button type="button" role="menuitem" class="menu-item menu-item-destructive" onclick={deleteSectionFromContextMenu}><Trash2 class="size-4" /><span>{t("chat.channels.deleteSectionConfirm")}</span></button>
     {/if}
   </div>
 {/if}
@@ -619,7 +641,7 @@
 {#if channelContextMenu}
   <div
     bind:this={channelContextMenuElement}
-    class="channel-context-menu fixed z-90 min-w-36 rounded-md border border-border bg-popover py-1 text-popover-foreground shadow-lg"
+    class="channel-context-menu surface-floating surface-floating-body fixed z-90 w-floating-sm"
     class:explorer-touch={presentation === "surface"}
     role="menu"
     tabindex="-1"
@@ -634,19 +656,19 @@
     }}
     onscroll={hideMoveMenu}
   >
-    <button type="button" role="menuitem" class="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[0.8rem] hover:bg-accent focus-visible:bg-accent" onclick={editChannelFromContextMenu}><Pencil class="size-4" /><span>{t("chat.channels.edit")}</span></button>
+    <button type="button" role="menuitem" class="menu-item" onclick={editChannelFromContextMenu}><Pencil class="size-4" /><span>{t("chat.channels.edit")}</span></button>
     <div
       role="group"
       aria-label={t("chat.channels.moveTo")}
-      onpointerenter={(event) => { if (event.pointerType !== "touch") void showMoveMenu(); }}
-      onpointerleave={(event) => { if (event.pointerType !== "touch") hideMoveMenu(); }}
+      onpointerenter={(event) => { if (event.pointerType !== "touch") scheduleMoveMenu(true); }}
+      onpointerleave={(event) => { if (event.pointerType !== "touch") scheduleMoveMenu(false); }}
       onfocusout={(event) => { if (!(event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget))) hideMoveMenu(); }}
     >
-      <button bind:this={moveMenuTrigger} type="button" role="menuitem" aria-haspopup="menu" aria-expanded={moveMenuOpen} class="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[0.8rem] hover:bg-accent focus-visible:bg-accent" onfocus={() => void showMoveMenu()} onclick={() => void showMoveMenu(true)} onkeydown={(event) => { if (event.key === "ArrowRight") { event.preventDefault(); void showMoveMenu(true); } }}><FolderInput class="size-4" /><span class="min-w-0 flex-1 truncate">{t("chat.channels.moveTo")}</span><ChevronRight class="size-4" /></button>
+      <button bind:this={moveMenuTrigger} type="button" role="menuitem" aria-haspopup="menu" aria-expanded={moveMenuOpen} class="menu-item" onfocus={() => void showMoveMenu()} onclick={() => void showMoveMenu(true)} onkeydown={(event) => { if (event.key === "ArrowRight") { event.preventDefault(); void showMoveMenu(true); } }}><FolderInput class="size-4" /><span class="min-w-0 flex-1 truncate">{t("chat.channels.moveTo")}</span><ChevronRight class="size-4" /></button>
       {#if moveMenuOpen}
         <div
           bind:this={moveMenuElement}
-          class="channel-move-menu fixed z-100 min-w-36 rounded-md border border-border bg-popover py-1 text-popover-foreground shadow-lg"
+          class="channel-move-menu surface-floating fixed z-100 flex w-floating-sm flex-col overflow-hidden"
           class:invisible={moveMenuPosition === null}
           role="menu"
           tabindex="-1"
@@ -654,12 +676,14 @@
           style={`left:${moveMenuPosition?.x ?? -9999}px;top:${moveMenuPosition?.y ?? -9999}px`}
           onkeydown={(event) => { if (event.key === "ArrowLeft") { event.preventDefault(); event.stopPropagation(); hideMoveMenu(); moveMenuTrigger?.focus(); } }}
         >
-          <button type="button" role="menuitem" class="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[0.8rem] hover:bg-accent focus-visible:bg-accent" onclick={() => moveChannelFromContextMenu(null)}><Hash class="size-4" /><span class="min-w-0 truncate">{t("chat.channels.defaultSection")}</span></button>
-          {#each sections as section (section.id)}<button type="button" role="menuitem" class="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[0.8rem] hover:bg-accent focus-visible:bg-accent" onclick={() => moveChannelFromContextMenu(section.id)}><Folder class="size-4" /><span class="min-w-0 truncate">{section.name}</span></button>{/each}
+          <div class="surface-floating-body min-h-0 flex-1 overflow-y-auto" use:scrollEdgeFadeAction>
+            <button type="button" role="menuitem" class="menu-item" onclick={() => moveChannelFromContextMenu(null)}><Hash class="size-4" /><span class="min-w-0 truncate">{t("chat.channels.defaultSection")}</span></button>
+            {#each sections as section (section.id)}<button type="button" role="menuitem" class="menu-item" onclick={() => moveChannelFromContextMenu(section.id)}><Folder class="size-4" /><span class="min-w-0 truncate">{section.name}</span></button>{/each}
+          </div>
         </div>
       {/if}
     </div>
-    {#if !channelContextMenu.channel.isDefault}<button type="button" role="menuitem" class="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[0.8rem] text-destructive hover:bg-accent focus-visible:bg-accent" onclick={archiveChannelFromContextMenu}><Archive class="size-4" /><span>{t("chat.archive")}</span></button>{/if}
+    {#if !channelContextMenu.channel.isDefault}<button type="button" role="menuitem" class="menu-item menu-item-destructive" onclick={archiveChannelFromContextMenu}><Archive class="size-4" /><span>{t("chat.archive")}</span></button>{/if}
   </div>
 {/if}
 
@@ -703,7 +727,8 @@
   .section-heading > .section-toggle { min-width: 0; flex: 1; justify-content: flex-start; }
   .section-toggle > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .section-toggle :global(.section-chevron) { flex: 0 0 auto; transition: opacity 120ms ease; }
-  .section-context-menu, .channel-context-menu, .channel-move-menu { width: min(12rem, calc(100vw - 1rem)); max-height: min(22rem, calc(100vh - 4rem)); overflow-y: auto; }
+  .section-context-menu, .channel-context-menu { max-height: min(22rem, calc(100vh - 4rem)); overflow-y: auto; }
+  .channel-move-menu { max-height: min(22rem, calc(100vh - 4rem)); }
   .section-context-menu.explorer-touch button, .channel-context-menu.explorer-touch button { min-height: var(--touch-target-min); }
   .channel-row-group { position: relative; display: flex; min-width: 0; align-items: center; }
   .channel-row { display: flex; width: 100%; min-width: 0; min-height: var(--explorer-row-height); align-items: center; gap: 0.375rem; border-radius: 0.35rem; padding: var(--explorer-row-padding) 0.5rem; color: var(--foreground); text-align: left; }

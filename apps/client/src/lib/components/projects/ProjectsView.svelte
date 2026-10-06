@@ -567,7 +567,7 @@
         onClearAndClose={() => routeUi.closeOrClearFinder(taskQuery.search, () => { taskQuery.search = ""; })}
       />
     {:else if taskFinderLoadState?.status === "failed"}
-      <div class="absolute inset-x-3 top-3 z-80 flex min-h-10 items-center justify-center gap-2 rounded-md border border-border bg-card px-3 text-xs text-muted-foreground shadow-lg" role="alert">
+      <div class="absolute inset-x-3 top-3 z-80 flex min-h-10 items-center justify-center gap-2 surface-floating px-3 text-muted-foreground" role="alert">
         <span>{t("common.viewLoadFailed", t("projects.finder.label"))}</span>
         <button
           type="button"
@@ -602,8 +602,8 @@
         }}
       />
     {:else if routeLoad.taskDetailDataError || taskDetailLoadState?.status === "failed"}
-      <div class="absolute inset-0 z-80 flex items-center justify-center bg-black/40 p-4" role="alert">
-        <div class="flex min-h-32 w-full max-w-sm flex-col items-center justify-center gap-3 rounded-lg border border-border bg-card p-4 text-center text-sm text-muted-foreground shadow-xl">
+      <div class="absolute inset-0 z-80 surface-backdrop flex items-center justify-center p-4" role="alert">
+        <div class="flex min-h-32 w-full max-w-sm flex-col items-center justify-center gap-3 surface-dialog p-4 text-center text-sm text-muted-foreground">
           <p>{t("common.viewLoadFailed", t("projects.detail.title"))}</p>
           <div class="flex gap-2">
             <button
@@ -631,8 +631,8 @@
         </div>
       </div>
     {:else}
-      <div class="absolute inset-0 z-80 flex items-center justify-center bg-black/30 p-4" aria-busy="true">
-        <div class="rounded-md border border-border bg-card px-4 py-3 text-sm text-muted-foreground shadow-lg">
+      <div class="absolute inset-0 z-80 surface-backdrop flex items-center justify-center p-4" aria-busy="true">
+        <div class="surface-dialog px-4 py-3 text-sm text-muted-foreground">
           {t("common.loading")}
         </div>
       </div>

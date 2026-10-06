@@ -576,7 +576,7 @@
                           <span class="truncate text-muted-foreground">{t("notes.databaseTimelineStartDate")}</span>
                           <input
                             type="date"
-                            class="h-7 min-w-0 rounded-sm border border-input bg-background px-1 text-foreground outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                            class="field h-7 min-h-0 min-w-0 px-1 text-foreground"
                             value={item.start}
                             disabled={mutating}
                             onchange={(event) => {
@@ -589,7 +589,7 @@
                           <span class="truncate text-muted-foreground">{t("notes.databaseTimelineEndDate")}</span>
                           <input
                             type="date"
-                            class="h-7 min-w-0 rounded-sm border border-input bg-background px-1 text-foreground outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                            class="field h-7 min-h-0 min-w-0 px-1 text-foreground"
                             value={item.end}
                             disabled={mutating}
                             onchange={(event) => {

@@ -88,7 +88,7 @@
   use:portal
   bind:this={panelElement}
   data-chat-project-settings-panel
-  class="fixed z-80 flex min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-card text-[0.8rem] text-foreground shadow-xl"
+  class="surface-floating fixed z-80 flex min-h-0 flex-col overflow-hidden"
   style={panelStyle}
   role="dialog"
   tabindex="-1"
@@ -114,7 +114,7 @@
       <div class="flex flex-wrap justify-start gap-2 px-1 py-1">
         <button
           type="button"
-          class="flex h-7 items-center gap-1.5 rounded-md border border-border bg-card px-2.5 text-[0.8rem] font-medium text-foreground transition-colors hover:bg-accent dark:bg-transparent"
+          class="flex h-7 items-center gap-1.5 rounded-floating-item border border-border bg-transparent px-2.5 font-medium text-foreground transition-colors hover:bg-accent"
           onclick={onOpenArchive}
         >
           <Archive size={13} strokeWidth={1.75} />

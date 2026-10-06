@@ -18,7 +18,7 @@
 </script>
 
 <section
-  class="theme-contrast-notice absolute z-30 flex h-10 items-center justify-center gap-2 rounded-lg border border-border bg-card px-3 text-[0.733333rem] shadow-xl dark:bg-background"
+  class="theme-contrast-notice absolute z-30 flex h-10 items-center justify-center gap-2 px-3 surface-floating"
 >
   <div class="theme-contrast-message flex shrink-0 items-center gap-2 text-foreground">
     <AlertTriangle

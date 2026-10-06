@@ -674,7 +674,7 @@
             type="text"
             spellcheck="false"
             placeholder={t("settings.distractions.browser.categoryName")}
-            class="flex h-7 min-w-32 flex-1 rounded-md border border-border bg-transparent px-2 text-[0.8rem] leading-snug text-foreground outline-none placeholder:text-muted-foreground"
+            class="field flex h-7 min-w-32 flex-1 px-2 text-[0.8rem] leading-snug text-foreground"
           />
           <button
             type="button"
@@ -712,7 +712,7 @@
         <div class="grid min-w-0">
           <div class="min-w-0">
             <form
-              class="flex min-w-0 items-center gap-2 border-b border-border/70 py-1.5 focus-within:border-ring"
+              class="flex min-w-0 items-center gap-2 border-b border-border/70 py-1.5"
               onsubmit={submitCustomCategoryDraftHost}
             >
               <input

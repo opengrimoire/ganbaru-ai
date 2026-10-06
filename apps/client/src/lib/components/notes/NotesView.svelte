@@ -584,13 +584,13 @@
         }}
       />
     {:else}
-      <div class="fixed inset-0 z-90 flex items-center justify-center bg-black/45 p-4" role="dialog" aria-modal="true" aria-busy={projectHistoryLoadState?.status !== "failed"}>
-        <div class="rounded-md border border-border bg-popover p-4 text-sm text-popover-foreground shadow-lg">
+      <div class="fixed inset-0 z-90 flex items-center justify-center surface-backdrop p-4" role="dialog" aria-modal="true" aria-busy={projectHistoryLoadState?.status !== "failed"}>
+        <div class="surface-dialog p-4 text-sm">
           {#if projectHistoryLoadState?.status === "failed"}
             <p role="alert">{t("common.viewLoadFailed", t("notes.projectSettingsVersionHistory"))}</p>
             <div class="mt-3 flex gap-2">
-              <button class="min-h-8 rounded-md border border-border px-2 hover:bg-accent" type="button" onclick={() => requestNotesOptionalComponent("project-history", true)}>{t("common.retry")}</button>
-              <button class="min-h-8 rounded-md border border-border px-2 hover:bg-accent" type="button" onclick={() => { projectVersionHistoryOpen = false; }}>{t("common.close")}</button>
+              <button class="min-h-8 rounded-floating-item border border-border px-2 hover:bg-accent" type="button" onclick={() => requestNotesOptionalComponent("project-history", true)}>{t("common.retry")}</button>
+              <button class="min-h-8 rounded-floating-item border border-border px-2 hover:bg-accent" type="button" onclick={() => { projectVersionHistoryOpen = false; }}>{t("common.close")}</button>
             </div>
           {:else}
             {t("common.loading")}
@@ -611,18 +611,18 @@
         onCancel={cancelDiscardProjectSettings}
       />
     {:else if confirmDialogLoadState?.status === "failed"}
-      <div class="fixed inset-0 z-100 flex items-center justify-center bg-black/45 p-4" role="alert">
-        <div class="rounded-md border border-border bg-popover p-4 text-sm text-popover-foreground shadow-lg">
+      <div class="fixed inset-0 z-100 flex items-center justify-center surface-backdrop p-4" role="alert">
+        <div class="surface-dialog p-4 text-sm">
           <p>{t("common.viewLoadFailed", t("calendar.view.discard"))}</p>
           <div class="mt-3 flex gap-2">
-            <button class="min-h-8 rounded-md border border-border px-2 hover:bg-accent" type="button" onclick={() => requestNotesOptionalComponent("confirm-dialog", true)}>{t("common.retry")}</button>
-            <button class="min-h-8 rounded-md border border-border px-2 hover:bg-accent" type="button" onclick={cancelDiscardProjectSettings}>{t("common.cancel")}</button>
+            <button class="min-h-8 rounded-floating-item border border-border px-2 hover:bg-accent" type="button" onclick={() => requestNotesOptionalComponent("confirm-dialog", true)}>{t("common.retry")}</button>
+            <button class="min-h-8 rounded-floating-item border border-border px-2 hover:bg-accent" type="button" onclick={cancelDiscardProjectSettings}>{t("common.cancel")}</button>
           </div>
         </div>
       </div>
     {:else}
-      <div class="fixed inset-0 z-100 flex items-center justify-center bg-black/45 p-4" role="dialog" aria-modal="true" aria-busy="true">
-        <div class="rounded-md border border-border bg-popover px-4 py-3 text-sm text-muted-foreground shadow-lg">{t("common.loading")}</div>
+      <div class="fixed inset-0 z-100 flex items-center justify-center surface-backdrop p-4" role="dialog" aria-modal="true" aria-busy="true">
+        <div class="surface-dialog px-4 py-3 text-sm text-muted-foreground">{t("common.loading")}</div>
       </div>
     {/if}
   {/if}
@@ -631,15 +631,15 @@
       {@const DatabaseDeletionDialog = databaseDeletionDialogLoadState.component}
       <DatabaseDeletionDialog controller={pane.store.databaseDeletion} />
     {:else}
-      <div class="fixed inset-0 z-100 flex items-center justify-center bg-black/45 p-4" role="dialog" aria-modal="true" aria-busy={databaseDeletionDialogLoadState?.status !== "failed"}>
-        <div class="rounded-md border border-border bg-popover p-4 text-sm text-popover-foreground shadow-lg">
+      <div class="fixed inset-0 z-100 flex items-center justify-center surface-backdrop p-4" role="dialog" aria-modal="true" aria-busy={databaseDeletionDialogLoadState?.status !== "failed"}>
+        <div class="surface-dialog p-4 text-sm">
           {#if databaseDeletionDialogLoadState?.status === "failed"}
             <p role="alert">{t("common.viewLoadFailed", t("notes.databaseDelete"))}</p>
-            <button type="button" class="mt-3 min-h-9 rounded-md border border-border px-3 hover:bg-accent" onclick={() => requestDatabaseDeletionDialog(true)}>{t("common.retry")}</button>
+            <button type="button" class="mt-3 min-h-9 rounded-floating-item border border-border px-3 hover:bg-accent" onclick={() => requestDatabaseDeletionDialog(true)}>{t("common.retry")}</button>
           {:else}
             <p>{t("common.loading")}</p>
           {/if}
-          <button type="button" class="mt-3 min-h-9 rounded-md border border-border px-3 hover:bg-accent" onclick={pane.store.databaseDeletion.cancel}>{t("common.cancel")}</button>
+          <button type="button" class="mt-3 min-h-9 rounded-floating-item border border-border px-3 hover:bg-accent" onclick={pane.store.databaseDeletion.cancel}>{t("common.cancel")}</button>
         </div>
       </div>
     {/if}
@@ -705,7 +705,7 @@
             {@const selected = store.selectedPageId !== null && !store.isPagePendingRemoval(store.selectedPageId)}
             <div
               class={hidden ? "hidden" : center
-                ? "fixed inset-x-0 bottom-0 z-50 flex items-center justify-center bg-black/45 px-3 py-4 sm:px-6 sm:py-8"
+                ? "surface-backdrop fixed inset-x-0 bottom-0 z-50 flex items-center justify-center px-3 py-4 sm:px-6 sm:py-8"
                 : side ? "ml-auto flex min-w-0 basis-1/2 overflow-hidden"
                   : !showDatabasePage && showSidePeek ? "flex min-w-0 basis-1/2 overflow-hidden" : "flex min-w-0 flex-1 overflow-hidden"}
               style={center ? "top: calc(var(--titlebar-h) + var(--cal-header-row-h));" : undefined}
@@ -722,7 +722,7 @@
             >
               <div
                 class={center
-                  ? "notes-center-peek-panel flex min-w-0 overflow-hidden rounded-lg border border-border"
+                  ? "notes-center-peek-panel flex min-w-0 overflow-hidden rounded-floating border border-border shadow-floating"
                   : side ? "flex min-w-0 flex-1 overflow-hidden border-l border-border" : "flex min-w-0 flex-1 overflow-hidden"}
                 style="background-color: var(--cal-bg);"
                 role={!showDatabasePage && isContextual && showPagePeek ? "dialog" : undefined}

@@ -16,6 +16,8 @@
   const PALETTE_GAP_REM = 0.5;
   const PALETTE_PADDING_REM = 0.625;
   const PALETTE_EDGE_PX = 8;
+  /** Border width on each side of the floating surface. */
+  const PALETTE_BORDER_PX = 1;
 
   let {
     color,
@@ -40,7 +42,6 @@
   const calendarTokens = $derived(resolveCalendarTokens(theme));
   const pickerBg = $derived(calendarTokens["--cal-bg"]);
   const pickerText = $derived(calendarTokens["--cal-time-label"]);
-  const pickerRing = $derived(calendarTokens["--cal-gridline"]);
   const selectionBorder = $derived(
     contrastRatio(pickerBg, "#000000") >= contrastRatio(pickerBg, "#ffffff")
       ? "#000000"
@@ -58,10 +59,12 @@
     return {
       width: PALETTE_COLUMNS * PALETTE_SWATCH_REM * rem
         + (PALETTE_COLUMNS - 1) * PALETTE_GAP_REM * rem
-        + PALETTE_PADDING_REM * rem * 2,
+        + PALETTE_PADDING_REM * rem * 2
+        + PALETTE_BORDER_PX * 2,
       height: rows * PALETTE_SWATCH_REM * rem
         + Math.max(0, rows - 1) * PALETTE_GAP_REM * rem
-        + PALETTE_PADDING_REM * rem * 2,
+        + PALETTE_PADDING_REM * rem * 2
+        + PALETTE_BORDER_PX * 2,
     };
   }
 
@@ -122,7 +125,6 @@
       background-color: ${pickerBg};
       color: ${pickerText};
       --selection-border: ${selectionBorder};
-      --tw-ring-color: ${pickerRing};
     `
     : `
       left: ${palettePosition.left}px;
@@ -131,7 +133,6 @@
       background-color: ${pickerBg};
       color: ${pickerText};
       --selection-border: ${selectionBorder};
-      --tw-ring-color: ${pickerRing};
     `);
 
   $effect(() => {
@@ -175,7 +176,7 @@
   <div
     bind:this={palette}
     use:portal
-    class={mobileLayout ? "fixed z-100 grid gap-1 overflow-y-auto overscroll-contain rounded-2xl p-2 shadow-lg ring-1" : "fixed z-100 grid gap-2 rounded-lg p-2.5 shadow-lg ring-1"}
+    class={mobileLayout ? "surface-floating fixed z-100 grid gap-1 overflow-y-auto overscroll-contain p-2" : "surface-floating fixed z-100 grid gap-2 p-2.5"}
     style={paletteStyle}
     role="dialog"
     aria-modal="true"

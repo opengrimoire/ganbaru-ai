@@ -1,3 +1,4 @@
+import { FLOATING_WIDTH } from "$lib/components/ui/floating-width";
 import { notesBlockInsertMenuStyle } from "./insertion";
 import type { NotesBlockInsertMenuPlacementInput } from "./insertion";
 
@@ -82,6 +83,6 @@ export function notesBlockHandleActionMenuStyle(
 ): string {
   return notesBlockInsertMenuStyle({
     ...input,
-    preferredWidth: 224,
+    preferredWidth: FLOATING_WIDTH.sm,
   });
 }

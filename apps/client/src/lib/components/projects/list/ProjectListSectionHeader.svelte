@@ -120,9 +120,9 @@
     </button>
     <div
       class={cn(
-        "flex min-h-8 min-w-0 flex-1 items-center gap-2 rounded-md px-2 transition-colors focus-within:bg-card focus-within:ring-1 focus-within:ring-inset focus-within:ring-foreground/50",
+        "flex min-h-8 min-w-0 flex-1 items-center gap-2 rounded-md px-2 transition-colors",
         draftDirty
-          ? "bg-card shadow-sm ring-1 ring-inset ring-border"
+          ? "bg-card ring-1 ring-inset ring-border"
           : "bg-transparent ring-0 hover:bg-card/60",
       )}
     >
@@ -165,38 +165,38 @@
       </button>
       {#if menuOpen}
         <div
-          class="absolute right-0 top-8 z-30 w-52 rounded-lg border border-border bg-popover p-1 text-[0.866667rem] text-popover-foreground shadow-sm"
+          class="surface-floating surface-floating-body absolute right-0 top-8 z-30 w-floating-sm"
           role="menu"
           aria-label={optionsLabel}
         >
           {#if disabled}
             <button
               type="button"
-              class="flex min-h-9 w-full cursor-pointer items-center gap-2 rounded-md px-2 text-left hover:bg-accent hover:text-foreground"
+              class="menu-item"
               role="menuitem"
               onclick={() => { void onRestore(); }}
             >
               <ArchiveRestore size={14} strokeWidth={1.75} class="shrink-0 text-muted-foreground" />
-              <span>{t("projects.actions.restoreSection", section.name)}</span>
+              <span class="min-w-0 truncate">{t("projects.actions.restoreSection", section.name)}</span>
             </button>
           {:else}
             <button
               type="button"
-              class="flex min-h-9 w-full cursor-pointer items-center gap-2 rounded-md px-2 text-left hover:bg-accent hover:text-foreground"
+              class="menu-item"
               role="menuitem"
               onclick={() => { void onHide(); }}
             >
               <EyeOff size={14} strokeWidth={1.75} class="shrink-0 text-muted-foreground" />
-              <span>{t("projects.actions.hideSection", section.name)}</span>
+              <span class="min-w-0 truncate">{t("projects.actions.hideSection", section.name)}</span>
             </button>
             <button
               type="button"
-              class="flex min-h-9 w-full cursor-pointer items-center gap-2 rounded-md px-2 text-left hover:bg-accent hover:text-foreground"
+              class="menu-item"
               role="menuitem"
               onclick={() => { void onArchive(); }}
             >
               <Archive size={14} strokeWidth={1.75} class="shrink-0 text-muted-foreground" />
-              <span>{t("projects.actions.archiveSection", section.name)}</span>
+              <span class="min-w-0 truncate">{t("projects.actions.archiveSection", section.name)}</span>
             </button>
           {/if}
         </div>

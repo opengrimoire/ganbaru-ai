@@ -9,14 +9,11 @@
   } = $props();
 </script>
 
-<div {...attributes} bind:this={element} role="dialog" aria-label={label} tabindex="-1" data-floating-root data-app-floating-surface data-app-shortcuts="ignore" class={cn("collection-panel flex min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-popover text-collection text-popover-foreground shadow-sm", className)}>
+<div {...attributes} bind:this={element} role="dialog" aria-label={label} tabindex="-1" data-floating-root data-app-floating-surface data-app-shortcuts="ignore" class={cn("collection-panel surface-floating flex min-h-0 flex-col overflow-hidden", className)}>
   {@render children()}
 </div>
 
 <style>
-  .collection-panel {
-    --collection-row-height: calc(var(--collection-font-size) * 1.5 + 0.5rem);
-  }
   .collection-panel :global(:disabled) { opacity: 1; }
   .collection-panel :global([data-collection-menu-body] .grid) {
     align-content: start;
@@ -24,12 +21,12 @@
   }
   .collection-panel :global(:is([data-collection-menu-body] button, [data-collection-menu-body] label.flex, [data-collection-settings-page] button, [data-collection-settings-page] label.flex, .collection-menu-trigger, [role="option"])) {
     box-sizing: border-box;
-    height: var(--collection-row-height);
-    min-height: var(--collection-row-height);
+    height: var(--panel-row-height);
+    min-height: var(--panel-row-height);
     flex-shrink: 0;
     padding: 0.25rem 0.5rem;
     gap: 0.375rem;
-    font-size: var(--collection-font-size);
+    font-size: var(--panel-font-size);
     line-height: 1.5;
     white-space: nowrap;
   }
@@ -41,14 +38,14 @@
     display: none;
   }
   .collection-panel :global(.collection-menu-row) {
-    height: var(--collection-row-height);
-    min-height: var(--collection-row-height);
+    height: var(--panel-row-height);
+    min-height: var(--panel-row-height);
     align-items: center;
   }
   .collection-panel :global(:is(.collection-menu-control, .collection-settings-control)) {
-    height: var(--collection-row-height);
-    min-height: var(--collection-row-height);
-    min-width: var(--collection-row-height);
+    height: var(--panel-row-height);
+    min-height: var(--panel-row-height);
+    min-width: var(--panel-row-height);
   }
   .collection-panel :global([data-collection-menu-body] button > svg),
   .collection-panel :global([data-collection-settings-page] button > svg),
@@ -58,30 +55,11 @@
     flex-shrink: 0;
   }
   .collection-panel :global(:is(input, select, textarea)) {
-    font-size: var(--collection-font-size);
-  }
-  .collection-panel :global([role="listbox"][data-app-floating-surface]) {
-    padding-inline: 0.375rem;
-    border-radius: var(--radius-xl);
-    box-shadow: var(--shadow-sm);
-  }
-  .collection-panel :global([role="option"]) {
-    border-radius: var(--radius-md);
-  }
-  .collection-panel :global(input:not([type="checkbox"]):not([type="radio"]):focus),
-  .collection-panel :global(textarea:focus) {
-    outline: none;
-    box-shadow: none;
-  }
-  :global(html[data-shell="mobile"]) .collection-panel {
-    --collection-row-height: 2.75rem;
+    font-size: var(--panel-font-size);
   }
   @media (any-pointer: coarse) and (any-hover: none) {
-    .collection-panel {
-      --collection-row-height: 2.75rem;
-    }
     .collection-panel :global(input:not([type="checkbox"]):not([type="radio"])),
     .collection-panel :global(select),
-    .collection-panel :global(textarea) { min-height: var(--collection-row-height); }
+    .collection-panel :global(textarea) { min-height: var(--panel-row-height); }
   }
 </style>

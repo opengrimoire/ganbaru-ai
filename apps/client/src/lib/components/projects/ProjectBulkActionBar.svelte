@@ -169,7 +169,7 @@
         <input
           value={bulkScheduleDate}
           placeholder="YYYY-MM-DD"
-          class="min-h-8 rounded-md border border-border bg-background px-2 text-[0.8rem] text-foreground"
+          class="field min-w-0 text-[0.8rem] text-foreground"
           oninput={(event) => onBulkScheduleDateChange(event.currentTarget.value)}
         />
       </label>
@@ -178,7 +178,7 @@
         <input
           value={bulkScheduleStartTime}
           placeholder="HH:MM"
-          class="min-h-8 rounded-md border border-border bg-background px-2 text-[0.8rem] text-foreground"
+          class="field min-w-0 text-[0.8rem] text-foreground"
           oninput={(event) => onBulkScheduleStartTimeChange(event.currentTarget.value)}
         />
       </label>
@@ -189,7 +189,7 @@
           min="1"
           step="5"
           value={bulkScheduleDurationMinutes}
-          class="min-h-8 rounded-md border border-border bg-background px-2 text-[0.8rem] text-foreground"
+          class="field min-w-0 text-[0.8rem] text-foreground"
           oninput={(event) => onBulkScheduleDurationMinutesChange(event.currentTarget.valueAsNumber)}
         />
       </label>

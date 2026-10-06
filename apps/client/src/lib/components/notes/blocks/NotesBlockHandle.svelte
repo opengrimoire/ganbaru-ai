@@ -7,6 +7,7 @@
     type LazyComponentLoadState,
   } from "$lib/lazy-component-loader";
   import { dismissOnOutside } from "$lib/utils/dismiss-on-outside";
+  import { scrollEdgeFadeAction } from "$lib/utils/scroll-edge-fade";
   import {
     NOTES_BACKGROUND_COLORS,
     NOTES_TEXT_COLORS,
@@ -281,7 +282,7 @@
 
   {#if menuOpen}
     <div
-      class="z-50 overflow-auto rounded-md border border-border bg-popover py-1 text-popover-foreground shadow-lg"
+      class="surface-floating z-50 flex flex-col overflow-hidden"
       style={actionMenuStyle}
       role="menu"
       tabindex="-1"
@@ -291,9 +292,10 @@
         if (!(target instanceof HTMLInputElement)) event.preventDefault();
       }}
     >
+      <div class="surface-floating-body min-h-0 flex-1 overflow-auto" use:scrollEdgeFadeAction>
       {#if canTurnInto}
       <button
-        class="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[0.8rem] hover:bg-accent hover:text-accent-foreground"
+        class="menu-item"
         type="button"
         role="menuitem"
         onclick={() => runAction("turn_into", onTurnInto)}
@@ -303,13 +305,13 @@
       </button>
       {/if}
       {#if canSetColor}
-        <div class="my-1 border-t border-border"></div>
-        <div class="px-2.5 pb-1 pt-1 text-[0.7rem] font-medium text-muted-foreground">
+        <div class="menu-separator" role="separator"></div>
+        <div class="menu-label">
           {t("notes.color")}
         </div>
         {#each backgroundOnly ? NOTES_TEXT_COLORS.slice(0, 1) : NOTES_TEXT_COLORS as color}
           <button
-            class="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[0.8rem] hover:bg-accent hover:text-accent-foreground"
+            class="menu-item"
             type="button"
             role="menuitemradio"
             aria-checked={currentColor === color}
@@ -328,12 +330,12 @@
             {/if}
           </button>
         {/each}
-        <div class="px-2.5 pb-1 pt-2 text-[0.7rem] font-medium text-muted-foreground">
+        <div class="menu-label">
           {t("notes.backgroundColor")}
         </div>
         {#each NOTES_BACKGROUND_COLORS as color}
           <button
-            class="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[0.8rem] hover:bg-accent hover:text-accent-foreground"
+            class="menu-item"
             type="button"
             role="menuitemradio"
             aria-checked={currentBackgroundColor === color}
@@ -352,10 +354,10 @@
             {/if}
           </button>
         {/each}
-        <div class="my-1 border-t border-border"></div>
+        <div class="menu-separator" role="separator"></div>
       {/if}
       <button
-        class="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[0.8rem] hover:bg-accent hover:text-accent-foreground"
+        class="menu-item"
         type="button"
         role="menuitem"
         onclick={() => {
@@ -378,7 +380,7 @@
         </span>
       </button>
       <button
-        class="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[0.8rem] hover:bg-accent hover:text-accent-foreground"
+        class="menu-item"
         type="button"
         role="menuitem"
         onclick={() => runAction("duplicate", onDuplicate)}
@@ -387,7 +389,7 @@
         <span class="min-w-0 truncate">{t("notes.duplicateBlock")}</span>
       </button>
       <button
-        class="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[0.8rem] hover:bg-accent hover:text-accent-foreground"
+        class="menu-item"
         type="button"
         role="menuitem"
         onclick={() => runAction("comment", onComment)}
@@ -395,7 +397,7 @@
         <MessageSquare class="size-4 shrink-0" />
         <span class="min-w-0 flex-1 truncate">{t("notes.commentBlock")}</span>
         {#if commentCount > 0}
-          <span class="shrink-0 text-[0.733333rem] text-muted-foreground">
+          <span class="shrink-0 text-panel-detail text-muted-foreground">
             {#if unreadCommentCount > 0}
               {t("notes.unreadCommentShortCount", unreadCommentCount)}
             {:else}
@@ -405,7 +407,7 @@
         {/if}
       </button>
       <button
-        class="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[0.8rem] hover:bg-accent hover:text-accent-foreground"
+        class="menu-item"
         type="button"
         role="menuitem"
         onclick={() => runAction("move_up", onMoveUp)}
@@ -414,7 +416,7 @@
         <span class="min-w-0 truncate">{t("notes.moveBlockUp")}</span>
       </button>
       <button
-        class="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[0.8rem] hover:bg-accent hover:text-accent-foreground"
+        class="menu-item"
         type="button"
         role="menuitem"
         onclick={() => runAction("move_down", onMoveDown)}
@@ -423,7 +425,7 @@
         <span class="min-w-0 truncate">{t("notes.moveBlockDown")}</span>
       </button>
       <button
-        class="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[0.8rem] hover:bg-accent hover:text-accent-foreground"
+        class="menu-item"
         type="button"
         role="menuitem"
         aria-expanded={moveMenuOpen}
@@ -450,14 +452,14 @@
               }}
             />
           {:else if destinationPickerLoadState?.status === "failed"}
-            <button class="m-2 min-h-8 rounded-md border border-border px-2 text-[0.8rem] hover:bg-accent" type="button" onclick={() => requestDestinationPicker(true)}>{t("common.retry")}</button>
+            <button class="menu-item" type="button" onclick={() => requestDestinationPicker(true)}>{t("common.retry")}</button>
           {:else}
-            <div class="p-2 text-[0.8rem] text-muted-foreground" aria-busy="true">{t("common.loading")}</div>
+            <div class="p-2 text-muted-foreground" aria-busy="true">{t("common.loading")}</div>
           {/if}
         </div>
       {/if}
       <button
-        class="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[0.8rem] text-destructive hover:bg-accent"
+        class="menu-item menu-item-destructive"
         type="button"
         role="menuitem"
         onclick={() => runAction("delete", onDelete)}
@@ -465,6 +467,7 @@
         <Trash2 class="size-4 shrink-0" />
         <span class="min-w-0 truncate">{t("notes.deleteBlock")}</span>
       </button>
+      </div>
     </div>
   {/if}
 </div>

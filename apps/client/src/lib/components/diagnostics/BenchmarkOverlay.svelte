@@ -7,6 +7,7 @@
   import type { BenchmarkScalarMetricRow } from "$lib/benchmark/output";
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
   import { getLocalization } from "$lib/i18n/translator.svelte";
+  import { scrollEdgeFadeAction } from "$lib/utils/scroll-edge-fade";
 
   const runner = getBenchmarkRunner();
   const localization = getLocalization();
@@ -224,9 +225,9 @@
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="fixed inset-0 z-75 flex items-center justify-center">
-    <div class="absolute inset-0 bg-black/60 cursor-not-allowed"></div>
+    <div class="surface-backdrop absolute inset-0 cursor-not-allowed"></div>
     <div
-      class="relative z-10 flex w-[min(520px,90vw)] flex-col gap-4 rounded-lg border border-border bg-card px-6 py-5 shadow-2xl dark:bg-background"
+      class="relative z-10 flex w-[min(520px,90vw)] flex-col gap-4 px-6 py-5 surface-dialog"
     >
       <div class="flex items-center gap-2.5">
         <LoaderCircle size={16} strokeWidth={2.25} class="animate-spin text-primary" />
@@ -278,9 +279,9 @@
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="fixed inset-0 z-75 flex items-center justify-center">
-    <div class="absolute inset-0 bg-black/60 cursor-not-allowed"></div>
+    <div class="surface-backdrop absolute inset-0 cursor-not-allowed"></div>
     <div
-      class="relative z-10 flex h-[80vh] w-[min(1040px,94vw)] flex-col rounded-lg border border-border bg-card shadow-2xl dark:bg-background"
+      class="relative z-10 flex h-[80vh] w-[min(1040px,94vw)] flex-col surface-dialog"
     >
       <header class="flex items-center justify-between border-b border-border px-5 py-3">
         <div>
@@ -304,7 +305,7 @@
         </button>
       </header>
 
-      <div class="flex-1 space-y-5 overflow-y-auto px-5 py-4">
+      <div use:scrollEdgeFadeAction class="flex-1 space-y-5 overflow-y-auto px-5 py-4">
         {#if summaryPreview}
           <section class="space-y-2">
             <h3 class="text-[0.866667rem] font-semibold text-foreground">{t("benchmark.runMetadata")}</h3>
@@ -512,9 +513,9 @@
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="fixed inset-0 z-75 flex items-center justify-center">
-    <div class="absolute inset-0 bg-black/60 cursor-not-allowed"></div>
+    <div class="surface-backdrop absolute inset-0 cursor-not-allowed"></div>
     <div
-      class="relative z-10 flex w-[min(480px,90vw)] flex-col gap-3 rounded-lg border border-border bg-card px-6 py-5 shadow-2xl dark:bg-background"
+      class="relative z-10 flex w-[min(480px,90vw)] flex-col gap-3 px-6 py-5 surface-dialog"
     >
       <h2 class="text-[0.933333rem] font-semibold text-destructive">{t("benchmark.failedTitle")}</h2>
       <p class="text-[0.8rem] text-foreground">

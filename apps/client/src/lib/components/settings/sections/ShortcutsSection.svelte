@@ -7,6 +7,7 @@
   import Search from "@lucide/svelte/icons/search";
   import X from "@lucide/svelte/icons/x";
   import { getLocalization } from "$lib/i18n/translator.svelte";
+  import { scrollEdgeFadeAction } from "$lib/utils/scroll-edge-fade";
   import CalendarScrollbar from "$lib/components/calendar/CalendarScrollbar.svelte";
   import {
     SHORTCUT_GROUPS,
@@ -57,7 +58,7 @@
         bind:value={search}
         data-shortcuts-search-input="true"
         placeholder={t("settings.shortcuts.search")}
-        class="h-8 w-full rounded-md border border-border bg-background pl-8 pr-8 text-[0.866667rem] text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-ring focus:ring-1 focus:ring-ring"
+        class="field w-full pl-8 pr-8 text-[0.866667rem] text-foreground"
       />
       {#if hasSearch}
         <button
@@ -73,7 +74,7 @@
   </div>
 
   <div class="relative min-h-0 flex-1">
-    <div bind:this={shortcutsScrollEl} class="hide-scrollbar h-full overflow-y-auto pr-1">
+    <div bind:this={shortcutsScrollEl} use:scrollEdgeFadeAction class="hide-scrollbar h-full overflow-y-auto pr-1">
       {#if filteredGroups.length === 0}
         <div class="px-1 py-6 text-[0.866667rem] text-muted-foreground">
           {t("settings.shortcuts.noResults")}

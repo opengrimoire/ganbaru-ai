@@ -67,12 +67,12 @@
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="fixed inset-0 z-90 flex items-center justify-center p-4" onclick={onClose}>
-  <div class="absolute inset-0 bg-black/50"></div>
+  <div class="surface-backdrop absolute inset-0"></div>
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
     bind:this={dialog}
-    class="relative z-10 w-full max-w-md rounded-md border border-black/20 bg-card px-5 py-5 text-card-foreground shadow-2xl outline-none dark:border-white/10 dark:bg-sidebar dark:text-sidebar-foreground sm:px-8"
+    class="relative z-10 w-full max-w-md surface-dialog px-5 py-5 outline-none sm:px-8"
     role="dialog"
     aria-modal="true"
     aria-labelledby="pairing-code-title"
@@ -95,7 +95,7 @@
       type="text"
       autocomplete="off"
       spellcheck="false"
-      class="pairing-code-input mt-5 h-10 w-full rounded-md border border-input bg-background px-3 text-sm outline-none focus:bg-accent/30"
+      class="field mt-5 h-10 w-full px-3 text-sm"
       placeholder={t("vaultHandoff.codePlaceholder")}
       aria-label={t("vaultHandoff.codePlaceholder")}
       aria-invalid={error !== null}
@@ -127,9 +127,3 @@
     </div>
   </div>
 </div>
-
-<style>
-  :global(html[data-focus-intent="keyboard"]) .pairing-code-input:focus {
-    outline: none;
-  }
-</style>

@@ -50,9 +50,9 @@
 <div class="flex min-h-0 flex-1 flex-col overflow-hidden">
   {#if destination.kind === "playlists" || destination.kind === "playlist"}
     <div class="shrink-0 p-2">
-      <div class="flex h-8 items-center gap-2 rounded-full bg-secondary/35 px-2.5 focus-within:bg-secondary/55">
+      <div class="field flex h-8 items-center gap-2 px-2.5">
         <Search size={13} class="shrink-0 text-muted-foreground" />
-        <input data-builder-context-search value={state.search} oninput={(event) => onSearch(event.currentTarget.value)} type="search" aria-label={destination.kind === "playlist" ? t("music.builder.search") : t("music.builder.searchPlaylists")} placeholder={destination.kind === "playlist" ? t("music.builder.search") : t("music.builder.searchPlaylists")} class="min-w-0 flex-1 bg-transparent text-[0.7rem] outline-none placeholder:text-muted-foreground" />
+        <input data-builder-context-search value={state.search} oninput={(event) => onSearch(event.currentTarget.value)} type="search" aria-label={destination.kind === "playlist" ? t("music.builder.search") : t("music.builder.searchPlaylists")} placeholder={destination.kind === "playlist" ? t("music.builder.search") : t("music.builder.searchPlaylists")} class="field-bare text-[0.7rem]" />
         {#if state.search}<button type="button" onclick={() => onSearch("")} class="grid h-6 w-6 place-items-center rounded-full text-muted-foreground hover:bg-background/60 hover:text-foreground" aria-label={t("music.builder.clearSearch")}><X size={12} /></button>{/if}
         <button type="button" onclick={onCreatePlaylist} class="grid h-6 w-6 place-items-center rounded-full text-muted-foreground hover:bg-background/60 hover:text-foreground" aria-label={t("music.builder.newPlaylist")} title={t("music.builder.newPlaylist")}><Plus size={13} /></button>
       </div>

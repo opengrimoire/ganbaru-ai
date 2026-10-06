@@ -10,14 +10,14 @@ describe("Notes text context menu placement", () => {
     expect(notesTextContextMenuPosition(
       { x: 790, y: 590 },
       { width: 800, height: 600 },
-    )).toEqual({ left: 600, top: 152, width: 192, maxHeight: 440 });
+    )).toEqual({ left: 552, top: 152, width: 240, maxHeight: 440 });
   });
 
   it("fits the menu on a narrow viewport", () => {
     expect(notesTextContextMenuPosition(
       { x: 180, y: 220 },
       { width: 240, height: 300 },
-    )).toEqual({ left: 40, top: 8, width: 192, maxHeight: 284 });
+    )).toEqual({ left: 8, top: 8, width: 224, maxHeight: 284 });
   });
 
   it("uses the rendered menu height to stay close to the click", () => {
@@ -25,7 +25,7 @@ describe("Notes text context menu placement", () => {
       { x: 500, y: 500 },
       { width: 800, height: 600 },
       240,
-    )).toEqual({ left: 500, top: 352, width: 192, maxHeight: 440 });
+    )).toEqual({ left: 500, top: 352, width: 240, maxHeight: 440 });
   });
 
   it("opens a submenu to the right when it fits", () => {

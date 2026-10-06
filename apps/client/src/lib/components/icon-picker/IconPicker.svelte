@@ -87,6 +87,7 @@
     setConfigKey,
   } from "$lib/vault/config";
   import ProjectIcon from "$lib/components/projects/ProjectIcon.svelte";
+  import { FLOATING_WIDTH } from "$lib/components/ui/floating-width";
   import IconPickerCategoryMenu from "./IconPickerCategoryMenu.svelte";
   import IconPickerColorChoicePanel from "./IconPickerColorChoicePanel.svelte";
   import IconPickerCustomEmojiPanel from "./IconPickerCustomEmojiPanel.svelte";
@@ -161,7 +162,7 @@
   const iconColorChoicePanelColumns = 4;
   const iconColorChoicePanelWidthRem = 8.25;
   const iconColorChoicePanelHeightRem = 18.05;
-  const iconCategoryMenuWidth = 240;
+  const iconCategoryMenuWidth = FLOATING_WIDTH.sm;
   const iconCategoryMenuMaxHeight = 280;
   const gridCellSize = 36;
   const gridRowHeight = 36;
@@ -300,10 +301,9 @@
   const appTokens = $derived(resolveAppTokens(theme.current));
   const pickerBg = $derived(calendarTokens["--cal-bg"]);
   const pickerText = $derived(calendarTokens["--cal-time-label"]);
-  const pickerRing = $derived(calendarTokens["--cal-gridline"]);
   const automaticIconColor = $derived(appTokens["--foreground"]);
   const pickerSurfaceStyle = $derived(
-    `background-color: ${pickerBg}; color: ${pickerText}; --icon-picker-bg: ${pickerBg}; --icon-picker-text: ${pickerText}; --icon-picker-ring: ${pickerRing};`,
+    `background-color: ${pickerBg}; color: ${pickerText}; --icon-picker-bg: ${pickerBg}; --icon-picker-text: ${pickerText};`,
   );
   const panelStyle = $derived.by(() => {
     const baseStyle = `left: ${panelPlacement.left}px; top: ${panelPlacement.top}px; width: ${panelPlacement.width}px; ${pickerSurfaceStyle}`;
@@ -1171,7 +1171,7 @@
     id={panelId}
     bind:this={panelElement}
     use:portal
-    class="fixed z-90 flex min-h-0 flex-col overflow-hidden rounded-xl border border-border shadow-xl"
+    class="surface-floating fixed z-90 flex min-h-0 flex-col overflow-hidden"
     style={panelStyle}
     role="dialog"
     data-app-floating-surface

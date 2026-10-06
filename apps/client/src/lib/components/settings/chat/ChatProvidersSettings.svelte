@@ -770,8 +770,7 @@
   .model-search:focus-within { color:var(--foreground); }
   .custom-model-editor { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto; align-items:end; gap:0.6rem; border-bottom:1px solid var(--border); padding:0.65rem 0.25rem; }
   .custom-model-editor label { display:grid; min-width:0; gap:0.3rem; color:var(--muted-foreground); font-size:calc(0.68rem * var(--type-scale)); }
-  .custom-model-editor input { min-width:0; height:2rem; border:1px solid var(--border); border-radius:0.375rem; background:var(--background); padding:0.3rem 0.55rem; color:var(--foreground); outline:none; }
-  .custom-model-editor input:focus { border-color:var(--ring); }
+  .custom-model-editor input { min-width:0; height:2rem; border:1px solid var(--border); border-radius:var(--floating-item-radius); background:transparent; padding:0.3rem 0.55rem; color:var(--foreground); outline:none; }
   .custom-model-editor p { grid-column:1/-1; font-size:calc(0.68rem * var(--type-scale)); }
   .model-list { display:grid; }
   .model-row { display:grid; grid-template-columns:auto minmax(0,1fr) auto; align-items:center; gap:0.65rem; border-bottom:1px solid var(--border); padding:0.62rem 0.25rem; }

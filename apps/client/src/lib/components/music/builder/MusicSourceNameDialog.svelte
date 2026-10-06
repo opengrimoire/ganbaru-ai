@@ -24,7 +24,7 @@
 <MusicBuilderDialog title={t("music.builder.renameSource")} titleId="music-source-name-title" size="small" dismissDisabled={saving} onDismiss={onClose}>
   <label class="block">
     <span class="mb-1.5 block text-xs font-medium">{t("music.builder.sourceName")}</span>
-    <input data-dialog-autofocus bind:value={name} maxlength="200" class="h-11 w-full rounded-md border border-border bg-background px-3 text-sm outline-none focus-visible:border-ring" onkeydown={(event) => { if (event.key === "Enter" && name.trim() && name.trim() !== currentName) onSave(name.trim()); }} />
+    <input data-dialog-autofocus bind:value={name} maxlength="200" class="field h-11 w-full px-3 text-sm" onkeydown={(event) => { if (event.key === "Enter" && name.trim() && name.trim() !== currentName) onSave(name.trim()); }} />
   </label>
   {#if error}<p class="mt-3 text-sm text-destructive" role="alert">{error}</p>{/if}
 

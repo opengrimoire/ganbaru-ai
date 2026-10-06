@@ -15,6 +15,7 @@
   } from "$lib/lazy-component-loader";
   import { dismissOnOutside } from "$lib/utils/dismiss-on-outside";
   import { overflowTooltip } from "$lib/utils/overflow-tooltip";
+  import { scrollEdgeFadeAction } from "$lib/utils/scroll-edge-fade";
   import {
     createInlineRenameHistory,
     inlineRenameHistoryAction,
@@ -573,7 +574,7 @@
 
   {#if menuOpen}
     <div
-      class="notes-page-action-menu fixed z-50 min-w-36 rounded-md border border-border bg-popover p-1.5 text-popover-foreground shadow-sm"
+      class="notes-page-action-menu surface-floating fixed z-50 flex min-w-36 flex-col overflow-hidden"
       style={menuStyle}
       role="menu"
       tabindex="-1"
@@ -585,158 +586,162 @@
       }}
       data-app-floating-surface
     >
-      <button
-        class="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[0.8rem] hover:bg-accent"
-        type="button"
-        onclick={() => {
-          menuOpen = false;
-          onCreateChild();
-        }}
-      >
-        <FilePlus2 class="size-4" />
-        <span>{t("notes.newSubpage")}</span>
-      </button>
-      <button
-        class="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[0.8rem] hover:bg-accent"
-        type="button"
-        onclick={() => {
-          onToggleFavorite(!favorited);
-          menuOpen = false;
-        }}
-      >
-        <Star class={`size-4 ${favorited ? "fill-current text-primary" : ""}`} />
-        <span>{favorited ? t("notes.removeFromFavorites") : t("notes.addToFavorites")}</span>
-      </button>
-      <button
-        class="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[0.8rem] hover:bg-accent"
-        type="button"
-        onclick={() => {
-          beginRename();
-          menuOpen = false;
-        }}
-      >
-        <Pencil class="size-4" />
-        <span>{t("notes.renamePage")}</span>
-      </button>
-      <button
-        class="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[0.8rem] hover:bg-accent"
-        type="button"
-        onclick={() => {
-          menuOpen = false;
-          onDuplicate();
-        }}
-      >
-        <Copy class="size-4" />
-        <span>{t("notes.duplicatePage")}</span>
-      </button>
-      <button
-        class="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[0.8rem] hover:bg-accent"
-        type="button"
-        aria-expanded={moveMenuOpen}
-        onclick={() => {
-          moveMenuOpen = !moveMenuOpen;
-          folderMoveMenuOpen = false;
-        }}
-      >
-        <FolderInput class="size-4" />
-        <span>{t("notes.movePageTo")}</span>
-      </button>
-      {#if moveMenuOpen}
-        <div
-          class="notes-page-move-menu border-y border-border bg-muted/25 py-1"
-          aria-label={t("notes.movePageTo")}
-        >
-          {#if destinationPickerLoadState?.status === "ready" && destinationPickerLoadState.component.kind === "destination-picker"}
-            {@const NotesDestinationPickerList = destinationPickerLoadState.component.component}
-            <NotesDestinationPickerList
-              targets={moveTargets}
-              searchLabel={t("notes.moveDestinationSearch")}
-              searchPlaceholder={t("notes.moveDestinationSearchPlaceholder")}
-              recentLabel={t("notes.recentDestinations")}
-              pagesLabel={t("notes.allPages")}
-              emptyLabel={t("notes.noPageMoveTargets")}
-              optionLabel={(target) => t("notes.movePageToTarget", target.title)}
-              onSelect={moveToTarget}
-              onClose={() => {
-                moveMenuOpen = false;
-              }}
-            />
-          {:else if destinationPickerLoadState?.status === "failed"}
-            <div class="p-2 text-[0.8rem] text-destructive" role="alert">
-              <p>{t("common.viewLoadFailed", t("notes.movePageTo"))}</p>
-              <button class="mt-2 min-h-8 rounded-md border border-border px-2 text-foreground hover:bg-accent" type="button" onclick={() => requestDestinationPicker(true)}>{t("common.retry")}</button>
-            </div>
-          {:else}
-            <div class="p-2 text-[0.8rem] text-muted-foreground" aria-busy="true">{t("common.loading")}</div>
-          {/if}
-        </div>
-      {/if}
-      {#if folderMoveTargets && folderMoveTargets.length > 0 && onMoveToFolder}
+      <div class="surface-floating-body flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden" use:scrollEdgeFadeAction>
         <button
-          class="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[0.8rem] hover:bg-accent"
+          class="menu-item"
           type="button"
-          aria-expanded={folderMoveMenuOpen}
           onclick={() => {
-            folderMoveMenuOpen = !folderMoveMenuOpen;
-            moveMenuOpen = false;
+            menuOpen = false;
+            onCreateChild();
           }}
         >
-          <FolderTree class="size-4" />
-          <span>{t("notes.movePageToFolder")}</span>
+          <FilePlus2 />
+          <span>{t("notes.newSubpage")}</span>
         </button>
-        {#if folderMoveMenuOpen}
+        <button
+          class="menu-item"
+          type="button"
+          onclick={() => {
+            onToggleFavorite(!favorited);
+            menuOpen = false;
+          }}
+        >
+          <Star class={favorited ? "fill-current text-primary" : undefined} />
+          <span>{favorited ? t("notes.removeFromFavorites") : t("notes.addToFavorites")}</span>
+        </button>
+        <button
+          class="menu-item"
+          type="button"
+          onclick={() => {
+            beginRename();
+            menuOpen = false;
+          }}
+        >
+          <Pencil />
+          <span>{t("notes.renamePage")}</span>
+        </button>
+        <button
+          class="menu-item"
+          type="button"
+          onclick={() => {
+            menuOpen = false;
+            onDuplicate();
+          }}
+        >
+          <Copy />
+          <span>{t("notes.duplicatePage")}</span>
+        </button>
+        <button
+          class="menu-item"
+          type="button"
+          aria-expanded={moveMenuOpen}
+          onclick={() => {
+            moveMenuOpen = !moveMenuOpen;
+            folderMoveMenuOpen = false;
+          }}
+        >
+          <FolderInput />
+          <span>{t("notes.movePageTo")}</span>
+        </button>
+        {#if moveMenuOpen}
           <div
             class="notes-page-move-menu border-y border-border bg-muted/25 py-1"
-            aria-label={t("notes.movePageToFolder")}
+            use:scrollEdgeFadeAction
+            aria-label={t("notes.movePageTo")}
           >
             {#if destinationPickerLoadState?.status === "ready" && destinationPickerLoadState.component.kind === "destination-picker"}
               {@const NotesDestinationPickerList = destinationPickerLoadState.component.component}
               <NotesDestinationPickerList
-                targets={folderMoveTargets}
+                targets={moveTargets}
                 searchLabel={t("notes.moveDestinationSearch")}
                 searchPlaceholder={t("notes.moveDestinationSearchPlaceholder")}
                 recentLabel={t("notes.recentDestinations")}
-                pagesLabel={t("notes.folders")}
-                emptyLabel={t("notes.noFolderMoveTargets")}
-                optionLabel={(target) => t("notes.movePageToFolderTarget", target.title)}
-                onSelect={moveToFolderTarget}
+                pagesLabel={t("notes.allPages")}
+                emptyLabel={t("notes.noPageMoveTargets")}
+                optionLabel={(target) => t("notes.movePageToTarget", target.title)}
+                onSelect={moveToTarget}
                 onClose={() => {
-                  folderMoveMenuOpen = false;
+                  moveMenuOpen = false;
                 }}
               />
             {:else if destinationPickerLoadState?.status === "failed"}
-              <div class="p-2 text-[0.8rem] text-destructive" role="alert">
-                <p>{t("common.viewLoadFailed", t("notes.movePageToFolder"))}</p>
-                <button class="mt-2 min-h-8 rounded-md border border-border px-2 text-foreground hover:bg-accent" type="button" onclick={() => requestDestinationPicker(true)}>{t("common.retry")}</button>
+              <div class="p-2 text-destructive" role="alert">
+                <p>{t("common.viewLoadFailed", t("notes.movePageTo"))}</p>
+                <button class="mt-2 min-h-8 rounded-floating-item border border-border px-2 text-foreground hover:bg-accent" type="button" onclick={() => requestDestinationPicker(true)}>{t("common.retry")}</button>
               </div>
             {:else}
-              <div class="p-2 text-[0.8rem] text-muted-foreground" aria-busy="true">{t("common.loading")}</div>
+              <div class="p-2 text-muted-foreground" aria-busy="true">{t("common.loading")}</div>
             {/if}
           </div>
         {/if}
-      {/if}
-      <button
-        class="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[0.8rem] hover:bg-accent"
-        type="button"
-        onclick={() => {
-          menuOpen = false;
-          onArchive();
-        }}
-      >
-        <Archive class="size-4" />
-        <span>{t("notes.archivePage")}</span>
-      </button>
-      <button
-        class="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[0.8rem] text-destructive hover:bg-accent"
-        type="button"
-        onclick={() => {
-          menuOpen = false;
-          onTrash();
-        }}
-      >
-        <Trash2 class="size-4" />
-        <span>{t("notes.moveToTrash")}</span>
-      </button>
+        {#if folderMoveTargets && folderMoveTargets.length > 0 && onMoveToFolder}
+          <button
+            class="menu-item"
+            type="button"
+            aria-expanded={folderMoveMenuOpen}
+            onclick={() => {
+              folderMoveMenuOpen = !folderMoveMenuOpen;
+              moveMenuOpen = false;
+            }}
+          >
+            <FolderTree />
+            <span>{t("notes.movePageToFolder")}</span>
+          </button>
+          {#if folderMoveMenuOpen}
+            <div
+              class="notes-page-move-menu border-y border-border bg-muted/25 py-1"
+              use:scrollEdgeFadeAction
+              aria-label={t("notes.movePageToFolder")}
+            >
+              {#if destinationPickerLoadState?.status === "ready" && destinationPickerLoadState.component.kind === "destination-picker"}
+                {@const NotesDestinationPickerList = destinationPickerLoadState.component.component}
+                <NotesDestinationPickerList
+                  targets={folderMoveTargets}
+                  searchLabel={t("notes.moveDestinationSearch")}
+                  searchPlaceholder={t("notes.moveDestinationSearchPlaceholder")}
+                  recentLabel={t("notes.recentDestinations")}
+                  pagesLabel={t("notes.folders")}
+                  emptyLabel={t("notes.noFolderMoveTargets")}
+                  optionLabel={(target) => t("notes.movePageToFolderTarget", target.title)}
+                  onSelect={moveToFolderTarget}
+                  onClose={() => {
+                    folderMoveMenuOpen = false;
+                  }}
+                />
+              {:else if destinationPickerLoadState?.status === "failed"}
+                <div class="p-2 text-destructive" role="alert">
+                  <p>{t("common.viewLoadFailed", t("notes.movePageToFolder"))}</p>
+                  <button class="mt-2 min-h-8 rounded-floating-item border border-border px-2 text-foreground hover:bg-accent" type="button" onclick={() => requestDestinationPicker(true)}>{t("common.retry")}</button>
+                </div>
+              {:else}
+                <div class="p-2 text-muted-foreground" aria-busy="true">{t("common.loading")}</div>
+              {/if}
+            </div>
+          {/if}
+        {/if}
+        <button
+          class="menu-item"
+          type="button"
+          onclick={() => {
+            menuOpen = false;
+            onArchive();
+          }}
+        >
+          <Archive />
+          <span>{t("notes.archivePage")}</span>
+        </button>
+        <button
+          class="menu-item menu-item-destructive"
+          type="button"
+          onclick={() => {
+            menuOpen = false;
+            onTrash();
+          }}
+        >
+          <Trash2 />
+          <span>{t("notes.moveToTrash")}</span>
+        </button>
+      </div>
     </div>
   {/if}
 </div>
@@ -808,30 +813,6 @@
     .notes-page-row-current-file-pulse .notes-page-row-content::before {
       animation-duration: 1ms;
     }
-  }
-
-  .notes-page-action-menu {
-    overflow-x: hidden;
-    overflow-y: auto;
-  }
-
-  .notes-page-action-menu > button {
-    min-height: 1.75rem;
-    padding: 0.25rem 0.5rem;
-    gap: 0.375rem;
-    border-radius: var(--radius-sm);
-    font-size: 0.75rem;
-    line-height: 1.25rem;
-  }
-
-  .notes-page-action-menu > button :global(svg) {
-    width: 0.875rem;
-    height: 0.875rem;
-    flex-shrink: 0;
-  }
-
-  @media (pointer: coarse) {
-    .notes-page-action-menu > button { min-height: 2.75rem; }
   }
 
   .notes-page-move-menu {

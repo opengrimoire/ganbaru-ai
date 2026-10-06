@@ -226,4 +226,45 @@ describe("ChatModelControls controlled mode", () => {
     expect(flyout.style.left).toBe("696px");
     expect(flyout.style.top).toBe("96px");
   });
+
+  it("keeps the open flyout while the pointer crosses other rows toward it", async () => {
+    const target = document.createElement("div");
+    document.body.append(target);
+    const component = mount(ChatModelControls, {
+      target,
+      props: {
+        value: {
+          providerInstanceId: "codex-local",
+          modelId: "gpt-5.6-sol",
+          providerManaged: false,
+          options: [],
+        },
+      },
+    });
+    mounted.push({ component, target });
+
+    target.querySelector<HTMLButtonElement>("[data-chat-model-trigger]")?.click();
+    await tick();
+    document.querySelector<HTMLButtonElement>(".model-popover .advanced-toggle")?.click();
+    await tick();
+    const rows = [...document.querySelectorAll<HTMLButtonElement>(".model-popover .advanced-list button[aria-expanded]")];
+    const modelRow = rows.find((button) => button.textContent?.startsWith("Model"));
+    const otherRow = rows.find((button) => button !== modelRow);
+    if (!modelRow || !otherRow) throw new Error("Advanced rows did not render");
+    modelRow.dispatchEvent(new MouseEvent("pointerenter"));
+    await tick();
+    const flyout = document.querySelector<HTMLElement>(".model-flyout");
+    if (!flyout) throw new Error("Advanced model flyout did not render");
+    vi.spyOn(modelRow, "getBoundingClientRect").mockReturnValue(domRect(410, 100, 280, 32));
+    vi.spyOn(flyout, "getBoundingClientRect").mockReturnValue(domRect(696, 96, 280, 240));
+
+    otherRow.dispatchEvent(new MouseEvent("pointermove", { bubbles: true, clientX: 600, clientY: 140 }));
+    await tick();
+    expect(modelRow.getAttribute("aria-expanded")).toBe("true");
+
+    otherRow.dispatchEvent(new MouseEvent("pointermove", { bubbles: true, clientX: 540, clientY: 140 }));
+    await tick();
+    expect(modelRow.getAttribute("aria-expanded")).toBe("false");
+    expect(otherRow.getAttribute("aria-expanded")).toBe("true");
+  });
 });

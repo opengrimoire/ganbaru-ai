@@ -17,6 +17,8 @@
   import type { NotesColor } from "$lib/notes/types";
   import { tick, type Component } from "svelte";
   import { portal } from "$lib/utils/portal";
+  import { scrollEdgeFadeAction } from "$lib/utils/scroll-edge-fade";
+  import { FLOATING_WIDTH } from "$lib/components/ui/floating-width";
   import { findEditableDomPoint } from "$lib/notes/editor/selection";
   import { notesBlockInsertMenuStyle } from "$lib/notes/blocks/insertion";
   import Search from "@lucide/svelte/icons/search";
@@ -86,9 +88,6 @@
 
   const { t } = getLocalization();
   let scrollArea: HTMLDivElement | null = $state(null);
-  let scrollContent: HTMLDivElement | null = $state(null);
-  let canScrollUp = $state(false);
-  let canScrollDown = $state(false);
   let localQuery = $state("");
   let localActiveIndex = $state(0);
   let recentKeys = $state<readonly string[]>(notesRecentSlashCommandKeys());
@@ -116,25 +115,6 @@
     localActiveIndex = 0;
   });
 
-  /** Fade only the edges with additional commands outside the scroll viewport. */
-  function refreshScrollState(): void {
-    const element = scrollArea;
-    const maxScrollTop = element ? element.scrollHeight - element.clientHeight : 0;
-    canScrollUp = !!element && maxScrollTop > 1 && element.scrollTop > 1;
-    canScrollDown = !!element && maxScrollTop > 1 && element.scrollTop < maxScrollTop - 1;
-  }
-
-  $effect(() => {
-    const viewport = scrollArea;
-    const content = scrollContent;
-    if (!viewport || !content) return;
-    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(refreshScrollState);
-    observer?.observe(viewport);
-    observer?.observe(content);
-    refreshScrollState();
-    return () => observer?.disconnect();
-  });
-
   $effect(() => {
     const index = safeActiveIndex;
     const command = flatItems[index]?.command ?? null;
@@ -147,7 +127,6 @@
       const viewport = scrollArea.getBoundingClientRect();
       if (item.top < viewport.top) scrollArea.scrollTop -= viewport.top - item.top;
       else if (item.bottom > viewport.bottom) scrollArea.scrollTop += item.bottom - viewport.bottom;
-      refreshScrollState();
     });
   });
 
@@ -204,7 +183,7 @@
         triggerRect: { left: rect.left - offsetLeft, right: rect.right - offsetLeft, top: rect.top - offsetTop, bottom: rect.bottom - offsetTop },
         viewportWidth: viewport?.width ?? window.innerWidth,
         viewportHeight: viewport?.height ?? window.innerHeight,
-        preferredWidth: 20 * rem,
+        preferredWidth: FLOATING_WIDTH.lg,
         preferredMaxHeight: Math.min(22 * rem, (scrollArea?.scrollHeight ?? 22 * rem) + chromeHeight),
       });
       node.style.left = `${Number.parseFloat(node.style.left) + offsetLeft}px`;
@@ -545,7 +524,7 @@
 <div
   use:positionMenu={anchor}
   id={menuId}
-  class={`${anchor ? "" : menuClass} z-50 flex max-h-[min(22rem,70vh)] w-80 flex-col overflow-hidden rounded-xl border border-border bg-popover text-popover-foreground shadow-lg`}
+  class={`${anchor ? "" : menuClass} surface-floating z-50 flex max-h-[min(22rem,70vh)] w-floating-lg flex-col overflow-hidden`}
   role="menu"
   onkeydown={handleMenuKey}
   aria-label={t("notes.slashMenu")}
@@ -553,23 +532,21 @@
   tabindex="-1"
   onmousedown={(event) => { if (!(event.target instanceof HTMLInputElement)) event.preventDefault(); }}
 >
-  <div class="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2 text-sm text-muted-foreground">
+  <div class="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2 text-muted-foreground">
     <Search class="size-4 shrink-0" aria-hidden="true" />
     {#if anchor}
       <span class="truncate">{query || t("notes.slashSearch")}</span>
     {:else}
-      <input class="min-w-0 flex-1 bg-transparent text-foreground outline-none placeholder:text-muted-foreground" aria-label={t("notes.slashSearch")} placeholder={t("notes.slashSearch")} bind:value={localQuery} />
+      <input class="field-bare text-foreground" aria-label={t("notes.slashSearch")} placeholder={t("notes.slashSearch")} bind:value={localQuery} />
     {/if}
   </div>
-  <div bind:this={scrollArea} class="slash-scroll min-h-0 overflow-y-auto overscroll-contain"
-    class:scroll-top={canScrollUp && !canScrollDown} class:scroll-bottom={canScrollDown && !canScrollUp}
-    class:scroll-both={canScrollUp && canScrollDown} onscroll={refreshScrollState}>
-  <div bind:this={scrollContent} class="p-1">
+  <div bind:this={scrollArea} class="slash-scroll min-h-0 overflow-y-auto overscroll-contain" use:scrollEdgeFadeAction>
+  <div class="surface-floating-body">
   {#if hasResults}
     {#each groups as group}
       {@const items = group.items}
       {#if items.length > 0}
-        <div class="px-2.5 pb-1 pt-2 text-[0.7rem] font-medium text-muted-foreground">
+        <div class="menu-label">
           {group.label}
         </div>
         {#each items as item (item.key)}
@@ -578,15 +555,14 @@
           {@const active = index === safeActiveIndex}
           <button
             id={itemId(item)}
-            class="flex min-h-9 w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm outline-none hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground focus-visible:ring-2 focus-visible:ring-ring"
-            class:bg-accent={active}
-            class:text-accent-foreground={active}
+            class="menu-item"
             type="button"
             role={item.command.kind === "color" ? "menuitemradio" : "menuitem"}
             aria-checked={item.command.kind === "color"
               ? currentColor === item.command.color
               : undefined}
             data-active={active ? "true" : undefined}
+            data-highlighted={active ? "" : undefined}
             onmousedown={(event) => event.preventDefault()}
             onpointermove={() => activate(index)}
             onfocus={() => activate(index)}
@@ -604,7 +580,7 @@
               <Icon class="size-4 shrink-0" aria-hidden="true" />
             {/if}
             <span class="min-w-0 flex-1 truncate">{commandLabel(item.command)}</span>
-            {#if commandHint(item.command)}<span class="text-xs text-muted-foreground" aria-hidden="true">{commandHint(item.command)}</span>{/if}
+            {#if commandHint(item.command)}<span class="text-panel-detail text-muted-foreground" aria-hidden="true">{commandHint(item.command)}</span>{/if}
             {#if item.command.kind === "color" && currentColor === item.command.color}
               <Check class="size-3.5 shrink-0" aria-hidden="true" />
             {/if}
@@ -613,39 +589,20 @@
       {/if}
     {/each}
   {:else}
-    <div class="px-2.5 py-2 text-[0.8rem] text-muted-foreground" role="status">
+    <div class="px-2 py-1.5 text-muted-foreground" role="status">
       {t("notes.slashNoResults")}
     </div>
   {/if}
   </div>
   </div>
   {#if onClose}
-    <button class="flex min-h-10 w-full shrink-0 items-center justify-between border-t border-border px-3 py-2 text-left text-sm hover:bg-accent" type="button" onclick={onClose}>
-      {t("notes.slashClose")}<kbd class="text-xs text-muted-foreground">Esc</kbd>
+    <button class="flex min-h-(--panel-row-height) w-full shrink-0 items-center justify-between border-t border-border px-3 py-2 text-left hover:bg-accent" type="button" onclick={onClose}>
+      {t("notes.slashClose")}<kbd class="text-panel-detail text-muted-foreground">Esc</kbd>
     </button>
   {/if}
 </div>
 
 <style>
-  .slash-scroll {
-    transition: -webkit-mask-image 120ms ease, mask-image 120ms ease;
-  }
-
-  .scroll-top {
-    -webkit-mask-image: linear-gradient(to bottom, transparent, black 20px, black);
-    mask-image: linear-gradient(to bottom, transparent, black 20px, black);
-  }
-
-  .scroll-bottom {
-    -webkit-mask-image: linear-gradient(to bottom, black, black calc(100% - 20px), transparent);
-    mask-image: linear-gradient(to bottom, black, black calc(100% - 20px), transparent);
-  }
-
-  .scroll-both {
-    -webkit-mask-image: linear-gradient(to bottom, transparent, black 20px, black calc(100% - 20px), transparent);
-    mask-image: linear-gradient(to bottom, transparent, black 20px, black calc(100% - 20px), transparent);
-  }
-
   .notes-color-swatch {
     display: inline-flex;
     width: 1rem;

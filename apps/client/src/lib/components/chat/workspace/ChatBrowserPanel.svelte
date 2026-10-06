@@ -329,7 +329,7 @@
     <button type="button" class="chat-icon-button" disabled={!browserTab?.visible} aria-label={t("chat.browser.back")} title={t("chat.browser.back")} onclick={() => { const selectedThread = threadId; const selectedTab = tabId; if (selectedThread && selectedTab) void control(() => chatApi.browserBack(selectedThread, selectedTab)); }}><ArrowLeft size={14} /></button>
     <button type="button" class="chat-icon-button" disabled={!browserTab?.visible} aria-label={t("chat.browser.forward")} title={t("chat.browser.forward")} onclick={() => { const selectedThread = threadId; const selectedTab = tabId; if (selectedThread && selectedTab) void control(() => chatApi.browserForward(selectedThread, selectedTab)); }}><ArrowRight size={14} /></button>
     <button type="button" class="chat-icon-button" disabled={!browserTab?.visible} aria-label={t("chat.browser.refresh")} title={t("chat.browser.refresh")} onclick={() => { const selectedThread = threadId; const selectedTab = tabId; if (selectedThread && selectedTab) void control(() => chatApi.refreshBrowserTab(selectedThread, selectedTab)); }}><RefreshCw size={14} /></button>
-    <input bind:value={url} autocomplete="url" spellcheck="false" aria-label={t("chat.browser.url")} placeholder={t("chat.browser.urlPlaceholder")} />
+    <input class="field" bind:value={url} autocomplete="url" spellcheck="false" aria-label={t("chat.browser.url")} placeholder={t("chat.browser.urlPlaceholder")} />
     <button type="button" class="chat-icon-button" disabled={!threadId || loading} aria-label={t("chat.browser.discoverServers")} title={t("chat.browser.discoverServers")} onclick={() => void discoverServers()}><Search size={14} /></button>
     <button type="submit" class="chat-icon-button" disabled={!url.trim() || loading} aria-label={t("chat.browser.open")} title={t("chat.browser.open")}><ExternalLink size={14} /></button>
   </form>
@@ -373,7 +373,7 @@
   .browser-tab .close-tab:hover { background: color-mix(in srgb, var(--foreground) 10%, transparent); }
   .browser-tabs > button.new-tab { flex: 0 0 auto; justify-content: center; }
   .browser-toolbar { display: flex; align-items: center; gap: 0.2rem; border-bottom: 1px solid var(--border); padding: 0.35rem 0.45rem; }
-  .browser-toolbar input { min-width: 0; flex: 1; border: 1px solid var(--border); border-radius: 0.45rem; background: var(--background); padding: 0.35rem 0.5rem; font-size: calc(0.72rem * var(--type-scale)); }
+  .browser-toolbar input { min-width: 0; flex: 1; font-size: var(--panel-font-size); }
   .server-list { display: flex; gap: 0.25rem; overflow-x: auto; border-bottom: 1px solid var(--border); padding: 0.3rem 0.45rem; }
   .server-list button { flex: 0 0 auto; border-radius: 0.35rem; background: var(--accent); padding: 0.2rem 0.4rem; color: var(--muted-foreground); font-size: calc(0.64rem * var(--type-scale)); }
   .viewport-toolbar { display: flex; align-items: center; gap: 0.2rem; border-bottom: 1px solid var(--border); padding: 0.28rem 0.45rem; }

@@ -346,7 +346,7 @@
 <div
   bind:this={panelElement}
   use:portal
-  class="fixed z-90 flex min-h-0 flex-col overflow-hidden rounded-xl border border-border shadow-xl"
+  class="fixed z-90 flex min-h-0 flex-col overflow-hidden rounded-floating border border-border shadow-floating"
   style={panelStyle}
   role="dialog"
   aria-label={t("notes.pageCover")}
@@ -386,11 +386,11 @@
   <div id={`${pickerId}-panel`} role="tabpanel" aria-labelledby={`${pickerId}-tab-${activeTab}`} class="flex min-h-0 flex-1 flex-col overflow-hidden">
     {#if activeTab === "designs"}
       <div class="flex shrink-0 items-center gap-2 px-3 pt-3">
-        <div class="flex min-w-0 flex-1 items-center gap-2 rounded-md border border-border bg-background px-2">
+        <div class="field flex min-h-8 min-w-0 flex-1 items-center gap-2">
           <Search size={14} strokeWidth={1.75} class="shrink-0 text-muted-foreground" />
-          <input bind:value={query} class="h-8 min-w-0 flex-1 bg-transparent text-[0.866667rem] outline-none placeholder:text-muted-foreground" placeholder={t("projects.iconPicker.filter")} aria-label={t("projects.iconPicker.filter")} />
+          <input bind:value={query} class="field-bare text-[0.866667rem]" placeholder={t("projects.iconPicker.filter")} aria-label={t("projects.iconPicker.filter")} />
         </div>
-        <button type="button" disabled={busy || matchingDesigns.length === 0} class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border text-muted-foreground hover:bg-accent hover:text-foreground" aria-label={t("projects.iconPicker.random")} onclick={(event) => {
+        <button type="button" disabled={busy || matchingDesigns.length === 0} class="flex size-8 shrink-0 items-center justify-center rounded-floating-item border border-border text-muted-foreground hover:bg-accent hover:text-foreground" aria-label={t("projects.iconPicker.random")} onclick={(event) => {
           const pattern = matchingDesigns[Math.floor(Math.random() * matchingDesigns.length)];
           if (pattern) chooseDesign(pattern, event.currentTarget);
         }}><Shuffle size={14} strokeWidth={1.75} /></button>

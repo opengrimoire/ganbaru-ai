@@ -6,6 +6,7 @@
   import type { NotesPageMentionTarget } from "$lib/notes/rich-text/core";
   import { dismissOnOutside } from "$lib/utils/dismiss-on-outside";
   import { portal } from "$lib/utils/portal";
+  import { scrollEdgeFadeAction } from "$lib/utils/scroll-edge-fade";
   import Copy from "@lucide/svelte/icons/copy";
   import Database from "@lucide/svelte/icons/database";
   import FileText from "@lucide/svelte/icons/file-text";
@@ -45,6 +46,7 @@
 
   const { t } = getLocalization();
   let root = $state<HTMLDivElement | null>(null);
+  let body = $state<HTMLDivElement | null>(null);
   let destinationInput = $state<HTMLInputElement | null>(null);
   let titleInput = $state<HTMLInputElement | null>(null);
   let isEditingDestination = $state(false);
@@ -72,7 +74,7 @@
     viewport = { width: visibleViewport?.width ?? window.innerWidth, height: visibleViewport?.height ?? window.innerHeight };
     const styles = window.getComputedStyle(root);
     const borderHeight = (Number.parseFloat(styles.borderTopWidth) || 0) + (Number.parseFloat(styles.borderBottomWidth) || 0);
-    panelHeight = Math.ceil(root.scrollHeight + borderHeight);
+    panelHeight = Math.ceil((body ?? root).scrollHeight + borderHeight);
   }
 
   /** Mount the open popover outside the note layout and release its observers on close. */
@@ -139,7 +141,7 @@
   aria-label={mode === "preview" ? t("notes.linkPreview") : t("notes.openLinkEditor")}
   tabindex="-1"
   data-notes-link-panel
-  class="notes-editor-body-text fixed z-60 overflow-x-hidden overflow-y-auto rounded-xl border border-border bg-popover leading-normal text-popover-foreground shadow-sm"
+  class="notes-editor-body-text surface-floating fixed z-60 flex flex-col overflow-hidden leading-normal"
   style:left={`${position.left}px`}
   style:top={`${position.top}px`}
   style:width={mode === "preview" ? "max-content" : `${position.width}px`}
@@ -159,57 +161,52 @@
     if (event.relatedTarget instanceof Node && !root?.contains(event.relatedTarget)) onCancel();
   }}
 >
-  {#if mode === "preview"}
-    <div class="flex min-h-11 items-center gap-1 p-1.5">
-      <button type="button" disabled={busy} aria-label={t("notes.linkOpen")} class="flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onclick={onOpen}>
-        {#if localTarget?.blockId}<Database class="size-4 shrink-0 text-muted-foreground" />{:else if localTarget}<FileText class="size-4 shrink-0 text-muted-foreground" />{:else}<Link class="size-4 shrink-0 text-muted-foreground" />{/if}
-        <span class="truncate">{destinationTitle || value}</span>
-      </button>
-      <button type="button" disabled={busy} aria-label={t("notes.linkCopy")} class="flex size-8 shrink-0 items-center justify-center rounded-md hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onclick={onCopy}><Copy class="size-4" /></button>
-      {#if canRemove}<button type="button" disabled={busy} class="shrink-0 rounded-md px-2 py-1.5 hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onclick={onEdit}>{t("notes.linkEdit")}</button>{/if}
-    </div>
-  {:else}
-    <div class="space-y-3 p-3">
-      <div class="space-y-1.5">
-        <label for="notes-link-destination" class="text-[0.875em] text-muted-foreground">{t("notes.linkDestination")}</label>
-        {#if localTarget && !isEditingDestination}
-          <button id="notes-link-destination" type="button" disabled={busy} class="flex min-h-9 w-full items-center gap-2 rounded-md border border-input bg-muted/40 px-2.5 text-left hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onclick={editDestination}>
-            {#if localTarget.blockId}<Database class="size-4 shrink-0 text-muted-foreground" />{:else}<FileText class="size-4 shrink-0 text-muted-foreground" />{/if}
-            <span class="truncate">{destinationTitle || value}</span>
-          </button>
-        {:else}
-          <input bind:this={destinationInput} id="notes-link-destination" class="min-h-9 w-full rounded-md border border-input bg-muted/40 px-2.5 outline-none focus:border-ring" {value} disabled={busy} placeholder={t("notes.linkUrlPlaceholder")} onfocus={() => { isEditingDestination = true; }} oninput={(event) => onInput(event.currentTarget.value)} />
-          {#if matches.length}
-            <div class="space-y-0.5" aria-label={t("notes.linkDestination")}>
-              {#each matches as page (page.id)}<button type="button" class="flex min-h-8 w-full items-center gap-2 rounded-md px-2 text-left hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onclick={() => selectPage(page)}><FileText class="size-4 shrink-0 text-muted-foreground" /><span class="truncate">{page.title}</span></button>{/each}
-            </div>
+  <div bind:this={body} class="min-h-0 flex-1 overflow-x-hidden overflow-y-auto" use:scrollEdgeFadeAction>
+    {#if mode === "preview"}
+      <div class="flex min-h-11 items-center gap-1 p-1.5">
+        <button type="button" disabled={busy} aria-label={t("notes.linkOpen")} class="menu-item min-w-0 flex-1 gap-2" onclick={onOpen}>
+          {#if localTarget?.blockId}<Database class="size-4 shrink-0 text-muted-foreground" />{:else if localTarget}<FileText class="size-4 shrink-0 text-muted-foreground" />{:else}<Link class="size-4 shrink-0 text-muted-foreground" />{/if}
+          <span class="truncate">{destinationTitle || value}</span>
+        </button>
+        <button type="button" disabled={busy} aria-label={t("notes.linkCopy")} class="menu-item size-8 shrink-0 justify-center p-0" onclick={onCopy}><Copy class="size-4" /></button>
+        {#if canRemove}<button type="button" disabled={busy} class="menu-item w-auto shrink-0" onclick={onEdit}>{t("notes.linkEdit")}</button>{/if}
+      </div>
+    {:else}
+      <div class="space-y-3 p-3">
+        <div class="space-y-1.5">
+          <label for="notes-link-destination" class="text-[0.875em] text-muted-foreground">{t("notes.linkDestination")}</label>
+          {#if localTarget && !isEditingDestination}
+            <button id="notes-link-destination" type="button" disabled={busy} class="field flex w-full items-center gap-2 text-left hover:bg-accent" onclick={editDestination}>
+              {#if localTarget.blockId}<Database class="size-4 shrink-0 text-muted-foreground" />{:else}<FileText class="size-4 shrink-0 text-muted-foreground" />{/if}
+              <span class="truncate">{destinationTitle || value}</span>
+            </button>
+          {:else}
+            <input bind:this={destinationInput} id="notes-link-destination" class="field w-full" {value} disabled={busy} placeholder={t("notes.linkUrlPlaceholder")} onfocus={() => { isEditingDestination = true; }} oninput={(event) => onInput(event.currentTarget.value)} />
+            {#if matches.length}
+              <div class="space-y-0.5" aria-label={t("notes.linkDestination")}>
+                {#each matches as page (page.id)}<button type="button" class="menu-item gap-2" onclick={() => selectPage(page)}><FileText class="size-4 shrink-0 text-muted-foreground" /><span class="truncate">{page.title}</span></button>{/each}
+              </div>
+            {/if}
           {/if}
-        {/if}
+        </div>
+        <div class="space-y-1.5">
+          <label for="notes-link-title" class="text-[0.875em] text-muted-foreground">{t("notes.linkTitle")}</label>
+          <input bind:this={titleInput} id="notes-link-title" class="field w-full" value={title} disabled={busy} oninput={(event) => onTitleInput(event.currentTarget.value)} />
+        </div>
       </div>
-      <div class="space-y-1.5">
-        <label for="notes-link-title" class="text-[0.875em] text-muted-foreground">{t("notes.linkTitle")}</label>
-        <input bind:this={titleInput} id="notes-link-title" class="min-h-9 w-full rounded-md border border-input bg-muted/40 px-2.5 outline-none focus:border-ring" value={title} disabled={busy} oninput={(event) => onTitleInput(event.currentTarget.value)} />
+      <div role="separator" class="menu-separator mx-3"></div>
+      <div class="flex items-center justify-between gap-2 p-1.5">
+        <button type="button" disabled={busy} class="menu-item w-auto" onclick={onApply}>{t("notes.applyLink")}</button>
+        {#if canRemove}<button type="button" disabled={busy} class="menu-item menu-item-destructive w-auto gap-2" onclick={onRemove}><Trash2 class="size-4" />{t("notes.removeLink")}</button>{/if}
       </div>
-    </div>
-    <div role="separator" class="mx-3 border-t border-border"></div>
-    <div class="flex items-center justify-between gap-2 p-1.5">
-      <button type="button" disabled={busy} class="min-h-9 rounded-md px-2 text-left hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onclick={onApply}>{t("notes.applyLink")}</button>
-      {#if canRemove}<button type="button" disabled={busy} class="flex min-h-9 items-center gap-2 rounded-md px-2 text-left hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" onclick={onRemove}><Trash2 class="size-4" />{t("notes.removeLink")}</button>{/if}
-    </div>
-  {/if}
-  {#if error}<p role="alert" class="px-3 pb-3 text-[0.875em] text-destructive">{error}</p>{/if}
+    {/if}
+    {#if error}<p role="alert" class="px-3 pb-3 text-[0.875em] text-destructive">{error}</p>{/if}
+  </div>
 </div>
 
 <style>
   [data-notes-link-panel] button,
   [data-notes-link-panel] input {
     font-size: inherit;
-  }
-
-  /* Keep keyboard focus visible through the field border without an extra outer contour. */
-  [data-notes-link-panel] input:focus,
-  [data-notes-link-panel] input:focus-visible {
-    outline: none;
-    box-shadow: none;
   }
 </style>

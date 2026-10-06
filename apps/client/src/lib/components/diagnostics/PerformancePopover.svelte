@@ -12,6 +12,7 @@
   import { formatNumber } from "$lib/i18n/formatters";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import { cn } from "$lib/utils";
+  import { scrollEdgeFadeAction } from "$lib/utils/scroll-edge-fade";
   import { getBenchmarkStatus } from "$lib/stores/benchmark-status.svelte";
   import {
     BENCHMARK_SCENARIOS,
@@ -468,294 +469,296 @@
 -->
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
-  class="perf-scroll fixed z-50 overflow-y-auto overflow-x-hidden rounded-lg border border-border bg-popover px-3 py-3 shadow-lg"
-  style="top: calc(var(--titlebar-h) + 4px); right: 8px; width: min(18rem, calc(100vw - 16px)); max-height: calc(100dvh - var(--titlebar-h) - 12px);"
+  class="surface-floating fixed z-50 flex w-floating flex-col overflow-hidden"
+  style="top: calc(var(--titlebar-h) + 4px); right: 8px; max-height: calc(100dvh - var(--titlebar-h) - 12px);"
   onwheel={(e) => e.stopPropagation()}
 >
-  <div class="flex items-center justify-between gap-2">
-    <div class="flex min-w-0 flex-1 items-center gap-1.5 text-[0.666667rem] uppercase tracking-wider">
-      <button
-        onclick={() => { perfLive = true; }}
-        class={cn(
-          "min-w-0 truncate transition-colors",
-          perfLive ? "text-foreground" : "text-muted-foreground/40 hover:text-muted-foreground/70",
-        )}
-      >{t("diagnostics.liveRam")}</button>
-      <span class="text-muted-foreground/30">|</span>
-      <button
-        onclick={() => { perfLive = false; }}
-        class={cn(
-          "min-w-0 truncate transition-colors",
-          !perfLive ? "text-foreground" : "text-muted-foreground/40 hover:text-muted-foreground/70",
-        )}
-      >{t("diagnostics.startupRam")}</button>
-    </div>
-    <button
-      onclick={() => onPinnedChange(!pinned)}
-      class={cn(
-        "flex h-5 w-5 items-center justify-center rounded transition-colors",
-        pinned ? "text-foreground" : "text-muted-foreground/40 hover:text-muted-foreground",
-      )}
-      aria-label={pinned ? t("diagnostics.unpin") : t("diagnostics.pin")}
-      data-app-tooltip-disabled="true"
-    >
-      {#if pinned}
-        <Pin size={11} />
-      {:else}
-        <PinOff size={11} />
-      {/if}
-    </button>
-  </div>
-
-  {#if isDevMode}
-    <div class="mt-2 flex w-full items-center justify-between gap-2 text-[0.666667rem] text-warning">
-      <span class="flex min-w-0 items-center gap-1.5">
-        <TriangleAlert size={11} class="shrink-0" />
-        <span class="truncate">{t("diagnostics.devModeUsesMoreResources")}</span>
-      </span>
-    </div>
-  {/if}
-
-  {#if !perfLive && startupMemorySnapshot.status === "pending"}
-    <div class="mt-2 text-xs text-muted-foreground">{t("diagnostics.startupSnapshotPending")}</div>
-  {:else if !perfLive && startupMemorySnapshot.status === "failed"}
-    <div class="mt-2 text-xs text-muted-foreground">{t("diagnostics.startupSnapshotUnavailable")}</div>
-  {/if}
-
-  <div class="mt-2 space-y-1.5" aria-busy={displayReport === null}>
-    {#each memoryRows as row (row.label)}
-      <div class="flex items-baseline justify-between">
-        <span class="flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
-          <span>{memoryLabel(row.label)}</span>
-        </span>
-        {#if row.mb === null}
-          <span class="min-w-14 text-right text-[0.733333rem] tabular-nums text-muted-foreground/50">...</span>
-        {:else}
-          <span class="flex min-w-0 items-baseline justify-end gap-1.5">
-            {#if row.label === "Total"}
-            <button
-              type="button"
-              class="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded bg-transparent p-0 text-muted-foreground/70 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-              data-app-tooltip={totalMemoryTooltip(displayReport)}
-              data-app-tooltip-keep-on-click="true"
-              aria-label={totalMemoryTooltip(displayReport)}
-            >
-              <CircleHelp size={10} strokeWidth={2} />
-            </button>
-            {/if}
-            <span class={cn("min-w-14 text-right text-[0.733333rem] tabular-nums text-foreground", showingHoveredSample && "italic")}>{formatMemoryMb(row.mb)}</span>
-          </span>
-        {/if}
+  <div use:scrollEdgeFadeAction class="perf-scroll min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-3 py-3">
+    <div class="flex items-center justify-between gap-2">
+      <div class="flex min-w-0 flex-1 items-center gap-1.5 text-[0.666667rem] uppercase tracking-wider">
+        <button
+          onclick={() => { perfLive = true; }}
+          class={cn(
+            "min-w-0 truncate transition-colors",
+            perfLive ? "text-foreground" : "text-muted-foreground/40 hover:text-muted-foreground/70",
+          )}
+        >{t("diagnostics.liveRam")}</button>
+        <span class="text-muted-foreground/30">|</span>
+        <button
+          onclick={() => { perfLive = false; }}
+          class={cn(
+            "min-w-0 truncate transition-colors",
+            !perfLive ? "text-foreground" : "text-muted-foreground/40 hover:text-muted-foreground/70",
+          )}
+        >{t("diagnostics.startupRam")}</button>
       </div>
-    {/each}
-  </div>
+      <button
+        onclick={() => onPinnedChange(!pinned)}
+        class={cn(
+          "flex h-5 w-5 items-center justify-center rounded transition-colors",
+          pinned ? "text-foreground" : "text-muted-foreground/40 hover:text-muted-foreground",
+        )}
+        aria-label={pinned ? t("diagnostics.unpin") : t("diagnostics.pin")}
+        data-app-tooltip-disabled="true"
+      >
+        {#if pinned}
+          <Pin size={11} />
+        {:else}
+          <PinOff size={11} />
+        {/if}
+      </button>
+    </div>
 
-  {#if perfLive}
-    <div class="mt-3 flex justify-center">
-      <MemoryChart
-        samples={memorySamples}
-        width={240}
-        height={64}
-        onHover={(s) => { chartHoverSample = s; }}
-      />
+    {#if isDevMode}
+      <div class="mt-2 flex w-full items-center justify-between gap-2 text-[0.666667rem] text-warning">
+        <span class="flex min-w-0 items-center gap-1.5">
+          <TriangleAlert size={11} class="shrink-0" />
+          <span class="truncate">{t("diagnostics.devModeUsesMoreResources")}</span>
+        </span>
+      </div>
+    {/if}
+
+    {#if !perfLive && startupMemorySnapshot.status === "pending"}
+      <div class="mt-2 text-xs text-muted-foreground">{t("diagnostics.startupSnapshotPending")}</div>
+    {:else if !perfLive && startupMemorySnapshot.status === "failed"}
+      <div class="mt-2 text-xs text-muted-foreground">{t("diagnostics.startupSnapshotUnavailable")}</div>
+    {/if}
+
+    <div class="mt-2 space-y-1.5" aria-busy={displayReport === null}>
+      {#each memoryRows as row (row.label)}
+        <div class="flex items-baseline justify-between">
+          <span class="flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
+            <span>{memoryLabel(row.label)}</span>
+          </span>
+          {#if row.mb === null}
+            <span class="min-w-14 text-right text-[0.733333rem] tabular-nums text-muted-foreground/50">...</span>
+          {:else}
+            <span class="flex min-w-0 items-baseline justify-end gap-1.5">
+              {#if row.label === "Total"}
+              <button
+                type="button"
+                class="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded bg-transparent p-0 text-muted-foreground/70 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                data-app-tooltip={totalMemoryTooltip(displayReport)}
+                data-app-tooltip-keep-on-click="true"
+                aria-label={totalMemoryTooltip(displayReport)}
+              >
+                <CircleHelp size={10} strokeWidth={2} />
+              </button>
+              {/if}
+              <span class={cn("min-w-14 text-right text-[0.733333rem] tabular-nums text-foreground", showingHoveredSample && "italic")}>{formatMemoryMb(row.mb)}</span>
+            </span>
+          {/if}
+        </div>
+      {/each}
     </div>
-    <div class="mt-3 grid grid-cols-2 gap-1.5">
+
+    {#if perfLive}
+      <div class="mt-3 flex justify-center">
+        <MemoryChart
+          samples={memorySamples}
+          width={240}
+          height={64}
+          onHover={(s) => { chartHoverSample = s; }}
+        />
+      </div>
+      <div class="mt-3 grid grid-cols-2 gap-1.5">
+        <button
+          onclick={copyLiveRam}
+          disabled={liveReport === null}
+          class="flex w-full items-center justify-center gap-1.5 rounded-md bg-primary px-2 py-1 text-[0.666667rem] font-medium uppercase tracking-wider text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {#if copiedId === "live-ram"}
+            <Check size={11} />
+            {t("diagnostics.copied")}
+          {:else}
+            <Copy size={11} />
+            {t("diagnostics.copyLiveRam")}
+          {/if}
+        </button>
+        <button
+          onclick={copyChart}
+          disabled={memorySamples.length === 0}
+          class="flex w-full items-center justify-center gap-1.5 rounded-md bg-primary px-2 py-1 text-[0.666667rem] font-medium uppercase tracking-wider text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {#if copiedId === "chart"}
+            <Check size={11} />
+            {t("diagnostics.copied")}
+          {:else}
+            <Copy size={11} />
+            {t("diagnostics.copyChart")}
+          {/if}
+        </button>
+      </div>
+    {:else if startupMemorySnapshot.status === "ready"}
       <button
-        onclick={copyLiveRam}
-        disabled={liveReport === null}
-        class="flex w-full items-center justify-center gap-1.5 rounded-md bg-primary px-2 py-1 text-[0.666667rem] font-medium uppercase tracking-wider text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+        onclick={copyStartupRam}
+        class="mt-3 flex w-full items-center justify-center gap-1.5 rounded-md bg-primary px-2 py-1 text-[0.666667rem] font-medium uppercase tracking-wider text-primary-foreground transition-colors hover:bg-primary/90"
       >
-        {#if copiedId === "live-ram"}
+        {#if copiedId === "startup-ram"}
           <Check size={11} />
           {t("diagnostics.copied")}
         {:else}
           <Copy size={11} />
-          {t("diagnostics.copyLiveRam")}
+          {t("diagnostics.copyStartupRam")}
         {/if}
       </button>
+    {/if}
+
+    {#if launchMs !== null}
+      <div class={sectionDividerClass}></div>
       <button
-        onclick={copyChart}
-        disabled={memorySamples.length === 0}
-        class="flex w-full items-center justify-center gap-1.5 rounded-md bg-primary px-2 py-1 text-[0.666667rem] font-medium uppercase tracking-wider text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+        onclick={() => (launchExpanded = !launchExpanded)}
+        class="flex w-full items-center justify-between rounded text-left transition-colors hover:bg-accent"
       >
-        {#if copiedId === "chart"}
-          <Check size={11} />
-          {t("diagnostics.copied")}
-        {:else}
-          <Copy size={11} />
-          {t("diagnostics.copyChart")}
-        {/if}
+        <span class="text-[0.666667rem] uppercase tracking-wider text-foreground">{t("diagnostics.launchTime")}</span>
+        <span class="flex items-center gap-1.5">
+          <span class="text-[0.733333rem] tabular-nums text-foreground">{formatWholeMilliseconds(launchMs)}</span>
+          <ChevronDown
+            size={11}
+            class={cn("text-muted-foreground transition-transform", launchExpanded && "rotate-180")}
+          />
+        </span>
       </button>
+      {#if launchExpanded}
+        {#if bootRows.length > 0}
+          <div class="perf-scroll mt-1.5 max-h-48 overflow-y-auto rounded border border-border/50 bg-muted/30 px-2 py-1.5 text-[0.666667rem] leading-tight">
+            {#each bootRows as row (row.label)}
+              <div class="flex min-w-0 justify-between gap-2 text-muted-foreground tabular-nums">
+                <span class="min-w-0 truncate">{row.label}</span>
+                <span class="shrink-0">{formatNumber(locale, row.deltaMs, { maximumFractionDigits: 1 })} ms</span>
+              </div>
+            {/each}
+          </div>
+        {:else}
+          <div class="mt-1.5 text-[0.666667rem] text-muted-foreground/60">{t("diagnostics.noBootMarksCaptured")}</div>
+        {/if}
+        <button
+          onclick={copyLaunchTable}
+          class="mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-md bg-primary px-2 py-1 text-[0.666667rem] font-medium uppercase tracking-wider text-primary-foreground transition-colors hover:bg-primary/90"
+        >
+          {#if copiedId === "launch"}
+            <Check size={11} />
+            {t("diagnostics.copied")}
+          {:else}
+            <Copy size={11} />
+            {t("diagnostics.copyLaunchTable")}
+          {/if}
+        </button>
+      {/if}
+    {/if}
+
+    <div class={sectionDividerClass}></div>
+    <div class="flex items-center justify-between">
+      <span class="text-[0.666667rem] uppercase tracking-wider text-foreground">
+        {t("diagnostics.speedLogHeading", actionChains.length)}
+      </span>
+      <div class="flex items-center gap-2">
+        <button
+          onclick={() => setTracking(!perfLog.tracking)}
+          class={cn(
+            "text-[0.666667rem] uppercase tracking-wider transition-colors",
+            perfLog.tracking ? "text-foreground" : "text-muted-foreground/60 hover:text-foreground",
+          )}
+          title={perfLog.tracking
+            ? t("diagnostics.stopTrackingTitle")
+            : t("diagnostics.startTrackingTitle")}
+        >{t("diagnostics.trackState", perfLog.tracking ? t("diagnostics.trackOn") : t("diagnostics.trackOff"))}</button>
+        <button
+          onclick={clearPerfLog}
+          disabled={!hasSpeedLogEntries}
+          class="text-[0.666667rem] uppercase tracking-wider text-muted-foreground/60 transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:text-muted-foreground/60"
+        >{t("diagnostics.clear")}</button>
+      </div>
     </div>
-  {:else if startupMemorySnapshot.status === "ready"}
+    {#if actionChains.length > 0}
+      <div bind:this={speedLogEl} class="perf-scroll mt-1.5 max-h-48 overflow-y-auto rounded border border-border/50 bg-muted/30 px-2 py-1.5 text-[0.666667rem] leading-tight">
+        {#each actionChains as row, i (i)}
+          <div class="min-w-0 text-muted-foreground tabular-nums">
+            <div class="flex min-w-0 justify-between gap-2">
+              <span class="min-w-0 truncate"><span class="text-muted-foreground/60">{row.prefix}</span> {row.action}</span>
+              <span class="shrink-0">{formatNumber(locale, row.durationMs, { maximumFractionDigits: 1 })} ms</span>
+            </div>
+            {#if row.steps.length > 0}
+              <div class="truncate pl-6 text-muted-foreground/60">
+                {row.steps.map((step) => {
+                  const value = formatNumber(locale, step.ms, { maximumFractionDigits: 1 });
+                  return `${step.label} ${value} ms`;
+                }).join("  ")}
+              </div>
+            {/if}
+          </div>
+        {/each}
+      </div>
+    {/if}
     <button
-      onclick={copyStartupRam}
-      class="mt-3 flex w-full items-center justify-center gap-1.5 rounded-md bg-primary px-2 py-1 text-[0.666667rem] font-medium uppercase tracking-wider text-primary-foreground transition-colors hover:bg-primary/90"
+      onclick={copySpeedLog}
+      disabled={actionChains.length === 0}
+      class="mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-md bg-primary px-2 py-1 text-[0.666667rem] font-medium uppercase tracking-wider text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
     >
-      {#if copiedId === "startup-ram"}
+      {#if copiedId === "speed-log"}
         <Check size={11} />
         {t("diagnostics.copied")}
       {:else}
         <Copy size={11} />
-        {t("diagnostics.copyStartupRam")}
+        {t("diagnostics.copySpeedLog")}
       {/if}
     </button>
-  {/if}
 
-  {#if launchMs !== null}
-    <div class={sectionDividerClass}></div>
-    <button
-      onclick={() => (launchExpanded = !launchExpanded)}
-      class="flex w-full items-center justify-between rounded text-left transition-colors hover:bg-accent"
-    >
-      <span class="text-[0.666667rem] uppercase tracking-wider text-foreground">{t("diagnostics.launchTime")}</span>
-      <span class="flex items-center gap-1.5">
-        <span class="text-[0.733333rem] tabular-nums text-foreground">{formatWholeMilliseconds(launchMs)}</span>
-        <ChevronDown
-          size={11}
-          class={cn("text-muted-foreground transition-transform", launchExpanded && "rotate-180")}
-        />
-      </span>
-    </button>
-    {#if launchExpanded}
-      {#if bootRows.length > 0}
-        <div class="perf-scroll mt-1.5 max-h-48 overflow-y-auto rounded border border-border/50 bg-muted/30 px-2 py-1.5 text-[0.666667rem] leading-tight">
-          {#each bootRows as row (row.label)}
-            <div class="flex min-w-0 justify-between gap-2 text-muted-foreground tabular-nums">
-              <span class="min-w-0 truncate">{row.label}</span>
-              <span class="shrink-0">{formatNumber(locale, row.deltaMs, { maximumFractionDigits: 1 })} ms</span>
+    {#if BENCHMARK_SUITES.length > 0}
+      <div class={sectionDividerClass}></div>
+      <div class="flex items-center justify-between">
+        <span class="text-[0.666667rem] uppercase tracking-wider text-foreground">{t("diagnostics.benchmarks")}</span>
+        <span class="text-[0.666667rem] uppercase tracking-wider text-muted-foreground/60"
+          >{t("diagnostics.restartsApp")}</span
+        >
+      </div>
+      <div use:scrollEdgeFadeAction class="perf-scroll mt-1.5 flex max-h-56 flex-col gap-1 overflow-y-auto">
+        {#each BENCHMARK_SUITES as suite (suite.id)}
+          <div class="flex flex-col gap-1">
+            <div class="flex gap-1">
+              <button
+                onclick={() => void requestBenchmarkSuite(suite)}
+                disabled={benchmarkStatus.status !== "idle"}
+                class="flex h-6 min-w-0 flex-1 items-center justify-start gap-1.5 rounded-md bg-primary px-2 text-[0.733333rem] font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+                title={localizedBenchmarkSuiteDescription(suite.id, suite.description)}
+              >
+                <Play size={12} class="shrink-0" />
+                <span class="truncate">{t("diagnostics.runSuite", localizedBenchmarkSuiteLabel(suite.id, suite.label))}</span>
+              </button>
+              <button
+                type="button"
+                onclick={() => toggleBenchmarkSuite(suite.id)}
+                class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-border bg-card text-muted-foreground transition-colors hover:bg-accent hover:text-foreground dark:bg-transparent"
+                aria-label={suiteExpanded(suite.id)
+                  ? t("diagnostics.hideSuite", localizedBenchmarkSuiteLabel(suite.id, suite.label))
+                  : t("diagnostics.showSuite", localizedBenchmarkSuiteLabel(suite.id, suite.label))}
+                data-app-tooltip-disabled="true"
+                aria-expanded={suiteExpanded(suite.id)}
+              >
+                <ChevronDown
+                  size={13}
+                  class={cn("transition-transform", suiteExpanded(suite.id) && "rotate-180")}
+                />
+              </button>
             </div>
-          {/each}
-        </div>
-      {:else}
-        <div class="mt-1.5 text-[0.666667rem] text-muted-foreground/60">{t("diagnostics.noBootMarksCaptured")}</div>
-      {/if}
-      <button
-        onclick={copyLaunchTable}
-        class="mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-md bg-primary px-2 py-1 text-[0.666667rem] font-medium uppercase tracking-wider text-primary-foreground transition-colors hover:bg-primary/90"
-      >
-        {#if copiedId === "launch"}
-          <Check size={11} />
-          {t("diagnostics.copied")}
-        {:else}
-          <Copy size={11} />
-          {t("diagnostics.copyLaunchTable")}
-        {/if}
-      </button>
+            {#if suiteExpanded(suite.id)}
+              <div class="flex flex-col gap-1">
+                {#each scenariosForSuite(suite) as scenario (scenario.id)}
+                  <button
+                    onclick={() => void requestBenchmark(scenario.id)}
+                    disabled={benchmarkStatus.status !== "idle"}
+                    class="flex h-6 w-full min-w-0 items-center justify-start gap-1.5 rounded-md bg-muted/70 px-2 text-[0.733333rem] font-medium text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                    title={localizedBenchmarkScenarioDescription(scenario.id, scenario.description)}
+                  >
+                    <Play size={11} class="shrink-0" />
+                    <span class="truncate">{localizedBenchmarkScenarioLabel(scenario.id, scenario.label)}</span>
+                  </button>
+                {/each}
+              </div>
+            {/if}
+          </div>
+        {/each}
+      </div>
     {/if}
-  {/if}
-
-  <div class={sectionDividerClass}></div>
-  <div class="flex items-center justify-between">
-    <span class="text-[0.666667rem] uppercase tracking-wider text-foreground">
-      {t("diagnostics.speedLogHeading", actionChains.length)}
-    </span>
-    <div class="flex items-center gap-2">
-      <button
-        onclick={() => setTracking(!perfLog.tracking)}
-        class={cn(
-          "text-[0.666667rem] uppercase tracking-wider transition-colors",
-          perfLog.tracking ? "text-foreground" : "text-muted-foreground/60 hover:text-foreground",
-        )}
-        title={perfLog.tracking
-          ? t("diagnostics.stopTrackingTitle")
-          : t("diagnostics.startTrackingTitle")}
-      >{t("diagnostics.trackState", perfLog.tracking ? t("diagnostics.trackOn") : t("diagnostics.trackOff"))}</button>
-      <button
-        onclick={clearPerfLog}
-        disabled={!hasSpeedLogEntries}
-        class="text-[0.666667rem] uppercase tracking-wider text-muted-foreground/60 transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:text-muted-foreground/60"
-      >{t("diagnostics.clear")}</button>
-    </div>
   </div>
-  {#if actionChains.length > 0}
-    <div bind:this={speedLogEl} class="perf-scroll mt-1.5 max-h-48 overflow-y-auto rounded border border-border/50 bg-muted/30 px-2 py-1.5 text-[0.666667rem] leading-tight">
-      {#each actionChains as row, i (i)}
-        <div class="min-w-0 text-muted-foreground tabular-nums">
-          <div class="flex min-w-0 justify-between gap-2">
-            <span class="min-w-0 truncate"><span class="text-muted-foreground/60">{row.prefix}</span> {row.action}</span>
-            <span class="shrink-0">{formatNumber(locale, row.durationMs, { maximumFractionDigits: 1 })} ms</span>
-          </div>
-          {#if row.steps.length > 0}
-            <div class="truncate pl-6 text-muted-foreground/60">
-              {row.steps.map((step) => {
-                const value = formatNumber(locale, step.ms, { maximumFractionDigits: 1 });
-                return `${step.label} ${value} ms`;
-              }).join("  ")}
-            </div>
-          {/if}
-        </div>
-      {/each}
-    </div>
-  {/if}
-  <button
-    onclick={copySpeedLog}
-    disabled={actionChains.length === 0}
-    class="mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-md bg-primary px-2 py-1 text-[0.666667rem] font-medium uppercase tracking-wider text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
-  >
-    {#if copiedId === "speed-log"}
-      <Check size={11} />
-      {t("diagnostics.copied")}
-    {:else}
-      <Copy size={11} />
-      {t("diagnostics.copySpeedLog")}
-    {/if}
-  </button>
-
-  {#if BENCHMARK_SUITES.length > 0}
-    <div class={sectionDividerClass}></div>
-    <div class="flex items-center justify-between">
-      <span class="text-[0.666667rem] uppercase tracking-wider text-foreground">{t("diagnostics.benchmarks")}</span>
-      <span class="text-[0.666667rem] uppercase tracking-wider text-muted-foreground/60"
-        >{t("diagnostics.restartsApp")}</span
-      >
-    </div>
-    <div class="perf-scroll mt-1.5 flex max-h-56 flex-col gap-1 overflow-y-auto">
-      {#each BENCHMARK_SUITES as suite (suite.id)}
-        <div class="flex flex-col gap-1">
-          <div class="flex gap-1">
-            <button
-              onclick={() => void requestBenchmarkSuite(suite)}
-              disabled={benchmarkStatus.status !== "idle"}
-              class="flex h-6 min-w-0 flex-1 items-center justify-start gap-1.5 rounded-md bg-primary px-2 text-[0.733333rem] font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
-              title={localizedBenchmarkSuiteDescription(suite.id, suite.description)}
-            >
-              <Play size={12} class="shrink-0" />
-              <span class="truncate">{t("diagnostics.runSuite", localizedBenchmarkSuiteLabel(suite.id, suite.label))}</span>
-            </button>
-            <button
-              type="button"
-              onclick={() => toggleBenchmarkSuite(suite.id)}
-              class="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-border bg-card text-muted-foreground transition-colors hover:bg-accent hover:text-foreground dark:bg-transparent"
-              aria-label={suiteExpanded(suite.id)
-                ? t("diagnostics.hideSuite", localizedBenchmarkSuiteLabel(suite.id, suite.label))
-                : t("diagnostics.showSuite", localizedBenchmarkSuiteLabel(suite.id, suite.label))}
-              data-app-tooltip-disabled="true"
-              aria-expanded={suiteExpanded(suite.id)}
-            >
-              <ChevronDown
-                size={13}
-                class={cn("transition-transform", suiteExpanded(suite.id) && "rotate-180")}
-              />
-            </button>
-          </div>
-          {#if suiteExpanded(suite.id)}
-            <div class="flex flex-col gap-1">
-              {#each scenariosForSuite(suite) as scenario (scenario.id)}
-                <button
-                  onclick={() => void requestBenchmark(scenario.id)}
-                  disabled={benchmarkStatus.status !== "idle"}
-                  class="flex h-6 w-full min-w-0 items-center justify-start gap-1.5 rounded-md bg-muted/70 px-2 text-[0.733333rem] font-medium text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
-                  title={localizedBenchmarkScenarioDescription(scenario.id, scenario.description)}
-                >
-                  <Play size={11} class="shrink-0" />
-                  <span class="truncate">{localizedBenchmarkScenarioLabel(scenario.id, scenario.label)}</span>
-                </button>
-              {/each}
-            </div>
-          {/if}
-        </div>
-      {/each}
-    </div>
-  {/if}
 </div>

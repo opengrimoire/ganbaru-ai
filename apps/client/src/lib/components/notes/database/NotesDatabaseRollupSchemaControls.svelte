@@ -33,7 +33,7 @@
 
 <div class="space-y-2">
   <div class="grid min-w-0 gap-2 @lg:grid-cols-3">
-    <div class="min-w-0 text-[0.733333rem] text-muted-foreground">
+    <div class="min-w-0 text-panel-detail text-muted-foreground">
       <span class="mb-1 block">{t("notes.databaseSchemaRollupRelation")}</span>
       <Select textSize="collection"
         inline
@@ -50,7 +50,7 @@
         }}
       />
     </div>
-    <div class="min-w-0 text-[0.733333rem] text-muted-foreground">
+    <div class="min-w-0 text-panel-detail text-muted-foreground">
       <span class="mb-1 block">{t("notes.databaseSchemaRollupTargetProperty")}</span>
       <Select textSize="collection"
         inline
@@ -67,7 +67,7 @@
         }}
       />
     </div>
-    <div class="min-w-0 text-[0.733333rem] text-muted-foreground">
+    <div class="min-w-0 text-panel-detail text-muted-foreground">
       <span class="mb-1 block">{t("notes.databaseSchemaRollupFunction")}</span>
       <Select textSize="collection"
         inline
@@ -85,7 +85,7 @@
     </div>
   </div>
   {#if relations.length === 0}
-    <p class="text-[0.8rem] text-muted-foreground">
+    <p class="text-panel-detail text-muted-foreground">
       {t("notes.databaseSchemaRollupNoRelations")}
     </p>
   {/if}

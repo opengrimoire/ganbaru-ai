@@ -6,6 +6,7 @@
     notesBlockColorSwatchStyle,
   } from "$lib/notes/blocks/color";
   import type { NotesColor } from "$lib/notes/types";
+  import { scrollEdgeFadeAction } from "$lib/utils/scroll-edge-fade";
 
   let {
     currentColor,
@@ -44,13 +45,14 @@
   }
 </script>
 
-<div class="w-full max-h-[min(19rem,calc(100vh-1rem))] overflow-y-auto rounded-lg border border-border bg-popover p-2 text-popover-foreground shadow-lg" role="menu" aria-label={t("notes.textColor")} tabindex="-1" data-app-floating-surface onmousedown={(event) => event.preventDefault()}>
-  <div class="px-1 pb-1 text-xs font-medium text-muted-foreground">{t("notes.textColors")}</div>
+<div class="surface-floating flex max-h-[min(19rem,calc(100vh-1rem))] w-full flex-col overflow-hidden" role="menu" aria-label={t("notes.textColor")} tabindex="-1" data-app-floating-surface onmousedown={(event) => event.preventDefault()}>
+  <div class="min-h-0 flex-1 overflow-y-auto p-2" use:scrollEdgeFadeAction>
+  <div class="px-1 pb-1 text-panel-detail font-medium text-muted-foreground">{t("notes.textColors")}</div>
   <div class="grid grid-cols-5 gap-0.5" role="group" aria-label={t("notes.textColors")}>
     {#each NOTES_TEXT_COLORS as color}
       <button
         type="button"
-        class="flex size-7 items-center justify-center rounded-md hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        class="flex size-7 items-center justify-center rounded-floating-item hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         role="menuitemradio"
         aria-label={colorLabel(color)}
         title={colorLabel(color)}
@@ -61,12 +63,12 @@
       </button>
     {/each}
   </div>
-  <div class="mt-2 border-t border-border px-1 pb-1 pt-2 text-xs font-medium text-muted-foreground">{t("notes.backgroundColors")}</div>
+  <div class="mt-2 border-t border-border px-1 pb-1 pt-2 text-panel-detail font-medium text-muted-foreground">{t("notes.backgroundColors")}</div>
   <div class="grid grid-cols-5 gap-0.5" role="group" aria-label={t("notes.backgroundColors")}>
     {#each NOTES_BACKGROUND_COLORS as color}
       <button
         type="button"
-        class="flex size-7 items-center justify-center rounded-md hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        class="flex size-7 items-center justify-center rounded-floating-item hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         role="menuitemradio"
         aria-label={colorLabel(color)}
         title={colorLabel(color)}
@@ -76,6 +78,7 @@
         <span class:notes-color-selected={(calloutBackgroundColor ?? currentColor) === color} class="notes-color-swatch" style={notesBlockColorSwatchStyle(color)} aria-hidden="true">A</span>
       </button>
     {/each}
+  </div>
   </div>
 </div>
 

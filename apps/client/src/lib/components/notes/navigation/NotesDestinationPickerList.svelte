@@ -10,6 +10,7 @@
     type NotesDestinationPickerTarget,
   } from "$lib/notes/pages/destination-picker";
   import Search from "@lucide/svelte/icons/search";
+  import { scrollEdgeFadeAction } from "$lib/utils/scroll-edge-fade";
 
   let {
     targets,
@@ -108,11 +109,11 @@
   role="group"
   aria-label={searchLabel}
 >
-  <label class="mx-2 mb-1 flex items-center gap-1.5 rounded-md border border-input bg-background px-2 py-1.5">
+  <label class="field mx-2 mb-1 flex items-center gap-1.5">
     <Search class="size-3.5 shrink-0 text-muted-foreground" />
     <input
       bind:this={searchInput}
-      class="min-w-0 flex-1 bg-transparent text-[0.8rem] text-foreground outline-none placeholder:text-muted-foreground"
+      class="field-bare text-foreground"
       bind:value={query}
       aria-label={searchLabel}
       aria-controls={listboxId}
@@ -123,24 +124,21 @@
   </label>
 
   {#if flatTargets.length === 0}
-    <div class="px-2.5 py-1.5 text-[0.733333rem] text-muted-foreground">
+    <div class="px-2.5 py-1.5 text-panel-detail text-muted-foreground">
       {emptyLabel}
     </div>
   {:else}
-    <div id={listboxId} class="max-h-60 overflow-auto py-1" role="listbox" aria-label={searchLabel}>
+    <div id={listboxId} class="max-h-60 overflow-auto py-1" role="listbox" use:scrollEdgeFadeAction aria-label={searchLabel}>
       {#each sectionList as section (section.key)}
-        <div class="px-2.5 pb-1 pt-1.5 text-[0.7rem] font-medium text-muted-foreground">
+        <div class="menu-label">
           {sectionLabel(section.key)}
         </div>
         {#each section.targets as target (target.key)}
           {@const targetIndex = flatTargets.findIndex((candidate) => candidate.key === target.key)}
           <button
             id={`${listboxId}-${target.key}`}
-            class={`flex w-full min-w-0 items-start gap-2 py-1.5 pr-2.5 text-left text-[0.8rem] ${
-              targetIndex === activeIndex
-                ? "bg-accent text-accent-foreground"
-                : "hover:bg-accent hover:text-accent-foreground"
-            }`}
+            class="menu-item min-w-0"
+            data-highlighted={targetIndex === activeIndex ? "" : undefined}
             style={`padding-left: ${0.625 + Math.min(target.depth, 6) * 0.75}rem`}
             type="button"
             role="option"
@@ -156,7 +154,7 @@
             <span class="min-w-0 flex-1">
               <span class="block truncate">{target.title}</span>
               {#if targetSubtitle(target)}
-                <span class="block truncate text-[0.7rem] text-muted-foreground">
+                <span class="block truncate text-panel-detail text-muted-foreground">
                   {targetSubtitle(target)}
                 </span>
               {/if}
@@ -167,7 +165,7 @@
       {#if notes.destinationHasMore}
         <button
           type="button"
-          class="mx-2 my-1 rounded-md border border-border px-2 py-1.5 text-[0.733333rem] text-foreground hover:bg-accent"
+          class="mx-2 my-1 rounded-floating-item border border-border px-2 py-1.5 text-panel-detail text-foreground hover:bg-accent"
           onclick={() => void notes.loadMoreDestinationCandidates()}
         >
           {t("common.loadMore")}

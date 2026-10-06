@@ -294,13 +294,13 @@
     aria-expanded={open}
   ><SlidersHorizontal size={14} strokeWidth={1.6} /></button>
   {#if open}
-    <div bind:this={panel} role="dialog" tabindex="-1" data-music-track-preferences-open data-app-shortcuts="ignore" aria-label={t("music.preferences.title")} class="absolute bottom-[calc(100%+0.5rem)] right-0 z-40 w-72 max-w-[calc(100vw-1rem)] rounded-xl border border-border/75 bg-popover p-4 text-popover-foreground shadow-md">
+    <div bind:this={panel} role="dialog" tabindex="-1" data-music-track-preferences-open data-app-shortcuts="ignore" aria-label={t("music.preferences.title")} class="surface-floating absolute bottom-[calc(100%+0.5rem)] right-0 z-40 w-floating p-4">
       {#if loading}
         <div class="flex h-24 items-center justify-center" aria-label={t("music.itemMenu.loading")}><LoaderCircle size={17} strokeWidth={2.6} class="animate-spin motion-reduce:animate-none" /></div>
       {:else}
-        {#if error}<p class="mb-2 text-xs text-destructive" role="alert">{error}</p>{/if}
+        {#if error}<p class="mb-2 text-panel-detail text-destructive" role="alert">{error}</p>{/if}
         <div class="flex items-center justify-between gap-3">
-          <span class="shrink-0 text-xs font-semibold">{t("music.preferences.applyTo")}</span>
+          <span class="shrink-0 font-semibold">{t("music.preferences.applyTo")}</span>
           <Select
             value={scopePlaylistId ?? ""}
             options={scopeOptions}
@@ -316,12 +316,12 @@
         <div class="mt-4">
           <div class="flex items-center justify-between gap-2">
             <div bind:this={frequencyHeader} class="relative flex min-w-0 items-center gap-1.5">
-              <span class="text-xs font-semibold">{t("music.preferences.likelihood")}</span>
+              <span class="font-semibold">{t("music.preferences.likelihood")}</span>
               {#if player.playbackMode !== "mix"}
                 <button type="button" data-music-frequency-warning-trigger class="group grid h-5 w-5 shrink-0 place-items-center rounded-full focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-ring" aria-label={frequencyInactiveText} onpointerenter={(event) => { void showFrequencyTooltip(event.currentTarget); }} onpointerleave={hideFrequencyTooltip} onfocus={(event) => { void showFrequencyTooltip(event.currentTarget); }} onblur={hideFrequencyTooltip}><span class="grid h-3.5 w-3.5 place-items-center rounded-full border border-muted-foreground/50 text-[0.55rem] leading-none font-bold text-muted-foreground group-hover:bg-secondary group-hover:text-foreground" aria-hidden="true">!</span></button>
               {/if}
             </div>
-            {#if targetMemberships.length > 0}<span class="text-[0.7rem] text-muted-foreground">{currentWeight ? t(`music.builder.weight.${currentWeight}`) : t("music.preferences.mixed")}</span>{/if}
+            {#if targetMemberships.length > 0}<span class="text-panel-detail text-muted-foreground">{currentWeight ? t(`music.builder.weight.${currentWeight}`) : t("music.preferences.mixed")}</span>{/if}
           </div>
           <div class="mt-2 flex items-center justify-between gap-1" role="group" aria-label={t("music.preferences.likelihood")}>
             {#each MUSIC_WEIGHT_ORDER as weight, index (weight)}
@@ -342,7 +342,7 @@
         </div>
 
         <div class="mt-3">
-          <span class="text-xs font-semibold">{t("music.preferences.snooze")}</span>
+          <span class="font-semibold">{t("music.preferences.snooze")}</span>
           <div class="mt-2 grid grid-cols-3 gap-1">
             {#each snoozePresets as duration (duration)}
               <button type="button" onclick={() => { void snooze(duration); }} aria-disabled={busy} aria-pressed={selectedSnooze === duration} class="snooze-choice">{t(`music.preferences.${duration}`)}</button>
@@ -361,7 +361,7 @@
     aria-hidden="true"
     data-music-frequency-tooltip={activeFrequencyTooltip}
     data-placement={frequencyTooltipPosition?.placement}
-    class="pointer-events-none fixed z-80 w-64 max-w-[calc(100vw-1rem)] rounded-md border border-border bg-popover p-3 text-left text-xs leading-4 text-popover-foreground shadow-md"
+    class="surface-floating pointer-events-none fixed z-80 w-64 p-3 text-left text-panel-detail"
     style={frequencyTooltipPosition ? `top: ${frequencyTooltipPosition.top}px; left: ${frequencyTooltipPosition.left}px;` : "top: -10000px; left: 0; visibility: hidden;"}
   >
     <p>
@@ -372,10 +372,10 @@
 {/if}
 
 <style>
-  .snooze-choice { min-height: 2rem; border-radius: 0.45rem; background: color-mix(in srgb, var(--accent) 45%, transparent); padding-inline: 0.15rem; font-size: calc(0.7rem * var(--type-scale)); color: var(--foreground); }
+  .snooze-choice { min-height: 2rem; border-radius: var(--floating-item-radius); background: color-mix(in srgb, var(--accent) 45%, transparent); padding-inline: 0.15rem; font-size: var(--panel-detail-font-size); color: var(--foreground); }
   .snooze-choice:hover { background: var(--accent); color: var(--foreground); }
   .snooze-choice[aria-pressed="true"] { background: color-mix(in srgb, var(--primary) 15%, var(--accent)); color: var(--foreground); }
-  .die-choice { display: inline-flex; height: 2.5rem; width: 2.5rem; align-items: center; justify-content: center; border-radius: 0.6rem; color: var(--muted-foreground); }
+  .die-choice { display: inline-flex; height: 2.5rem; width: 2.5rem; align-items: center; justify-content: center; border-radius: var(--floating-item-radius); color: var(--muted-foreground); }
   .die-choice:hover { background: var(--accent); color: var(--foreground); }
   .die-choice.active-die { background: color-mix(in srgb, var(--primary) 12%, transparent); color: var(--primary); }
   .die-choice:disabled { cursor: not-allowed; opacity: 0.35; }

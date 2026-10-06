@@ -1,8 +1,17 @@
 import { clsx, type ClassValue } from "clsx";
 import { extendTailwindMerge } from "tailwind-merge";
 
-/** Class merging that knows the app's custom `--text-*` theme sizes, so they are not mistaken for text colors. */
-const twMerge = extendTailwindMerge({ extend: { theme: { text: ["identity", "collection"] } } });
+/** Class merging that knows the app's custom theme sizes, so they conflict with the built-in utilities they replace instead of being mistaken for colors. */
+const twMerge = extendTailwindMerge({
+	extend: {
+		theme: {
+			text: ["identity", "collection", "panel", "panel-detail"],
+			radius: ["floating", "floating-item"],
+			shadow: ["floating"],
+			container: ["floating-sm", "floating", "floating-lg"],
+		},
+	},
+});
 
 /** Join conditional class names, letting later Tailwind utilities override conflicting earlier ones. */
 export function cn(...inputs: ClassValue[]) {

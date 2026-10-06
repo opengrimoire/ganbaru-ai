@@ -13,6 +13,7 @@
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import UserRound from "@lucide/svelte/icons/user-round";
   import X from "@lucide/svelte/icons/x";
+  import Checkbox from "$lib/components/ui/Checkbox.svelte";
   import MiniDatePicker from "$lib/components/ui/MiniDatePicker.svelte";
   import TimePicker from "$lib/components/ui/TimePicker.svelte";
   import ProfileAvatar from "$lib/components/profile/ProfileAvatar.svelte";
@@ -45,6 +46,8 @@
   import { getPreferences } from "$lib/stores/preferences.svelte";
   import { getTheme } from "$lib/stores/theme.svelte";
   import { cn } from "$lib/utils";
+  import { scrollEdgeFadeAction } from "$lib/utils/scroll-edge-fade";
+  import { FLOATING_WIDTH } from "$lib/components/ui/floating-width";
   import PriorityFlagIcon from "$lib/components/projects/PriorityFlagIcon.svelte";
   import ProjectStatusBadge from "$lib/components/projects/ProjectStatusBadge.svelte";
   import { getProjectListTableContext } from "./table-context";
@@ -135,7 +138,7 @@
   const context = getProjectListTableContext();
   const FLOATING_PANEL_GAP = 6;
   const FLOATING_PANEL_MARGIN = 8;
-  const DATE_PICKER_PANEL_WIDTH = 240;
+  const DATE_PICKER_PANEL_WIDTH = FLOATING_WIDTH.sm;
   const DATE_PICKER_PANEL_MIN_HEIGHT = 180;
   const TIME_PICKER_PANEL_WIDTH = 160;
   const TIME_PICKER_PANEL_HEIGHT = 200;
@@ -488,13 +491,13 @@
     </div>
       {#if statusMenuOpen}
         <div
-          class="absolute left-0 top-full z-30 mt-1 w-44 rounded-lg border border-border bg-popover p-1 text-collection text-popover-foreground shadow-sm"
+          class="surface-floating surface-floating-body absolute left-0 top-full z-30 mt-1 w-44"
           role="menu"
         >
           {#each statuses as nextStatus (nextStatus.id)}
             <button
               type="button"
-              class="flex min-h-8 w-full cursor-pointer items-center justify-between gap-2 rounded-md px-2 text-left hover:bg-accent hover:text-foreground"
+              class="menu-item justify-between"
               role="menuitemradio"
               aria-checked={task.statusId === nextStatus.id}
               onclick={() => onSetStatus(nextStatus)}
@@ -533,13 +536,13 @@
     </div>
       {#if priorityMenuOpen}
         <div
-          class="absolute left-0 top-full z-30 mt-1 w-44 rounded-lg border border-border bg-popover p-1 text-collection text-popover-foreground shadow-sm"
+          class="surface-floating surface-floating-body absolute left-0 top-full z-30 mt-1 w-44"
           role="menu"
         >
           {#each priorities as priority (priority.id)}
             <button
               type="button"
-              class="flex min-h-8 w-full cursor-pointer items-center justify-between gap-2 rounded-md px-2 text-left hover:bg-accent hover:text-foreground"
+              class="menu-item justify-between"
               role="menuitemradio"
               aria-checked={task.priority === priority.id}
               onclick={() => onSetPriority(priority.id)}
@@ -592,7 +595,7 @@
       </span>
       {#if dateMenuOpen}
         <div
-          class="fixed z-30 w-60 rounded-lg border border-border bg-popover p-2 text-popover-foreground shadow-sm"
+          class="surface-floating fixed z-30 w-floating-sm p-2"
           role="dialog"
           aria-label={dateLabel}
           use:positionDatePickerPanel
@@ -619,7 +622,7 @@
                 <button
                   bind:this={timeTriggerEl}
                   type="button"
-                  class="flex min-h-8 min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-md px-2 text-left text-[0.8rem] text-muted-foreground hover:bg-accent hover:text-foreground"
+                  class="menu-item min-w-0 flex-1 text-muted-foreground hover:text-foreground"
                   aria-haspopup="dialog"
                   aria-expanded={timePickerOpen}
                   onclick={() => {
@@ -634,7 +637,7 @@
                 {#if timeValue}
                   <button
                     type="button"
-                    class="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+                    class="flex size-(--panel-row-height) shrink-0 items-center justify-center rounded-floating-item text-muted-foreground hover:bg-accent hover:text-foreground"
                     aria-label={t("projects.columns.clearHour")}
                     data-app-tooltip-disabled="true"
                     onclick={() => {
@@ -648,7 +651,7 @@
                 {/if}
                 <button
                   type="button"
-                  class="flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+                  class="flex size-(--panel-row-height) shrink-0 items-center justify-center rounded-floating-item text-muted-foreground hover:bg-accent hover:text-foreground"
                   aria-label={t("projects.detail.clearDate", dateLabel)}
                   data-app-tooltip-disabled="true"
                   onclick={() => {
@@ -662,7 +665,7 @@
               </div>
               {#if timePickerOpen}
                 <div
-                  class="project-list-time-panel fixed z-40 w-40 overflow-hidden rounded-md border border-border bg-popover text-popover-foreground shadow-sm"
+                  class="project-list-time-panel surface-floating fixed z-40 w-40 overflow-hidden"
                   role="dialog"
                   aria-label={`${dateLabel} ${t("projects.columns.selectHour")}`}
                   use:positionTimePickerPanel
@@ -764,19 +767,14 @@
         {#if valueSaveError}<span role="alert" class="text-xs text-destructive">{valueSaveError}</span>{/if}
       {:else if customField.fieldType === "checkbox"}
         {@const checked = customValue?.checkboxValue ?? false}
-        <button
-          type="button"
-          class="relative z-10 flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-md border border-border bg-background text-foreground hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
-          role="checkbox" data-collection-cell-primary
-          aria-checked={checked}
-          aria-label={customField.name}
-          disabled={Boolean(task.archivedAt)}
-          onclick={() => { void saveCustomFieldCheckbox(customField, !checked); }}
-        >
-          {#if checked}
-            <Check size={14} strokeWidth={2} />
-          {/if}
-        </button>
+        <label class="flex items-center" data-collection-cell-primary>
+          <Checkbox
+            {checked}
+            label={customField.name}
+            disabled={Boolean(task.archivedAt)}
+            onChange={(next) => { void saveCustomFieldCheckbox(customField, next); }}
+          />
+        </label>
       {:else if customField.fieldType === "date"}
         <div bind:this={customFieldRootEl} class="relative z-10 flex min-w-0 flex-1 items-center gap-1">
           <button
@@ -807,7 +805,7 @@
           {/if}
           {#if customFieldPanelOpen}
             <div
-              class="fixed z-40 w-60 rounded-lg border border-border bg-popover p-2 text-popover-foreground shadow-sm"
+              class="surface-floating fixed z-40 w-floating-sm p-2"
               role="dialog"
               aria-label={customField.name}
               use:positionCustomFieldPanel
@@ -848,54 +846,56 @@
           </button>
           {#if customFieldPanelOpen}
             <div
-              class="fixed z-40 min-w-44 rounded-lg border border-border bg-popover p-1 text-collection text-popover-foreground shadow-sm"
+              class="surface-floating fixed z-40 flex min-w-44 flex-col overflow-hidden"
               role="menu"
               aria-label={customField.name}
               use:positionCustomFieldPanel
             >
-              {#if selectedOptionIds.length > 0}
-                <button
-                  type="button"
-                  class="flex min-h-8 w-full cursor-pointer items-center gap-2 rounded-md px-2 text-left text-muted-foreground hover:bg-accent hover:text-foreground"
-                  role="menuitem"
-                  onclick={() => {
-                    void saveCustomFieldOptions(customField, []);
-                    if (!multiple) customFieldPanelOpen = false;
-                  }}
-                >
-                  <Eraser size={13} strokeWidth={1.75} class="shrink-0" />
-                  <span class="truncate">{t("projects.customFields.clearValue")}</span>
-                </button>
-              {/if}
-              {#each customFieldOptions(customField) as option (option.id)}
-                {@const optionSelected = selectedOptionIds.includes(option.id)}
-                <button
-                  type="button"
-                  class="flex min-h-8 w-full cursor-pointer items-center justify-between gap-2 rounded-md px-2 text-left hover:bg-accent hover:text-foreground"
-                  role={multiple ? "menuitemcheckbox" : "menuitemradio"}
-                  aria-checked={optionSelected}
-                  onclick={() => {
-                    if (multiple) {
-                      void saveCustomFieldOptions(
-                        customField,
-                        optionSelected
-                          ? selectedOptionIds.filter((optionId) => optionId !== option.id)
-                          : [...selectedOptionIds, option.id],
-                      );
-                    } else {
-                      void saveCustomFieldOptions(customField, [option.id]);
-                      customFieldPanelOpen = false;
-                    }
-                  }}
-                >
-                  <span class="min-w-0 truncate">{option.name}</span>
-                  {#if optionSelected}
-                    <Check size={13} strokeWidth={2} class="shrink-0 text-muted-foreground" />
-                  {/if}
-                </button>
-              {:else}
-                <div class="px-2 py-2 text-muted-foreground">{t("projects.customFields.noOptions")}</div>
-              {/each}
+              <div use:scrollEdgeFadeAction class="surface-floating-body min-h-0 overflow-y-auto">
+                {#if selectedOptionIds.length > 0}
+                  <button
+                    type="button"
+                    class="menu-item text-muted-foreground"
+                    role="menuitem"
+                    onclick={() => {
+                      void saveCustomFieldOptions(customField, []);
+                      if (!multiple) customFieldPanelOpen = false;
+                    }}
+                  >
+                    <Eraser size={13} strokeWidth={1.75} class="shrink-0" />
+                    <span class="truncate">{t("projects.customFields.clearValue")}</span>
+                  </button>
+                {/if}
+                {#each customFieldOptions(customField) as option (option.id)}
+                  {@const optionSelected = selectedOptionIds.includes(option.id)}
+                  <button
+                    type="button"
+                    class="menu-item justify-between"
+                    role={multiple ? "menuitemcheckbox" : "menuitemradio"}
+                    aria-checked={optionSelected}
+                    onclick={() => {
+                      if (multiple) {
+                        void saveCustomFieldOptions(
+                          customField,
+                          optionSelected
+                            ? selectedOptionIds.filter((optionId) => optionId !== option.id)
+                            : [...selectedOptionIds, option.id],
+                        );
+                      } else {
+                        void saveCustomFieldOptions(customField, [option.id]);
+                        customFieldPanelOpen = false;
+                      }
+                    }}
+                  >
+                    <span class="min-w-0 truncate">{option.name}</span>
+                    {#if optionSelected}
+                      <Check size={13} strokeWidth={2} class="shrink-0 text-muted-foreground" />
+                    {/if}
+                  </button>
+                {:else}
+                  <div class="px-2 py-2 text-muted-foreground">{t("projects.customFields.noOptions")}</div>
+                {/each}
+              </div>
             </div>
           {/if}
         </div>

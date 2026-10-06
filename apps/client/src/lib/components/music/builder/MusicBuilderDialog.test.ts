@@ -41,9 +41,10 @@ describe("MusicBuilderDialog", () => {
     expect(layer?.parentElement).toBe(document.body);
     expect(layer?.classList.contains("fixed")).toBe(true);
     expect(layer?.style.width).toContain("--visual-viewport-width");
-    expect(backdrop?.classList.contains("bg-black/50")).toBe(true);
+    expect(backdrop?.classList.contains("surface-backdrop")).toBe(true);
     expect(layer?.classList.contains("backdrop-blur-sm")).toBe(false);
     expect(dialog?.classList.contains("shadow-2xl")).toBe(false);
+    expect(dialog?.classList.contains("surface-dialog")).toBe(true);
     expect(dialog?.querySelector("[title]")).toBeNull();
   });
 

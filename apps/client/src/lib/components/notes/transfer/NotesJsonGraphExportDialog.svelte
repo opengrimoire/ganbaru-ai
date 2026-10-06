@@ -1,12 +1,13 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
   import { getLocalization } from "$lib/i18n/translator.svelte";
+  import { scrollEdgeFadeAction } from "$lib/utils/scroll-edge-fade";
   import { toRoundTripDiagnosticItem } from "$lib/notes/round-trip-diagnostics";
   import type {
     NotesJsonGraphExportDiagnostic,
     NotesJsonGraphExportSaveResult,
   } from "$lib/notes/types";
-  import NotesCheckboxField from "$lib/components/notes/NotesCheckboxField.svelte";
+  import Checkbox from "$lib/components/ui/Checkbox.svelte";
   import NotesRoundTripDiagnostics from "$lib/components/notes/NotesRoundTripDiagnostics.svelte";
   import NotesTransferFieldRow from "./NotesTransferFieldRow.svelte";
 
@@ -156,7 +157,7 @@
 <div class={embedded ? "flex min-h-0 flex-col" : "fixed inset-0 z-90 flex items-center justify-center p-3"}>
   {#if !embedded}
     <button
-      class="absolute inset-0 border-0 bg-black/50 p-0"
+      class="absolute inset-0 border-0 surface-backdrop p-0"
       type="button"
       aria-label={t("common.close")}
       onclick={onCancel}
@@ -166,7 +167,7 @@
     bind:this={dialogEl}
     class={embedded
       ? "flex min-h-0 flex-col text-card-foreground outline-none"
-      : "relative z-10 flex max-h-[min(92vh,38rem)] w-[min(34rem,100%)] flex-col rounded-md border border-border bg-card text-card-foreground shadow-lg outline-none"}
+      : "relative z-10 flex max-h-[min(92vh,38rem)] w-[min(34rem,100%)] flex-col surface-dialog outline-none"}
     role={embedded ? "region" : "dialog"}
     aria-modal={embedded ? undefined : "true"}
     aria-label={t("notes.jsonGraphExportDialogTitle")}
@@ -182,13 +183,13 @@
       {/if}
     </div>
 
-    <div class={embedded ? "px-4 py-3" : "min-h-0 flex-1 overflow-auto px-4 py-3"}>
+    <div class={embedded ? "px-4 py-3" : "min-h-0 flex-1 overflow-auto px-4 py-3"} use:scrollEdgeFadeAction>
       <div class="grid gap-2">
         <NotesTransferFieldRow
           label={t("notes.jsonGraphExportIncludeIndexes")}
           description={t("notes.jsonGraphExportIncludeIndexesDescription")}
         >
-          <NotesCheckboxField
+          <Checkbox
             bind:checked={includeIndexes}
             label={t("notes.jsonGraphExportIncludeIndexes")}
           />
@@ -197,7 +198,7 @@
           label={t("notes.jsonGraphExportIncludeHistory")}
           description={t("notes.jsonGraphExportIncludeHistoryDescription")}
         >
-          <NotesCheckboxField
+          <Checkbox
             bind:checked={includeHistory}
             label={t("notes.jsonGraphExportIncludeHistory")}
           />
@@ -206,7 +207,7 @@
           label={t("notes.jsonGraphExportIncludeTemplates")}
           description={t("notes.jsonGraphExportIncludeTemplatesDescription")}
         >
-          <NotesCheckboxField
+          <Checkbox
             bind:checked={includeTemplates}
             label={t("notes.jsonGraphExportIncludeTemplates")}
           />
@@ -215,7 +216,7 @@
           label={t("notes.jsonGraphExportIncludeLocalState")}
           description={t("notes.jsonGraphExportIncludeLocalStateDescription")}
         >
-          <NotesCheckboxField
+          <Checkbox
             bind:checked={includeLocalState}
             label={t("notes.jsonGraphExportIncludeLocalState")}
           />
@@ -224,7 +225,7 @@
           label={t("notes.jsonGraphExportPretty")}
           description={t("notes.jsonGraphExportPrettyDescription")}
         >
-          <NotesCheckboxField
+          <Checkbox
             bind:checked={pretty}
             label={t("notes.jsonGraphExportPretty")}
           />

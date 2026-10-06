@@ -2,6 +2,7 @@
   import Select from "$lib/components/ui/Select.svelte";
   import { onMount, tick } from "svelte";
   import { getLocalization } from "$lib/i18n/translator.svelte";
+  import { scrollEdgeFadeAction } from "$lib/utils/scroll-edge-fade";
   import type { Project } from "$lib/projects/types";
   import { getProjects } from "$lib/stores/projects.svelte";
   import {
@@ -12,7 +13,7 @@
     NotesAgentBridgeExportDiagnostic,
     NotesAgentBridgeExportSaveResult,
   } from "$lib/notes/types";
-  import NotesCheckboxField from "$lib/components/notes/NotesCheckboxField.svelte";
+  import Checkbox from "$lib/components/ui/Checkbox.svelte";
   import NotesRoundTripDiagnostics from "$lib/components/notes/NotesRoundTripDiagnostics.svelte";
   import NotesTransferFieldRow from "./NotesTransferFieldRow.svelte";
 
@@ -179,14 +180,14 @@
 
 <div class="fixed inset-0 z-90 flex items-center justify-center p-3">
   <button
-    class="absolute inset-0 border-0 bg-black/50 p-0"
+    class="absolute inset-0 border-0 surface-backdrop p-0"
     type="button"
     aria-label={t("common.close")}
     onclick={onCancel}
   ></button>
   <div
     bind:this={dialogEl}
-    class="relative z-10 flex max-h-[min(92vh,40rem)] w-[min(36rem,100%)] flex-col rounded-md border border-border bg-card text-card-foreground shadow-lg outline-none"
+    class="relative z-10 flex max-h-[min(92vh,40rem)] w-[min(36rem,100%)] flex-col surface-dialog outline-none"
     role="dialog"
     aria-modal="true"
     aria-label={title}
@@ -199,13 +200,13 @@
       </h2>
     </div>
 
-    <div class="min-h-0 flex-1 overflow-auto px-4 py-3">
+    <div class="min-h-0 flex-1 overflow-auto px-4 py-3" use:scrollEdgeFadeAction>
       <div class="grid gap-2">
         <NotesTransferFieldRow
           label={t("notes.agentBridgeExportIncludeDescendants")}
           description={t("notes.agentBridgeExportIncludeDescendantsDescription")}
         >
-          <NotesCheckboxField
+          <Checkbox
             bind:checked={includeDescendants}
             label={t("notes.agentBridgeExportIncludeDescendants")}
           />
@@ -214,7 +215,7 @@
           label={t("notes.agentBridgeExportIncludeBacklinks")}
           description={t("notes.agentBridgeExportIncludeBacklinksDescription")}
         >
-          <NotesCheckboxField
+          <Checkbox
             bind:checked={includeBacklinks}
             label={t("notes.agentBridgeExportIncludeBacklinks")}
           />
@@ -223,7 +224,7 @@
           label={t("notes.agentBridgeExportIncludeDatabaseViews")}
           description={t("notes.agentBridgeExportIncludeDatabaseViewsDescription")}
         >
-          <NotesCheckboxField
+          <Checkbox
             bind:checked={includeDatabaseViews}
             label={t("notes.agentBridgeExportIncludeDatabaseViews")}
           />
@@ -232,7 +233,7 @@
           label={t("notes.agentBridgeExportIncludeTaskContext")}
           description={t("notes.agentBridgeExportIncludeTaskContextDescription")}
         >
-          <NotesCheckboxField
+          <Checkbox
             bind:checked={includeTaskContext}
             label={t("notes.agentBridgeExportIncludeTaskContext")}
           />
@@ -241,7 +242,7 @@
           label={t("notes.agentBridgeExportIncludePageComments")}
           description={t("notes.agentBridgeExportIncludePageCommentsDescription")}
         >
-          <NotesCheckboxField
+          <Checkbox
             bind:checked={includePageComments}
             label={t("notes.agentBridgeExportIncludePageComments")}
           />
@@ -250,7 +251,7 @@
           label={t("notes.agentBridgeExportIncludeResolvedComments")}
           description={t("notes.agentBridgeExportIncludeResolvedCommentsDescription")}
         >
-          <NotesCheckboxField
+          <Checkbox
             bind:checked={includeResolvedComments}
             disabled={!includePageComments}
             label={t("notes.agentBridgeExportIncludeResolvedComments")}

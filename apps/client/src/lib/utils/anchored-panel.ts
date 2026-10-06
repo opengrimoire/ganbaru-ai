@@ -27,11 +27,16 @@ export function anchoredSubmenuWidth(preferredWidth: number, parentWidth: number
   return Math.max(0, Math.min(preferredWidth, parentWidth - inset));
 }
 
+/** Combined top and bottom border width of a surface, including fractional pixels; a missing element has none. */
+export function verticalBorderWidth(element: HTMLElement | null | undefined): number {
+  if (!element) return 0;
+  const style = window.getComputedStyle(element);
+  return (Number.parseFloat(style.borderTopWidth) || 0) + (Number.parseFloat(style.borderBottomWidth) || 0);
+}
+
 /** Measure intrinsic content and fractional borders without scrollbar rounding. */
 export function anchoredPanelContentHeight(panel: HTMLElement, content: readonly HTMLElement[]): number {
-  const style = window.getComputedStyle(panel);
-  const borders = (Number.parseFloat(style.borderTopWidth) || 0) + (Number.parseFloat(style.borderBottomWidth) || 0);
-  return content.reduce((height, element) => height + element.getBoundingClientRect().height, borders);
+  return content.reduce((height, element) => height + element.getBoundingClientRect().height, verticalBorderWidth(panel));
 }
 
 /** Place a panel above or below its anchor without leaving the viewport. */

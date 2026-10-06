@@ -335,7 +335,7 @@ describe("Notes inline links", () => {
   it("does not constrain a fitting preview or editor to its inner height", async () => {
     const h = await editor("paragraph", "Tasks");
     vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockImplementation(function (this: HTMLElement) {
-      return this.hasAttribute("data-notes-link-panel") ? 120 : 0;
+      return this.parentElement?.hasAttribute("data-notes-link-panel") ? 120 : 0;
     });
     restoreNotesEditableSelection(h.host, { start: 0, end: 5 });
     pasteUrl(h.host, "https://example.com");

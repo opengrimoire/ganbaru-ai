@@ -79,7 +79,7 @@ export function projectSettingsCssLengthToPixels(
 
 export function projectSettingsScrollFadeInset(scrollElement: HTMLElement): number {
   return projectSettingsCssLengthToPixels(
-    getComputedStyle(scrollElement).getPropertyValue("--project-settings-scroll-fade-size"),
+    getComputedStyle(scrollElement).getPropertyValue("--scroll-fade-size"),
     scrollElement,
     32,
   );

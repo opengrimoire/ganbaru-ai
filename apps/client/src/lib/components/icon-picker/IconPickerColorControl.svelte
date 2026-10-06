@@ -4,6 +4,7 @@
   import type { IconPickerColor } from "$lib/projects/icons/picker";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import { cn } from "$lib/utils";
+  import Switch from "$lib/components/ui/Switch.svelte";
 
   let {
     open = $bindable(false), color, label, askEveryTime, colorSelectionBorder,
@@ -31,7 +32,7 @@
     type="button"
     {disabled}
     class={cn(
-      "flex h-8 w-8 items-center justify-center rounded-md border border-border hover:bg-accent",
+      "flex size-8 items-center justify-center rounded-floating-item border border-border hover:bg-accent",
       open && "bg-accent text-foreground",
     )}
     aria-label={label}
@@ -50,14 +51,14 @@
   </button>
   {#if open}
     <div
-      class="absolute right-0 top-9 z-10 w-40 rounded-lg border border-border px-2.5 py-2 shadow-lg"
+      class="surface-floating absolute right-0 top-9 z-10 w-40 px-2.5 py-2"
       style={`background-color: var(--icon-picker-bg); color: var(--icon-picker-text); --project-icon-color-selection-border: ${colorSelectionBorder};`}
     >
       <button
         type="button"
         {disabled}
         class={cn(
-          "grid h-8 w-full items-center justify-center gap-2 rounded-md text-left text-[0.8rem] text-foreground hover:bg-accent",
+          "grid h-8 w-full items-center justify-center gap-2 rounded-floating-item text-left text-foreground hover:bg-accent",
           color === "default" && "bg-accent/70",
         )}
         style="grid-template-columns: repeat(4, 1.375rem);"
@@ -96,27 +97,15 @@
         {/each}
       </div>
       <div class="mx-1.5 mt-2 h-px bg-border/70" aria-hidden="true"></div>
-      <button
-        type="button"
-        {disabled}
-        role="switch"
-        aria-checked={askEveryTime}
-        class="mt-1 flex h-8 w-full items-center justify-between rounded-md px-1.5 text-left text-[0.8rem] text-foreground hover:bg-accent"
-        onclick={(event) => {
-          event.stopPropagation();
-          onAskEveryTimeChange(!askEveryTime);
-        }}
-      >
-        <span>{t("projects.iconPicker.askEveryTime")}</span>
-        <span
-          class={cn(
-            "flex h-4 w-7 shrink-0 items-center rounded-full p-0.5",
-            askEveryTime ? "justify-end bg-primary" : "justify-start bg-muted-foreground/30",
-          )}
-        >
-          <span class="h-3 w-3 rounded-full bg-background shadow-sm"></span>
-        </span>
-      </button>
+      <div class="mt-1 flex min-h-8 items-center justify-between gap-2 px-1.5 text-foreground">
+        <span class="min-w-0">{t("projects.iconPicker.askEveryTime")}</span>
+        <Switch
+          checked={askEveryTime}
+          onChange={onAskEveryTimeChange}
+          ariaLabel={t("projects.iconPicker.askEveryTime")}
+          {disabled}
+        />
+      </div>
     </div>
   {/if}
 </div>

@@ -19,6 +19,7 @@
   } from "$lib/api/distractions";
   import { isProtectedDistractionsDesktopAppName } from "$lib/distractions";
   import { getLocalization } from "$lib/i18n/translator.svelte";
+  import { scrollEdgeFadeAction } from "$lib/utils/scroll-edge-fade";
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
 
   let {
@@ -168,10 +169,10 @@
     onCancel();
   }}
 >
-  <div class="absolute inset-0 bg-black/50"></div>
+  <div class="surface-backdrop absolute inset-0"></div>
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
-    class="relative z-10 flex h-[min(36rem,calc(100vh-2rem))] w-full max-w-lg flex-col rounded-md border border-black/20 bg-card text-card-foreground outline-none dark:border-white/10 dark:bg-sidebar dark:text-sidebar-foreground"
+    class="surface-dialog relative z-10 flex h-[min(36rem,calc(100vh-2rem))] w-full max-w-lg flex-col outline-none"
     role="dialog"
     aria-modal="true"
     tabindex="-1"
@@ -197,7 +198,7 @@
     </div>
 
     <div class="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-hidden px-4 pb-4 pt-3">
-      <div class="flex min-w-0 items-center gap-2 rounded-md border border-border bg-background/60 px-2.5 py-1.5 dark:bg-transparent">
+      <div class="field flex min-w-0 items-center gap-2 px-2.5 py-1.5">
         <Search size={14} strokeWidth={2.25} class="shrink-0 text-muted-foreground" />
         <input
           bind:this={searchInputEl}
@@ -205,7 +206,7 @@
           type="text"
           spellcheck="false"
           placeholder={t("settings.distractions.appSelector.search")}
-          class="h-7 min-w-0 flex-1 bg-transparent text-[0.866667rem] text-foreground outline-none placeholder:text-muted-foreground"
+          class="field-bare h-7 text-[0.866667rem] text-foreground"
         />
         <button
           type="button"
@@ -222,7 +223,8 @@
         </button>
       </div>
 
-      <div class="min-h-0 flex-1 overflow-y-auto rounded-md border border-border">
+      <div class="min-h-0 flex-1 overflow-hidden rounded-floating-item border border-border">
+        <div use:scrollEdgeFadeAction class="h-full overflow-y-auto">
         {#if loading && showLoadingState}
           <div class="flex h-full min-h-36 items-center justify-center gap-2 text-[0.866667rem] text-muted-foreground">
             <LoaderCircle size={15} strokeWidth={2.25} class="animate-spin" />
@@ -270,6 +272,7 @@
             {/each}
           </div>
         {/if}
+        </div>
       </div>
     </div>
   </div>

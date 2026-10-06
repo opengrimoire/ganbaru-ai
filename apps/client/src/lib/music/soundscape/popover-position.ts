@@ -1,3 +1,4 @@
+import { FLOATING_WIDTH } from "$lib/components/ui/floating-width";
 import {
   pickSelectPopoverGeometry,
   type SelectPopoverGeometry,
@@ -6,7 +7,7 @@ import {
 
 const VIEWPORT_INSET = 8;
 const TRIGGER_GAP = 6;
-export const SOUNDSCAPE_POPOVER_WIDTH = 252;
+export const SOUNDSCAPE_POPOVER_WIDTH = FLOATING_WIDTH.sm;
 
 /** Center the player panel over its trigger while keeping it within the viewport. */
 export function centeredSoundscapePanelLeft(triggerLeft: number, triggerWidth: number, panelWidth: number, viewportWidth: number): number {

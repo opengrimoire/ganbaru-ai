@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Check from "@lucide/svelte/icons/check";
   import Ellipsis from "@lucide/svelte/icons/ellipsis";
   import { onMount } from "svelte";
   import IconPicker from "$lib/components/icon-picker/IconPicker.svelte";
@@ -6,6 +7,7 @@
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import type { MusicSoundscapeDefinition } from "$lib/music/soundscape/contracts";
   import { getSoundscapeStore } from "$lib/stores/soundscape.svelte";
+  import { scrollEdgeFadeAction } from "$lib/utils/scroll-edge-fade";
   import MusicSoundscapeGroupIcon from "./MusicSoundscapeGroupIcon.svelte";
 
   let { definition, onRepair, onRemove, onPlaybackStart }: {
@@ -88,7 +90,7 @@
         <IconPicker value={iconDraft} onChange={(value) => iconDraft = value} ariaLabel={t("music.soundscape.soundIcon")} showUpload={false} showRemove={false}>
           {#snippet trigger({ open, toggle, panelId })}<button type="button" class="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-background text-foreground hover:bg-accent" aria-label={t("music.soundscape.soundIcon")} aria-haspopup="dialog" aria-expanded={open} aria-controls={panelId} onclick={toggle}><MusicSoundscapeGroupIcon icon={iconDraft} size={16} /></button>{/snippet}
         </IconPicker>
-        <input class="h-8 min-w-0 flex-1 rounded-md border border-input bg-background px-2 text-xs outline-none" bind:value={nameDraft} aria-label={t("music.soundscape.name")} maxlength="200" />
+        <input class="field h-8 min-w-0 flex-1 px-2 text-xs" bind:value={nameDraft} aria-label={t("music.soundscape.name")} maxlength="200" />
       </div>
       <div class="flex justify-end gap-1"><button type="button" class="h-7 rounded-md px-2 text-xs hover:bg-accent" onclick={() => editing = false}>{t("common.cancel")}</button><button type="submit" disabled={!nameDraft.trim() || soundscape.saving} class="h-7 rounded-md bg-primary px-2 text-xs text-primary-foreground disabled:opacity-40">{t("music.soundscape.saveName")}</button></div>
     </form>
@@ -101,17 +103,18 @@
     <button type="button" aria-label={t("music.soundscape.soundActions", definition.name)} aria-expanded={menuOpen} class="absolute right-1 top-1 z-10 grid h-7 w-7 place-items-center rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground" onclick={() => menuOpen = !menuOpen}><Ellipsis size={16} /></button>
   {/if}
   {#if menuOpen}
-    <div class="absolute right-1 top-8 z-20 min-w-36 rounded-lg border border-border bg-popover p-1 shadow-md">
-      <button type="button" class="block h-8 w-full rounded-md px-2 text-left text-xs hover:bg-accent" onclick={() => { menuOpen = false; nameDraft = definition.name; iconDraft = definition.icon; editing = true; }}>{t("music.soundscape.editSound")}</button>
-      {#if definition.localPath}<button type="button" class="block h-8 w-full rounded-md px-2 text-left text-xs hover:bg-accent" onclick={() => { menuOpen = false; if (definition.localPath) void revealLocalFile(definition.localPath); }}>{t("music.soundscape.showFile")}</button>{/if}
+    <div class="surface-floating surface-floating-body absolute right-1 top-8 z-20 flex min-w-36 flex-col">
+      <button type="button" class="menu-item" onclick={() => { menuOpen = false; nameDraft = definition.name; iconDraft = definition.icon; editing = true; }}>{t("music.soundscape.editSound")}</button>
+      {#if definition.localPath}<button type="button" class="menu-item" onclick={() => { menuOpen = false; if (definition.localPath) void revealLocalFile(definition.localPath); }}>{t("music.soundscape.showFile")}</button>{/if}
       {#if soundscape.groups.length > 0}
-        <p class="px-2 pt-2 text-[0.65rem] text-muted-foreground">{t("music.soundscape.moveToGroup")}</p>
-        <div class="max-h-32 overflow-y-auto" data-music-scrollable="true">
-          <button type="button" class="block h-8 w-full truncate rounded-md px-2 text-left text-xs hover:bg-accent" aria-current={definition.groupId === null ? "true" : undefined} onclick={() => { void moveToGroup(null); }}>{t("music.soundscape.ungrouped")}</button>
-          {#each soundscape.groups as group (group.id)}<button type="button" class="block h-8 w-full truncate rounded-md px-2 text-left text-xs hover:bg-accent" aria-current={definition.groupId === group.id ? "true" : undefined} onclick={() => { void moveToGroup(group.id); }}>{group.name}</button>{/each}
+        <p class="menu-label">{t("music.soundscape.moveToGroup")}</p>
+        <div use:scrollEdgeFadeAction class="max-h-32 overflow-y-auto" data-music-scrollable="true">
+          <button type="button" class="menu-item" aria-current={definition.groupId === null ? "true" : undefined} onclick={() => { void moveToGroup(null); }}><span class="min-w-0 flex-1 truncate">{t("music.soundscape.ungrouped")}</span>{#if definition.groupId === null}<Check size={14} />{/if}</button>
+          {#each soundscape.groups as group (group.id)}<button type="button" class="menu-item" aria-current={definition.groupId === group.id ? "true" : undefined} onclick={() => { void moveToGroup(group.id); }}><span class="min-w-0 flex-1 truncate">{group.name}</span>{#if definition.groupId === group.id}<Check size={14} />{/if}</button>{/each}
         </div>
       {/if}
-      <button type="button" class="block h-8 w-full rounded-md px-2 text-left text-xs text-destructive hover:bg-accent" onclick={() => { menuOpen = false; onRemove(definition); }}>{t("music.soundscape.remove")}</button>
+      <div class="menu-separator" role="separator"></div>
+      <button type="button" class="menu-item menu-item-destructive" onclick={() => { menuOpen = false; onRemove(definition); }}>{t("music.soundscape.remove")}</button>
     </div>
   {/if}
 </div>

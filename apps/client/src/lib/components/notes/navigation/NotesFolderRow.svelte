@@ -35,6 +35,7 @@
   import type { NotesFolder } from "$lib/notes/types";
   import { dismissOnOutside } from "$lib/utils/dismiss-on-outside";
   import { overflowTooltip } from "$lib/utils/overflow-tooltip";
+  import { scrollEdgeFadeAction } from "$lib/utils/scroll-edge-fade";
   import {
     loadNotesOptionalComponent,
     retryNotesOptionalComponent,
@@ -356,7 +357,7 @@
 
   {#if menuOpen}
     <div
-      class="notes-folder-action-menu fixed z-50 min-w-40 rounded-md border border-border bg-popover p-1.5 text-popover-foreground shadow-sm"
+      class="notes-folder-action-menu surface-floating fixed z-50 flex min-w-40 flex-col overflow-hidden"
       style={menuStyle}
       role="menu"
       tabindex="-1"
@@ -368,90 +369,92 @@
       }}
       data-app-floating-surface
     >
-      <button
-        class="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[0.8rem] hover:bg-accent"
-        type="button"
-        onclick={() => {
-          closeMenu();
-          onCreatePage();
-        }}
-      >
-        <FilePlus2 class="size-4" />
-        <span>{t("notes.newNoteInFolder")}</span>
-      </button>
-      <button
-        class="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[0.8rem] hover:bg-accent"
-        type="button"
-        onclick={() => {
-          closeMenu();
-          onCreateFolder();
-        }}
-      >
-        <FolderPlus class="size-4" />
-        <span>{t("notes.newSubfolder")}</span>
-      </button>
-      <button
-        class="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[0.8rem] hover:bg-accent"
-        type="button"
-        onclick={() => {
-          beginRename();
-          closeMenu();
-        }}
-      >
-        <Pencil class="size-4" />
-        <span>{t("notes.renameFolder")}</span>
-      </button>
-      {#if moveTargets.length > 0}
+      <div class="surface-floating-body flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden" use:scrollEdgeFadeAction>
         <button
-          class="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[0.8rem] hover:bg-accent"
+          class="menu-item"
           type="button"
-          aria-expanded={moveMenuOpen}
           onclick={() => {
-            moveMenuOpen = !moveMenuOpen;
+            closeMenu();
+            onCreatePage();
           }}
         >
-          <FolderInput class="size-4" />
-          <span>{t("notes.moveFolderTo")}</span>
+          <FilePlus2 />
+          <span>{t("notes.newNoteInFolder")}</span>
         </button>
-        {#if moveMenuOpen}
-          <div class="notes-folder-move-menu border-y border-border bg-muted/25 py-1">
-            {#if destinationPickerLoadState?.status === "ready" && destinationPickerLoadState.component.kind === "destination-picker"}
-              {@const NotesDestinationPickerList = destinationPickerLoadState.component.component}
-              <NotesDestinationPickerList
-                targets={moveTargets}
-                searchLabel={t("notes.moveDestinationSearch")}
-                searchPlaceholder={t("notes.moveDestinationSearchPlaceholder")}
-                recentLabel={t("notes.recentDestinations")}
-                pagesLabel={t("notes.folders")}
-                emptyLabel={t("notes.noFolderMoveTargets")}
-                optionLabel={(target) => t("notes.moveFolderToTarget", target.title)}
-                onSelect={moveToTarget}
-                onClose={() => {
-                  moveMenuOpen = false;
-                }}
-              />
-            {:else if destinationPickerLoadState?.status === "failed"}
-              <div class="p-2 text-[0.8rem] text-destructive" role="alert">
-                <p>{t("common.viewLoadFailed", t("notes.moveFolderTo"))}</p>
-                <button class="mt-2 min-h-8 rounded-md border border-border px-2 text-foreground hover:bg-accent" type="button" onclick={() => requestDestinationPicker(true)}>{t("common.retry")}</button>
-              </div>
-            {:else}
-              <div class="p-2 text-[0.8rem] text-muted-foreground" aria-busy="true">{t("common.loading")}</div>
-            {/if}
-          </div>
+        <button
+          class="menu-item"
+          type="button"
+          onclick={() => {
+            closeMenu();
+            onCreateFolder();
+          }}
+        >
+          <FolderPlus />
+          <span>{t("notes.newSubfolder")}</span>
+        </button>
+        <button
+          class="menu-item"
+          type="button"
+          onclick={() => {
+            beginRename();
+            closeMenu();
+          }}
+        >
+          <Pencil />
+          <span>{t("notes.renameFolder")}</span>
+        </button>
+        {#if moveTargets.length > 0}
+          <button
+            class="menu-item"
+            type="button"
+            aria-expanded={moveMenuOpen}
+            onclick={() => {
+              moveMenuOpen = !moveMenuOpen;
+            }}
+          >
+            <FolderInput />
+            <span>{t("notes.moveFolderTo")}</span>
+          </button>
+          {#if moveMenuOpen}
+            <div class="notes-folder-move-menu border-y border-border bg-muted/25 py-1" use:scrollEdgeFadeAction>
+              {#if destinationPickerLoadState?.status === "ready" && destinationPickerLoadState.component.kind === "destination-picker"}
+                {@const NotesDestinationPickerList = destinationPickerLoadState.component.component}
+                <NotesDestinationPickerList
+                  targets={moveTargets}
+                  searchLabel={t("notes.moveDestinationSearch")}
+                  searchPlaceholder={t("notes.moveDestinationSearchPlaceholder")}
+                  recentLabel={t("notes.recentDestinations")}
+                  pagesLabel={t("notes.folders")}
+                  emptyLabel={t("notes.noFolderMoveTargets")}
+                  optionLabel={(target) => t("notes.moveFolderToTarget", target.title)}
+                  onSelect={moveToTarget}
+                  onClose={() => {
+                    moveMenuOpen = false;
+                  }}
+                />
+              {:else if destinationPickerLoadState?.status === "failed"}
+                <div class="p-2 text-destructive" role="alert">
+                  <p>{t("common.viewLoadFailed", t("notes.moveFolderTo"))}</p>
+                  <button class="mt-2 min-h-8 rounded-floating-item border border-border px-2 text-foreground hover:bg-accent" type="button" onclick={() => requestDestinationPicker(true)}>{t("common.retry")}</button>
+                </div>
+              {:else}
+                <div class="p-2 text-muted-foreground" aria-busy="true">{t("common.loading")}</div>
+              {/if}
+            </div>
+          {/if}
         {/if}
-      {/if}
-      <button
-        class="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[0.8rem] text-destructive hover:bg-accent"
-        type="button"
-        onclick={() => {
-          closeMenu();
-          onDelete();
-        }}
-      >
-        <Trash2 class="size-4" />
-        <span>{t("notes.deleteFolder")}</span>
-      </button>
+        <button
+          class="menu-item menu-item-destructive"
+          type="button"
+          onclick={() => {
+            closeMenu();
+            onDelete();
+          }}
+        >
+          <Trash2 />
+          <span>{t("notes.deleteFolder")}</span>
+        </button>
+      </div>
     </div>
   {/if}
 </div>
@@ -489,30 +492,6 @@
   .notes-navigation-drop-invalid .notes-folder-row-content {
     box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--destructive) 42%, transparent);
     cursor: no-drop;
-  }
-
-  .notes-folder-action-menu {
-    overflow-x: hidden;
-    overflow-y: auto;
-  }
-
-  .notes-folder-action-menu > button {
-    min-height: 1.75rem;
-    padding: 0.25rem 0.5rem;
-    gap: 0.375rem;
-    border-radius: var(--radius-sm);
-    font-size: 0.75rem;
-    line-height: 1.25rem;
-  }
-
-  .notes-folder-action-menu > button :global(svg) {
-    width: 0.875rem;
-    height: 0.875rem;
-    flex-shrink: 0;
-  }
-
-  @media (pointer: coarse) {
-    .notes-folder-action-menu > button { min-height: 2.75rem; }
   }
 
   .notes-folder-move-menu {

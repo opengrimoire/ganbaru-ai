@@ -1,3 +1,20 @@
+/**
+ * Shared hover-submenu behavior, so every nested menu, picker, and flyout opens, holds, and closes alike.
+ * docs/architecture/ui-foundations.md owns the rules.
+ */
+
+/** Delay before a hovered row opens its submenu, so a pointer crossing several rows does not open each one. */
+export const SUBMENU_OPEN_DELAY_MS = 100;
+/** Grace period before a hover-opened submenu closes, so the pointer can travel from its row into it. */
+export const SUBMENU_CLOSE_DELAY_MS = 250;
+/** Aim corridor toward a submenu, in pixels; the lower edge is wider because submenus usually extend downward. */
+export const SUBMENU_AIM_TOLERANCES = {
+  tolerance: 12,
+  topTolerance: 8,
+  bottomTolerance: 32,
+  minTowardDistance: 3,
+} as const satisfies Pick<MenuAimInput, "tolerance" | "topTolerance" | "bottomTolerance" | "minTowardDistance">;
+
 export interface MenuAimPoint {
   x: number;
   y: number;

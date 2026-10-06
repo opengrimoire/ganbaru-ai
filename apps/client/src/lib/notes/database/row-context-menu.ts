@@ -1,3 +1,5 @@
+import { FLOATING_WIDTH } from "$lib/components/ui/floating-width";
+
 export interface NotesRowContextMenuGeometryInput {
   clientX: number;
   clientY: number;
@@ -12,7 +14,7 @@ export interface NotesRowContextMenuGeometry {
   maxHeight: number;
 }
 
-const MENU_WIDTH_PX = 180;
+const MENU_WIDTH_PX = FLOATING_WIDTH.sm;
 const MENU_ESTIMATED_HEIGHT_PX = 330;
 const MENU_EDGE_GAP_PX = 8;
 

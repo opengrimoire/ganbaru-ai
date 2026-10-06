@@ -1,5 +1,6 @@
 <script lang="ts">
   import { tick } from "svelte";
+  import Check from "@lucide/svelte/icons/check";
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import ListMusic from "@lucide/svelte/icons/list-music";
@@ -10,8 +11,10 @@
   import { orderMusicPlaylists, systemMusicPlaylistName } from "$lib/music/playlists/system";
   import { formatNumber } from "$lib/i18n/formatters";
   import MusicPlaylistIcon from "$lib/components/music/builder/MusicPlaylistIcon.svelte";
+  import { FLOATING_WIDTH } from "$lib/components/ui/floating-width";
   import { cn } from "$lib/utils";
   import { portal } from "$lib/utils/portal";
+  import { scrollEdgeFadeAction } from "$lib/utils/scroll-edge-fade";
   import {
     pickSelectPopoverGeometry,
     type SelectPopoverGeometry,
@@ -40,7 +43,7 @@
   const localization = getLocalization();
   const { t } = localization;
   const id = $props.id();
-  const PLAYLIST_POPOVER_WIDTH_PX = 248;
+  const PLAYLIST_POPOVER_WIDTH_PX = FLOATING_WIDTH.lg;
   const PLAYLIST_POPOVER_MAX_HEIGHT_PX = 520;
   const noneLabel = $derived(emptyLabel ?? t("music.assignment.noPlaylist"));
   let open = $state(false);
@@ -207,30 +210,32 @@
     aria-label={label}
     onfocusout={handlePopoverFocusOut}
     style={popoverStyle()}
-    class="fixed z-80 flex min-h-0 flex-col overflow-hidden rounded-xl border border-border/80 bg-popover text-popover-foreground shadow-lg"
+    class="surface-floating fixed z-80 flex min-h-0 flex-col overflow-hidden"
   >
-    <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain p-2" data-music-scrollable="true">
-      <div class="sticky top-0 z-10 bg-popover pb-1.5">
-        <label class="flex min-h-8 items-center gap-1.5 rounded-md border border-border/70 bg-muted/20 pl-2 pr-1">
-          <Search size={13} strokeWidth={1.5} class="shrink-0 text-popover-foreground/60" />
-          <input bind:this={searchInput} bind:value={search} type="search" aria-label={t("music.assignment.searchPlaylists")} class="min-w-0 flex-1 bg-transparent text-[0.8rem] text-popover-foreground outline-none placeholder:text-popover-foreground/45" placeholder={t("music.assignment.searchPlaylists")} />
-        </label>
-      </div>
+    <div class="shrink-0 px-1.5 pt-1.5">
+      <label class="field flex items-center gap-1.5">
+        <Search size={13} strokeWidth={1.5} class="shrink-0 text-muted-foreground" />
+        <input bind:this={searchInput} bind:value={search} type="search" aria-label={t("music.assignment.searchPlaylists")} class="field-bare" placeholder={t("music.assignment.searchPlaylists")} />
+      </label>
+    </div>
+    <div use:scrollEdgeFadeAction class="surface-floating-body min-h-0 flex-1 overflow-y-auto overscroll-contain" data-music-scrollable="true">
       <div role="listbox" aria-label={label}>
       {#if !search.trim()}
-        <button type="button" role="option" aria-selected={value === null} onclick={() => choose(null)} class={cn("flex h-9 w-full items-center gap-2 rounded-lg px-2 text-left text-xs hover:bg-accent", value === null && "bg-accent")}>
-          <span class="grid h-7 w-7 shrink-0 place-items-center text-foreground"><VolumeX size={15} strokeWidth={1.75} /></span>
-          <span class="font-medium">{noneLabel}</span>
+        <button type="button" role="option" aria-selected={value === null} onclick={() => choose(null)} class="menu-item">
+          <VolumeX size={15} strokeWidth={1.75} />
+          <span class="min-w-0 flex-1 truncate font-medium">{noneLabel}</span>
+          {#if value === null}<Check size={14} />{/if}
         </button>
       {/if}
       {#each matching as playlist (playlist.id)}
-        <button type="button" role="option" aria-selected={value === playlist.id} onclick={() => choose(playlist.id)} class={cn("flex h-9 w-full items-center gap-2 rounded-lg px-2 text-left hover:bg-accent", value === playlist.id && "bg-accent")}>
-          <span class="grid h-7 w-7 shrink-0 place-items-center text-foreground"><MusicPlaylistIcon icon={playlist.icon} size={15} /></span>
-          <span class="min-w-0 flex-1 truncate text-xs font-medium">{systemMusicPlaylistName(playlist.id, playlist.name, t)}</span>
-          <span class="shrink-0 text-[0.64rem] tabular-nums text-muted-foreground">{formatNumber(localization.locale, playlist.totalCount)}</span>
+        <button type="button" role="option" aria-selected={value === playlist.id} onclick={() => choose(playlist.id)} class="menu-item">
+          <span class="grid size-4 shrink-0 place-items-center"><MusicPlaylistIcon icon={playlist.icon} size={15} /></span>
+          <span class="min-w-0 flex-1 truncate font-medium">{systemMusicPlaylistName(playlist.id, playlist.name, t)}</span>
+          <span class="shrink-0 text-panel-detail tabular-nums text-muted-foreground">{formatNumber(localization.locale, playlist.totalCount)}</span>
+          {#if value === playlist.id}<Check size={14} />{/if}
         </button>
       {:else}
-        <p class="px-3 py-6 text-center text-xs text-muted-foreground">{t("music.assignment.noPlaylistMatches")}</p>
+        <p class="px-3 py-6 text-center text-muted-foreground">{t("music.assignment.noPlaylistMatches")}</p>
       {/each}
       </div>
     </div>

@@ -11,10 +11,11 @@
 </script>
 
 <div class={inline ? "min-w-0 flex-1" : "shrink-0 px-2 pb-2"}>
-  <div class="explorer-search">
+  <div class="explorer-search field flex items-center gap-1.5 py-0 text-muted-foreground">
     <Search size={14} aria-hidden="true" />
     <input
       bind:this={input}
+      class="field-bare self-stretch text-foreground"
       bind:value
       type="search"
       aria-label={label}

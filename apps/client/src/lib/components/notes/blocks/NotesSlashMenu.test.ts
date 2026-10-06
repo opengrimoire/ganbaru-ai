@@ -32,14 +32,6 @@ function host() {
 
 describe("Notes slash menu", () => {
   it("fades only edges with hidden commands and updates when filtering removes overflow", async () => {
-    const resizeRefreshes = new Map<Element, () => void>();
-    vi.stubGlobal("ResizeObserver", class {
-      private targets = new Set<Element>();
-      constructor(private callback: () => void) {}
-      observe(target: Element): void { this.targets.add(target); resizeRefreshes.set(target, this.callback); }
-      unobserve(target: Element): void { this.targets.delete(target); resizeRefreshes.delete(target); }
-      disconnect(): void { for (const target of this.targets) resizeRefreshes.delete(target); }
-    });
     const { row } = host();
     component = mount(NotesSlashMenu, { target: row, props: { onSelect: vi.fn() } });
     await tick();
@@ -49,28 +41,22 @@ describe("Notes slash menu", () => {
       clientHeight: { configurable: true, value: 200 },
       scrollHeight: { configurable: true, get: () => contentHeight },
     });
-    resizeRefreshes.get(scroll)?.();
-    await tick();
-    expect(scroll.classList.contains("scroll-bottom")).toBe(true);
+    scroll.dispatchEvent(new Event("scroll"));
+    expect(scroll.dataset.scrollFade).toBe("bottom");
     scroll.scrollTop = 100;
     scroll.dispatchEvent(new Event("scroll"));
-    await tick();
-    expect(scroll.classList.contains("scroll-both")).toBe(true);
+    expect(scroll.dataset.scrollFade).toBe("both");
     scroll.scrollTop = 400;
     scroll.dispatchEvent(new Event("scroll"));
-    await tick();
-    expect(scroll.classList.contains("scroll-top")).toBe(true);
+    expect(scroll.dataset.scrollFade).toBe("top");
     const input = row.querySelector<HTMLInputElement>("input")!;
     input.value = "missing-command";
     input.dispatchEvent(new Event("input", { bubbles: true }));
     await tick();
     contentHeight = 150;
     scroll.scrollTop = 0;
-    resizeRefreshes.get(scroll.firstElementChild!)?.();
-    await tick();
-    expect(scroll.classList.contains("scroll-top")).toBe(false);
-    expect(scroll.classList.contains("scroll-bottom")).toBe(false);
-    expect(scroll.classList.contains("scroll-both")).toBe(false);
+    scroll.dispatchEvent(new Event("scroll"));
+    expect(scroll.dataset.scrollFade).toBeUndefined();
   });
 
   it("escapes the clipped row, stays inside its dialog, and preserves editor focus on selection", async () => {

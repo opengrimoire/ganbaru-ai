@@ -313,7 +313,7 @@
               placeholder={'{\n  "id": "midnight",\n  "displayName": "Midnight",\n  ...\n}'}
               rows={8}
               spellcheck={false}
-              class="w-full resize-y rounded-md border border-border bg-background p-2 text-[0.733333rem] text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+              class="field w-full resize-y p-2 text-[0.733333rem] text-foreground"
             ></textarea>
             {#if importErrors.length > 0}
               <ul

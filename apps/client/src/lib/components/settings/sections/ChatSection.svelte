@@ -126,8 +126,7 @@
   :global(.chat-settings-button:hover:not(:disabled)) { background: var(--accent); }
   :global(.chat-settings-button:disabled) { cursor: not-allowed; opacity: 0.5; }
   :global(.setup-field), :global(.chat-inline-field) { display: flex; flex-direction: column; gap: 0.375rem; font-size: calc(0.733333rem * var(--type-scale)); font-weight: 500; color: var(--muted-foreground); }
-  :global(.setup-field input), :global(.chat-inline-field input) { min-height: 2.25rem; border-radius: 0.375rem; border: 1px solid var(--border); background: var(--background); padding: 0.375rem 0.625rem; color: var(--foreground); outline: none; }
-  :global(.setup-field input:focus), :global(.chat-inline-field input:focus) { border-color: var(--ring); outline: 1px solid var(--ring); outline-offset: -1px; }
+  :global(.setup-field input), :global(.chat-inline-field input) { min-height: 2.25rem; border-radius: var(--floating-item-radius); border: 1px solid var(--border); background: transparent; padding: 0.375rem 0.625rem; color: var(--foreground); outline: none; }
   :global(.setup-secondary-button), :global(.setup-primary-button) { display: inline-flex; min-height: 2.25rem; align-items: center; justify-content: center; border-radius: 0.375rem; padding: 0.375rem 0.75rem; font-size: calc(0.8rem * var(--type-scale)); font-weight: 600; }
   :global(.setup-secondary-button) { border: 1px solid var(--border); background: var(--background); }
   :global(.setup-primary-button) { background: var(--primary); color: var(--primary-foreground); }

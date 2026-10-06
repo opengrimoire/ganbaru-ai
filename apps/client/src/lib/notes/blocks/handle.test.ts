@@ -126,8 +126,8 @@ describe("notes block context menu routing", () => {
       viewportHeight: 180,
     });
 
-    expect(style).toContain("left:48px");
-    expect(style).toContain("width:224px");
+    expect(style).toContain("left:32px");
+    expect(style).toContain("width:240px");
     expect(style).toContain("max-height:108px");
   });
 });

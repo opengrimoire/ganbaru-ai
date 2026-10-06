@@ -37,11 +37,11 @@
   aria-label={t("notes.selectionActions")} onkeydown={handleKeydown}
   use:dismissOnOutside={{ onDismiss: onClose }}
   style:left={`${left}px`} style:top={`${top}px`}
-  class="fixed z-50 flex min-w-40 flex-col rounded-md border border-border bg-popover p-1 text-sm text-popover-foreground shadow-md"
+  class="surface-floating surface-floating-body fixed z-50 flex w-floating-sm flex-col"
 >
   {#each actions as action}
     <button type="button" role="menuitem" disabled={action.disabled}
-      class="rounded-sm px-3 py-1.5 text-left hover:bg-accent focus:bg-accent disabled:opacity-50"
+      class="menu-item"
       onclick={() => { action.run(); onClose(); }}>{action.label}</button>
   {/each}
 </div>

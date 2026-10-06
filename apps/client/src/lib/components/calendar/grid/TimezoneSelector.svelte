@@ -6,6 +6,7 @@
   } from "$lib/calendar/utils";
   import type { TimezoneAbbrMode } from "$lib/calendar/utils";
   import { portal } from "$lib/utils/portal";
+  import { scrollEdgeFadeAction } from "$lib/utils/scroll-edge-fade";
   import X from "@lucide/svelte/icons/x";
   import ChevronUp from "@lucide/svelte/icons/chevron-up";
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
@@ -362,19 +363,19 @@
   <div
     bind:this={popoverEl}
     use:portal
-    class="tz-popover fixed z-80 flex flex-col rounded-lg border border-border bg-card text-card-foreground shadow-xl"
-    style="top: {popoverPos.top}px; left: {popoverPos.left}px; width: {POPOVER_WIDTH}px; max-height: {POPOVER_HEIGHT}px; --foreground: var(--card-foreground);"
+    class="tz-popover surface-floating fixed z-80 flex flex-col"
+    style="top: {popoverPos.top}px; left: {popoverPos.left}px; width: {POPOVER_WIDTH}px; max-height: {POPOVER_HEIGHT}px; --foreground: var(--popover-foreground);"
     role="dialog"
     aria-label={t("calendar.timezone.title")}
     onwheel={(e) => e.stopPropagation()}
   >
     <div class="flex items-center justify-between gap-2 px-3 pt-3 pb-1">
       <div class="flex flex-col">
-        <p class="text-xs font-semibold text-foreground">{t("calendar.timezone.title")}</p>
-        <p class="text-[0.666667rem] text-muted-foreground">{t("calendar.timezone.device", localTimezone)}</p>
+        <p class="font-semibold text-foreground">{t("calendar.timezone.title")}</p>
+        <p class="text-panel-detail text-muted-foreground">{t("calendar.timezone.device", localTimezone)}</p>
       </div>
       <div
-        class="flex items-center gap-0.5 rounded border border-border bg-background p-0.5 text-[0.666667rem]"
+        class="flex items-center gap-0.5 rounded-floating-item border border-border p-0.5 text-panel-detail"
         role="group"
         aria-label={t("calendar.timezone.labelFormat")}
       >
@@ -407,7 +408,7 @@
         <!-- Whole row is the drag source. Chevrons and X are draggable=false
              so mousedown on them doesn't start a drag. -->
         <div
-          class="group flex cursor-grab items-center justify-between gap-2 rounded px-1 py-1 text-xs transition-colors active:cursor-grabbing {isDragTarget ? 'bg-accent' : ''} {isDragging ? 'opacity-40' : ''}"
+          class="group flex cursor-grab items-center justify-between gap-2 rounded-floating-item px-1 py-1 transition-colors active:cursor-grabbing {isDragTarget ? 'bg-accent' : ''} {isDragging ? 'opacity-40' : ''}"
           draggable="true"
           ondragstart={(e: DragEvent) => handleRowDragStart(e, i)}
           ondragover={(e: DragEvent) => handleRowDragOver(e, i)}
@@ -480,7 +481,7 @@
           bind:value={query}
           placeholder={t("calendar.timezone.searchPlaceholder")}
           aria-label={t("calendar.timezone.searchPlaceholder")}
-          class="w-full rounded border border-border bg-background px-2 py-1.5 text-xs text-foreground outline-none focus:ring-1 focus:ring-ring"
+          class="field w-full text-foreground"
           onclick={(e: MouseEvent) => e.stopPropagation()}
           onkeydown={handleSearchKeydown}
         />
@@ -489,10 +490,11 @@
       <div class="relative mt-2 flex min-h-0 flex-1 flex-col">
         <div
           bind:this={listEl}
+          use:scrollEdgeFadeAction
           class="tz-results min-h-0 flex-1 overflow-y-auto px-2 pb-3 pr-3"
         >
           {#if timezoneResults.length === 0}
-            <p class="px-2 py-3 text-center text-[0.733333rem] text-muted-foreground">
+            <p class="px-2 py-3 text-center text-panel-detail text-muted-foreground">
               {t("calendar.timezone.noMatches")}
             </p>
           {:else}
@@ -500,7 +502,8 @@
               {@const info = getTimezoneInfo(tz)}
               <button
                 type="button"
-                class="block w-full rounded px-2 py-1.5 text-left text-xs transition-colors {idx === highlightIndex ? 'bg-accent' : 'hover:bg-accent'}"
+                class="menu-item flex-col items-stretch gap-0"
+                data-highlighted={idx === highlightIndex || undefined}
                 onmouseenter={() => { highlightIndex = idx; }}
                 onclick={(e: MouseEvent) => { e.stopPropagation(); handleAdd(tz, "pointer"); }}
               >
@@ -508,7 +511,7 @@
                   <span class="inline-block w-18 font-medium tabular-nums">{info.offsetUtc}</span>
                   <span class="ml-1">{info.longName}</span>
                 </div>
-                <div class="truncate text-[0.7rem] text-muted-foreground">
+                <div class="truncate text-panel-detail text-muted-foreground">
                   {info.city}{#if info.region}, {info.region}{/if}
                 </div>
               </button>
@@ -530,7 +533,7 @@
         </div>
       </div>
     {:else}
-      <p class="px-3 pt-1 pb-3 text-[0.666667rem] text-muted-foreground">{t("calendar.timezone.maximumTimezones", MAX_TIMEZONES)}</p>
+      <p class="px-3 pt-1 pb-3 text-panel-detail text-muted-foreground">{t("calendar.timezone.maximumTimezones", MAX_TIMEZONES)}</p>
     {/if}
   </div>
 {/if}

@@ -16,6 +16,7 @@
   import { getDetachedWindows } from "$lib/stores/detached-windows.svelte";
   import { detachableTabViewFromWindowLabel } from "$lib/windows/detached";
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
+  import { FLOATING_WIDTH } from "$lib/components/ui/floating-width";
   import { getThemeEditor } from "$lib/stores/theme-editor.svelte";
   import { getSettingsLauncher } from "$lib/stores/settings-launcher.svelte";
   import { getBenchmarkStatus } from "$lib/stores/benchmark-status.svelte";
@@ -305,7 +306,7 @@
     { id: "settings", label: () => t("titleBar.control.settings") },
   ];
 
-  const TITLE_BAR_MENU_WIDTH = 224;
+  const TITLE_BAR_MENU_WIDTH = FLOATING_WIDTH.sm;
   const TAB_CONTEXT_MENU_MAX_WIDTH = 260;
   const MENU_EDGE_GAP = 8;
   const themeEditorLockedControlIds = new Set<TitleBarControlId>([

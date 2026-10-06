@@ -11,6 +11,7 @@
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import PencilLine from "@lucide/svelte/icons/pencil-line";
   import X from "@lucide/svelte/icons/x";
+  import Checkbox from "$lib/components/ui/Checkbox.svelte";
 
   const notes = getNotesEditor();
   const localization = getLocalization();
@@ -123,13 +124,11 @@
         <div class="text-[0.8rem] font-medium text-foreground">
           {t("notes.suggestedEdits")}
         </div>
-        <label class="flex items-center gap-1.5 text-[0.733333rem] text-muted-foreground">
-          <input
-            class="size-3.5 accent-primary"
-            type="checkbox"
+        <label class="inline-flex cursor-pointer items-center gap-1.5 text-[0.733333rem] text-muted-foreground hover:text-foreground">
+          <Checkbox
             checked={notes.suggestionsIncludeDecided}
-            onchange={(event) => {
-              void notes.setSuggestionsIncludeDecided(event.currentTarget.checked);
+            onChange={(checked) => {
+              void notes.setSuggestionsIncludeDecided(checked);
             }}
           />
           <span>{t("notes.showDecidedSuggestions")}</span>
@@ -157,7 +156,7 @@
             <label class="min-w-0">
               <span class="text-[0.7rem] text-muted-foreground">{t("notes.proposedText")}</span>
               <textarea
-                class="mt-1 min-h-20 w-full resize-y rounded-md border border-input bg-background px-2 py-1.5 text-[0.866667rem] outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                class="field mt-1 min-h-20 w-full resize-y py-1.5 text-[0.866667rem]"
                 bind:value={proposedDraft}
                 aria-label={t("notes.proposedText")}
               ></textarea>

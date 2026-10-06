@@ -22,6 +22,7 @@
   import { getChat } from "$lib/stores/chat.svelte";
   import { getPreferences } from "$lib/stores/preferences.svelte";
   import { portal } from "$lib/utils/portal";
+  import { scrollEdgeFadeAction } from "$lib/utils/scroll-edge-fade";
   import ChatScheduledMessagePreview from "./ChatScheduledMessagePreview.svelte";
 
   type ScheduleMenuMode = "choose" | "manage";
@@ -226,13 +227,13 @@
   }
 </script>
 
-<div class:align-right={align === "right"} class:manage={mode === "manage"} class="schedule-menu" role="dialog" aria-label={mode === "manage" ? t("chat.organization.scheduledMessages") : t("chat.organization.scheduleMessage")}>
+<div class:align-right={align === "right"} class:manage={mode === "manage"} class="schedule-menu surface-floating surface-floating-body w-floating" role="dialog" aria-label={mode === "manage" ? t("chat.organization.scheduledMessages") : t("chat.organization.scheduleMessage")}>
   {#if mode === "manage"}
     <div class="schedule-header">
       <strong>{t("chat.organization.scheduledMessagesCount", scheduledMessages.length)}</strong>
       <button class="header-icon" type="button" aria-label={t("chat.organization.closeScheduledMessages")} onclick={onClose}><X size={14} /></button>
     </div>
-    <div class="scheduled-list">
+    <div class="scheduled-list" use:scrollEdgeFadeAction>
       {#each scheduledMessages as scheduled (scheduled.id)}
         <ChatScheduledMessagePreview
           message={scheduled}
@@ -279,7 +280,7 @@
           <div
             use:portal
             use:positionTimePickerPanel
-            class="schedule-time-picker fixed z-100 w-40 overflow-hidden rounded-md border border-border bg-popover text-popover-foreground shadow-sm"
+            class="schedule-time-picker surface-floating fixed z-100 w-40 overflow-hidden"
             role="dialog"
             aria-label={t("chat.organization.chooseTime")}
           >
@@ -304,15 +305,14 @@
       <div class="schedule-choices">
         {#each scheduleSuggestions as suggestion (suggestion.kind)}
           {@const selected = isSelected(suggestion)}
-          <button type="button" class:selected disabled={disabled} aria-pressed={selected} onclick={() => selectSchedule(suggestion)}>
-            <span>{scheduleSuggestionLabel(suggestion.kind)}</span>
-            <small>{formatLocalSchedule(suggestion.date, suggestion.time)}</small>
-            {#if selected}<Check class="choice-check" size={14} />{/if}
+          <button type="button" class="menu-item" disabled={disabled} aria-pressed={selected} onclick={() => selectSchedule(suggestion)}>
+            <span class="choice-copy"><span>{scheduleSuggestionLabel(suggestion.kind)}</span><span class="text-panel-detail text-muted-foreground">{formatLocalSchedule(suggestion.date, suggestion.time)}</span></span>
+            {#if selected}<Check size={14} />{/if}
           </button>
         {/each}
-        <button type="button" class="custom-schedule-button" class:selected={Boolean(selectedScheduledFor) && !scheduleSuggestions.some(isSelected)} onclick={() => { customScheduleOpen = true; }}>
-          <span>{t("chat.organization.customDateTime")}</span>
-          {#if selectedScheduledFor && !scheduleSuggestions.some(isSelected)}<Check class="choice-check" size={14} />{/if}
+        <button type="button" class="menu-item" onclick={() => { customScheduleOpen = true; }}>
+          <span class="choice-copy">{t("chat.organization.customDateTime")}</span>
+          {#if selectedScheduledFor && !scheduleSuggestions.some(isSelected)}<Check size={14} />{/if}
         </button>
       </div>
     {/if}
@@ -321,30 +321,23 @@
 </div>
 
 <style>
-  .schedule-menu { position:absolute; z-index:70; bottom:calc(100% + 0.35rem); left:0; width:min(18rem,calc(100vw - 1rem)); max-height:min(30rem,calc(100vh - 1rem)); border:1px solid var(--border); border-radius:0.6rem; background:var(--popover); padding:0.35rem; box-shadow:0 10px 30px rgb(0 0 0 / 0.16); }
+  .schedule-menu { position:absolute; z-index:70; bottom:calc(100% + 0.35rem); left:0; max-height:min(30rem,calc(100vh - 1rem)); }
   .schedule-menu.align-right { right:0; left:auto; }
-  .schedule-menu.manage { width:min(36rem,calc(100vw - 1rem)); padding:0.35rem 0.25rem 0.25rem; }
+  .schedule-menu.manage { width:min(36rem,calc(100vw - 1rem)); }
   .schedule-header { display:flex; min-height:2rem; align-items:center; gap:0.35rem; padding:0.2rem 0.35rem 0.35rem; }
-  .schedule-header strong { min-width:0; flex:1; font-size: calc(0.75rem * var(--type-scale)); font-weight:600; }
-  .header-icon { display:grid; width:1.65rem; height:1.65rem; place-items:center; border-radius:0.4rem; color:var(--muted-foreground); }
+  .schedule-header strong { min-width:0; flex:1; font-weight:600; }
+  .header-icon { display:grid; width:1.65rem; height:1.65rem; place-items:center; border-radius:var(--floating-item-radius); color:var(--muted-foreground); }
   .header-icon:hover { background:var(--accent); color:var(--foreground); }
-  .clear-schedule { flex:0 0 auto; border-radius:0.35rem; padding:0.25rem 0.35rem; color:var(--muted-foreground); font-size: calc(0.68rem * var(--type-scale)); }
+  .clear-schedule { flex:0 0 auto; border-radius:var(--floating-item-radius); padding:0.25rem 0.35rem; color:var(--muted-foreground); font-size:var(--panel-detail-font-size); }
   .clear-schedule:hover { background:var(--accent); color:var(--foreground); }
   .schedule-choices { display:grid; gap:0.1rem; }
-  .schedule-choices > button { position:relative; display:grid; min-height:2.55rem; gap:0.05rem; border-radius:0.45rem; padding:0.35rem 2rem 0.35rem 0.5rem; text-align:left; }
-  .schedule-choices > button:hover:not(:disabled),.schedule-choices > button.selected { background:var(--accent); color:var(--foreground); }
-  .schedule-choices > button:disabled { opacity:0.45; }
-  .schedule-choices span { font-size: calc(0.75rem * var(--type-scale)); }
-  .schedule-choices small { color:var(--muted-foreground); font-size: calc(0.66rem * var(--type-scale)); }
-  .schedule-choices .custom-schedule-button { min-height:2.25rem; }
-  :global(.choice-check) { position:absolute; top:50%; right:0.55rem; color:var(--foreground); transform:translateY(-50%); }
+  .choice-copy { display:grid; min-width:0; flex:1 1 0%; gap:0.05rem; }
   .custom-schedule { display:grid; gap:0.4rem; padding:0.15rem 0.25rem 0.3rem; }
-  .schedule-time-button { display:flex; min-height:2rem; align-items:center; gap:0.5rem; border-radius:0.4rem; padding:0.35rem 0.5rem; color:var(--muted-foreground); font-size: calc(0.75rem * var(--type-scale)); text-align:left; }
+  .schedule-time-button { display:flex; min-height:var(--panel-row-height); align-items:center; gap:0.5rem; border-radius:var(--floating-item-radius); padding:0.25rem 0.5rem; color:var(--muted-foreground); text-align:left; }
   .schedule-time-button:hover,.schedule-time-button[aria-expanded="true"] { background:var(--accent); color:var(--foreground); }
-  .schedule-submit { min-height:2.15rem; border-radius:0.5rem; background:var(--primary); color:var(--primary-foreground); font-size: calc(0.75rem * var(--type-scale)); font-weight:600; }
+  .schedule-submit { min-height:var(--panel-row-height); border-radius:var(--floating-item-radius); background:var(--primary); color:var(--primary-foreground); font-weight:600; }
   .schedule-submit:disabled { opacity:0.45; }
   .scheduled-list { max-height:min(28rem,calc(100vh - 7rem)); overflow-y:auto; overscroll-behavior:contain; }
-  .schedule-error { padding:0.4rem 0.35rem 0.2rem; color:var(--destructive); font-size: calc(0.7rem * var(--type-scale)); }
+  .schedule-error { padding:0.4rem 0.35rem 0.2rem; color:var(--destructive); font-size:var(--panel-detail-font-size); }
   :global(.schedule-time-picker .time-picker-scroll) { max-height:var(--chat-schedule-time-picker-max-height,12.5rem); }
-  @media (forced-colors:active) { .schedule-menu { border:1px solid CanvasText; } }
 </style>

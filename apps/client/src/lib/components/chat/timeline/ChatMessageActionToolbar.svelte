@@ -74,7 +74,7 @@
 </script>
 
 <div
-  class="message-action-controls"
+  class="message-action-controls surface-floating"
   class:visible
   class:grouped-message={placement === "grouped-message"}
   data-message-action-kind={target.kind}
@@ -131,7 +131,7 @@
 </div>
 
 <style>
-  .message-action-controls { pointer-events:none; position:absolute; top:var(--chat-message-action-anchor-bottom,1.25rem); right:0; z-index:2; display:flex; align-items:center; overflow:hidden; border:1px solid var(--border); border-radius:0.45rem; background:var(--popover); box-shadow:none; opacity:0; transform:translateY(-100%); }
+  .message-action-controls { pointer-events:none; position:absolute; top:var(--chat-message-action-anchor-bottom,1.25rem); right:0; z-index:2; display:flex; align-items:center; overflow:hidden; opacity:0; transform:translateY(-100%); }
   .message-action-controls.grouped-message { top:0; transform:translateY(-50%); }
   .message-action-controls.visible,.message-action-controls:focus-within { pointer-events:auto; opacity:1; }
   .message-action-button { display:inline-grid; width:1.75rem; height:1.75rem; flex:0 0 auto; place-items:center; border-radius:0; color:var(--muted-foreground); }

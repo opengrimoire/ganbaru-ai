@@ -588,7 +588,7 @@
           {#if activeTab}
             <div class="notes-tab-tools" aria-label={t("notes.tabActions", activeTabIndex + 1)}>
               <input
-                class="notes-tab-label-input"
+                class="notes-tab-label-input field"
                 type="text"
                 value={activeLabelDraft}
                 aria-label={t("notes.renameTab", activeTabIndex + 1)}
@@ -864,19 +864,11 @@
   .notes-tab-label-input {
     min-width: 0;
     height: 1.9rem;
-    border: 1px solid var(--border);
-    border-radius: 0.375rem;
-    background: var(--background);
+    min-height: 0;
     color: var(--foreground);
     font-size: calc(0.78rem * var(--type-scale));
-    outline: none;
   }
 
-  .notes-tab-label-input {
-    padding: 0 0.5rem;
-  }
-
-  .notes-tab-label-input:focus-visible,
   .notes-tab-tool-button:focus-visible {
     box-shadow: 0 0 0 2px color-mix(in srgb, var(--ring) 65%, transparent);
   }

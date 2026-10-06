@@ -43,7 +43,7 @@
 <div
   bind:this={rootElement}
   use:portal
-  class="fixed z-100 overflow-y-auto rounded-xl border border-border p-2.5 shadow-xl"
+  class="surface-floating fixed z-100 overflow-y-auto p-2.5"
   {style}
   role="dialog"
   data-app-floating-surface
@@ -52,7 +52,7 @@
   <button
     type="button"
     {disabled}
-    class="flex h-5.5 w-full items-center justify-center gap-2 rounded-md text-[0.8rem] text-foreground hover:bg-accent"
+    class="flex h-5.5 w-full items-center justify-center gap-2 rounded-floating-item text-foreground hover:bg-accent"
     aria-label={automaticLabel}
     data-app-tooltip-disabled="true"
     onclick={(event) => {
@@ -84,7 +84,7 @@
       <button
         type="button"
         {disabled}
-        class="flex size-5.5 items-center justify-center rounded-md hover:bg-accent"
+        class="flex size-5.5 items-center justify-center rounded-floating-item hover:bg-accent"
         aria-label={iconColorLabel(color)}
         data-app-tooltip-disabled="true"
         onclick={(event) => {

@@ -1,9 +1,10 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
   import { getLocalization } from "$lib/i18n/translator.svelte";
+  import { scrollEdgeFadeAction } from "$lib/utils/scroll-edge-fade";
   import { toRoundTripDiagnosticItem } from "$lib/notes/round-trip-diagnostics";
   import type { NotesNotionApiImportResult } from "$lib/notes/types";
-  import NotesCheckboxField from "$lib/components/notes/NotesCheckboxField.svelte";
+  import Checkbox from "$lib/components/ui/Checkbox.svelte";
   import NotesImportDestinationRow from "./NotesImportDestinationRow.svelte";
   import NotesRoundTripDiagnostics from "$lib/components/notes/NotesRoundTripDiagnostics.svelte";
   import NotesTransferFieldRow from "./NotesTransferFieldRow.svelte";
@@ -196,13 +197,13 @@
   }}
 >
   {#if !embedded}
-    <div class="absolute inset-0 bg-black/50"></div>
+    <div class="surface-backdrop absolute inset-0"></div>
   {/if}
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
     class={embedded
       ? "flex min-h-0 flex-col text-card-foreground outline-none"
-      : "relative z-10 flex max-h-[min(92vh,46rem)] w-[min(44rem,100%)] flex-col rounded-md border border-border bg-card text-card-foreground shadow-lg outline-none"}
+      : "relative z-10 flex max-h-[min(92vh,46rem)] w-[min(44rem,100%)] flex-col surface-dialog outline-none"}
     role={embedded ? "region" : "dialog"}
     aria-modal={embedded ? undefined : "true"}
     aria-label={t("notes.notionApiImportDialogTitle")}
@@ -219,7 +220,7 @@
       {/if}
     </div>
 
-    <div class={embedded ? "px-4 py-3" : "min-h-0 flex-1 overflow-auto px-4 py-3"}>
+    <div class={embedded ? "px-4 py-3" : "min-h-0 flex-1 overflow-auto px-4 py-3"} use:scrollEdgeFadeAction>
       <div class="grid gap-3">
         <NotesImportDestinationRow bind:projectId />
 
@@ -233,7 +234,7 @@
             id="notes-notion-api-token"
             aria-label={t("notes.notionApiImportTokenLabel")}
             bind:this={tokenInputEl}
-            class="h-7 w-72 max-w-full rounded-md border border-border bg-card px-2.5 text-[0.8rem] text-foreground outline-none focus:border-ring dark:bg-transparent max-[560px]:w-full"
+            class="field w-72 max-w-full text-panel text-foreground max-[560px]:w-full"
             type="password"
             bind:value={integrationToken}
             autocomplete="off"
@@ -248,7 +249,7 @@
         >
           <input
             id="notes-notion-api-workspace"
-            class="h-7 w-72 max-w-full rounded-md border border-border bg-card px-2.5 text-[0.8rem] text-foreground outline-none focus:border-ring dark:bg-transparent max-[560px]:w-full"
+            class="field w-72 max-w-full text-panel text-foreground max-[560px]:w-full"
             bind:value={sourceWorkspaceId}
             spellcheck="false"
           />
@@ -263,7 +264,7 @@
           >
             <textarea
               id="notes-notion-api-page-ids"
-              class="min-h-28 w-full resize-y rounded-md border border-border bg-card px-2.5 py-2 font-mono text-[0.8rem] leading-relaxed text-foreground outline-none focus:border-ring dark:bg-transparent"
+              class="field min-h-28 w-full resize-y py-2 font-mono text-panel leading-relaxed text-foreground"
               bind:value={pageIdsText}
               spellcheck="false"
             ></textarea>
@@ -277,7 +278,7 @@
           >
             <textarea
               id="notes-notion-api-data-source-ids"
-              class="min-h-28 w-full resize-y rounded-md border border-border bg-card px-2.5 py-2 font-mono text-[0.8rem] leading-relaxed text-foreground outline-none focus:border-ring dark:bg-transparent"
+              class="field min-h-28 w-full resize-y py-2 font-mono text-panel leading-relaxed text-foreground"
               bind:value={dataSourceIdsText}
               spellcheck="false"
             ></textarea>
@@ -289,7 +290,7 @@
             label={t("notes.notionApiImportIncludeComments")}
             description={t("notes.notionApiImportIncludeCommentsDescription")}
           >
-            <NotesCheckboxField
+            <Checkbox
               bind:checked={includeComments}
               label={t("notes.notionApiImportIncludeComments")}
             />
@@ -298,7 +299,7 @@
             label={t("notes.notionApiImportIncludeUsers")}
             description={t("notes.notionApiImportIncludeUsersDescription")}
           >
-            <NotesCheckboxField
+            <Checkbox
               bind:checked={includeUsers}
               label={t("notes.notionApiImportIncludeUsers")}
             />
@@ -307,7 +308,7 @@
             label={t("notes.notionApiImportKeepExternalFiles")}
             description={t("notes.notionApiImportKeepExternalFilesDescription")}
           >
-            <NotesCheckboxField
+            <Checkbox
               bind:checked={keepExternalFileReferences}
               label={t("notes.notionApiImportKeepExternalFiles")}
             />

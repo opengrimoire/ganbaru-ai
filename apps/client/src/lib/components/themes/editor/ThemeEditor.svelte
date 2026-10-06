@@ -30,6 +30,7 @@
   import ThemeTokenEditor from "./ThemeTokenEditor.svelte";
   import ActionToast from "$lib/components/ui/ActionToast.svelte";
   import { BUILD_PLATFORM_PROFILE } from "$lib/platform";
+  import { scrollEdgeFadeAction } from "$lib/utils/scroll-edge-fade";
   import {
     SOURCE_GROUPS,
     isCalendarGroup,
@@ -166,7 +167,7 @@
     class="theme-editor-chrome relative z-20 flex shrink-0 flex-col gap-1.5 border-b border-border/70 bg-sidebar px-3 py-2"
   >
     <div
-      class="theme-editor-identity flex h-9 min-w-0 items-center overflow-hidden rounded-md border border-border bg-card text-[0.733333rem] text-muted-foreground dark:bg-background"
+      class="theme-editor-identity field flex h-9 min-w-0 items-center overflow-hidden p-0 text-[0.733333rem] text-muted-foreground"
     >
       <button
         type="button"
@@ -218,7 +219,7 @@
         maxlength={60}
         aria-label={t("settings.theme.editor.themeName")}
         class={cn(
-          "h-full min-w-0 flex-1 bg-transparent px-3 font-medium text-muted-foreground focus:outline-none",
+          "field-bare h-full px-3 font-medium text-muted-foreground",
           readOnly && "cursor-default",
         )}
       />
@@ -603,6 +604,7 @@
     <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
     <div
       bind:this={scrollViewport}
+      use:scrollEdgeFadeAction
       class="theme-editor-scroll h-full overflow-y-auto focus:outline-none"
       role="region"
       aria-label={t("settings.theme.editor.controlsLabel")}

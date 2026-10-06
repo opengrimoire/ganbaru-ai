@@ -422,7 +422,7 @@
       onClose={controller.closeContextMenu}
     />
   {:else if controlLoadStates["text-context-menu"]?.status === "failed"}
-    <button class="fixed z-50 min-h-8 rounded-md border border-border bg-popover px-2 text-[0.8rem]" style:left={`${contextMenuPoint.x}px`} style:top={`${contextMenuPoint.y}px`} type="button" onclick={() => runtime.requestControl("text-context-menu", true)}>{t("common.retry")}</button>
+    <button class="surface-floating fixed z-50 min-h-8 px-2" style:left={`${contextMenuPoint.x}px`} style:top={`${contextMenuPoint.y}px`} type="button" onclick={() => runtime.requestControl("text-context-menu", true)}>{t("common.retry")}</button>
   {/if}
 {/if}
 {#if mentionOpen || slashOpen}
@@ -467,7 +467,7 @@
     onCancel={controller.cancelLinkEditor}
     />
   {:else if controlLoadStates["link-editor"]?.status === "failed"}
-    <button class="fixed z-60 min-h-8 rounded-md border border-border bg-popover px-2 text-[0.8rem]" type="button" onclick={() => runtime.requestControl("link-editor", true)}>{t("common.retry")}</button>
+    <button class="surface-floating fixed z-60 min-h-8 px-2" type="button" onclick={() => runtime.requestControl("link-editor", true)}>{t("common.retry")}</button>
   {/if}
 {/if}
 

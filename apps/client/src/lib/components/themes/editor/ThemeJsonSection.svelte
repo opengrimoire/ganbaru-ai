@@ -53,7 +53,7 @@
       readonly={isBuiltin}
       spellcheck={false}
       rows={12}
-      class="w-full resize-y rounded-md border border-border bg-background p-2 text-[0.733333rem] text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+      class="field w-full resize-y p-2 text-[0.733333rem] text-foreground"
     ></textarea>
     {#if jsonErrors.length > 0}
       <ul

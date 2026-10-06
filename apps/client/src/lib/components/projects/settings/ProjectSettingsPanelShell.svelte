@@ -7,6 +7,7 @@
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import { cn } from "$lib/utils";
+  import { scrollEdgeFadeAction } from "$lib/utils/scroll-edge-fade";
 
   let {
     presentation,
@@ -44,64 +45,23 @@
 
   const { t } = getLocalization();
 
-  let contentElement = $state<HTMLElement | undefined>();
   let discardConfirmOpen = $state(false);
-  let scrollable = $state(false);
-  let canScrollUp = $state(false);
-  let canScrollDown = $state(false);
-  let scrollStateFrame: number | null = null;
-
-  function refreshScrollState(): void {
-    scrollStateFrame = null;
-    const element = scrollElement;
-    if (!element) {
-      scrollable = false;
-      canScrollUp = false;
-      canScrollDown = false;
-      return;
-    }
-    const maxScrollTop = element.scrollHeight - element.clientHeight;
-    scrollable = maxScrollTop > 1;
-    canScrollUp = element.scrollTop > 1;
-    canScrollDown = element.scrollTop < maxScrollTop - 1;
-  }
-
-  function requestScrollStateRefresh(): void {
-    if (scrollStateFrame !== null) cancelAnimationFrame(scrollStateFrame);
-    scrollStateFrame = requestAnimationFrame(refreshScrollState);
-  }
 
   function confirmDiscard(): void {
     discardConfirmOpen = false;
     onDiscard();
   }
-
-  $effect(() => {
-    const element = scrollElement;
-    if (!element) return;
-    const resizeObserver = new ResizeObserver(requestScrollStateRefresh);
-    resizeObserver.observe(element);
-    if (contentElement) resizeObserver.observe(contentElement);
-    requestScrollStateRefresh();
-    return () => {
-      resizeObserver.disconnect();
-      if (scrollStateFrame !== null) {
-        cancelAnimationFrame(scrollStateFrame);
-        scrollStateFrame = null;
-      }
-    };
-  });
 </script>
 
 <aside
   class={cn(
-    "project-settings-panel flex min-h-0 flex-col bg-card",
+    "project-settings-panel flex min-h-0 flex-col",
     presentation === "popover"
       ? "h-full w-full"
-      : "w-[min(23rem,42vw)] min-w-64 shrink-0 border-l border-border max-[760px]:fixed max-[760px]:inset-2 max-[760px]:z-30 max-[760px]:w-auto max-[760px]:rounded-md max-[760px]:border",
+      : "w-[min(23rem,42vw)] min-w-64 shrink-0 border-l border-border bg-card max-[760px]:fixed max-[760px]:inset-2 max-[760px]:z-30 max-[760px]:w-auto max-[760px]:rounded-floating max-[760px]:border max-[760px]:shadow-floating",
   )}
 >
-  <header class="sticky top-0 z-10 flex shrink-0 items-center gap-2 bg-card px-3 pb-1 pt-2">
+  <header class="sticky top-0 z-10 flex shrink-0 items-center gap-2 px-3 pb-1 pt-2">
     <div class="min-w-0 flex-1">
       <div class="truncate text-[0.8125rem] font-medium">{title}</div>
     </div>
@@ -135,15 +95,10 @@
         <div
           bind:this={scrollElement}
           data-settings-content
-          class={cn(
-            "project-settings-scroll-area hide-scrollbar h-full min-h-0 overflow-y-auto px-3 pb-3 pt-1",
-            scrollable && canScrollUp && canScrollDown && "project-settings-scroll-both",
-            scrollable && canScrollUp && !canScrollDown && "project-settings-scroll-top",
-            scrollable && !canScrollUp && canScrollDown && "project-settings-scroll-bottom",
-          )}
-          onscroll={refreshScrollState}
+          use:scrollEdgeFadeAction
+          class="hide-scrollbar h-full min-h-0 overflow-y-auto px-3 pb-3 pt-1"
         >
-          <fieldset bind:this={contentElement} disabled={saving} inert={saving} class="flex min-w-0 flex-col gap-3 border-0 p-0">
+          <fieldset disabled={saving} inert={saving} class="flex min-w-0 flex-col gap-3 border-0 p-0">
             {@render children()}
           </fieldset>
         </div>
@@ -155,9 +110,9 @@
         />
       </div>
 
-      <footer class="flex shrink-0 items-center gap-2 bg-card px-3 pb-2 pt-1">
+      <footer class="flex shrink-0 items-center gap-2 px-3 pb-2 pt-1">
         {#if error}
-          <div class="min-w-0 flex-1 rounded-md border border-destructive/30 bg-destructive/10 px-2 py-1.5 text-[0.766667rem] text-destructive">
+          <div class="min-w-0 flex-1 rounded-md border border-destructive/30 bg-destructive/10 px-2 py-1.5 text-panel-detail text-destructive">
             {error}
           </div>
         {:else}
@@ -197,38 +152,5 @@
   .project-settings-panel {
     --cal-scrollbar-thumb: color-mix(in srgb, var(--card-foreground) 18%, var(--card));
     --cal-scrollbar-thumb-hover: color-mix(in srgb, var(--card-foreground) 36%, var(--card));
-  }
-
-  .project-settings-scroll-area {
-    --project-settings-scroll-fade-size: 2rem;
-
-    transition: -webkit-mask-image 120ms ease, mask-image 120ms ease;
-  }
-
-  .project-settings-scroll-top {
-    -webkit-mask-image: linear-gradient(to bottom, transparent, black var(--project-settings-scroll-fade-size), black);
-    mask-image: linear-gradient(to bottom, transparent, black var(--project-settings-scroll-fade-size), black);
-  }
-
-  .project-settings-scroll-bottom {
-    -webkit-mask-image: linear-gradient(to bottom, black, black calc(100% - var(--project-settings-scroll-fade-size)), transparent);
-    mask-image: linear-gradient(to bottom, black, black calc(100% - var(--project-settings-scroll-fade-size)), transparent);
-  }
-
-  .project-settings-scroll-both {
-    -webkit-mask-image: linear-gradient(
-      to bottom,
-      transparent,
-      black var(--project-settings-scroll-fade-size),
-      black calc(100% - var(--project-settings-scroll-fade-size)),
-      transparent
-    );
-    mask-image: linear-gradient(
-      to bottom,
-      transparent,
-      black var(--project-settings-scroll-fade-size),
-      black calc(100% - var(--project-settings-scroll-fade-size)),
-      transparent
-    );
   }
 </style>

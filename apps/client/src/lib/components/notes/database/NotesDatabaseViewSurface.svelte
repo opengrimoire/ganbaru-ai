@@ -57,6 +57,8 @@
   import CollectionMenu from "$lib/components/collections/CollectionMenu.svelte";
   import CollectionMenuItem from "$lib/components/collections/CollectionMenuItem.svelte";
   import CollectionMenuSeparator from "$lib/components/collections/CollectionMenuSeparator.svelte";
+  import Switch from "$lib/components/ui/Switch.svelte";
+  import { cn } from "$lib/utils";
   import {
     loadNotesDatabaseView,
     retryNotesDatabaseView,
@@ -423,6 +425,15 @@
     }
   }
 
+  /**
+   * Mark the switch inside a settings row so the settings panel arrow keys reach it like other rows.
+   *
+   * @param node Row element that contains the switch.
+   */
+  function settingsRowSwitch(node: HTMLElement): void {
+    node.querySelector<HTMLButtonElement>("button[role=\"switch\"]")?.setAttribute("data-collection-settings-row", "");
+  }
+
   function beginRename(): void {
     if (selectionDisabled || editingLocked) return;
     nameDraft = selectedView?.name ?? "";
@@ -486,10 +497,10 @@
   {#if selectedView}
     {@const Icon = viewIcons[selectedView.type as NotesDatabaseViewKind]}
     <div class="flex min-w-0 items-center gap-1.5 pb-1.5">
-      <span class="inline-flex size-8 shrink-0 items-center justify-center rounded-md border border-border text-muted-foreground">
+      <span class="inline-flex size-8 shrink-0 items-center justify-center rounded-floating-item border border-border text-muted-foreground">
         <Icon class="size-4" strokeWidth={1.75} aria-hidden="true" />
       </span>
-      <input class="h-8 min-w-0 flex-1 rounded-md border border-border bg-transparent px-2 text-[length:inherit] outline-none" aria-label={t("notes.databaseViewName")} value={selectedView.name} disabled={selectionDisabled || editingLocked}
+      <input class="field min-w-0 flex-1" aria-label={t("notes.databaseViewName")} value={selectedView.name} disabled={selectionDisabled || editingLocked}
         onblur={(event) => { nameDraft = event.currentTarget.value; void saveName(); }}
         onkeydown={(event) => { if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); } }} />
     </div>
@@ -507,7 +518,7 @@
         }} />
     {/each}
     <CollectionMenuSeparator />
-    <input class="mb-1 h-8 w-full min-w-0 rounded-md border border-border bg-transparent px-2 text-[length:inherit] outline-none" aria-label={t("notes.databaseSourceName")} placeholder={t("notes.databaseSourceName")}
+    <input class="field mb-1 w-full min-w-0" aria-label={t("notes.databaseSourceName")} placeholder={t("notes.databaseSourceName")}
       bind:value={sourceName} disabled={selectionDisabled || editingLocked} onkeydown={(event) => event.stopPropagation()} />
     <CollectionMenuItem icon={Plus} label={t("notes.databaseSourceCreate")} disabled={selectionDisabled || editingLocked || !sourceName.trim()} onclick={() => { void manageSource(); }} />
     <CollectionMenuSeparator />
@@ -518,11 +529,11 @@
     {#if otherSources.length === 0 && !sourcesLoading}<p class="px-2 py-1 text-muted-foreground">{t("notes.databaseSourceNoOtherSources")}</p>{/if}
     <p class="px-2 py-1 text-muted-foreground">{t("notes.databaseSourceSharedDescription")}</p>
   </CollectionMenu>
-  <button data-collection-settings-row type="button" role="switch" aria-checked={editingLocked} aria-label={t("notes.databaseEditingLock")} disabled={selectionDisabled}
-    class="flex min-h-8 w-full min-w-0 items-center gap-2 rounded-md px-2 text-left hover:bg-accent disabled:cursor-not-allowed disabled:text-muted-foreground/60 disabled:hover:bg-transparent" onclick={() => { void toggleEditingLock(); }}>
+  <label class={cn("flex min-h-(--panel-row-height) w-full min-w-0 items-center gap-2 px-2", selectionDisabled ? "cursor-not-allowed text-muted-foreground/60" : "cursor-pointer")} use:settingsRowSwitch>
     {#if editingLocked}<Lock class="size-3.5 shrink-0 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />{:else}<LockOpen class="size-3.5 shrink-0 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />{/if}
-    <span class="min-w-0 flex-1 truncate">{t(editingLocked ? "notes.databaseUnlockLayout" : "notes.databaseLockLayout")}</span>
-  </button>
+    <span class="min-w-0 flex-1 truncate">{t("notes.databaseLockLayout")}</span>
+    <Switch checked={editingLocked} ariaLabel={t("notes.databaseEditingLock")} disabled={selectionDisabled} onChange={() => { void toggleEditingLock(); }} />
+  </label>
   {#if editingLocked}<p class="px-2 py-1 text-muted-foreground">{t("notes.databaseEditingLockDescription")}</p>{/if}
   <CollectionMenuSeparator />
 {/snippet}
@@ -537,11 +548,11 @@
     {/each}
     {#if overflowCount > 0}
       <CollectionMenu label={t("notes.databaseMoreViews", overflowCount)} kind="actions" showHeader={false} dismissOnAction disabled={selectionDisabled}>
-        <input class="mb-1.5 h-8 w-full rounded-md border border-border bg-transparent px-2 text-[length:inherit] outline-none" aria-label={t("notes.databaseSearchViews")} placeholder={t("notes.databaseSearchViews")} bind:value={viewSearch} />
+        <input class="field mb-1.5 w-full" aria-label={t("notes.databaseSearchViews")} placeholder={t("notes.databaseSearchViews")} bind:value={viewSearch} />
         <div class="grid gap-0">
           {#each searchableViews as view (view.id)}
             {@const Icon = viewIcons[view.type as NotesDatabaseViewKind]}
-            <button type="button" class="flex min-h-8 items-center gap-2 rounded px-2 text-left hover:bg-accent" disabled={selectionDisabled} onclick={() => selectViewFromToolbar(view.id)}>
+            <button type="button" class="menu-item" disabled={selectionDisabled} onclick={() => selectViewFromToolbar(view.id)}>
               <Icon class="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" /><span class="min-w-0 flex-1 truncate">{view.name}</span>
             </button>
           {/each}
@@ -549,28 +560,29 @@
       </CollectionMenu>
     {/if}
     <CollectionMenu label={t("notes.databaseAddView")} kind="new" iconOnly showHeader={false} dismissOnAction disabled={selectionDisabled || editingLocked}>
-      <p class="mb-2 text-muted-foreground">{t("notes.databaseAddView")}</p>
+      <p class="menu-label">{t("notes.databaseAddView")}</p>
       <div class="grid gap-0">
         {#each NOTES_DATABASE_VIEW_KINDS as kind}
           {@const Icon = viewIcons[kind]}
-          <button type="button" class="flex min-h-9 items-center gap-2 rounded px-2 text-left text-foreground hover:bg-accent" disabled={selectionDisabled || editingLocked} onclick={() => { void addView(kind); }}>
+          <button type="button" class="menu-item text-foreground" disabled={selectionDisabled || editingLocked} onclick={() => { void addView(kind); }}>
             <Icon class="size-4 shrink-0 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" /><span>{viewLabel(kind)}</span>
           </button>
         {/each}
       </div>
-      <div class="mt-1 border-t border-border pt-1">
-        <button type="button" class="flex min-h-9 w-full items-center rounded-md px-2 text-left hover:bg-accent" onclick={onCreateLinkedDatabaseView}>{t("notes.databaseLinkedViewCreate")}</button>
+      <div class="menu-separator" role="separator"></div>
+      <div>
+        <button type="button" class="menu-item" onclick={onCreateLinkedDatabaseView}>{t("notes.databaseLinkedViewCreate")}</button>
       </div>
     </CollectionMenu>
     {#if selectedView}
       <CollectionMenu label={t("notes.databaseViewActions")} kind="actions" iconOnly showHeader={false} disabled={selectionDisabled}>
         {#if editingName}
-          <input bind:this={nameInput} class="h-9 w-full rounded-md border border-border bg-transparent px-2 outline-none" aria-label={t("notes.databaseViewName")} bind:value={nameDraft} onkeydown={(event) => { event.stopPropagation(); if (event.key === "Enter") void saveName(); if (event.key === "Escape") { nameDraft = selectedView?.name ?? ""; editingName = false; } }} onblur={() => { if (editingName) void saveName(); }} />
+          <input bind:this={nameInput} class="field w-full" aria-label={t("notes.databaseViewName")} bind:value={nameDraft} onkeydown={(event) => { event.stopPropagation(); if (event.key === "Enter") void saveName(); if (event.key === "Escape") { nameDraft = selectedView?.name ?? ""; editingName = false; } }} onblur={() => { if (editingName) void saveName(); }} />
         {:else}
           <div class="grid gap-0">
-            <button data-collection-menu-keep-open type="button" class="flex min-h-9 items-center gap-2 rounded-md px-2 text-left hover:bg-accent" disabled={editingLocked} onclick={beginRename}><Pencil class="size-4" />{t("notes.databaseViewRename")}</button>
-            <button type="button" class="flex min-h-9 items-center gap-2 rounded-md px-2 text-left hover:bg-accent" disabled={editingLocked} onclick={() => { void duplicateView(); }}><Copy class="size-4" />{t("notes.databaseViewDuplicate")}</button>
-            <button type="button" class="flex min-h-9 items-center gap-2 rounded-md px-2 text-left text-destructive hover:bg-destructive/10" disabled={editingLocked || supportedViews.length < 2 || (selectedView.type === "table" && supportedViews.filter((view) => view.data_source_id === activeSourceId && view.type === "table").length < 2)} onclick={() => { pendingDeleteView = selectedView; }}><Trash2 class="size-4" />{t("notes.databaseViewDelete")}</button>
+            <button data-collection-menu-keep-open type="button" class="menu-item" disabled={editingLocked} onclick={beginRename}><Pencil class="size-4" />{t("notes.databaseViewRename")}</button>
+            <button type="button" class="menu-item" disabled={editingLocked} onclick={() => { void duplicateView(); }}><Copy class="size-4" />{t("notes.databaseViewDuplicate")}</button>
+            <button type="button" class="menu-item menu-item-destructive" disabled={editingLocked || supportedViews.length < 2 || (selectedView.type === "table" && supportedViews.filter((view) => view.data_source_id === activeSourceId && view.type === "table").length < 2)} onclick={() => { pendingDeleteView = selectedView; }}><Trash2 class="size-4" />{t("notes.databaseViewDelete")}</button>
           </div>
         {/if}
       </CollectionMenu>
@@ -581,19 +593,20 @@
     <button type="button" class="min-h-8 rounded-l-md px-3 text-[0.866667rem] font-medium text-primary-foreground hover:bg-primary/90" disabled={busy} onclick={() => { void createNewRow(); }}>{t("notes.databaseNew")}</button>
     <span class="h-5 w-px bg-primary-foreground/25" aria-hidden="true"></span>
     <CollectionMenu label={t("notes.databaseNewOptions")} kind="new-options" iconOnly primary showHeader={false} dismissOnAction>
-      <p class="mb-2 text-[0.8rem] font-medium text-muted-foreground">{t("notes.databaseTemplatesTitle")}</p>
-      {#if templateError}<p class="mb-2 text-[0.8rem] text-destructive" role="alert">{templateError}</p>{/if}
+      <p class="menu-label">{t("notes.databaseTemplatesTitle")}</p>
+      {#if templateError}<p class="mb-2 px-2 text-panel-detail text-destructive" role="alert">{templateError}</p>{/if}
       {#if templates.length === 0}
-        <p class="mb-2 text-[0.8rem] text-muted-foreground">{t("notes.databaseTemplatesEmpty")}</p>
+        <p class="mb-2 px-2 text-panel-detail text-muted-foreground">{t("notes.databaseTemplatesEmpty")}</p>
       {:else}
         <div class="grid gap-0">
           {#each templates as template (template.id)}
-            <button type="button" class="min-h-9 rounded-md px-2 text-left hover:bg-accent" disabled={busy} onclick={() => { void createFromTemplate(template.id); }}>{template.name}</button>
+            <button type="button" class="menu-item" disabled={busy} onclick={() => { void createFromTemplate(template.id); }}>{template.name}</button>
           {/each}
         </div>
       {/if}
-      <div class="mt-2 border-t border-border pt-2">
-        <button type="button" class="min-h-9 w-full rounded-md px-2 text-left hover:bg-accent" disabled={selectionDisabled} onclick={openTemplateSettings}>{t("notes.databaseTemplatesManage")}</button>
+      <div class="menu-separator" role="separator"></div>
+      <div>
+        <button type="button" class="menu-item" disabled={selectionDisabled} onclick={openTemplateSettings}>{t("notes.databaseTemplatesManage")}</button>
       </div>
     </CollectionMenu>
   </div>

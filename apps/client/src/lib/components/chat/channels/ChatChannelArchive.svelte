@@ -42,7 +42,7 @@
     <h2 class="min-w-0 flex-1 truncate text-[1.05rem] font-semibold">{t("chat.channels.archive")}</h2>
   </div>
   <div class="shrink-0 px-4 py-3 sm:px-6">
-    <label class="flex max-w-xl items-center gap-1.5 rounded-md border border-border bg-background px-2 py-1.5"><Search size={16} class="text-muted-foreground" /><input class="min-w-0 flex-1 bg-transparent text-[0.866667rem] outline-none" type="search" bind:value={query} placeholder={t("chat.channels.searchArchive")} aria-label={t("chat.channels.searchArchive")} /></label>
+    <label class="field flex max-w-xl items-center gap-1.5 px-2 py-1.5"><Search size={16} class="text-muted-foreground" /><input class="field-bare text-[0.866667rem]" type="search" bind:value={query} placeholder={t("chat.channels.searchArchive")} aria-label={t("chat.channels.searchArchive")} /></label>
   </div>
   <div class="min-h-0 flex-1 overflow-auto px-4 pb-5 sm:px-6">
     {#if error}<p class="py-2 text-sm text-destructive" role="alert">{error}</p>{/if}

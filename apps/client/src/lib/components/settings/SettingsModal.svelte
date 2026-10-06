@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, untrack } from "svelte";
   import { cn } from "$lib/utils";
+  import { scrollEdgeFadeAction } from "$lib/utils/scroll-edge-fade";
   import ArrowLeft from "@lucide/svelte/icons/arrow-left";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import SettingsIcon from "@lucide/svelte/icons/settings";
@@ -422,6 +423,7 @@
       <section
         bind:this={settingsScrollEl}
         data-settings-content
+        use:scrollEdgeFadeAction
         class={cn(
           "mobile-settings-content min-h-0 flex-1",
           detailView ? "overflow-hidden" : "overflow-y-auto px-4 py-5",
@@ -501,6 +503,7 @@
 
       <nav
         aria-label={t("mobile.settings.categoriesLabel")}
+        use:scrollEdgeFadeAction
         class="min-h-0 flex-1 overflow-y-auto px-3 py-3"
       >
         <div class="mx-auto flex w-full max-w-xl flex-col gap-1">
@@ -535,7 +538,7 @@
     requestSettingsClose();
   }}
 >
-  <div class="absolute inset-0 bg-black/50"></div>
+  <div class="surface-backdrop absolute inset-0"></div>
   <div
     bind:this={modalPanel}
     data-settings-modal-panel
@@ -545,10 +548,10 @@
     tabindex="-1"
     data-settings-section={activeSection}
     class={cn(
-      "relative z-10 flex overflow-hidden border border-border bg-card shadow-2xl dark:bg-background",
+      "surface-dialog relative z-10 flex overflow-hidden",
       useTopNav
-        ? "h-[calc(100dvh-0.5rem)] w-full flex-col rounded-md"
-        : "h-[80vh] rounded-lg",
+        ? "h-[calc(100dvh-0.5rem)] w-full flex-col"
+        : "h-[80vh]",
       !useTopNav && useIconRail ? "w-[min(760px,94vw)]" : "",
       !useTopNav && !useIconRail ? "w-[min(900px,90vw)]" : "",
     )}

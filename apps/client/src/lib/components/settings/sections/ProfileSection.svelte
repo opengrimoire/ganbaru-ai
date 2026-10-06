@@ -228,7 +228,7 @@
 
         <input
           id="profile-display-name"
-          class="h-7 w-44 min-w-0 rounded-md border border-border bg-card px-2.5 text-left text-[0.8rem] font-medium text-foreground outline-none transition-colors focus:border-ring disabled:opacity-60 dark:bg-transparent max-[520px]:w-full"
+          class="field w-44 min-w-0 px-2.5 text-left text-[0.8rem] font-medium text-foreground max-[520px]:w-full"
           value={draftDisplayName}
           maxlength={PROFILE_DISPLAY_NAME_MAX_CHARS}
           disabled={saving}
@@ -253,7 +253,7 @@
 
         <input
           id="profile-full-name"
-          class="h-7 w-44 min-w-0 rounded-md border border-border bg-card px-2.5 text-left text-[0.8rem] font-medium text-foreground outline-none transition-colors focus:border-ring disabled:opacity-60 dark:bg-transparent max-[520px]:w-full"
+          class="field w-44 min-w-0 px-2.5 text-left text-[0.8rem] font-medium text-foreground max-[520px]:w-full"
           value={draftFullName}
           maxlength={PROFILE_FULL_NAME_MAX_CHARS}
           disabled={saving}

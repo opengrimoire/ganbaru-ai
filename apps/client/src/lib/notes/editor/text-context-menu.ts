@@ -1,3 +1,5 @@
+import { FLOATING_WIDTH } from "$lib/components/ui/floating-width";
+
 export interface NotesTextMenuPoint {
   x: number;
   y: number;
@@ -37,8 +39,8 @@ export function notesTextContextMenuSelectionAtPoint(
 
 const MENU_MARGIN = 8;
 const MENU_GAP = 4;
-const MENU_WIDTH = 192;
-export const NOTES_TEXT_CONTEXT_SUBMENU_WIDTH = 168;
+const MENU_WIDTH = FLOATING_WIDTH.sm;
+export const NOTES_TEXT_CONTEXT_SUBMENU_WIDTH = FLOATING_WIDTH.sm;
 
 function clamp(value: number, minimum: number, maximum: number): number {
   return Math.min(Math.max(value, minimum), Math.max(minimum, maximum));

@@ -902,10 +902,10 @@
         <input bind:this={fileInput} class="sr-only" type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple onchange={(event) => void importFiles([...(event.currentTarget.files ?? [])])} />
         <details bind:this={attachmentMenu} class="attachment-menu">
           <summary aria-label={t("chat.composer.attachImages")}><Plus size={15} /></summary>
-          <div>
-            <button type="button" title={t("chat.composer.imageLimit")} disabled={importing} onclick={() => { attachmentMenu?.removeAttribute("open"); fileInput?.click(); }}>{#if importing}<LoaderCircle size={14} class="animate-spin" />{:else}<Paperclip size={14} />{/if}{t("chat.composer.attachImages")}</button>
-            <button type="button" onclick={() => { attachmentMenu?.removeAttribute("open"); void run(() => chat.pickComposerImages(t("chat.composer.imagePickerTitle"))); }}><ImagePlus size={14} />{t("chat.composer.imagePickerTitle")}</button>
-            <button type="button" onclick={insertMentionTrigger}><AtSign size={14} />{t("chat.composer.mentionFiles")}</button>
+          <div class="surface-floating surface-floating-body w-floating-sm">
+            <button type="button" class="menu-item" title={t("chat.composer.imageLimit")} disabled={importing} onclick={() => { attachmentMenu?.removeAttribute("open"); fileInput?.click(); }}>{#if importing}<LoaderCircle size={14} class="animate-spin" />{:else}<Paperclip size={14} />{/if}{t("chat.composer.attachImages")}</button>
+            <button type="button" class="menu-item" onclick={() => { attachmentMenu?.removeAttribute("open"); void run(() => chat.pickComposerImages(t("chat.composer.imagePickerTitle"))); }}><ImagePlus size={14} />{t("chat.composer.imagePickerTitle")}</button>
+            <button type="button" class="menu-item" onclick={insertMentionTrigger}><AtSign size={14} />{t("chat.composer.mentionFiles")}</button>
           </div>
         </details>
         <ChatAccessControl />
@@ -961,16 +961,14 @@
   .composer-mode:hover { background: var(--accent); color: var(--foreground); }
   .composer-mode :global(svg) { flex: 0 0 auto; }
   .composer-mode span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .attachment-menu > div { position: absolute; left: 0; bottom: calc(100% + 0.5rem); z-index: 35; display: grid; min-width: 13rem; gap: 0.15rem; border: 1px solid var(--border); border-radius: 0.7rem; background: var(--popover); padding: 0.35rem; box-shadow: 0 14px 36px rgb(0 0 0 / 0.2); }
-  .attachment-menu > div button { display: flex; min-height: 2rem; align-items: center; gap: 0.55rem; border-radius: 0.4rem; padding: 0.35rem 0.5rem; color: var(--foreground); font-size: calc(0.733333rem * var(--type-scale)); text-align: left; }
-  .attachment-menu > div button:hover { background: var(--accent); }
+  .attachment-menu > div { position: absolute; left: 0; bottom: calc(100% + 0.5rem); z-index: 35; display: grid; max-width: calc(100vw - 1rem); }
   .context-ring { position: relative; display: grid; width: 1.45rem; height: 1.45rem; flex: 0 0 auto; place-items: center; border-radius: 999px; color: var(--muted-foreground); outline: none; }
   .context-ring.warning { color: var(--status-tentative); }
   .context-ring svg { width: 1.2rem; height: 1.2rem; transform: rotate(-90deg); overflow: visible; }
   .context-ring circle { fill: none; stroke-width: 3; }
   .context-track { stroke: color-mix(in srgb, var(--muted-foreground) 22%, transparent); }
   .context-fill { stroke: currentColor; stroke-linecap: round; stroke-dasharray: 43.9823; stroke-dashoffset: calc(43.9823 * (1 - var(--context-progress))); transition: stroke-dashoffset 180ms ease; }
-  .context-tooltip { position: absolute; right: 50%; bottom: calc(100% + 0.55rem); z-index: 55; display: none; width: max-content; max-width: min(18rem, 80vw); transform: translateX(50%); border: 1px solid var(--border); border-radius: 0.75rem; background: var(--popover); padding: 0.55rem 0.75rem; color: var(--popover-foreground); box-shadow: 0 12px 30px rgb(0 0 0 / 0.18); text-align: center; }
+  .context-tooltip { position: absolute; right: 50%; bottom: calc(100% + 0.55rem); z-index: 55; display: none; width: max-content; max-width: min(18rem, 80vw); transform: translateX(50%); border: 1px solid var(--border); border-radius: var(--floating-radius); background: var(--popover); padding: 0.55rem 0.75rem; color: var(--popover-foreground); box-shadow: var(--floating-shadow); text-align: center; }
   .context-ring:hover .context-tooltip { display: grid; gap: 0.15rem; }
   .context-tooltip strong { color: var(--muted-foreground); font-size: calc(0.7rem * var(--type-scale)); font-weight: 400; }
   .context-tooltip span { font-size: calc(0.733333rem * var(--type-scale)); }

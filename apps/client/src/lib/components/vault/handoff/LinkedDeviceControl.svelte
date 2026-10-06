@@ -5,11 +5,13 @@
     readPairingStatus,
     type PairingStatus,
   } from "$lib/api/vault-handoff";
+  import { FLOATING_WIDTH } from "$lib/components/ui/floating-width";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import { mobileTopBarPanelGeometry } from "$lib/mobile/layout";
   import { getMobileBackStack } from "$lib/stores/mobile-back-stack.svelte";
   import { getSettingsLauncher } from "$lib/stores/settings-launcher.svelte";
   import { cn } from "$lib/utils";
+  import { scrollEdgeFadeAction } from "$lib/utils/scroll-edge-fade";
   import { getVaultOwnership } from "$lib/vault/ownership.svelte";
 
   interface HandoffPanelProps {
@@ -125,7 +127,7 @@
       anchorLeft: triggerRect.left,
       anchorWidth: triggerRect.width,
       anchorBottom: triggerRect.bottom,
-      desiredWidth: 256,
+      desiredWidth: FLOATING_WIDTH.sm,
       desiredHeight: viewportHeight,
       viewportLeft: viewportOffsetLeft + safeAreaLeft,
       viewportWidth: Math.max(0, viewportWidth - safeAreaLeft - safeAreaRight),
@@ -305,38 +307,40 @@
       role="dialog"
       aria-label={t("vaultHandoff.heading")}
       class={cn(
-        "z-50 overflow-x-hidden overflow-y-auto rounded-lg border border-border bg-popover py-1 text-popover-foreground shadow-lg",
+        "surface-floating z-50 flex flex-col overflow-hidden",
         presentation === "desktop"
-          ? "absolute right-0 top-9 max-h-[calc(100vh-3rem)] w-60 max-w-[calc(100vw-1rem)]"
-          : "fixed rounded-xl",
+          ? "absolute right-0 top-9 max-h-[calc(100vh-3rem)] w-floating-sm"
+          : "fixed",
       )}
       style={presentation === "mobile" ? mobilePanelStyle : undefined}
     >
-      {#if HandoffPanel}
-        <HandoffPanel
-          {platform}
-          presentation="control"
-          initialStatus={status}
-          onStatusChange={handleStatusChange}
-          onActivated={handleActivated}
-          onOpenDataSettings={openDataSettings}
-        />
-      {:else if panelLoadError}
-        <div class="flex flex-col gap-3 text-sm" role="alert">
-          <p class="wrap-break-word text-xs text-muted-foreground">{panelLoadError}</p>
-          <button
-            type="button"
-            class="min-h-9 rounded-md border border-border px-3 font-medium hover:bg-accent"
-            onclick={() => void loadPanel()}
-          >
-            {t("vaultHandoff.retry")}
-          </button>
-        </div>
-      {:else}
-        <p class="p-4 text-center text-sm text-muted-foreground" aria-busy="true">
-          {t("common.loading")}
-        </p>
-      {/if}
+      <div use:scrollEdgeFadeAction class="min-h-0 flex-1 overflow-x-hidden overflow-y-auto py-1">
+        {#if HandoffPanel}
+          <HandoffPanel
+            {platform}
+            presentation="control"
+            initialStatus={status}
+            onStatusChange={handleStatusChange}
+            onActivated={handleActivated}
+            onOpenDataSettings={openDataSettings}
+          />
+        {:else if panelLoadError}
+          <div class="flex flex-col gap-3" role="alert">
+            <p class="wrap-break-word text-panel-detail text-muted-foreground">{panelLoadError}</p>
+            <button
+              type="button"
+              class="min-h-9 rounded-floating-item border border-border px-3 font-medium hover:bg-accent"
+              onclick={() => void loadPanel()}
+            >
+              {t("vaultHandoff.retry")}
+            </button>
+          </div>
+        {:else}
+          <p class="p-4 text-center text-muted-foreground" aria-busy="true">
+            {t("common.loading")}
+          </p>
+        {/if}
+      </div>
     </div>
   {/if}
 </div>

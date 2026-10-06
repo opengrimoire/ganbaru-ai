@@ -1116,13 +1116,13 @@
   .chat-bottom-transition-shell.snap-transition { transition: height var(--chat-panel-transition-duration) cubic-bezier(0.22, 1, 0.36, 1); }
   .chat-sheet-backdrop { position: absolute; inset: 0; z-index: 30; background: rgb(0 0 0 / 0.28); }
   .chat-rail-backdrop { top: var(--cal-header-row-h); }
-  .chat-workspace[data-rail-presentation="sheet"] .chat-rail-shell { position: absolute; top: var(--cal-header-row-h); bottom: 0; left: 0; z-index: 40; width: min(var(--explorer-width), 88cqw); min-width: min(var(--explorer-width), 88cqw); box-shadow: 8px 0 28px rgb(0 0 0 / 0.22); }
+  .chat-workspace[data-rail-presentation="sheet"] .chat-rail-shell { position: absolute; top: var(--cal-header-row-h); bottom: 0; left: 0; z-index: 40; width: min(var(--explorer-width), 88cqw); min-width: min(var(--explorer-width), 88cqw); box-shadow: var(--floating-shadow); }
   .chat-workspace[data-rail-presentation="sheet"] .chat-rail-shell.closed { transform: translateX(-105%); }
   .chat-workspace.mobile-rail-surface .chat-rail-shell { position: relative; inset: auto; z-index: auto; grid-column: 1 / 7; grid-row: 2 / 5; width: 100%; min-width: 0; background: var(--cal-bg); box-shadow: none; transform: none; }
   .chat-workspace.mobile-rail-surface .chat-rail-shell.closed { display: none; transform: none; }
   .chat-workspace.mobile-rail-surface .main-shell { padding-top: var(--chat-mobile-rail-bar-height); }
   .chat-workspace.mobile-rail-surface[data-rail-open="true"] .main-shell { display: none; }
-  .chat-workspace[data-inspector-presentation="sheet"] .chat-inspector-shell { position: absolute; inset-block: 0; right: 0; z-index: 45; width: 0; box-shadow: -8px 0 28px rgb(0 0 0 / 0.22); }
+  .chat-workspace[data-inspector-presentation="sheet"] .chat-inspector-shell { position: absolute; inset-block: 0; right: 0; z-index: 45; width: 0; box-shadow: var(--floating-shadow); }
   .chat-workspace[data-inspector-presentation="sheet"] .chat-inspector-shell.open { width: min(620px, 94cqw); min-width: min(320px, 94cqw); }
   .chat-workspace[data-inspector-presentation="sheet"] .chat-inspector-content-shell { width: min(620px, 94cqw); }
   .chat-workspace[data-layout="minimum_recovery"] .chat-rail-shell, .chat-workspace[data-layout="minimum_recovery"] .chat-rail-shell.closed, .chat-workspace[data-layout="minimum_recovery"] .chat-inspector-shell.open { width: 100cqw; min-width: 0; box-shadow: none; }

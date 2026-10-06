@@ -42,7 +42,7 @@
   <button
     type="button"
     tabindex="-1"
-    class="absolute inset-0 bg-black/45"
+    class="surface-backdrop absolute inset-0"
     aria-label={closeLabel}
     onclick={onClose}
   ></button>

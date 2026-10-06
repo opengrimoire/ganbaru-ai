@@ -42,7 +42,7 @@
           bind:value={projectNameDraft}
           disabled={identityLocked}
           aria-label={t("projects.settings.name")}
-          class="h-7 w-44 min-w-0 rounded-md border border-border bg-card px-2.5 text-left text-[0.8rem] font-medium text-foreground outline-none transition-colors focus:border-ring disabled:cursor-not-allowed disabled:text-foreground dark:bg-transparent max-[480px]:w-full"
+          class="field w-44 min-w-0 px-2.5 text-left font-medium text-foreground disabled:opacity-100 max-[480px]:w-full"
           onpointerdown={moveTextInputCaretToPointer}
         />
       </div>

@@ -5,6 +5,7 @@
   import { formatNumber } from "$lib/i18n/formatters";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import { getPreferences } from "$lib/stores/preferences.svelte";
+  import { scrollEdgeFadeAction } from "$lib/utils/scroll-edge-fade";
 
   export interface TimePickerInputNavigation {
     key: "ArrowUp" | "ArrowDown";
@@ -188,7 +189,7 @@
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<div bind:this={scrollEl} onwheel={onWheel} class="time-picker-scroll max-h-50 overflow-y-auto">
+<div bind:this={scrollEl} use:scrollEdgeFadeAction onwheel={onWheel} class="time-picker-scroll max-h-50 overflow-y-auto">
   {#each TIME_SLOTS as slot, index}
     {@const selected = currentTime === slot}
     {@const emphasized = slot === emphasizedSlot}
@@ -210,10 +211,3 @@
     </button>
   {/each}
 </div>
-
-<style>
-  .time-picker-scroll {
-    -webkit-mask-image: linear-gradient(to bottom, transparent, black 24px, black calc(100% - 24px), transparent);
-    mask-image: linear-gradient(to bottom, transparent, black 24px, black calc(100% - 24px), transparent);
-  }
-</style>

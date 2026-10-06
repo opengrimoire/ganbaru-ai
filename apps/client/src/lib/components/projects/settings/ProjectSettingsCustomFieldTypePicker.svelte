@@ -1,5 +1,6 @@
 <script lang="ts">
   import { tick } from "svelte";
+  import Check from "@lucide/svelte/icons/check";
   import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import {
     pickSelectPopoverGeometry,
@@ -16,6 +17,7 @@
   } from "$lib/projects/types";
   import { cn } from "$lib/utils";
   import { portal } from "$lib/utils/portal";
+  import { scrollEdgeFadeAction } from "$lib/utils/scroll-edge-fade";
 
   let {
     value = $bindable<ProjectCustomFieldType>(),
@@ -41,6 +43,7 @@
   let pickerOpen = $state(false);
   let triggerElement = $state<HTMLButtonElement | undefined>();
   let panelElement = $state<HTMLDivElement | undefined>();
+  let scrollElement = $state<HTMLDivElement | undefined>();
   let pickerGeometry = $state<SelectPopoverGeometry>(DEFAULT_CUSTOM_FIELD_TYPE_PICKER_GEOMETRY);
   let pickerReady = $state(false);
 
@@ -89,7 +92,9 @@
     pickerGeometry = pickSelectPopoverGeometry({
       triggerRect: toSelectPopoverRect(triggerElement.getBoundingClientRect()),
       boundaryRect: pickerBoundaryRect(),
-      contentHeight: panelElement?.scrollHeight ?? CUSTOM_FIELD_TYPE_PICKER_ESTIMATED_HEIGHT,
+      contentHeight: panelElement
+        ? panelElement.offsetHeight - (scrollElement?.clientHeight ?? 0) + (scrollElement?.scrollHeight ?? 0)
+        : CUSTOM_FIELD_TYPE_PICKER_ESTIMATED_HEIGHT,
       contentWidth: panelElement?.scrollWidth,
       horizontalAlign: "end",
     });
@@ -166,7 +171,7 @@
   <button
     bind:this={triggerElement}
     type="button"
-    class="flex h-7 w-full max-w-full items-center justify-between gap-2 rounded-md border border-border bg-card px-2.5 text-left text-[0.8rem] font-medium text-foreground transition-colors hover:bg-accent dark:bg-transparent"
+    class="flex h-7 w-full max-w-full items-center justify-between gap-2 rounded-md border border-border bg-transparent px-2.5 text-left text-[0.8rem] font-medium text-foreground transition-colors hover:bg-accent"
     aria-haspopup="listbox"
     aria-expanded={pickerOpen}
     aria-label={t("projects.customFields.fieldType")}
@@ -185,30 +190,28 @@
       use:portal
       role="listbox"
       data-app-floating-surface
-      class="fixed z-80 overflow-x-hidden overflow-y-auto rounded-lg border border-border bg-popover p-1.5 shadow-lg"
+      class="surface-floating fixed z-80 flex flex-col overflow-hidden"
       style={pickerStyle()}
     >
-      <div class="grid min-w-64 grid-cols-2 gap-1">
-        {#each PROJECT_CUSTOM_FIELD_TYPES as fieldType}
-          {@const selected = fieldType === value}
-          <button
-            type="button"
-            role="option"
-            aria-selected={selected}
-            class={cn(
-              "flex min-h-9 min-w-0 cursor-pointer items-center gap-2 rounded-md px-2 text-left text-[0.8rem] transition-colors",
-              selected
-                ? "bg-accent/70 font-semibold text-foreground"
-                : "text-foreground hover:bg-accent/45",
-            )}
-            onclick={() => selectFieldType(fieldType)}
-          >
-            <span class="flex h-5 w-5 shrink-0 items-center justify-center text-muted-foreground">
-              {@render fieldTypeIcon(fieldType)}
-            </span>
-            <span class="min-w-0 truncate">{projectCustomFieldTypeLabel(fieldType, t)}</span>
-          </button>
-        {/each}
+      <div bind:this={scrollElement} use:scrollEdgeFadeAction class="surface-floating-body min-h-0 overflow-x-hidden overflow-y-auto">
+        <div class="grid min-w-64 grid-cols-2 gap-1">
+          {#each PROJECT_CUSTOM_FIELD_TYPES as fieldType}
+            {@const selected = fieldType === value}
+            <button
+              type="button"
+              role="option"
+              aria-selected={selected}
+              class="menu-item min-w-0"
+              onclick={() => selectFieldType(fieldType)}
+            >
+              <span class="flex h-5 w-5 shrink-0 items-center justify-center text-muted-foreground">
+                {@render fieldTypeIcon(fieldType)}
+              </span>
+              <span class="min-w-0 flex-1 truncate">{projectCustomFieldTypeLabel(fieldType, t)}</span>
+              {#if selected}<Check class="size-3.5 shrink-0" aria-hidden="true" />{/if}
+            </button>
+          {/each}
+        </div>
       </div>
     </div>
   {/if}

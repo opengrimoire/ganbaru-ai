@@ -468,7 +468,7 @@
         bind:value={projectDefaultEventNameDraft}
         placeholder={projectDefaultEventNamePlaceholder ?? t("common.none")}
         aria-label={t("projects.settings.defaultEventName")}
-        class="h-7 w-44 min-w-0 rounded-md border border-border bg-card px-2.5 text-left text-[0.8rem] font-medium text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-ring dark:bg-transparent max-[480px]:w-full"
+        class="field w-44 min-w-0 px-2.5 text-left font-medium text-foreground max-[480px]:w-full"
         onpointerdown={moveTextInputCaretToPointer}
       />
     </div>
@@ -502,7 +502,7 @@
             value={customDurationValue}
             inputmode="decimal"
             aria-label={t("projects.settings.customDurationValue")}
-            class="h-7 min-w-0 flex-1 rounded-md border border-border bg-card px-2.5 text-left text-[0.8rem] font-medium text-foreground outline-none transition-colors focus:border-ring dark:bg-transparent"
+            class="field min-w-0 flex-1 px-2.5 text-left font-medium text-foreground"
             onpointerdown={moveTextInputCaretToPointer}
             oninput={(event) => {
               setCustomDurationValue(event.currentTarget);

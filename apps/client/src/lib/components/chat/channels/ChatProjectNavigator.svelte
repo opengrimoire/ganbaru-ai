@@ -3,6 +3,7 @@
   import type { ChatChannelRead } from "$lib/chat/contracts";
   import {
     isPointerAimingAtSubmenu,
+    SUBMENU_AIM_TOLERANCES,
     type MenuAimPoint,
   } from "$lib/utils/menu-aim";
   import {
@@ -105,10 +106,7 @@
       point,
       submenu: projectPickerMenuAimRect(panelRect),
       side,
-      tolerance: 12,
-      topTolerance: 8,
-      bottomTolerance: 32,
-      minTowardDistance: 3,
+      ...SUBMENU_AIM_TOLERANCES,
     });
   }
 

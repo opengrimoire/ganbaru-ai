@@ -39,6 +39,7 @@
   } from "$lib/projects/picker-panels";
   import { getNotesEditor } from "$lib/components/notes/editor-context";
   import { cn, type MaybePromise } from "$lib/utils";
+  import { scrollEdgeFadeAction } from "$lib/utils/scroll-edge-fade";
   import NotesHierarchyPickerPanel from "./NotesHierarchyPickerPanel.svelte";
   import NotesPageIcon from "$lib/components/notes/pages/NotesPageIcon.svelte";
 
@@ -415,8 +416,8 @@
 <div
   bind:this={rootElement}
   class={cn(
-    "project-picker-panel flex min-h-0 flex-col overflow-hidden bg-popover text-popover-foreground shadow-lg ring-1 ring-border/60",
-    mobileLayout ? "h-full rounded-2xl" : "rounded-md",
+    "project-picker-panel surface-floating flex min-h-0 flex-col overflow-hidden",
+    mobileLayout && "h-full rounded-2xl",
     className,
     zIndexClass,
   )}
@@ -453,8 +454,8 @@
     {/if}
     {#if showSearch}
     <div class={cn(
-      "flex items-center gap-1.5 border border-border/70 bg-muted/20",
-      mobileLayout ? "min-h-12 rounded-xl px-3" : "min-h-8 rounded-md pl-2 pr-1",
+      "field flex items-center gap-1.5",
+      mobileLayout && "min-h-12 rounded-xl px-3",
     )}>
       <Search size={iconSize} strokeWidth={iconStrokeWidth} class="shrink-0 text-popover-foreground/60" />
       <input
@@ -462,8 +463,8 @@
         placeholder={t(effectiveParent.kind === "database" ? "notes.databaseSearchViews" : "notes.searchPlaceholder")}
         aria-label={t(effectiveParent.kind === "database" ? "notes.databaseSearchViews" : "notes.searchLabel")}
         class={cn(
-          "min-w-0 flex-1 bg-transparent text-popover-foreground placeholder:text-popover-foreground/45",
-          mobileLayout ? "h-12 text-base" : "text-[0.8rem]",
+          "field-bare text-popover-foreground",
+          mobileLayout && "h-12 text-base",
         )}
       />
       {#if mobileLayout && normalizedSearch}
@@ -481,18 +482,18 @@
   </div>
   {/if}
   <div class="relative flex min-h-0 flex-auto flex-col">
-    <div bind:this={scrollElement} class={cn("hide-scrollbar min-h-0 flex-auto overflow-y-auto", mobileLayout ? "overscroll-contain px-2 py-2" : "p-1")}>
+    <div bind:this={scrollElement} use:scrollEdgeFadeAction class={cn("hide-scrollbar min-h-0 flex-auto overflow-y-auto", mobileLayout ? "overscroll-contain px-2 py-2" : "surface-floating-body")}>
       {#if navigationError || viewError}
-        <div class="px-3 py-2 text-[0.8rem] text-destructive" role="alert">
+        <div class="px-3 py-2 text-destructive" role="alert">
           {navigationError ?? viewError}
-          {#if viewError}<button type="button" class="mt-1 block rounded px-1 py-1 text-popover-foreground hover:bg-accent" onclick={() => { viewRetryCount += 1; }}>{t("common.retry")}</button>{/if}
+          {#if viewError}<button type="button" class="mt-1 block rounded-floating-item px-1 py-1 text-popover-foreground hover:bg-accent" onclick={() => { viewRetryCount += 1; }}>{t("common.retry")}</button>{/if}
         </div>
       {:else if isLoadingViews || (notes.loading && projectPages.length === 0 && projectFolders.length === 0)}
-        <div class="px-3 py-2 text-[0.8rem] text-popover-foreground/60">{t("notes.loading")}</div>
+        <div class="px-3 py-2 text-popover-foreground/60">{t("notes.loading")}</div>
       {:else if notes.loadError}
-        <div class="px-3 py-2 text-[0.8rem] text-destructive">{t("notes.loadFailed", notes.loadError)}</div>
+        <div class="px-3 py-2 text-destructive">{t("notes.loadFailed", notes.loadError)}</div>
       {:else if items.length === 0}
-        <div class="px-3 py-2 text-[0.8rem] text-popover-foreground/60">
+        <div class="px-3 py-2 text-popover-foreground/60">
           {normalizedSearch ? t("notes.noSearchResults") : t(effectiveParent.kind === "database" ? "notes.databaseNoViews" : "notes.noPages")}
         </div>
       {:else}
@@ -500,10 +501,10 @@
           {#each items as item (item.key)}
             {@const title = nodeTitle(item)}
             {#if mobileLayout}
-              <div class={cn("flex min-h-12 items-stretch rounded-md", activeNodeKey === item.key && "bg-accent text-accent-foreground")}>
+              <div class={cn("flex min-h-12 items-stretch rounded-floating-item", activeNodeKey === item.key && "bg-accent text-accent-foreground")}>
                 <button
                   type="button"
-                  class="flex min-w-0 flex-1 items-center gap-2 rounded-md px-3 text-left text-sm text-popover-foreground active:bg-accent"
+                  class="flex min-w-0 flex-1 items-center gap-2 rounded-floating-item px-3 text-left text-sm text-popover-foreground active:bg-accent"
                   aria-label={title}
                   onclick={() => {
                     if (item.kind === "folder") openMobileChildren(item);
@@ -536,7 +537,7 @@
                 {#if item.kind !== "folder" && item.hasChildren}
                   <button
                     type="button"
-                    class="flex w-12 shrink-0 items-center justify-center rounded-md text-popover-foreground/60 active:bg-accent"
+                    class="flex w-12 shrink-0 items-center justify-center rounded-floating-item text-popover-foreground/60 active:bg-accent"
                     aria-label={title}
                     onclick={() => openMobileChildren(item)}
                   >
@@ -547,10 +548,8 @@
             {:else}
               <button
                 type="button"
-                class={cn(
-                  "flex min-h-8 w-full items-center gap-2 rounded-md px-2 text-left text-[0.8rem] text-popover-foreground transition-colors hover:bg-accent hover:text-accent-foreground",
-                  activeNodeKey === item.key && "bg-accent text-accent-foreground",
-                )}
+                class="menu-item text-popover-foreground"
+                aria-expanded={item.hasChildren ? activeNodeKey === item.key : undefined}
                 aria-label={title}
                 onpointerenter={(event) => activateNode(item, event.currentTarget)}
                 onfocus={(event) => activateNode(item, event.currentTarget)}
@@ -608,11 +607,11 @@
           placeholder={t("notes.defaultFolderName")}
           aria-label={t("notes.newFolder")}
           class={cn(
-            "min-w-0 flex-1 border border-border bg-muted/40 text-popover-foreground placeholder:text-popover-foreground/45",
-            mobileLayout ? "min-h-12 rounded-xl px-3 text-base" : "min-h-8 rounded px-2 text-[0.8rem]",
+            "field min-w-0 flex-1 text-popover-foreground",
+            mobileLayout && "min-h-12 rounded-xl px-3 text-base",
           )}
         />
-        <button type="submit" class={cn("bg-primary font-medium text-primary-foreground", mobileLayout ? "min-h-12 rounded-xl px-4 text-sm" : "min-h-8 rounded px-2 text-[0.733333rem]")}>
+        <button type="submit" class={cn("bg-primary font-medium text-primary-foreground", mobileLayout ? "min-h-12 rounded-xl px-4 text-sm" : "min-h-8 rounded-floating-item px-2 text-panel-detail")}>
           {t("common.save")}
         </button>
         {#if mobileLayout}
@@ -635,7 +634,7 @@
         {#if effectiveParent.kind !== "page"}
           <button
             type="button"
-            class={cn("flex min-w-0 flex-1 items-center justify-center gap-1.5 px-1 text-popover-foreground transition-colors hover:bg-accent hover:text-accent-foreground", mobileLayout ? "min-h-12 rounded-xl text-sm active:bg-accent" : "min-h-8 rounded-md text-[0.8rem]")}
+            class={cn("flex min-w-0 flex-1 items-center justify-center gap-1.5 px-1 text-popover-foreground transition-colors hover:bg-accent hover:text-accent-foreground", mobileLayout ? "min-h-12 rounded-xl text-sm active:bg-accent" : "min-h-8 rounded-floating-item")}
             onclick={beginFolderCreation}
           >
             <FolderPlus size={iconSize} strokeWidth={iconStrokeWidth} />
@@ -645,7 +644,7 @@
         {/if}
         <button
           type="button"
-          class={cn("flex min-w-0 flex-1 items-center justify-center gap-1.5 px-1 text-popover-foreground transition-colors hover:bg-accent hover:text-accent-foreground", mobileLayout ? "min-h-12 rounded-xl text-sm active:bg-accent" : "min-h-8 rounded-md text-[0.8rem]")}
+          class={cn("flex min-w-0 flex-1 items-center justify-center gap-1.5 px-1 text-popover-foreground transition-colors hover:bg-accent hover:text-accent-foreground", mobileLayout ? "min-h-12 rounded-xl text-sm active:bg-accent" : "min-h-8 rounded-floating-item")}
           aria-label={t("notes.newPage")}
           aria-keyshortcuts="Control+N Meta+N"
           onclick={() => { void createPage(); }}
@@ -656,7 +655,7 @@
       </div>
     {/if}
     {#if folderCreationError}
-      <div class="px-1 pt-1 text-[0.733333rem] text-destructive" role="alert">
+      <div class="px-1 pt-1 text-panel-detail text-destructive" role="alert">
         {t("notes.folderActionFailed", folderCreationError)}
       </div>
     {/if}

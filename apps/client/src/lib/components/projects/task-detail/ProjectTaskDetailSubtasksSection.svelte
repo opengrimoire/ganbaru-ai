@@ -2,12 +2,12 @@
   import ArrowDown from "@lucide/svelte/icons/arrow-down";
   import ArrowLeft from "@lucide/svelte/icons/arrow-left";
   import ArrowUp from "@lucide/svelte/icons/arrow-up";
-  import Check from "@lucide/svelte/icons/check";
   import Plus from "@lucide/svelte/icons/plus";
+  import Checkbox from "$lib/components/ui/Checkbox.svelte";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import type { MoveDirection, ProjectStatus, ProjectTask } from "$lib/projects/types";
   import type { Theme } from "$lib/themes";
-  import { cn, type MaybePromise } from "$lib/utils";
+  import type { MaybePromise } from "$lib/utils";
   import ProjectStatusBadge from "$lib/components/projects/ProjectStatusBadge.svelte";
   import ProjectSettingsSectionHeading from "$lib/components/projects/settings/ProjectSettingsSectionHeading.svelte";
 
@@ -55,19 +55,11 @@
       {@const previousSubtask = adjacentSubtask(subtask, -1)}
       {@const nextSubtask = adjacentSubtask(subtask, 1)}
       <div class="grid min-h-8 grid-cols-[auto_minmax(0,1fr)_auto_auto_auto_auto] items-center gap-1 rounded-md bg-transparent px-2 hover:bg-muted/40">
-        <button
-          type="button"
-          class={cn(
-            "flex h-5 w-5 shrink-0 items-center justify-center rounded border",
-            subtaskStatus?.terminal ? "border-emerald-500 bg-emerald-500 text-white" : "border-border hover:bg-accent",
-          )}
-          aria-label={t("projects.actions.toggleComplete")}
-          onclick={() => { void onToggleComplete(subtask); }}
-        >
-          {#if subtaskStatus?.terminal}
-            <Check size={13} strokeWidth={2} />
-          {/if}
-        </button>
+        <Checkbox
+          checked={Boolean(subtaskStatus?.terminal)}
+          label={t("projects.actions.toggleComplete")}
+          onChange={() => { void onToggleComplete(subtask); }}
+        />
         <button
           type="button"
           class="min-w-0 text-left"

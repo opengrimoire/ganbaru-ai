@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
   import { getLocalization } from "$lib/i18n/translator.svelte";
+  import { scrollEdgeFadeAction } from "$lib/utils/scroll-edge-fade";
   import {
     buildRoundTripNotesSourceHref,
     roundTripWarningCount,
@@ -10,7 +11,7 @@
     NotesHtmlArchiveSaveResult,
     NotesHtmlExportDiagnostic,
   } from "$lib/notes/types";
-  import NotesCheckboxField from "$lib/components/notes/NotesCheckboxField.svelte";
+  import Checkbox from "$lib/components/ui/Checkbox.svelte";
   import NotesRoundTripDiagnostics from "$lib/components/notes/NotesRoundTripDiagnostics.svelte";
   import NotesTransferFieldRow from "./NotesTransferFieldRow.svelte";
 
@@ -151,14 +152,14 @@
 
 <div class="fixed inset-0 z-90 flex items-center justify-center p-3">
   <button
-    class="absolute inset-0 border-0 bg-black/50 p-0"
+    class="absolute inset-0 border-0 surface-backdrop p-0"
     type="button"
     aria-label={t("common.close")}
     onclick={onCancel}
   ></button>
   <div
     bind:this={dialogEl}
-    class="relative z-10 flex max-h-[min(92vh,38rem)] w-[min(34rem,100%)] flex-col rounded-md border border-border bg-card text-card-foreground shadow-lg outline-none"
+    class="relative z-10 flex max-h-[min(92vh,38rem)] w-[min(34rem,100%)] flex-col surface-dialog outline-none"
     role="dialog"
     aria-modal="true"
     aria-label={t("notes.htmlExportDialogTitle")}
@@ -174,13 +175,13 @@
       </p>
     </div>
 
-    <div class="min-h-0 flex-1 overflow-auto px-4 py-3">
+    <div class="min-h-0 flex-1 overflow-auto px-4 py-3" use:scrollEdgeFadeAction>
       <div class="grid gap-2">
         <NotesTransferFieldRow
           label={t("notes.htmlExportIncludePageTree")}
           description={t("notes.htmlExportIncludePageTreeDescription")}
         >
-          <NotesCheckboxField
+          <Checkbox
             bind:checked={includePageTree}
             label={t("notes.htmlExportIncludePageTree")}
           />
@@ -189,7 +190,7 @@
           label={t("notes.htmlExportIncludeAssets")}
           description={t("notes.htmlExportIncludeAssetsDescription")}
         >
-          <NotesCheckboxField
+          <Checkbox
             bind:checked={includeAssets}
             label={t("notes.htmlExportIncludeAssets")}
           />
@@ -198,7 +199,7 @@
           label={t("notes.htmlExportIncludeDatabaseViews")}
           description={t("notes.htmlExportIncludeDatabaseViewsDescription")}
         >
-          <NotesCheckboxField
+          <Checkbox
             bind:checked={includeDatabaseViews}
             label={t("notes.htmlExportIncludeDatabaseViews")}
           />
@@ -207,7 +208,7 @@
           label={t("notes.htmlExportIncludeComments")}
           description={t("notes.htmlExportIncludeCommentsDescription")}
         >
-          <NotesCheckboxField
+          <Checkbox
             bind:checked={includeComments}
             label={t("notes.htmlExportIncludeComments")}
           />
@@ -216,7 +217,7 @@
           label={t("notes.htmlExportIncludeResolvedComments")}
           description={t("notes.htmlExportIncludeResolvedCommentsDescription")}
         >
-          <NotesCheckboxField
+          <Checkbox
             bind:checked={includeResolvedComments}
             disabled={!includeComments}
             label={t("notes.htmlExportIncludeResolvedComments")}

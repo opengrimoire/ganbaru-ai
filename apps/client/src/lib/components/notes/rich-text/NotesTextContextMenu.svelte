@@ -11,6 +11,14 @@
   import type { NotesRichTextAnnotationName } from "$lib/notes/rich-text/core";
   import type { NotesBlockType, NotesColor, NotesRichTextAnnotations } from "$lib/notes/types";
   import { dismissOnOutside } from "$lib/utils/dismiss-on-outside";
+  import {
+    SUBMENU_AIM_TOLERANCES,
+    SUBMENU_CLOSE_DELAY_MS,
+    SUBMENU_OPEN_DELAY_MS,
+    isPointerAimingAtSubmenu,
+    type MenuAimPoint,
+  } from "$lib/utils/menu-aim";
+  import { scrollEdgeFadeAction } from "$lib/utils/scroll-edge-fade";
   import Bold from "@lucide/svelte/icons/bold";
   import Check from "@lucide/svelte/icons/check";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
@@ -36,7 +44,7 @@
   import Scissors from "@lucide/svelte/icons/scissors";
   import Sigma from "@lucide/svelte/icons/sigma";
   import SquareCheck from "@lucide/svelte/icons/square-check";
-  import { tick } from "svelte";
+  import { onDestroy, tick } from "svelte";
   import NotesTextColorPalette from "./NotesTextColorPalette.svelte";
 
   type Submenu = "format" | "paragraph" | "insert";
@@ -92,7 +100,7 @@
   } = $props();
 
   const { t } = getLocalization();
-  const itemClass = "flex min-h-8 w-full items-center gap-2 rounded px-2 text-left text-[0.8rem] text-foreground hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40";
+  const itemClass = "menu-item";
   const paragraphItems = [
     { type: "paragraph", labelKey: "notes.blockType.paragraph", icon: Pilcrow },
     { type: "heading_1", labelKey: "notes.blockType.heading1", icon: Heading1 },
@@ -166,6 +174,7 @@
   }
 
   function openSubmenu(next: Submenu, element: HTMLElement, shouldFocusFirst = false): void {
+    cancelHover();
     submenu = next;
     submenuAnchor = rectOf(element);
     submenuPosition = null;
@@ -177,6 +186,7 @@
   }
 
   function openPalette(element: HTMLElement, shouldFocusFirst = false): void {
+    cancelHover();
     paletteAnchor = rectOf(element);
     palettePosition = null;
     if (shouldFocusFirst) {
@@ -203,17 +213,105 @@
     paletteAnchor = null;
   }
 
+  let pointer: MenuAimPoint | null = null;
+  let hoverTimer: ReturnType<typeof setTimeout> | null = null;
+
+  onDestroy(cancelHover);
+
+  function trackPointer(event: PointerEvent): void {
+    pointer = { x: event.clientX, y: event.clientY };
+  }
+
+  function cancelHover(): void {
+    if (hoverTimer) clearTimeout(hoverTimer);
+    hoverTimer = null;
+  }
+
+  /** Whether the pointer currently rests inside an open flyout. */
+  function pointerInside(element: HTMLElement | null): boolean {
+    if (!element || !pointer) return false;
+    const rect = element.getBoundingClientRect();
+    return pointer.x >= rect.left && pointer.x <= rect.right && pointer.y >= rect.top && pointer.y <= rect.bottom;
+  }
+
+  /** Whether the pointer has moved from `origin` toward the open flyout that sits beside `anchor`. */
+  function aimingAtFlyout(element: HTMLElement | null, anchor: NotesTextMenuRect | null, origin: MenuAimPoint | null): boolean {
+    if (!element || !anchor || !pointer) return false;
+    const rect = element.getBoundingClientRect();
+    return isPointerAimingAtSubmenu({
+      origin,
+      point: pointer,
+      submenu: { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom },
+      side: rect.left >= anchor.right - 1 ? "right" : "left",
+      ...SUBMENU_AIM_TOLERANCES,
+    });
+  }
+
+  /**
+   * Apply a hover change after `delay`, deferring it while the pointer keeps travelling toward the open flyout so a
+   * diagonal path across sibling rows does not switch or close it, and dropping it once the pointer reaches the flyout.
+   */
+  function scheduleHover(action: () => void, delay: number, flyout: () => [HTMLElement | null, NotesTextMenuRect | null]): void {
+    cancelHover();
+    const origin = pointer;
+    hoverTimer = setTimeout(() => {
+      hoverTimer = null;
+      const [element, anchor] = flyout();
+      if (pointerInside(element)) return;
+      if (aimingAtFlyout(element, anchor, origin)) {
+        scheduleHover(action, delay, flyout);
+        return;
+      }
+      action();
+    }, delay);
+  }
+
+  const openSubmenuFlyout = (): [HTMLElement | null, NotesTextMenuRect | null] => [submenuElement, submenuAnchor];
+  const openPaletteFlyout = (): [HTMLElement | null, NotesTextMenuRect | null] => [paletteElement, paletteAnchor];
+
+  function hoverSubmenuRow(next: Submenu, element: HTMLElement): void {
+    if (submenu === next) {
+      cancelHover();
+      return;
+    }
+    scheduleHover(() => openSubmenu(next, element), SUBMENU_OPEN_DELAY_MS, openSubmenuFlyout);
+  }
+
+  function hoverPlainRow(): void {
+    if (!submenu) {
+      cancelHover();
+      return;
+    }
+    scheduleHover(closeSubmenus, SUBMENU_CLOSE_DELAY_MS, openSubmenuFlyout);
+  }
+
+  function hoverPaletteRow(element: HTMLElement): void {
+    if (paletteAnchor) {
+      cancelHover();
+      return;
+    }
+    scheduleHover(() => openPalette(element), SUBMENU_OPEN_DELAY_MS, openPaletteFlyout);
+  }
+
+  function hoverPlainSubmenuRow(): void {
+    if (!paletteAnchor) {
+      cancelHover();
+      return;
+    }
+    scheduleHover(() => { paletteAnchor = null; }, SUBMENU_CLOSE_DELAY_MS, openPaletteFlyout);
+  }
+
   function updateViewport(): void {
     viewport = { width: window.innerWidth, height: window.innerHeight };
   }
 </script>
 
-<svelte:window onresize={updateViewport} />
+<svelte:window onresize={updateViewport} onpointermove={trackPointer} />
 
 <div class="contents" use:dismissOnOutside={{ onDismiss: (reason) => onClose(reason === "escape") }}>
 <div
   bind:this={rootElement}
-  class="fixed z-50 overflow-y-auto rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-lg"
+  class="surface-floating fixed z-50 flex flex-col overflow-hidden"
   style:left={`${rootPosition.left}px`}
   style:top={`${rootPosition.top}px`}
   style:width={`${rootPosition.width}px`}
@@ -225,15 +323,16 @@
   data-app-floating-surface
   onmousedown={(event) => event.preventDefault()}
 >
-  <button class={itemClass} type="button" role="menuitem" disabled={!canOpenLink} onmouseenter={closeSubmenus} onclick={() => runAction(onOpenLink)}>
+  <div class="surface-floating-body min-h-0 flex-1 overflow-y-auto" use:scrollEdgeFadeAction>
+  <button class={itemClass} type="button" role="menuitem" disabled={!canOpenLink} onmouseenter={hoverPlainRow} onclick={() => runAction(onOpenLink)}>
     <LinkIcon class="size-4 shrink-0" aria-hidden="true" />
     <span class="flex-1">{t("notes.openLinkEditor")}</span>
   </button>
-  <button class={itemClass} type="button" role="menuitem" onmouseenter={closeSubmenus} onclick={() => runAction(onCopyBlockLink)}>
+  <button class={itemClass} type="button" role="menuitem" onmouseenter={hoverPlainRow} onclick={() => runAction(onCopyBlockLink)}>
     <LinkIcon class="size-4 shrink-0" aria-hidden="true" />
     <span>{t("notes.copyBlockLink")}</span>
   </button>
-  <div class="my-1 border-t border-border"></div>
+  <div class="menu-separator" role="separator"></div>
   <button
     class={itemClass}
     type="button"
@@ -241,7 +340,7 @@
     aria-haspopup="menu"
     aria-expanded={submenu === "format"}
     disabled={!canFormatSelection && !canSetCalloutBackground}
-    onmouseenter={(event) => openSubmenu("format", event.currentTarget)}
+    onmouseenter={(event) => hoverSubmenuRow("format", event.currentTarget)}
     onclick={(event) => openSubmenu("format", event.currentTarget, event.detail === 0)}
   >
     <Palette class="size-4 shrink-0" aria-hidden="true" />
@@ -254,7 +353,7 @@
     role="menuitem"
     aria-haspopup="menu"
     aria-expanded={submenu === "paragraph"}
-    onmouseenter={(event) => openSubmenu("paragraph", event.currentTarget)}
+    onmouseenter={(event) => hoverSubmenuRow("paragraph", event.currentTarget)}
     onclick={(event) => openSubmenu("paragraph", event.currentTarget, event.detail === 0)}
   >
     <Pilcrow class="size-4 shrink-0" aria-hidden="true" />
@@ -267,47 +366,48 @@
     role="menuitem"
     aria-haspopup="menu"
     aria-expanded={submenu === "insert"}
-    onmouseenter={(event) => openSubmenu("insert", event.currentTarget)}
+    onmouseenter={(event) => hoverSubmenuRow("insert", event.currentTarget)}
     onclick={(event) => openSubmenu("insert", event.currentTarget, event.detail === 0)}
   >
     <List class="size-4 shrink-0" aria-hidden="true" />
     <span class="flex-1">{t("notes.contextMenuInsert")}</span>
     <ChevronRight class="size-4 shrink-0" aria-hidden="true" />
   </button>
-  <button class={itemClass} type="button" role="menuitem" disabled={!canFormatSelection} onmouseenter={closeSubmenus} onclick={() => runAction(onCreateComment)}>
+  <button class={itemClass} type="button" role="menuitem" disabled={!canFormatSelection} onmouseenter={hoverPlainRow} onclick={() => runAction(onCreateComment)}>
     <MessageSquare class="size-4 shrink-0" aria-hidden="true" />
     <span>{t("notes.inlineComment")}</span>
   </button>
-  <button class={itemClass} type="button" role="menuitem" disabled={!canFormatSelection} onmouseenter={closeSubmenus} onclick={() => runAction(onCreateSuggestion)}>
+  <button class={itemClass} type="button" role="menuitem" disabled={!canFormatSelection} onmouseenter={hoverPlainRow} onclick={() => runAction(onCreateSuggestion)}>
     <PencilLine class="size-4 shrink-0" aria-hidden="true" />
     <span>{t("notes.inlineSuggestion")}</span>
   </button>
-  <div class="my-1 border-t border-border"></div>
-  <button class={itemClass} type="button" role="menuitem" disabled={!hasSelection} onmouseenter={closeSubmenus} onclick={() => runAction(onCut)}>
+  <div class="menu-separator" role="separator"></div>
+  <button class={itemClass} type="button" role="menuitem" disabled={!hasSelection} onmouseenter={hoverPlainRow} onclick={() => runAction(onCut)}>
     <Scissors class="size-4 shrink-0" aria-hidden="true" />
     <span>{t("notes.cutSelection")}</span>
   </button>
-  <button class={itemClass} type="button" role="menuitem" disabled={!hasSelection} onmouseenter={closeSubmenus} onclick={() => runAction(onCopy)}>
+  <button class={itemClass} type="button" role="menuitem" disabled={!hasSelection} onmouseenter={hoverPlainRow} onclick={() => runAction(onCopy)}>
     <Copy class="size-4 shrink-0" aria-hidden="true" />
     <span>{t("notes.copySelection")}</span>
   </button>
-  <button class={itemClass} type="button" role="menuitem" onmouseenter={closeSubmenus} onclick={() => runAction(onPaste)}>
+  <button class={itemClass} type="button" role="menuitem" onmouseenter={hoverPlainRow} onclick={() => runAction(onPaste)}>
     <ClipboardPaste class="size-4 shrink-0" aria-hidden="true" />
     <span>{t("notes.pasteSelection")}</span>
   </button>
-  <button class={itemClass} type="button" role="menuitem" onmouseenter={closeSubmenus} onclick={() => runAction(onPastePlainText)}>
+  <button class={itemClass} type="button" role="menuitem" onmouseenter={hoverPlainRow} onclick={() => runAction(onPastePlainText)}>
     <ClipboardPaste class="size-4 shrink-0" aria-hidden="true" />
     <span>{t("notes.contextMenuPastePlainText")}</span>
   </button>
   {#if actionError}
-    <div class="px-2 py-1 text-xs text-destructive" role="alert">{actionError}</div>
+    <div class="px-2 py-1 text-panel-detail text-destructive" role="alert">{actionError}</div>
   {/if}
+  </div>
 </div>
 
   {#if submenu && submenuAnchor}
     <div
       bind:this={submenuElement}
-      class="fixed z-60 max-h-[min(26rem,calc(100vh-1rem))] overflow-y-auto rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-lg"
+      class="surface-floating fixed z-60 flex max-h-[min(26rem,calc(100vh-1rem))] flex-col overflow-hidden"
       style:left={`${submenuPosition?.x ?? 0}px`}
       style:top={`${submenuPosition?.y ?? 0}px`}
       style:width={`${NOTES_TEXT_CONTEXT_SUBMENU_WIDTH}px`}
@@ -318,20 +418,23 @@
       data-app-floating-surface
       onmousedown={(event) => event.preventDefault()}
     >
+      <div class="surface-floating-body min-h-0 flex-1 overflow-y-auto" use:scrollEdgeFadeAction>
       {#if submenu === "format"}
-        <button class={itemClass} class:bg-accent={annotations.bold} type="button" role="menuitemcheckbox" aria-checked={annotations.bold} onclick={() => runAction(() => onToggleAnnotation("bold"))}><Bold class="size-4 shrink-0" aria-hidden="true" /><span class="flex-1">{t("notes.bold")}</span></button>
-        <button class={itemClass} class:bg-accent={annotations.italic} type="button" role="menuitemcheckbox" aria-checked={annotations.italic} onclick={() => runAction(() => onToggleAnnotation("italic"))}><Italic class="size-4 shrink-0" aria-hidden="true" /><span class="flex-1">{t("notes.italic")}</span></button>
-        <button class={itemClass} class:bg-accent={annotations.underline} type="button" role="menuitemcheckbox" aria-checked={annotations.underline} onclick={() => runAction(() => onToggleAnnotation("underline"))}>
+        <button class={itemClass} type="button" role="menuitemcheckbox" onmouseenter={hoverPlainSubmenuRow} aria-checked={annotations.bold} onclick={() => runAction(() => onToggleAnnotation("bold"))}><Bold class="size-4 shrink-0" aria-hidden="true" /><span class="flex-1">{t("notes.bold")}</span>{#if annotations.bold}<Check class="size-3.5 shrink-0" aria-hidden="true" />{/if}</button>
+        <button class={itemClass} type="button" role="menuitemcheckbox" onmouseenter={hoverPlainSubmenuRow} aria-checked={annotations.italic} onclick={() => runAction(() => onToggleAnnotation("italic"))}><Italic class="size-4 shrink-0" aria-hidden="true" /><span class="flex-1">{t("notes.italic")}</span>{#if annotations.italic}<Check class="size-3.5 shrink-0" aria-hidden="true" />{/if}</button>
+        <button class={itemClass} type="button" role="menuitemcheckbox" onmouseenter={hoverPlainSubmenuRow} aria-checked={annotations.underline} onclick={() => runAction(() => onToggleAnnotation("underline"))}>
           <svg class="size-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M5.5 4.5v7.25c0 3.75 2.5 5.75 6.5 5.75s6.5-2 6.5-5.75V4.5" /><path d="M4.5 20.5h15" /></svg>
           <span class="flex-1">{t("notes.underline")}</span>
+          {#if annotations.underline}<Check class="size-3.5 shrink-0" aria-hidden="true" />{/if}
         </button>
-        <button class={itemClass} class:bg-accent={annotations.strikethrough} type="button" role="menuitemcheckbox" aria-checked={annotations.strikethrough} onclick={() => runAction(() => onToggleAnnotation("strikethrough"))}>
+        <button class={itemClass} type="button" role="menuitemcheckbox" onmouseenter={hoverPlainSubmenuRow} aria-checked={annotations.strikethrough} onclick={() => runAction(() => onToggleAnnotation("strikethrough"))}>
           <svg class="size-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M17.5 5.5c-1.3-1.2-3.1-1.8-5.5-1.8-3.6 0-5.9 1.7-5.9 4.4 0 2.2 1.9 3.5 5.9 4.3 4 .8 5.9 2 5.9 4.2 0 2.8-2.3 4.5-5.9 4.5-2.4 0-4.2-.6-5.5-1.8" /><path d="M3 12.25h18" stroke-width="1.2" /></svg>
           <span class="flex-1">{t("notes.strikethrough")}</span>
+          {#if annotations.strikethrough}<Check class="size-3.5 shrink-0" aria-hidden="true" />{/if}
         </button>
-        <button class={itemClass} class:bg-accent={annotations.code} type="button" role="menuitemcheckbox" aria-checked={annotations.code} onclick={() => runAction(() => onToggleAnnotation("code"))}><Code class="size-4 shrink-0" aria-hidden="true" /><span class="flex-1">{t("notes.inlineCode")}</span></button>
-        <button class={itemClass} type="button" role="menuitem" aria-haspopup="menu" aria-expanded={Boolean(paletteAnchor)} onmouseenter={(event) => openPalette(event.currentTarget)} onclick={(event) => openPalette(event.currentTarget, event.detail === 0)}><Palette class="size-4 shrink-0" aria-hidden="true" /><span class="flex-1">{t("notes.textColor")}</span><ChevronRight class="size-4 shrink-0" aria-hidden="true" /></button>
-        <button class={itemClass} type="button" role="menuitem" onmouseenter={() => { paletteAnchor = null; }} onclick={() => runAction(onCreateEquation)}><Sigma class="size-4 shrink-0" aria-hidden="true" /><span>{t("notes.inlineEquation")}</span></button>
+        <button class={itemClass} type="button" role="menuitemcheckbox" onmouseenter={hoverPlainSubmenuRow} aria-checked={annotations.code} onclick={() => runAction(() => onToggleAnnotation("code"))}><Code class="size-4 shrink-0" aria-hidden="true" /><span class="flex-1">{t("notes.inlineCode")}</span>{#if annotations.code}<Check class="size-3.5 shrink-0" aria-hidden="true" />{/if}</button>
+        <button class={itemClass} type="button" role="menuitem" aria-haspopup="menu" aria-expanded={Boolean(paletteAnchor)} onmouseenter={(event) => hoverPaletteRow(event.currentTarget)} onclick={(event) => openPalette(event.currentTarget, event.detail === 0)}><Palette class="size-4 shrink-0" aria-hidden="true" /><span class="flex-1">{t("notes.textColor")}</span><ChevronRight class="size-4 shrink-0" aria-hidden="true" /></button>
+        <button class={itemClass} type="button" role="menuitem" onmouseenter={hoverPlainSubmenuRow} onclick={() => runAction(onCreateEquation)}><Sigma class="size-4 shrink-0" aria-hidden="true" /><span>{t("notes.inlineEquation")}</span></button>
       {:else if submenu === "paragraph"}
         {#each paragraphItems as item}
           {@const Icon = item.icon}
@@ -350,6 +453,7 @@
           </button>
         {/each}
       {/if}
+      </div>
     </div>
   {/if}
 

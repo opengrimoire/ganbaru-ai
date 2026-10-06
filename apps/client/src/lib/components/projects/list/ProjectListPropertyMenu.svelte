@@ -17,6 +17,7 @@
   import TextWrap from "@lucide/svelte/icons/text-wrap";
   import CollectionMenu from "$lib/components/collections/CollectionMenu.svelte";
   import CollectionMenuItem from "$lib/components/collections/CollectionMenuItem.svelte";
+  import CollectionMenuSeparator from "$lib/components/collections/CollectionMenuSeparator.svelte";
   import CollectionPropertyNameField from "$lib/components/collections/CollectionPropertyNameField.svelte";
   import { COLLECTION_PROPERTY_ICONS } from "$lib/components/collections/property-icons";
   import { getLocalization } from "$lib/i18n/translator.svelte";
@@ -121,14 +122,14 @@
           <div class="grid gap-1">
             {#each projects.customFieldOptionsForField(field.id) as option (option.id)}<span class="truncate px-2 py-1">{option.name}</span>{/each}
             <form class="flex min-w-0 gap-1" onsubmit={(event) => { event.preventDefault(); void addOption(); }}>
-              <input class="h-8 min-w-0 flex-1 rounded-md border border-input bg-transparent px-2" aria-label={t("projects.customFields.optionName")} placeholder={t("projects.customFields.optionName")} bind:value={optionDraft} disabled={optionSaving} />
+              <input class="field min-w-0 flex-1" aria-label={t("projects.customFields.optionName")} placeholder={t("projects.customFields.optionName")} bind:value={optionDraft} disabled={optionSaving} />
               <button type="submit" class="collection-menu-control inline-flex items-center justify-center rounded-md hover:bg-accent" aria-label={t("projects.columns.addOption")} disabled={optionSaving || !optionDraft.trim()}><Plus class="size-3.5" aria-hidden="true" /></button>
             </form>
             {#if optionError}<p role="alert" class="px-1 py-1 text-destructive">{optionError}</p>{/if}
           </div>
         </CollectionMenu>
       {/if}
-      <div class="mx-1 my-1 border-t border-border"></div>
+      <CollectionMenuSeparator />
       <ProjectListColumnFilters {query} {column} />
       {#if sortMode}
         <CollectionMenuItem icon={ArrowUp} label={t("collections.property.sortAscending")} checked={query.sortMode === sortMode && query.sortDirection === "asc"} onclick={() => sort("asc")} />
@@ -165,12 +166,12 @@
           {/each}
         </CollectionMenu>
       {/if}
-      <div class="mx-1 my-1 border-t border-border"></div>
+      <CollectionMenuSeparator />
       <CollectionMenuItem icon={frozen ? PinOff : Pin} label={t(frozen ? "collections.property.unfreeze" : "collections.property.freeze")} disabled={pending}
         onclick={() => void query.savePresentation({ ...query.listPresentation, frozenThrough: frozen ? null : column })} />
       {#if column !== "name"}<CollectionMenuItem icon={EyeOff} label={t("collections.property.hide")} disabled={pending} onclick={() => void query.toggleColumn(column)} />{/if}
       <CollectionMenuItem icon={TextWrap} label={t("collections.property.wrap")} checked={wrapped} disabled={pending} onclick={toggleWrap} />
-      <div class="mx-1 my-1 border-t border-border"></div>
+      <CollectionMenuSeparator />
       {#if column !== "name"}
         <CollectionMenuItem icon={ArrowLeft} label={t("collections.property.moveLeft")} disabled={pending || index <= 0} onclick={() => void query.moveColumn(column, -1)} />
         <CollectionMenuItem icon={ArrowRight} label={t("collections.property.moveRight")} disabled={pending || index < 0 || index >= query.listColumns.length - 1} onclick={() => void query.moveColumn(column, 1)} />

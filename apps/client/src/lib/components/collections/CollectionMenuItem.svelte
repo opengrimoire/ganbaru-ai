@@ -22,8 +22,7 @@
   const settingsRow = getCollectionSettingsNavigation() !== undefined;
 </script>
 
-<button type="button" class={cn("flex min-h-8 w-full min-w-0 items-center gap-2 rounded-md px-2 text-left disabled:cursor-not-allowed disabled:text-muted-foreground/60 disabled:hover:bg-transparent",
-  destructive ? "text-destructive hover:bg-destructive/10" : "hover:bg-accent")}
+<button type="button" class={cn("menu-item min-w-0", destructive && "menu-item-destructive")}
   data-collection-settings-row={settingsRow ? "" : undefined} aria-pressed={checked} {disabled} {onclick}>
   {#if Icon}<Icon class={cn("size-3.5 shrink-0", !destructive && "text-muted-foreground")} strokeWidth={1.75} aria-hidden="true" />{/if}
   <span class="min-w-0 flex-1 truncate">{label}</span>

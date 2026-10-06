@@ -61,7 +61,7 @@
   <div
     role="status"
     aria-live="polite"
-    class="fixed right-3 bottom-3 z-80 flex w-[min(28rem,calc(100vw-1.5rem))] gap-3 rounded-md border border-border bg-popover px-3 py-3 text-popover-foreground shadow-xl max-[420px]:right-2 max-[420px]:bottom-2 max-[420px]:w-[calc(100vw-1rem)]"
+    class="fixed right-3 bottom-3 z-80 flex w-[min(28rem,calc(100vw-1.5rem))] gap-3 surface-floating px-3 py-3 max-[420px]:right-2 max-[420px]:bottom-2 max-[420px]:w-[calc(100vw-1rem)]"
   >
     <div class="min-w-0 flex-1">
       <p class="wrap-break-word text-[0.866667rem] font-medium leading-5">

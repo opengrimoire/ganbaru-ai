@@ -86,12 +86,12 @@
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="fixed inset-0 z-90 flex items-center justify-center p-4" onclick={onClose}>
-  <div class="absolute inset-0 bg-black/50"></div>
+  <div class="surface-backdrop absolute inset-0"></div>
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
     bind:this={dialog}
-    class="relative z-10 flex max-h-full w-full max-w-md flex-col overflow-y-auto rounded-md border border-black/20 bg-card px-5 py-5 text-card-foreground shadow-2xl outline-none dark:border-white/10 dark:bg-sidebar dark:text-sidebar-foreground sm:px-8"
+    class="relative z-10 flex max-h-full w-full max-w-md flex-col overflow-y-auto surface-dialog px-5 py-5 outline-none sm:px-8"
     role="dialog"
     aria-modal="true"
     aria-labelledby="pairing-qr-title"

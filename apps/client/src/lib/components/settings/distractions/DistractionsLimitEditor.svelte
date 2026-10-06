@@ -603,10 +603,7 @@
               oninput={() => {
                 formError = "";
               }}
-              class={[
-                "h-7 w-full rounded-md border bg-card px-2.5 text-[0.8rem] text-foreground outline-none placeholder:text-muted-foreground focus:border-ring dark:bg-transparent",
-                limitNameWarning ? "border-destructive" : "border-border",
-              ]}
+              class="field w-full px-2.5 text-[0.8rem] text-foreground"
               aria-invalid={limitNameWarning ? "true" : "false"}
               aria-describedby={limitNameWarning ? "distractions-limit-name-warning" : undefined}
               placeholder={t("settings.distractions.limits.editor.limitNamePlaceholder")}
@@ -643,7 +640,7 @@
               type="text"
               inputmode="numeric"
               pattern="[0-9]*"
-              class="h-7 w-28 max-w-full rounded-md border border-border bg-card px-2.5 text-[0.8rem] text-foreground outline-none placeholder:text-muted-foreground focus:border-ring max-[480px]:w-full dark:bg-transparent"
+              class="field w-28 max-w-full px-2.5 text-[0.8rem] text-foreground max-[480px]:w-full"
               placeholder="75"
             />
           </div>
@@ -672,7 +669,7 @@
               }}
               type="text"
               inputmode="decimal"
-              class="h-7 w-28 max-w-full rounded-md border border-border bg-card px-2.5 text-[0.8rem] text-foreground outline-none placeholder:text-muted-foreground focus:border-ring max-[480px]:w-full dark:bg-transparent"
+              class="field w-28 max-w-full px-2.5 text-[0.8rem] text-foreground max-[480px]:w-full"
               placeholder="5.5"
             />
           </div>
@@ -697,7 +694,7 @@
                   value={entry.name}
                   oninput={(event) => updateEntry(entry.id, "name", event.currentTarget.value)}
                   aria-label={t("settings.distractions.limits.editor.sourceName")}
-                  class="h-8 min-w-0 flex-1 rounded-md border border-border bg-background/70 px-2.5 text-[0.8rem] text-foreground outline-none placeholder:text-muted-foreground focus:border-ring dark:bg-transparent"
+                  class="field h-8 min-w-0 flex-1 px-2.5 text-[0.8rem] text-foreground"
                   placeholder={t("settings.distractions.limits.editor.sourceNamePlaceholder")}
                 />
                 <div class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border bg-card text-muted-foreground transition-colors hover:bg-accent hover:text-foreground dark:bg-transparent">
@@ -726,7 +723,7 @@
                     value={entry.websiteHost}
                     disabled={isAndroid}
                     oninput={(event) => updateEntry(entry.id, "websiteHost", event.currentTarget.value)}
-                    class="h-8 min-w-0 rounded-md border border-border bg-background/70 px-2.5 text-[0.8rem] text-foreground outline-none placeholder:text-muted-foreground focus:border-ring dark:bg-transparent"
+                    class="field h-8 min-w-0 px-2.5 text-[0.8rem] text-foreground"
                     placeholder="domain.com"
                   />
                 </label>
@@ -734,7 +731,7 @@
                 <div class="flex min-w-0 flex-col gap-1">
                   <span class="text-[0.733333rem] font-medium text-muted-foreground">{t("settings.distractions.limits.editor.mobile")}</span>
                   {#if isAndroid}
-                    <div class="flex h-8 min-w-0 items-center gap-1 rounded-md border border-border bg-background/70 px-1.5 dark:bg-transparent">
+                    <div class="field flex h-8 min-w-0 items-center gap-1 px-1.5">
                       <button type="button" onclick={() => openMobileAppPicker(entry.id)} class={["min-w-0 flex-1 truncate rounded-sm px-1.5 py-1 text-left text-[0.8rem] outline-none hover:bg-accent", entry.mobileAppName ? "text-foreground" : "text-muted-foreground"]}>
                         {entry.mobileAppName || t("settings.distractions.limits.editor.chooseApp")}
                       </button>
@@ -746,19 +743,19 @@
                       <span class="text-[0.7rem] text-destructive">{t("settings.distractions.mobile.reselectForAndroid")}</span>
                     {/if}
                   {:else}
-                    <input value={entry.mobileAppName} oninput={(event) => updateEntry(entry.id, "mobileAppName", event.currentTarget.value)} class="h-8 min-w-0 rounded-md border border-border bg-background/70 px-2.5 text-[0.8rem] text-foreground outline-none placeholder:text-muted-foreground focus:border-ring dark:bg-transparent" placeholder={t("settings.distractions.limits.editor.mobilePlaceholder")} />
+                    <input value={entry.mobileAppName} oninput={(event) => updateEntry(entry.id, "mobileAppName", event.currentTarget.value)} class="field h-8 min-w-0 px-2.5 text-[0.8rem] text-foreground" placeholder={t("settings.distractions.limits.editor.mobilePlaceholder")} />
                   {/if}
                 </div>
 
                 <div class="flex min-w-0 flex-col gap-1">
                   <span class="text-[0.733333rem] font-medium text-muted-foreground">{t("settings.distractions.limits.editor.desktop")}</span>
-                  <div class="flex h-8 min-w-0 items-center gap-1 rounded-md border border-border bg-background/70 px-1.5 dark:bg-transparent">
+                  <div class="field flex h-8 min-w-0 items-center gap-1 px-1.5">
                     <button
                       type="button"
                       onclick={() => openDesktopAppPicker(entry.id)}
                       disabled={isAndroid}
                       class={[
-                        "min-w-0 flex-1 truncate rounded-sm px-1.5 py-1 text-left text-[0.8rem] outline-none transition-colors hover:bg-accent focus:bg-accent",
+                        "min-w-0 flex-1 truncate rounded-sm px-1.5 py-1 text-left text-[0.8rem] outline-none transition-colors hover:bg-accent focus-visible:bg-accent",
                         entry.desktopAppName ? "text-foreground" : "text-muted-foreground",
                       ]}
                     >

@@ -63,11 +63,11 @@ describe("MusicCurrentItemMenu", () => {
   it("stages additions and removals until Save and applies them together", async () => {
     const view = await render();
     view.querySelector<HTMLButtonElement>("button[aria-label='Current track playlists']")?.click();
-    await vi.waitFor(() => expect(view.querySelectorAll("[aria-pressed]")).toHaveLength(2));
-    const morning = view.querySelector<HTMLButtonElement>("button[aria-label='Remove from Morning']");
-    const evening = view.querySelector<HTMLButtonElement>("button[aria-label='Add to Evening']");
-    expect(morning?.getAttribute("aria-pressed")).toBe("true");
-    expect(evening?.getAttribute("aria-pressed")).toBe("false");
+    await vi.waitFor(() => expect(view.querySelectorAll("input[type='checkbox']")).toHaveLength(2));
+    const morning = view.querySelector<HTMLInputElement>("input[aria-label='Remove from Morning']");
+    const evening = view.querySelector<HTMLInputElement>("input[aria-label='Add to Evening']");
+    expect(morning?.checked).toBe(true);
+    expect(evening?.checked).toBe(false);
     expect(view.textContent).not.toContain("tracks");
     morning?.click();
     evening?.click();
@@ -87,11 +87,11 @@ describe("MusicCurrentItemMenu", () => {
     const view = await render(onOpenBuilder);
     const trigger = view.querySelector<HTMLButtonElement>("button[aria-label='Current track playlists']");
     trigger?.click();
-    await vi.waitFor(() => expect(view.querySelector("button[aria-label='Add to Evening']")).not.toBeNull());
-    view.querySelector<HTMLButtonElement>("button[aria-label='Add to Evening']")?.click();
+    await vi.waitFor(() => expect(view.querySelector("input[aria-label='Add to Evening']")).not.toBeNull());
+    view.querySelector<HTMLInputElement>("input[aria-label='Add to Evening']")?.click();
     trigger?.click();
     trigger?.click();
-    await vi.waitFor(() => expect(view.querySelector<HTMLButtonElement>("button[aria-label='Add to Evening']")?.getAttribute("aria-pressed")).toBe("false"));
+    await vi.waitFor(() => expect(view.querySelector<HTMLInputElement>("input[aria-label='Add to Evening']")?.checked).toBe(false));
     expect(api.bulkEditMusicMemberships).not.toHaveBeenCalled();
     const builder = [...view.querySelectorAll<HTMLButtonElement>("button")]
       .find((button) => button.textContent?.includes("Open in playlist builder"));

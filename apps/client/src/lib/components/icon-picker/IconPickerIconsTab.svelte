@@ -100,17 +100,17 @@
 </script>
 
 <div class="flex shrink-0 items-center gap-2 px-3 pt-3">
-  <div class="flex min-w-0 flex-1 items-center gap-2 rounded-md border border-border bg-background px-2">
+  <div class="field flex h-8 min-w-0 flex-1 items-center gap-2 py-0">
     <Search size={14} strokeWidth={1.75} class="shrink-0 text-muted-foreground" />
     <input
       bind:value={iconQuery}
-      class="h-8 min-w-0 flex-1 bg-transparent text-[0.866667rem] outline-none placeholder:text-muted-foreground"
+      class="field-bare h-full"
       placeholder={t("projects.iconPicker.filter")}
     />
   </div>
   <button
     type="button"
-    class="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border border-border text-muted-foreground hover:bg-accent hover:text-foreground"
+    class="flex size-8 shrink-0 items-center justify-center rounded-floating-item border border-border text-muted-foreground hover:bg-accent hover:text-foreground"
     aria-label={t("projects.iconPicker.random")}
     onclick={onChooseRandom}
   >

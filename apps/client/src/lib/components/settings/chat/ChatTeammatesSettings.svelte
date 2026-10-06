@@ -39,7 +39,7 @@
   import { getProjects } from "$lib/stores/projects.svelte";
   import CalendarScrollbar from "$lib/components/calendar/CalendarScrollbar.svelte";
   import Select from "$lib/components/ui/Select.svelte";
-  import SettingsCheckbox from "$lib/components/settings/SettingsCheckbox.svelte";
+  import Checkbox from "$lib/components/ui/Checkbox.svelte";
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
   import ChatAccessControl from "$lib/components/chat/composer/ChatAccessControl.svelte";
   import ChatControlMenu, {
@@ -665,13 +665,13 @@
   {@const preset = channelCapabilityPreset(channelAccess.capabilities)}
   <div class="access-details">
     {#if channelAccess.capabilities.readHistory}
-      <div class="field history-field"><span>{t("settings.chat.teammates.history")}</span><Select inline class="w-full" value={channelAccess.historyBoundary.kind} options={historyOptions} ariaLabel={t("settings.chat.teammates.history")} disabled={editor.archivedMode} onChange={(value) => updateAccessChannel(channelAccess.channelId, (channel) => ({ ...channel, historyBoundary: value === "fromGrant" ? { kind: "fromGrant" } : { kind: "entire" } }))} /></div>
+      <div class="form-field history-field"><span>{t("settings.chat.teammates.history")}</span><Select inline class="w-full" value={channelAccess.historyBoundary.kind} options={historyOptions} ariaLabel={t("settings.chat.teammates.history")} disabled={editor.archivedMode} onChange={(value) => updateAccessChannel(channelAccess.channelId, (channel) => ({ ...channel, historyBoundary: value === "fromGrant" ? { kind: "fromGrant" } : { kind: "entire" } }))} /></div>
     {/if}
     {#if preset === "custom"}
       <fieldset class="capability-switches" disabled={editor.archivedMode}>
         <legend>{t("settings.chat.teammates.channelCapabilities")}</legend>
-        <div><SettingsCheckbox checked={channelAccess.capabilities.readHistory} label={t("settings.chat.teammates.readHistory")} disabled={editor.archivedMode} onChange={(checked) => updateAccessChannel(channelAccess.channelId, (channel) => ({ ...channel, capabilities: { ...channel.capabilities, readHistory: checked }, historyBoundary: { kind: "entire" } }))} /><span><strong>{t("settings.chat.teammates.readHistory")}</strong><small>{t("settings.chat.teammates.readHistoryDescription")}</small></span></div>
-        <div><SettingsCheckbox checked={channelAccess.capabilities.participate} label={t("settings.chat.teammates.participate")} disabled={editor.archivedMode} onChange={(checked) => updateAccessChannel(channelAccess.channelId, (channel) => ({ ...channel, capabilities: { ...channel.capabilities, participate: checked } }))} /><span><strong>{t("settings.chat.teammates.participate")}</strong><small>{t("settings.chat.teammates.participateDescription")}</small></span></div>
+        <div><Checkbox checked={channelAccess.capabilities.readHistory} label={t("settings.chat.teammates.readHistory")} disabled={editor.archivedMode} onChange={(checked) => updateAccessChannel(channelAccess.channelId, (channel) => ({ ...channel, capabilities: { ...channel.capabilities, readHistory: checked }, historyBoundary: { kind: "entire" } }))} /><span><strong>{t("settings.chat.teammates.readHistory")}</strong><small>{t("settings.chat.teammates.readHistoryDescription")}</small></span></div>
+        <div><Checkbox checked={channelAccess.capabilities.participate} label={t("settings.chat.teammates.participate")} disabled={editor.archivedMode} onChange={(checked) => updateAccessChannel(channelAccess.channelId, (channel) => ({ ...channel, capabilities: { ...channel.capabilities, participate: checked } }))} /><span><strong>{t("settings.chat.teammates.participate")}</strong><small>{t("settings.chat.teammates.participateDescription")}</small></span></div>
       </fieldset>
     {/if}
     {#if selectedProfile?.latestRevision.maximumFolderCapability !== "none"}
@@ -680,7 +680,7 @@
         {#each foldersForChannel(channelAccess.channelId) as folderRead (folderRead.workingFolder.id)}
           {@const grant = channelAccess.folderGrants.find((entry) => entry.workingFolderId === folderRead.workingFolder.id)}
           <div class="folder-row">
-            <SettingsCheckbox checked={Boolean(grant)} label={t("settings.chat.teammates.allowFolder", folderRead.workingFolder.displayName)} disabled={editor.archivedMode} onChange={(checked) => toggleFolderGrant(channelAccess.channelId, folderRead.workingFolder.id, checked)} />
+            <Checkbox checked={Boolean(grant)} label={t("settings.chat.teammates.allowFolder", folderRead.workingFolder.displayName)} disabled={editor.archivedMode} onChange={(checked) => toggleFolderGrant(channelAccess.channelId, folderRead.workingFolder.id, checked)} />
             <Folder size={14} />
             <span class="folder-name"><strong>{folderRead.workingFolder.displayName}</strong><small data-status={folderRead.bindingStatus}>{t(`settings.chat.teammates.binding.${folderRead.bindingStatus}`)}</small></span>
             <div class="folder-controls">
@@ -700,7 +700,7 @@
     {/if}
     {#if channelAccess.folderGrants.length > 0 && advancedChannelIds.has(channelAccess.channelId)}
       <div class="field-grid compact advanced-fields">
-        <div class="field"><span>{t("settings.chat.teammates.channelRuntimeApproval")}</span><Select inline class="w-full" value={channelAccess.runtimeApprovalOverride ?? "inherit"} options={channelRuntimeOptions} ariaLabel={t("settings.chat.teammates.channelRuntimeApproval")} disabled={editor.archivedMode} onChange={(value) => updateAccessChannel(channelAccess.channelId, (channel) => ({ ...channel, runtimeApprovalOverride: value === "inherit" ? null : value as ChatRuntimeApprovalPolicy }))} /></div>
+        <div class="form-field"><span>{t("settings.chat.teammates.channelRuntimeApproval")}</span><Select inline class="w-full" value={channelAccess.runtimeApprovalOverride ?? "inherit"} options={channelRuntimeOptions} ariaLabel={t("settings.chat.teammates.channelRuntimeApproval")} disabled={editor.archivedMode} onChange={(value) => updateAccessChannel(channelAccess.channelId, (channel) => ({ ...channel, runtimeApprovalOverride: value === "inherit" ? null : value as ChatRuntimeApprovalPolicy }))} /></div>
       </div>
     {/if}
   </div>
@@ -718,8 +718,8 @@
       <div class="tools-menu-anchor">
         <button bind:this={toolsMenuTrigger} type="button" class="archive-filter" aria-label={t("settings.chat.teammates.accessTools")} aria-haspopup="menu" aria-expanded={toolsMenuOpen} disabled={editor.dirty} onclick={() => { toolsMenuOpen = !toolsMenuOpen; }}><Ellipsis size={15} /></button>
         {#if toolsMenuOpen}
-          <div bind:this={toolsMenuElement} role="menu" class="tools-menu" data-app-floating-surface>
-            <button type="button" role="menuitem" disabled={profileManagerLoading} onclick={() => void openProfileManager()}>{profileManagerLoading ? t("common.loading") : t("settings.chat.teammates.profileManager.heading")}</button>
+          <div bind:this={toolsMenuElement} role="menu" class="tools-menu surface-floating surface-floating-body" data-app-floating-surface>
+            <button type="button" role="menuitem" class="menu-item" disabled={profileManagerLoading} onclick={() => void openProfileManager()}>{profileManagerLoading ? t("common.loading") : t("settings.chat.teammates.profileManager.heading")}</button>
           </div>
         {/if}
       </div>
@@ -818,14 +818,14 @@
 
               <div class="editor-content">
                 <section class="editor-section"><div class="section-heading"><h4>{t("settings.chat.teammates.identitySection")}</h4></div><div class="field-grid">
-                  <div class="field full"><span id="teammate-name-label">{t("settings.chat.teammates.name")}<i class="required-marker" aria-hidden="true">*</i></span><input bind:value={editor.displayName} aria-labelledby="teammate-name-label" aria-describedby={editor.nameTaken || (editor.error && editor.errorField === "displayName") ? "teammate-name-error" : undefined} aria-invalid={editor.nameTaken || (editor.error && editor.errorField === "displayName") ? "true" : undefined} placeholder={t("settings.chat.teammates.namePlaceholder")} maxlength="160" required disabled={editor.archivedMode} oninput={() => editor.clearFieldError("displayName")} />{#if editor.nameTaken}<small id="teammate-name-error" class="field-error" role="alert">{t("settings.chat.teammates.nameTaken")}</small>{:else if editor.error && editor.errorField === "displayName"}<small id="teammate-name-error" class="field-error" role="alert">{editor.error}</small>{/if}</div>
-                  <div class="field full"><span id="teammate-role-label">{t("settings.chat.teammates.role")}<i class="required-marker" aria-hidden="true">*</i></span><input bind:value={editor.role} aria-labelledby="teammate-role-label" aria-describedby={editor.error && editor.errorField === "role" ? "teammate-role-error" : undefined} aria-invalid={editor.error && editor.errorField === "role" ? "true" : undefined} placeholder={t("settings.chat.teammates.rolePlaceholder")} maxlength="1000" required disabled={editor.archivedMode} oninput={() => editor.clearFieldError("role")} />{#if editor.error && editor.errorField === "role"}<small id="teammate-role-error" class="field-error" role="alert">{editor.error}</small>{/if}</div>
-                  <div class="field full"><span id="teammate-instructions-label">{t("settings.chat.teammates.instructions")}</span><textarea bind:value={editor.instructions} aria-labelledby="teammate-instructions-label" rows="4" maxlength="65536" disabled={editor.archivedMode} placeholder={t("settings.chat.teammates.instructionsPlaceholder")}></textarea></div>
+                  <div class="form-field full"><span id="teammate-name-label">{t("settings.chat.teammates.name")}<i class="required-marker" aria-hidden="true">*</i></span><input bind:value={editor.displayName} aria-labelledby="teammate-name-label" aria-describedby={editor.nameTaken || (editor.error && editor.errorField === "displayName") ? "teammate-name-error" : undefined} aria-invalid={editor.nameTaken || (editor.error && editor.errorField === "displayName") ? "true" : undefined} placeholder={t("settings.chat.teammates.namePlaceholder")} maxlength="160" required disabled={editor.archivedMode} oninput={() => editor.clearFieldError("displayName")} />{#if editor.nameTaken}<small id="teammate-name-error" class="field-error" role="alert">{t("settings.chat.teammates.nameTaken")}</small>{:else if editor.error && editor.errorField === "displayName"}<small id="teammate-name-error" class="field-error" role="alert">{editor.error}</small>{/if}</div>
+                  <div class="form-field full"><span id="teammate-role-label">{t("settings.chat.teammates.role")}<i class="required-marker" aria-hidden="true">*</i></span><input bind:value={editor.role} aria-labelledby="teammate-role-label" aria-describedby={editor.error && editor.errorField === "role" ? "teammate-role-error" : undefined} aria-invalid={editor.error && editor.errorField === "role" ? "true" : undefined} placeholder={t("settings.chat.teammates.rolePlaceholder")} maxlength="1000" required disabled={editor.archivedMode} oninput={() => editor.clearFieldError("role")} />{#if editor.error && editor.errorField === "role"}<small id="teammate-role-error" class="field-error" role="alert">{editor.error}</small>{/if}</div>
+                  <div class="form-field full"><span id="teammate-instructions-label">{t("settings.chat.teammates.instructions")}</span><textarea bind:value={editor.instructions} aria-labelledby="teammate-instructions-label" rows="4" maxlength="65536" disabled={editor.archivedMode} placeholder={t("settings.chat.teammates.instructionsPlaceholder")}></textarea></div>
                 </div></section>
 
                 <section class="editor-section"><div class="section-heading"><h4>{t("settings.chat.teammates.executionSection")}</h4></div><div class="field-grid execution-fields">
-                  <div class="field execution-model-field"><span>{t("settings.chat.teammates.model")}<i class="required-marker" aria-hidden="true">*</i></span><ChatModelControls value={{ providerInstanceId: editor.providerId || null, modelId: editor.modelId || null, providerManaged: editor.providerManagedModel, options: editor.modelOptions }} disabled={editor.archivedMode} onChange={editor.selectExecution} /></div>
-                  <div class="field execution-approval-field"><span>{t("settings.chat.teammates.approval")}</span><ChatAccessControl value={editor.safetyMode} providerInstanceId={editor.providerId || null} workingFolderId={permissionWorkingFolderId} disabled={editor.archivedMode} onChange={(value) => { editor.safetyMode = value; }} /></div>
+                  <div class="form-field execution-model-field"><span>{t("settings.chat.teammates.model")}<i class="required-marker" aria-hidden="true">*</i></span><ChatModelControls value={{ providerInstanceId: editor.providerId || null, modelId: editor.modelId || null, providerManaged: editor.providerManagedModel, options: editor.modelOptions }} disabled={editor.archivedMode} onChange={editor.selectExecution} /></div>
+                  <div class="form-field execution-approval-field"><span>{t("settings.chat.teammates.approval")}</span><ChatAccessControl value={editor.safetyMode} providerInstanceId={editor.providerId || null} workingFolderId={permissionWorkingFolderId} disabled={editor.archivedMode} onChange={(value) => { editor.safetyMode = value; }} /></div>
                 </div></section>
 
                 <section class="editor-section access-section">
@@ -1002,18 +1002,17 @@
   .section-heading h4 { font-size:calc(0.8rem * var(--type-scale)); font-weight:600; }
   .field-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:0.75rem; }
   .field-grid.compact { grid-template-columns:repeat(2,minmax(0,1fr)); }
-  .field { display:grid; min-width:0; align-content:start; gap:0.3rem; color:var(--muted-foreground); font-size:calc(0.68rem * var(--type-scale)); font-weight:550; }
+  .form-field { display:grid; min-width:0; align-content:start; gap:0.3rem; color:var(--muted-foreground); font-size:calc(0.68rem * var(--type-scale)); font-weight:550; }
   .execution-fields { gap:0.7rem; padding-inline:0.25rem; }
   .required-marker { margin-left:0.15rem; color:var(--destructive); font-style:normal; }
   .execution-model-field :global(.model-control) { z-index:2; max-width:100%; justify-self:start; }
   .execution-model-field :global(.model-trigger) { min-width:12rem; }
   .execution-approval-field :global(.access-control) { justify-self:start; }
   .execution-approval-field :global(.control-trigger) { min-width:12rem; max-width:100%; justify-content:center; }
-  .field.full { grid-column:1/-1; }
-  .field input,.field textarea { box-sizing:border-box; width:100%; min-width:0; appearance:none; border:1px solid var(--border); border-radius:0.375rem; background:var(--background); padding:0.47rem 0.55rem; color:var(--foreground); outline:0; font-weight:400; }
-  .field input:focus,.field textarea:focus { border-color:var(--ring); }
-  .field textarea { resize:vertical; }
-  .field small { color:var(--muted-foreground); font-weight:400; line-height:1rem; }
+  .form-field.full { grid-column:1/-1; }
+  .form-field input,.form-field textarea { box-sizing:border-box; width:100%; min-width:0; appearance:none; border:1px solid var(--border); border-radius:var(--floating-item-radius); background:transparent; padding:0.47rem 0.55rem; color:var(--foreground); outline:0; font-weight:400; }
+  .form-field textarea { resize:vertical; }
+  .form-field small { color:var(--muted-foreground); font-weight:400; line-height:1rem; }
   .conflict-panel { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:start; gap:0.8rem; margin-bottom:1rem; border:1px solid color-mix(in srgb,var(--destructive) 45%,var(--border)); border-radius:0.6rem; background:color-mix(in srgb,var(--destructive) 7%,var(--background)); padding:0.8rem; outline:0; }
   .conflict-panel:focus-visible,.conflict-recovery-notice:focus-visible { box-shadow:0 0 0 2px color-mix(in srgb,var(--primary) 55%,transparent); }
   .conflict-copy { min-width:0; }
@@ -1054,9 +1053,7 @@
   .directory-header p { margin-top:0.25rem; color:var(--muted-foreground); font-size:calc(0.8rem * var(--type-scale)); }
   .header-actions { display:flex; align-items:center; gap:0.35rem; }
   .tools-menu-anchor { position:relative; }
-  .tools-menu { position:absolute; z-index:20; top:calc(100% + 0.25rem); right:0; display:grid; min-width:10rem; border:1px solid var(--border); border-radius:0.42rem; background:var(--popover); padding:0.2rem; color:var(--popover-foreground); box-shadow:0 0.35rem 1rem color-mix(in srgb,var(--foreground) 12%,transparent); }
-  .tools-menu button { min-height:1.9rem; border-radius:0.32rem; padding:0.35rem 0.55rem; text-align:left; font-size:calc(0.7rem * var(--type-scale)); }
-  .tools-menu button:hover:not(:disabled) { background:var(--accent); color:var(--accent-foreground); }
+  .tools-menu { position:absolute; z-index:20; top:calc(100% + 0.25rem); right:0; display:grid; min-width:10rem; }
   .settings-button { display:inline-flex; min-height:1.9rem; align-items:center; justify-content:center; gap:0.35rem; border-radius:0.42rem; padding:0.3rem 0.65rem; font-size:calc(0.733333rem * var(--type-scale)); font-weight:600; line-height:1; white-space:nowrap; }
   .settings-button { border:1px solid var(--border); background:var(--background); color:var(--foreground); }
   .archive-filter { position:relative; display:grid; width:1.9rem; height:1.9rem; place-items:center; border-radius:0.42rem; color:var(--muted-foreground); }

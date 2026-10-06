@@ -133,7 +133,7 @@
 {#if pickerOpen}
   <div bind:this={popup} use:portal={trigger?.closest<HTMLElement>("[data-floating-root]") ?? "body"}
     id={pickerId} role="dialog" aria-label={label ?? clearLabel} tabindex="-1" data-app-floating-surface
-    class="task-date-popover fixed z-90 w-72 overflow-auto rounded-xl border border-border bg-popover p-3 text-popover-foreground shadow-xl"
+    class="task-date-popover surface-floating fixed z-90 w-floating overflow-auto p-3"
     style={popupStyle}
     onkeydowncapture={(event) => {
       if (event.key === "Escape") {

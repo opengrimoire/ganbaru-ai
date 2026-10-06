@@ -7,6 +7,7 @@
   import type { ChatPendingRequestRead, UserInputAnswer } from "$lib/chat/contracts";
   import { parseApprovalChoices, parseUserInputQuestions, validateUserInputAnswers } from "$lib/chat/composer/model";
   import { chatErrorMessage } from "$lib/chat/error-presentation";
+  import Checkbox from "$lib/components/ui/Checkbox.svelte";
   import { formatList, formatNumber } from "$lib/i18n/formatters";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import { getChat } from "$lib/stores/chat.svelte";
@@ -198,8 +199,8 @@
   {:else if question}
     <header><div><strong>{t("chat.composer.question")}</strong><p>{t("chat.composer.questionProgress", formatNumber(localization.locale, step + 1), formatNumber(localization.locale, questions.length))}</p></div></header>
     {#if question.header}<small>{question.header}</small>{/if}<p class="question-text">{question.question}</p>
-    <div class="question-options">{#each question.options as option}<label><input type={question.multiple ? "checkbox" : "radio"} name={`question-${question.id}`} checked={(selected[question.id] ?? []).includes(option.id)} onchange={() => toggleOption(question.id, option.id, question.multiple)} /><span><strong>{option.label}</strong>{#if option.description}<small>{option.description}</small>{/if}</span></label>{/each}</div>
-    {#if question.freeFormAllowed}<label class="free-form"><span>{t("chat.composer.freeForm")}</span><textarea value={freeForm[question.id] ?? ""} oninput={(event) => { freeForm = { ...freeForm, [question.id]: event.currentTarget.value }; scheduleAnswerDraftSave(); }}></textarea></label>{/if}
+    <div class="question-options">{#each question.options as option}<label>{#if question.multiple}<Checkbox name={`question-${question.id}`} checked={(selected[question.id] ?? []).includes(option.id)} onChange={() => toggleOption(question.id, option.id, question.multiple)} />{:else}<input type="radio" name={`question-${question.id}`} checked={(selected[question.id] ?? []).includes(option.id)} onchange={() => toggleOption(question.id, option.id, question.multiple)} />{/if}<span><strong>{option.label}</strong>{#if option.description}<small>{option.description}</small>{/if}</span></label>{/each}</div>
+    {#if question.freeFormAllowed}<label class="free-form"><span>{t("chat.composer.freeForm")}</span><textarea class="field" value={freeForm[question.id] ?? ""} oninput={(event) => { freeForm = { ...freeForm, [question.id]: event.currentTarget.value }; scheduleAnswerDraftSave(); }}></textarea></label>{/if}
     {#if answerPreview}<div class="answer-preview"><span>{t("chat.composer.responsePreview")}</span><p>{answerPreview}</p></div>{/if}
     <div class="request-actions">{#if step > 0}<button type="button" disabled={resolving} onclick={() => { step -= 1; error = null; }}>{t("chat.composer.back")}</button>{/if}<button type="button" disabled={resolving} onclick={() => void advanceOrSubmit()}>{step < questions.length - 1 ? t("chat.save") : t("chat.composer.submitAnswer")}</button></div>
   {/if}
@@ -226,7 +227,7 @@
   .question-options strong { font-size: calc(0.733333rem * var(--type-scale)); }
   .question-options small { color: var(--muted-foreground); font-size: calc(0.666667rem * var(--type-scale)); }
   .free-form { display: grid; gap: 0.25rem; color: var(--muted-foreground); font-size: calc(0.7rem * var(--type-scale)); }
-  .free-form textarea { min-height: 4rem; resize: vertical; border: 1px solid var(--border); border-radius: 0.4rem; padding: 0.45rem; color: var(--foreground); }
+  .free-form textarea { min-height: 4rem; resize: vertical; color: var(--foreground); }
   .answer-preview { border-left: 2px solid var(--primary); padding-left: 0.5rem; }
   .answer-preview span { color: var(--muted-foreground); font-size: calc(0.666667rem * var(--type-scale)); }
   .answer-preview p { white-space: pre-wrap; font-size: calc(0.733333rem * var(--type-scale)); }

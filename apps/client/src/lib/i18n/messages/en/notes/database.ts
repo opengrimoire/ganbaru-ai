@@ -12,7 +12,6 @@ export const database = {
   databaseSourceSharedDescription: "Linked sources share their properties and pages. Views keep their own layout settings.",
   databaseEditingLock: "Database layout lock",
   databaseLockLayout: "Lock database layout",
-  databaseUnlockLayout: "Unlock database layout",
   databaseEditingLockDescription: "The layout is locked to prevent accidental changes. You can still edit and add pages. Linked databases have their own layout lock.",
   databaseSchemaDuplicateName: (name: string) => `${name} (copy)`,
   databaseTablePresentation: {

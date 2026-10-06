@@ -62,5 +62,5 @@
 <style>
   .folder-control { position: relative; min-width: 0; }
   .folder-control :global(.control-trigger) { max-width: 12rem; border: 1px solid color-mix(in srgb, var(--border) 75%, transparent); background: color-mix(in srgb, var(--card) 88%, transparent); }
-  .folder-error { position: absolute; right: 0; bottom: calc(100% + 0.45rem); z-index: 60; width: min(18rem, calc(100vw - 1.5rem)); border: 1px solid color-mix(in srgb, var(--destructive) 45%, var(--border)); border-radius: 0.5rem; background: var(--popover); padding: 0.45rem 0.55rem; color: var(--destructive); font-size: calc(0.666667rem * var(--type-scale)); box-shadow: 0 10px 24px rgb(0 0 0 / 0.16); }
+  .folder-error { position: absolute; right: 0; bottom: calc(100% + 0.45rem); z-index: 60; width: min(18rem, calc(100vw - 1.5rem)); border: 1px solid color-mix(in srgb, var(--destructive) 45%, var(--border)); border-radius: var(--floating-radius); background: var(--popover); padding: 0.45rem 0.55rem; color: var(--destructive); font-size: var(--panel-detail-font-size); box-shadow: var(--floating-shadow); }
 </style>

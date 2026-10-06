@@ -48,23 +48,23 @@
 </script>
 
 <div class="pointer-events-none absolute inset-x-0 bottom-4 z-40 flex justify-center px-3">
-  <div class="pointer-events-auto flex min-h-10 w-[min(32rem,100%)] items-center gap-2 rounded-lg border border-border bg-card px-2">
+  <div class="pointer-events-auto surface-floating flex min-h-10 w-[min(32rem,100%)] items-center gap-2 px-2">
     <Search size={15} strokeWidth={1.75} class="shrink-0 text-muted-foreground" />
     <input
       bind:this={taskFinderInputElement}
       value={taskSearch}
       aria-label={t("projects.finder.label")}
       placeholder={t("projects.header.searchPlaceholder")}
-      class="min-w-0 flex-1 bg-transparent text-[0.866667rem] placeholder:text-muted-foreground"
+      class="field-bare"
       oninput={(event) => {
         onTaskSearchChange(event.currentTarget.value);
       }}
       onkeydown={handleTaskFinderKeydown}
     />
-    <span class="hidden shrink-0 rounded-md bg-muted/70 px-2 py-1 text-[0.733333rem] text-muted-foreground min-[520px]:inline">
+    <span class="hidden shrink-0 rounded-md bg-muted/70 px-2 py-1 text-panel-detail text-muted-foreground min-[520px]:inline">
       {t("projects.filters.matchingTasks", matchingTaskCount, totalTaskCount)}
     </span>
-    <span class="hidden shrink-0 rounded-md border border-border px-2 py-1 text-[0.733333rem] text-muted-foreground min-[420px]:inline">
+    <span class="hidden shrink-0 rounded-md border border-border px-2 py-1 text-panel-detail text-muted-foreground min-[420px]:inline">
       {t("projects.finder.shortcut")}
     </span>
     <button

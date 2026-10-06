@@ -2,6 +2,7 @@
   import { tick, untrack, type Component, type Snippet } from "svelte";
   import { portal } from "$lib/utils/portal";
   import { scrollEdgeFadeAction } from "$lib/utils/scroll-edge-fade";
+  import { SUBMENU_CLOSE_DELAY_MS, SUBMENU_OPEN_DELAY_MS } from "$lib/utils/menu-aim";
   import { anchoredPanelContentHeight, anchoredPanelStyle, anchoredPanelWidth, anchoredSidePanelStyle, anchoredSubmenuWidth } from "$lib/utils/anchored-panel";
   import SlidersHorizontal from "@lucide/svelte/icons/sliders-horizontal";
   import ListFilter from "@lucide/svelte/icons/list-filter";
@@ -56,10 +57,6 @@
   const VIEWPORT_HEIGHT_FRACTION = 0.7;
   /** How much narrower a submenu is than the menu it opens from. */
   const SUBMENU_WIDTH_INSET = 32;
-  /** Delay before a hovered row opens its submenu, so a pointer crossing several rows does not open each one. */
-  const SUBMENU_OPEN_DELAY_MS = 100;
-  /** Grace period before a hover-opened submenu closes, so the pointer can travel from its row into it. */
-  const SUBMENU_CLOSE_DELAY_MS = 250;
   /** Dispatched on the parent menu when one of its submenus opens, so sibling submenus close. */
   const SUBMENU_OPEN_EVENT = "collection-submenu-open";
   /** Parent menu controls whose hover takes the highlight from an open submenu's row; padding, dividers, and labels do not. */
@@ -361,7 +358,7 @@
     {:else if countLabel}<span class="rounded bg-accent px-1 text-[0.733333rem] tabular-nums">{countLabel}</span>{/if}
   </button>
   {#if open && !settingsRow}
-    <CollectionPanel bind:element={panel} {label} id={id} data-collection-menu-dismiss={dismisses ? "" : undefined} class="fixed z-80 max-w-[calc(100vw-1rem)]">
+    <CollectionPanel bind:element={panel} {label} id={id} data-collection-menu-dismiss={dismisses ? "" : undefined} class="fixed z-80">
       <div use:scrollEdgeFadeAction class="min-h-0 overflow-x-hidden overflow-y-auto">
         <div data-collection-menu-content class="@container flow-root h-max p-1.5">
           {#if headerVisible}
@@ -382,7 +379,7 @@
 <style>
   @media (any-pointer: coarse) and (any-hover: none) {
     .collection-menu-trigger {
-      min-height: var(--collection-row-height, 2.75rem);
+      min-height: var(--panel-row-height);
       min-width: 2.75rem;
     }
   }

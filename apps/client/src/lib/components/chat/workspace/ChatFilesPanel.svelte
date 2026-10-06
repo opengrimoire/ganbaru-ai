@@ -643,7 +643,7 @@
       {#if editorSession.reviewComposerOpen && editorSession.editorSelection?.text}
         <form class="review-composer" onsubmit={(event) => { event.preventDefault(); void editorSession.createReviewComment(); }}>
           <label for="chat-review-comment">{t("chat.review.commentOnSelection", editorSession.editorSelection.startLine, editorSession.editorSelection.endLine)}</label>
-          <textarea id="chat-review-comment" bind:value={editorSession.reviewDraft} maxlength="65536" placeholder={t("chat.review.commentPlaceholder")}></textarea>
+          <textarea class="field" id="chat-review-comment" bind:value={editorSession.reviewDraft} maxlength="65536" placeholder={t("chat.review.commentPlaceholder")}></textarea>
           <div>
             <button type="button" onclick={() => editorSession.closeReviewComposer()}>{t("common.cancel")}</button>
             <button type="submit" class="primary" disabled={!editorSession.reviewDraft.trim() || editorSession.creatingReview}>{editorSession.creatingReview ? t("common.loading") : t("chat.review.add")}</button>
@@ -656,14 +656,14 @@
           <span>{fileDirty ? t("chat.inspector.fileDeletedWithUnsavedChanges") : t("chat.inspector.fileDeletedOnDisk")}</span>
           <div><button type="button" onclick={() => void editorSession.recreateDeletedFile()}>{t("chat.inspector.recreateFile")}</button></div>
           {#if fileDirty}
-            <form onsubmit={(event) => { event.preventDefault(); void editorSession.saveConflictCopy(); }}><input bind:value={editorSession.saveCopyPath} aria-label={t("chat.inspector.saveCopyPath")} /><button type="submit" disabled={!editorSession.saveCopyPath.trim() || editorSession.saving}>{t("chat.inspector.saveCopy")}</button></form>
+            <form onsubmit={(event) => { event.preventDefault(); void editorSession.saveConflictCopy(); }}><input class="field" bind:value={editorSession.saveCopyPath} aria-label={t("chat.inspector.saveCopyPath")} /><button type="submit" disabled={!editorSession.saveCopyPath.trim() || editorSession.saving}>{t("chat.inspector.saveCopy")}</button></form>
           {/if}
         </div>
       {:else if editorSession.saveConflict}
         <div role="alert" class="save-conflict">
           <span>{t("chat.inspector.saveConflict")}</span>
           <div><button type="button" onclick={() => void editorSession.compareConflict()}>{t("chat.inspector.compareFile")}</button><button type="button" onclick={() => editorSession.reloadSelectedFile()}>{t("chat.inspector.reloadFile")}</button><button type="button" onclick={() => void editorSession.overwriteExternalFile()}>{t("chat.inspector.overwriteFile")}</button></div>
-          <form onsubmit={(event) => { event.preventDefault(); void editorSession.saveConflictCopy(); }}><input bind:value={editorSession.saveCopyPath} aria-label={t("chat.inspector.saveCopyPath")} /><button type="submit" disabled={!editorSession.saveCopyPath.trim() || editorSession.saving}>{t("chat.inspector.saveCopy")}</button></form>
+          <form onsubmit={(event) => { event.preventDefault(); void editorSession.saveConflictCopy(); }}><input class="field" bind:value={editorSession.saveCopyPath} aria-label={t("chat.inspector.saveCopyPath")} /><button type="submit" disabled={!editorSession.saveCopyPath.trim() || editorSession.saving}>{t("chat.inspector.saveCopy")}</button></form>
         </div>
       {/if}
       {#if editorSession.conflictDiskText !== null && editorSession.preview}
@@ -704,7 +704,7 @@
   .file-tree-pane { display: flex; width: var(--file-tree-width); min-width: 0; min-height: 0; flex: 0 0 var(--file-tree-width); flex-direction: column; overflow: hidden; background: color-mix(in srgb, var(--cal-bg) 96%, var(--muted)); }
   .tree-toolbar { display: flex; min-height: 2.45rem; flex: 0 0 auto; align-items: center; gap: 0.15rem; border-bottom: 1px solid var(--border); padding: 0.3rem; }
   .file-search { display: flex; min-width: 0; min-height: 1.75rem; flex: 1; align-items: center; gap: 0.35rem; border-radius: 0.4rem; padding-inline: 0.4rem; color: var(--muted-foreground); }
-  .file-search:focus-within { background: var(--background); box-shadow: inset 0 0 0 1px var(--ring); color: var(--foreground); }
+  .file-search:focus-within { color: var(--foreground); }
   .file-search input { min-width: 0; flex: 1; background: transparent; color: var(--foreground); font-size: calc(0.7rem * var(--type-scale)); outline: none; }
   .tree-action { display: inline-grid; width: 1.7rem; height: 1.7rem; flex: 0 0 auto; place-items: center; border-radius: 0.35rem; color: var(--foreground); }
   .tree-action:hover, .tree-action.active { background: var(--accent); }
@@ -717,7 +717,7 @@
   .save-conflict { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 0.35rem; border-bottom: 1px solid color-mix(in srgb, var(--destructive) 35%, var(--border)); background: color-mix(in srgb, var(--destructive) 8%, var(--background)); padding: 0.4rem 0.55rem; color: var(--destructive); font-size: calc(0.7rem * var(--type-scale)); }
   .save-conflict > div { display: flex; gap: 0.25rem; }
   .save-conflict form { grid-column: 1 / -1; display: flex; min-width: 0; gap: 0.35rem; }
-  .save-conflict input { min-width: 0; flex: 1; border: 1px solid var(--border); border-radius: 0.35rem; background: var(--background); padding: 0.25rem 0.4rem; color: var(--foreground); }
+  .save-conflict input { min-width: 0; flex: 1; color: var(--foreground); }
   .save-conflict button { flex: 0 0 auto; border-radius: 0.35rem; padding: 0.2rem 0.45rem; color: var(--foreground); }
   .save-conflict button:hover { background: var(--accent); }
   .conflict-compare { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); max-height: 35%; overflow: hidden; border-bottom: 1px solid var(--border); }
@@ -727,8 +727,7 @@
   .conflict-compare pre { margin-top: 0.3rem; white-space: pre-wrap; overflow-wrap: anywhere; font-size: calc(0.66rem * var(--type-scale)); }
   .review-composer { display: grid; flex: 0 0 auto; gap: 0.4rem; border-bottom: 1px solid var(--border); padding: 0.55rem; background: var(--background); }
   .review-composer label { font-size: calc(0.7rem * var(--type-scale)); color: var(--muted-foreground); }
-  .review-composer textarea { min-height: 4rem; max-height: 9rem; resize: vertical; border: 1px solid var(--border); border-radius: 0.4rem; background: var(--cal-bg); padding: 0.45rem; font-size: calc(0.733333rem * var(--type-scale)); color: var(--foreground); outline: none; }
-  .review-composer textarea:focus { border-color: var(--ring); }
+  .review-composer textarea { min-height: 4rem; max-height: 9rem; resize: vertical; color: var(--foreground); font-size: var(--panel-font-size); }
   .review-composer div { display: flex; justify-content: flex-end; gap: 0.35rem; }
   .review-composer button { border-radius: 0.35rem; padding: 0.3rem 0.55rem; font-size: calc(0.7rem * var(--type-scale)); }
   .review-composer button:hover { background: var(--accent); }

@@ -113,7 +113,7 @@
     />
   {:else}
     <div
-      class="fixed z-50 overflow-hidden rounded-lg border border-border bg-popover px-3 py-3 text-xs text-muted-foreground shadow-lg"
+      class="surface-floating fixed z-50 overflow-hidden px-3 py-3 text-muted-foreground"
       style="top: calc(var(--titlebar-h) + 4px); right: 8px; width: min(18rem, calc(100vw - 16px)); max-height: calc(100dvh - var(--titlebar-h) - 12px);"
     >
       {t("common.loading")}...

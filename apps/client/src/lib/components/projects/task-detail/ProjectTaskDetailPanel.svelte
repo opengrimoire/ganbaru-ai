@@ -25,6 +25,7 @@
   import { getMobileBackStack } from "$lib/stores/mobile-back-stack.svelte";
   import { getTheme } from "$lib/stores/theme.svelte";
   import { cn } from "$lib/utils";
+  import { scrollEdgeFadeAction } from "$lib/utils/scroll-edge-fade";
   import type { ProjectTaskModalLayout } from "$lib/projects/toolbar";
   import {
     canCreateTag as canCreateTaskTag,
@@ -760,7 +761,7 @@
     <!-- svelte-ignore a11y_click_events_have_key_events -->
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div
-      class="fixed inset-0 z-70 flex items-center justify-center bg-black/35 p-3"
+      class="surface-backdrop fixed inset-0 z-70 flex items-center justify-center p-3"
       style={androidSystemBackAvailable
         ? "padding: calc(var(--safe-area-top) + 0.75rem) calc(var(--safe-area-right) + 0.75rem) calc(var(--safe-area-bottom) + 0.75rem) calc(var(--safe-area-left) + 0.75rem)"
         : undefined}
@@ -770,11 +771,11 @@
       bind:this={detailDialog}
       class={cn(
         "task-detail-dialog",
-        "flex max-h-full max-w-full min-h-0 flex-col overflow-hidden border border-border bg-card text-card-foreground shadow-2xl",
-        layout === "fullscreen" && androidSystemBackAvailable && "h-full w-full rounded-md",
-        layout === "fullscreen" && !androidSystemBackAvailable && "h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] rounded-md",
-        layout === "sheet" && "h-[min(88dvh,48rem)] w-[calc(100vw-1rem)] max-w-6xl rounded-xl",
-        layout === "modal" && "h-[min(92dvh,62rem)] w-[min(78rem,calc(100vw-2rem))] rounded-xl",
+        "surface-dialog flex max-h-full max-w-full min-h-0 flex-col overflow-hidden",
+        layout === "fullscreen" && androidSystemBackAvailable && "h-full w-full",
+        layout === "fullscreen" && !androidSystemBackAvailable && "h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)]",
+        layout === "sheet" && "h-[min(88dvh,48rem)] w-[calc(100vw-1rem)] max-w-6xl",
+        layout === "modal" && "h-[min(92dvh,62rem)] w-[min(78rem,calc(100vw-2rem))]",
       )}
       data-floating-root
       role="dialog"
@@ -794,7 +795,7 @@
 
       <form class="flex min-h-0 flex-1 flex-col" onsubmit={(event) => { event.preventDefault(); void saveTaskDetail(); }}>
         <div class="relative min-h-0 flex-1">
-          <div bind:this={detailScrollContainer} class="task-detail-scroll hide-scrollbar h-full overflow-y-auto overscroll-contain">
+          <div bind:this={detailScrollContainer} use:scrollEdgeFadeAction class="task-detail-scroll hide-scrollbar h-full overflow-y-auto overscroll-contain">
             {#key selectedTask.id}
               <div class="task-detail-workspace">
                 <div class="task-detail-content">
@@ -1063,18 +1064,12 @@
     box-shadow: none !important;
   }
 
-  .task-detail-dialog :global(:is(input, textarea):focus),
   .task-detail-dialog :global(button:focus-visible) {
     background-color: var(--accent);
   }
 
   .task-detail-dialog :global(button:focus-visible) {
     color: var(--accent-foreground);
-  }
-
-  .task-detail-dialog :global(label:has(> input[type="checkbox"]:focus-visible)) {
-    background-color: var(--accent);
-    border-radius: 0.375rem;
   }
 
   .task-detail-content :global(.task-detail-section + .task-detail-section) {

@@ -130,7 +130,7 @@
         />
         <input
           value={statusNameDraftValue(status)}
-          class="h-7 min-w-0 rounded-md border border-border bg-background px-2 text-[0.8rem] text-foreground outline-none transition-colors focus:border-ring placeholder:text-muted-foreground"
+          class="field min-w-0 text-foreground"
           aria-label={t("projects.settings.statusName")}
           onpointerdown={moveTextInputCaretToPointer}
           oninput={(event) => setStatusNameDraft(status.id, event.currentTarget.value)}
@@ -171,7 +171,7 @@
     />
     <input
       bind:value={newStatusName}
-      class="h-7 min-w-0 rounded-md border border-border bg-background px-2 text-[0.8rem] text-foreground outline-none transition-colors focus:border-ring placeholder:text-muted-foreground"
+      class="field min-w-0 text-foreground"
       placeholder={t("projects.settings.newStatusPlaceholder")}
       onpointerdown={moveTextInputCaretToPointer}
       onkeydown={(event) => {

@@ -2,7 +2,6 @@
   import { onMount, untrack } from "svelte";
   import AlertTriangle from "@lucide/svelte/icons/triangle-alert";
   import Check from "@lucide/svelte/icons/check";
-  import ChevronDown from "@lucide/svelte/icons/chevron-down";
   import ChevronLeft from "@lucide/svelte/icons/chevron-left";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import Columns2 from "@lucide/svelte/icons/columns-2";
@@ -59,6 +58,8 @@
   import { getChat } from "$lib/stores/chat.svelte";
   import { subscribeChatWorkspaceChanges } from "$lib/chat/workspace/observer-client";
   import { writeTextToClipboard } from "$lib/utils/clipboard";
+  import Checkbox from "$lib/components/ui/Checkbox.svelte";
+  import Select from "$lib/components/ui/Select.svelte";
   import ChatChangedFileTree from "./ChatChangedFileTree.svelte";
   import ChatFileIcon from "$lib/components/chat/workspace/ChatFileIcon.svelte";
   import ChatPierreDiff, { type ChatDiffViewport } from "./ChatPierreDiff.svelte";
@@ -136,6 +137,26 @@
     ?? (threadId
       ? { kind: "checkpoint", range: "turn", turnId: null }
       : { kind: "working_tree", mode: "all" }));
+  const reviewSourceOptions = $derived.by(() => {
+    const options: { value: string; label: string }[] = [];
+    const currentKey = reviewSourceKey(effectiveSource);
+    if (effectiveSource.kind === "checkpoint" && effectiveSource.range === "turn" && effectiveSource.turnId) {
+      options.push({ value: currentKey, label: sourceOptionLabel(effectiveSource) });
+    }
+    if (threadId) {
+      options.push({ value: "checkpoint:turn:", label: t("chat.inspector.currentTurn") });
+      options.push({ value: "checkpoint:thread:", label: t("chat.inspector.entireThread") });
+    }
+    options.push(
+      { value: "working_tree:staged", label: t("chat.review.stagedChanges") },
+      { value: "working_tree:unstaged", label: t("chat.review.unstagedChanges") },
+      { value: "working_tree:all", label: t("chat.review.allChanges") },
+    );
+    if (effectiveSource.kind !== "checkpoint" && effectiveSource.kind !== "working_tree") {
+      options.push({ value: currentKey, label: sourceOptionLabel(effectiveSource) });
+    }
+    return options;
+  });
   const reviewSession = new ChatReviewSession({
     scope: currentReviewScope,
     hasPendingEdit: () => Boolean(commentDraft.trim() || selection),
@@ -391,6 +412,19 @@
     onStateChange({ source: next, selectedFile: null });
   }
 
+  /**
+   * Applies a diff source picked by its option key; keys for the current custom source leave it unchanged.
+   *
+   * @param value Option key produced by `reviewSourceKey` or one of the fixed source keys.
+   */
+  function chooseSourceKey(value: string): void {
+    if (value === "checkpoint:turn:") chooseSource({ kind: "checkpoint", range: "turn", turnId: null });
+    else if (value === "checkpoint:thread:") chooseSource({ kind: "checkpoint", range: "thread", turnId: null });
+    else if (value === "working_tree:staged") chooseSource({ kind: "working_tree", mode: "staged" });
+    else if (value === "working_tree:unstaged") chooseSource({ kind: "working_tree", mode: "unstaged" });
+    else if (value === "working_tree:all") chooseSource({ kind: "working_tree", mode: "all" });
+  }
+
   function selectFile(file: ChatChangedFileRead): void {
     const reviewFile = snapshot?.files.find((candidate) => candidate.relativePath === file.relativePath);
     if (!reviewFile) return;
@@ -640,35 +674,14 @@
 
 <section bind:this={panel} class="review-panel" aria-label={t("chat.inspector.review")}>
   <header class="review-toolbar">
-    <label class="source-picker">
-      <FileDiff size={13} />
-      <span class="sr-only">{t("chat.review.diffSource")}</span>
-      <select
-        aria-label={t("chat.review.diffSource")}
-        value={reviewSourceKey(effectiveSource)}
-        onchange={(event) => {
-          const value = event.currentTarget.value;
-          if (value === "checkpoint:turn:") chooseSource({ kind: "checkpoint", range: "turn", turnId: null });
-          else if (value === "checkpoint:thread:") chooseSource({ kind: "checkpoint", range: "thread", turnId: null });
-          else if (value === "working_tree:staged") chooseSource({ kind: "working_tree", mode: "staged" });
-          else if (value === "working_tree:unstaged") chooseSource({ kind: "working_tree", mode: "unstaged" });
-          else if (value === "working_tree:all") chooseSource({ kind: "working_tree", mode: "all" });
-        }}
-      >
-        {#if effectiveSource.kind === "checkpoint" && effectiveSource.range === "turn" && effectiveSource.turnId}
-          <option value={reviewSourceKey(effectiveSource)}>{sourceOptionLabel(effectiveSource)}</option>
-        {/if}
-        {#if threadId}<option value="checkpoint:turn:">{t("chat.inspector.currentTurn")}</option>{/if}
-        {#if threadId}<option value="checkpoint:thread:">{t("chat.inspector.entireThread")}</option>{/if}
-        <option value="working_tree:staged">{t("chat.review.stagedChanges")}</option>
-        <option value="working_tree:unstaged">{t("chat.review.unstagedChanges")}</option>
-        <option value="working_tree:all">{t("chat.review.allChanges")}</option>
-        {#if !["checkpoint", "working_tree"].includes(effectiveSource.kind)}
-          <option value={reviewSourceKey(effectiveSource)}>{sourceOptionLabel(effectiveSource)}</option>
-        {/if}
-      </select>
-      <ChevronDown size={12} />
-    </label>
+    <Select
+      inline
+      class="source-picker"
+      ariaLabel={t("chat.review.diffSource")}
+      value={reviewSourceKey(effectiveSource)}
+      options={reviewSourceOptions}
+      onChange={chooseSourceKey}
+    />
 
     <div class="toolbar-group" role="group" aria-label={t("chat.review.layout")}>
       <button type="button" class:active={resolvedLayout === "continuous"} aria-pressed={resolvedLayout === "continuous"} aria-label={t("chat.review.continuousLayout")} title={t("chat.review.continuousLayout")} onclick={() => onStateChange({ layoutPreference: resolvedLayout === "continuous" ? "file" : "continuous" })}><PanelTop size={13} /></button>
@@ -752,7 +765,7 @@
             {#if selectionCrossesSides}
               <p role="status">{t("chat.review.crossSideCommentUnavailable")}</p>
             {:else if threadId && selectedReviewFile.capabilities.comment}
-              <textarea bind:value={commentDraft} maxlength="65536" rows="3" placeholder={t("chat.review.commentPlaceholder")} aria-label={t("chat.review.commentPlaceholder")}></textarea>
+              <textarea class="field" bind:value={commentDraft} maxlength="65536" rows="3" placeholder={t("chat.review.commentPlaceholder")} aria-label={t("chat.review.commentPlaceholder")}></textarea>
               <footer>
                 <button type="button" onclick={() => { selection = null; commentDraft = ""; viewport?.clearSelection(); }}>{t("common.cancel")}</button>
                 <button type="submit" class="primary" disabled={!commentDraft.trim() || busyCommentId !== null}>{t("chat.review.add")}</button>
@@ -808,7 +821,7 @@
 
     {#if commentsVisible}
       <aside class="comments-panel" aria-label={t("chat.review.comments", visibleComments.length)}>
-        <header><strong>{t("chat.review.comments", visibleComments.length)}</strong><label><input type="checkbox" bind:checked={includeResolved} />{t("chat.review.showResolved")}</label></header>
+        <header><strong>{t("chat.review.comments", visibleComments.length)}</strong><label><Checkbox bind:checked={includeResolved} />{t("chat.review.showResolved")}</label></header>
         <div>
           {#each visibleComments as comment (comment.id)}
             <article class:resolved={comment.state === "resolved"}>
@@ -840,9 +853,7 @@
   .review-panel { container-type: inline-size; display: flex; height: 100%; min-height: 0; flex-direction: column; overflow: hidden; background: var(--cal-bg); }
   .review-toolbar, .search-toolbar, .file-toolbar { display: flex; min-width: 0; flex: 0 0 auto; align-items: center; gap: 0.3rem; border-bottom: 1px solid var(--border); padding: 0.35rem 0.45rem; }
   .review-toolbar { min-height: 2.65rem; overflow-x: auto; }
-  .source-picker { position: relative; display: flex; min-width: 7rem; max-width: 13rem; align-items: center; gap: 0.35rem; border: 1px solid var(--border); border-radius: 0.4rem; padding: 0.25rem 0.35rem; }
-  .source-picker select { min-width: 0; flex: 1; appearance: none; background: transparent; color: var(--foreground); font-size: calc(0.7rem * var(--type-scale)); outline: none; }
-  .source-picker > :global(svg:last-child) { pointer-events: none; }
+  .review-toolbar :global(.source-picker) { width: auto; min-width: 7rem; max-width: 13rem; flex: 0 1 13rem; }
   .toolbar-group { display: flex; border: 1px solid var(--border); border-radius: 0.4rem; padding: 0.1rem; }
   .scope-actions { display: flex; align-items: center; gap: 0.2rem; }
   .scope-actions button { display: inline-flex; height: 1.7rem; align-items: center; gap: 0.2rem; border-radius: 0.3rem; padding-inline: 0.35rem; color: var(--muted-foreground); font-size: calc(0.633333rem * var(--type-scale)); white-space: nowrap; }
@@ -877,8 +888,7 @@
   .comment-composer > div strong { margin-right: auto; font-size: calc(0.7rem * var(--type-scale)); }
   .comment-composer button { display: inline-flex; align-items: center; gap: 0.2rem; border-radius: 0.3rem; padding: 0.25rem 0.4rem; color: var(--muted-foreground); font-size: calc(0.633333rem * var(--type-scale)); }
   .comment-composer button:hover { background: var(--accent); color: var(--foreground); }
-  .comment-composer textarea { min-height: 3.5rem; max-height: 9rem; resize: vertical; border: 1px solid var(--border); border-radius: 0.4rem; background: var(--cal-bg); padding: 0.4rem; color: var(--foreground); font-size: calc(0.7rem * var(--type-scale)); outline: none; }
-  .comment-composer textarea:focus { border-color: var(--ring); }
+  .comment-composer textarea { min-height: 3.5rem; max-height: 9rem; resize: vertical; color: var(--foreground); font-size: var(--panel-detail-font-size); }
   .comment-composer footer { justify-content: flex-end; }
   .comment-composer button.primary { background: var(--primary); color: var(--primary-foreground); }
   .comment-composer > p { color: var(--muted-foreground); font-size: calc(0.666667rem * var(--type-scale)); }
@@ -916,7 +926,7 @@
 
   @container (max-width: 430px) {
     .review-toolbar { flex-wrap: wrap; }
-    .source-picker { order: -1; max-width: none; flex: 1 1 calc(100% - 4rem); }
+    .review-toolbar :global(.source-picker) { order: -1; max-width: none; flex: 1 1 calc(100% - 4rem); }
     .toolbar-group { margin-left: 0; }
     .scope-actions button span { display: none; }
     .file-toolbar .read-only, .diff-stats { display: none; }

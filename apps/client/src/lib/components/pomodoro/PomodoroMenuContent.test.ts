@@ -74,7 +74,7 @@ describe("PomodoroMenuContent", () => {
 
     const actions = target.querySelectorAll<HTMLButtonElement>("button");
     expect(actions).toHaveLength(3);
-    expect(actions.item(0).classList.contains("min-h-12")).toBe(true);
+    expect(actions.item(0).classList.contains("menu-item")).toBe(true);
     actions.item(0).click();
     expect(pomodoro.pause).toHaveBeenCalledOnce();
     expect(onDismiss).toHaveBeenCalledOnce();

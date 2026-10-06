@@ -74,13 +74,8 @@
     }
   }
 
-  function itemClass(enabled: boolean): string {
-    return cn(
-      "flex w-full items-center justify-between gap-4 whitespace-nowrap px-3 text-left text-sm transition-colors",
-      touch ? "min-h-12 active:bg-accent" : "py-1.5 hover:bg-accent",
-      enabled ? "text-foreground" : "cursor-not-allowed text-muted-foreground/50",
-    );
-  }
+  /** Row styling shared by every action; disabled rows take the shared disabled color from `menu-item`. */
+  const MENU_ITEM_CLASS = "menu-item justify-between gap-4 whitespace-nowrap";
 
   function snappedVolume(value: number): number {
     if (!Number.isFinite(value)) return musicPlayer.volumeControlValue;
@@ -115,26 +110,26 @@
 </script>
 
 {#if isActive}
-  <div class={cn("px-3 text-xs text-muted-foreground", touch ? "py-3" : "py-1.5")}>
+  <div class="menu-label">
     {pomodoro.phase !== "focus" && pomodoro.remainingSeconds === 0
       ? t("pomodoroNotification.breakCompleteTitle")
       : t("titleBar.pomodoro.left", pomodoro.formattedTime)}
   </div>
 {:else}
-  <div class={cn("px-3 text-xs text-muted-foreground", touch ? "py-3" : "py-1.5")}>
+  <div class="menu-label">
     {t("titleBar.pomodoro.noActiveSession")}
   </div>
   <button
     type="button"
     disabled={starting}
     onclick={() => { void startScheduledSession(); }}
-    class={itemClass(!starting)}
+    class={MENU_ITEM_CLASS}
   >
     <span>{t("pomodoroNotification.startScheduledSession")}</span>
     <PlayIcon class="shrink-0 opacity-70" size={MENU_ICON_SIZE} strokeWidth={MENU_ICON_STROKE_WIDTH} />
   </button>
   {#if startMessage}
-    <p class="px-3 py-2 text-xs text-muted-foreground" role="status">{startMessage}</p>
+    <p class="px-2 py-1.5 text-panel-detail text-muted-foreground" role="status">{startMessage}</p>
   {/if}
 {/if}
 
@@ -146,7 +141,7 @@
     onDismiss();
   }}
   disabled={!pomodoro.canPauseResume}
-  class={itemClass(pomodoro.canPauseResume)}
+  class={MENU_ITEM_CLASS}
 >
   <span>{pauseResumeLabel}</span>
   {#if isActive && !pomodoro.isRunning}
@@ -160,7 +155,7 @@
   type="button"
   onclick={() => { pomodoro.addFocusTime(); onDismiss(); }}
   disabled={!pomodoro.canAddFocusTime}
-  class={itemClass(pomodoro.canAddFocusTime)}
+  class={MENU_ITEM_CLASS}
 >
   <span>{t("titleBar.pomodoro.extendFocusMinutes", 3)}</span>
   <ClockPlus class="shrink-0 opacity-70" size={MENU_ICON_SIZE} strokeWidth={MENU_ICON_STROKE_WIDTH} />
@@ -170,7 +165,7 @@
   type="button"
   onclick={() => { pomodoro.skip(); onDismiss(); }}
   disabled={!isActive}
-  class={itemClass(isActive)}
+  class={MENU_ITEM_CLASS}
 >
   <span>{phaseAdvanceLabel}</span>
   {#if pomodoro.phase === "focus" || !isActive}
@@ -181,31 +176,31 @@
 </button>
 
 {#if includeMusic}
-  <div class="mx-3 my-1.5 border-t border-border"></div>
+  <div role="separator" class="menu-separator"></div>
   {#if musicPlayer.contextPlayback && musicPlayer.contextPlayback.state !== "overridden"}
     <button
       type="button"
       onclick={() => { musicPlayer.inspectContextAssignment(); onDismiss(); }}
       class={cn(
-        "mx-1 mb-1 flex w-[calc(100%-0.5rem)] items-start gap-2 rounded-md bg-primary/7 px-2 py-2 text-left",
-        touch ? "min-h-12 active:bg-primary/12" : "hover:bg-primary/12",
+        "menu-item items-start gap-2 bg-primary/7 py-2",
+        touch ? "active:bg-primary/12" : "hover:bg-primary/12",
       )}
     >
       <span class="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-primary"></span>
       <span class="min-w-0">
-        <span class="block truncate text-xs font-medium">{t("titleBar.music.contextual", t(`music.assignment.phase.${musicPlayer.contextPlayback.phase}`), musicPlayer.contextPlayback.eventTitle)}</span>
-        <span class="block text-[0.65rem] text-muted-foreground">{t("titleBar.music.inspectAssignment")}</span>
+        <span class="block truncate font-medium">{t("titleBar.music.contextual", t(`music.assignment.phase.${musicPlayer.contextPlayback.phase}`), musicPlayer.contextPlayback.eventTitle)}</span>
+        <span class="block text-panel-detail text-muted-foreground">{t("titleBar.music.inspectAssignment")}</span>
       </span>
     </button>
   {/if}
-  <div class="px-3 pb-1.5 pt-2 text-xs text-muted-foreground">
+  <div class="menu-label">
     <span class="block truncate">{musicStatusText}</span>
   </div>
   <button
     type="button"
     onclick={() => { void musicPlayer.togglePlay(); onDismiss(); }}
     disabled={!canPlayPauseMusic}
-    class={itemClass(canPlayPauseMusic)}
+    class={MENU_ITEM_CLASS}
   >
     <span>{musicPlayPauseLabel}</span>
     {#if musicPlayer.isPlaying}
@@ -218,7 +213,7 @@
     type="button"
     onclick={() => { void musicPlayer.playPreviousTrack(); onDismiss(); }}
     disabled={!musicPlayer.canPlayPreviousTrack}
-    class={itemClass(musicPlayer.canPlayPreviousTrack)}
+    class={MENU_ITEM_CLASS}
   >
     <span>{t("titleBar.music.previous")}</span>
     <SkipBack class="shrink-0 opacity-70" size={MENU_ICON_SIZE} strokeWidth={MENU_ICON_STROKE_WIDTH} />
@@ -227,12 +222,12 @@
     type="button"
     onclick={() => { void musicPlayer.playNextTrack(); onDismiss(); }}
     disabled={!musicPlayer.canPlayNextTrack}
-    class={itemClass(musicPlayer.canPlayNextTrack)}
+    class={MENU_ITEM_CLASS}
   >
     <span>{t("titleBar.music.next")}</span>
     <SkipForward class="shrink-0 opacity-70" size={MENU_ICON_SIZE} strokeWidth={MENU_ICON_STROKE_WIDTH} />
   </button>
-  <div class={cn("flex items-center gap-3 px-3 text-sm text-foreground", touch ? "min-h-12" : "py-2")}>
+  <div class="flex min-h-(--panel-row-height) items-center gap-3 px-2 text-foreground">
     <span class="shrink-0">{t("titleBar.music.volume")}</span>
     <input
       type="range"
@@ -246,7 +241,7 @@
       oninput={(event) => { setVolume(Number(event.currentTarget.value)); }}
     />
   </div>
-  <button type="button" onclick={openMusic} class={itemClass(true)}>
+  <button type="button" onclick={openMusic} class={MENU_ITEM_CLASS}>
     <span>{t("titleBar.music.open")}</span>
     <ExternalLink class="shrink-0 opacity-70" size={MENU_ICON_SIZE} strokeWidth={MENU_ICON_STROKE_WIDTH} />
   </button>

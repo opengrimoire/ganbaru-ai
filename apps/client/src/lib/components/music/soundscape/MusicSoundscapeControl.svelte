@@ -12,6 +12,7 @@
   import { orderedGeneratedSounds } from "$lib/music/soundscape/presentation";
   import { centeredSoundscapePanelLeft } from "$lib/music/soundscape/popover-position";
   import { getSoundscapeStore } from "$lib/stores/soundscape.svelte";
+  import { scrollEdgeFadeAction } from "$lib/utils/scroll-edge-fade";
   import MusicSoundscapeGroupIcon from "./MusicSoundscapeGroupIcon.svelte";
   import MusicSoundscapeSectionControls from "./MusicSoundscapeSectionControls.svelte";
 
@@ -85,46 +86,48 @@
     {#if playing}<span class="absolute bottom-1 right-1 h-1.5 w-1.5 rounded-full bg-primary" aria-hidden="true"></span>{/if}
   </button>
   {#if open}
-    <div bind:this={popover} tabindex="-1" class="soundscape-popover absolute bottom-full z-40 mb-2 w-[min(19rem,calc(100vw-1rem))] max-h-[calc(100vh-1rem)] overflow-y-auto rounded-xl border border-border/75 bg-popover p-3 text-popover-foreground shadow-md" style={popoverLeft === null ? "visibility:hidden" : `--soundscape-popover-left:${popoverLeft}px`} role="dialog" aria-label={t("music.soundscape.controls")}>
-      <div class="flex min-h-9 items-center gap-2 px-1">
-        <Volume2 size={15} class="shrink-0 text-muted-foreground" />
-        <input id="soundscape-volume" class="min-w-0 flex-1 accent-primary disabled:opacity-40" type="range" min="0" max="1" step="0.01" value={volume} aria-label={t("music.soundscape.volume")} disabled={!soundscape.persisted || soundscape.loading} oninput={(event) => { void soundscape.setVolume(Number(event.currentTarget.value)); }} />
-        <span class="w-9 shrink-0 text-right text-[0.68rem] tabular-nums text-muted-foreground">{Math.round(volume * 100)}%</span>
-        <button type="button" disabled={!active || soundscape.saving} aria-label={playing ? t("music.soundscape.pause") : t("music.soundscape.play", activeName)} class="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-secondary hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40" onclick={toggleActive}>{#if playing}<Pause size={15} />{:else}<Play size={15} />{/if}</button>
-      </div>
-      {#if soundscape.error}<p class="mt-1 px-1 text-xs text-destructive" role="alert">{t("music.soundscape.genericError")}</p>{/if}
-      <div class="mt-3 px-1"><MusicSoundscapeSectionControls title={t("music.soundscape.generated")} section="generated" idPrefix="player-soundscape" compact /></div>
-      <div class="grid grid-cols-3 gap-1.5">
-        {#each generated as definition (definition.id)}
-          {@const selected = selectedIds.includes(definition.id)}
-          <button type="button" aria-pressed={selected} aria-label={selected && soundscape.persisted?.multipleEnabled ? t("music.soundscape.stop", t(`music.soundscape.rainName.${definition.generatedKind ?? "brown"}`)) : selected && playing ? t("music.soundscape.pause") : t("music.soundscape.play", t(`music.soundscape.rainName.${definition.generatedKind ?? "brown"}`))} disabled={soundscape.saving} class={selected ? "flex min-h-16 flex-col items-center justify-center gap-1 rounded-lg bg-primary/10 text-[0.68rem] transition-colors hover:bg-accent/70 disabled:opacity-50" : "flex min-h-16 flex-col items-center justify-center gap-1 rounded-lg text-[0.68rem] transition-colors hover:bg-accent/70 disabled:opacity-50"} onclick={() => { void soundscape.toggleSelection(definition.id); }}>
-            {#if definition.generatedKind === "brown"}<CloudHail size={19} strokeWidth={1.5} />{:else if definition.generatedKind === "pink"}<CloudRain size={19} strokeWidth={1.5} />{:else}<CloudRainWind size={19} strokeWidth={1.5} />{/if}
-            <span>{t(`music.soundscape.rainName.${definition.generatedKind ?? "brown"}`)}</span>
-          </button>
-        {/each}
-      </div>
-      {#if local.length > 0}
-        <div class="mt-3 px-1"><MusicSoundscapeSectionControls title={t("music.soundscape.localLoops")} section="local" idPrefix="player-soundscape" compact /></div>
-        <div class="max-h-40 space-y-0.5 overflow-y-auto" data-music-scrollable="true">
-          {#each soundscape.groups as group (group.id)}
-            {#if local.some((entry) => entry.groupId === group.id)}
-              <p class="flex items-center gap-1.5 px-2 pt-2 text-[0.65rem] text-muted-foreground"><MusicSoundscapeGroupIcon icon={group.icon} size={12} />{group.name}</p>
-              <div class="grid grid-cols-3 gap-1.5">
-                {#each local.filter((entry) => entry.groupId === group.id) as definition (definition.id)}
-                  <button type="button" aria-pressed={selectedIds.includes(definition.id)} aria-label={selectedIds.includes(definition.id) && soundscape.persisted?.multipleEnabled ? t("music.soundscape.stop", definition.name) : selectedIds.includes(definition.id) && playing ? t("music.soundscape.pause") : t("music.soundscape.play", definition.name)} disabled={definition.availability !== "available" || soundscape.saving} class={selectedIds.includes(definition.id) ? "flex min-h-16 min-w-0 flex-col items-center justify-center gap-1 rounded-lg bg-primary/10 px-1 text-[0.68rem] transition-colors hover:bg-accent/70 disabled:opacity-50" : "flex min-h-16 min-w-0 flex-col items-center justify-center gap-1 rounded-lg px-1 text-[0.68rem] transition-colors hover:bg-accent/70 disabled:opacity-50"} onclick={() => { void soundscape.toggleSelection(definition.id); }}><MusicSoundscapeGroupIcon icon={definition.icon} size={19} /><span class="max-w-full truncate">{definition.name}</span></button>
-                {/each}
-              </div>
-            {/if}
-          {/each}
-          {#if ungrouped.length > 0 && soundscape.groups.length > 0}<p class="px-2 pt-2 text-[0.65rem] text-muted-foreground">{t("music.soundscape.ungrouped")}</p>{/if}
-          <div class="grid grid-cols-3 gap-1.5">
-            {#each ungrouped as definition (definition.id)}
-              <button type="button" aria-pressed={selectedIds.includes(definition.id)} aria-label={selectedIds.includes(definition.id) && soundscape.persisted?.multipleEnabled ? t("music.soundscape.stop", definition.name) : selectedIds.includes(definition.id) && playing ? t("music.soundscape.pause") : t("music.soundscape.play", definition.name)} disabled={definition.availability !== "available" || soundscape.saving} class={selectedIds.includes(definition.id) ? "flex min-h-16 min-w-0 flex-col items-center justify-center gap-1 rounded-lg bg-primary/10 px-1 text-[0.68rem] transition-colors hover:bg-accent/70 disabled:opacity-50" : "flex min-h-16 min-w-0 flex-col items-center justify-center gap-1 rounded-lg px-1 text-[0.68rem] transition-colors hover:bg-accent/70 disabled:opacity-50"} onclick={() => { void soundscape.toggleSelection(definition.id); }}><MusicSoundscapeGroupIcon icon={definition.icon} size={19} /><span class="max-w-full truncate">{definition.name}</span></button>
-            {/each}
-          </div>
+    <div bind:this={popover} tabindex="-1" class="soundscape-popover surface-floating absolute bottom-full z-40 mb-2 flex w-floating-lg max-h-[calc(100vh-1rem)] flex-col overflow-hidden" style={popoverLeft === null ? "visibility:hidden" : `--soundscape-popover-left:${popoverLeft}px`} role="dialog" aria-label={t("music.soundscape.controls")}>
+      <div use:scrollEdgeFadeAction class="min-h-0 flex-1 overflow-y-auto p-3">
+        <div class="flex min-h-9 items-center gap-2 px-1">
+          <Volume2 size={15} class="shrink-0 text-muted-foreground" />
+          <input id="soundscape-volume" class="min-w-0 flex-1 accent-primary disabled:opacity-40" type="range" min="0" max="1" step="0.01" value={volume} aria-label={t("music.soundscape.volume")} disabled={!soundscape.persisted || soundscape.loading} oninput={(event) => { void soundscape.setVolume(Number(event.currentTarget.value)); }} />
+          <span class="w-9 shrink-0 text-right text-panel-detail tabular-nums text-muted-foreground">{Math.round(volume * 100)}%</span>
+          <button type="button" disabled={!active || soundscape.saving} aria-label={playing ? t("music.soundscape.pause") : t("music.soundscape.play", activeName)} class="grid h-8 w-8 shrink-0 place-items-center rounded-floating-item bg-secondary hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40" onclick={toggleActive}>{#if playing}<Pause size={15} />{:else}<Play size={15} />{/if}</button>
         </div>
-      {/if}
-      <button type="button" class="mt-3 flex h-8 w-full items-center justify-between rounded-lg px-2 text-xs text-muted-foreground hover:bg-accent/60 hover:text-foreground" onclick={() => { open = false; onOpenSoundscapes(); }}><span>{t("music.soundscape.openBuilder")}</span><ChevronRight size={14} /></button>
+        {#if soundscape.error}<p class="mt-1 px-1 text-panel-detail text-destructive" role="alert">{t("music.soundscape.genericError")}</p>{/if}
+        <div class="mt-3 px-1"><MusicSoundscapeSectionControls title={t("music.soundscape.generated")} section="generated" idPrefix="player-soundscape" compact /></div>
+        <div class="grid grid-cols-3 gap-1.5">
+          {#each generated as definition (definition.id)}
+            {@const selected = selectedIds.includes(definition.id)}
+            <button type="button" aria-pressed={selected} aria-label={selected && soundscape.persisted?.multipleEnabled ? t("music.soundscape.stop", t(`music.soundscape.rainName.${definition.generatedKind ?? "brown"}`)) : selected && playing ? t("music.soundscape.pause") : t("music.soundscape.play", t(`music.soundscape.rainName.${definition.generatedKind ?? "brown"}`))} disabled={soundscape.saving} class={selected ? "flex min-h-16 flex-col items-center justify-center gap-1 rounded-floating-item bg-primary/10 text-panel-detail transition-colors hover:bg-accent/70 disabled:opacity-50" : "flex min-h-16 flex-col items-center justify-center gap-1 rounded-floating-item text-panel-detail transition-colors hover:bg-accent/70 disabled:opacity-50"} onclick={() => { void soundscape.toggleSelection(definition.id); }}>
+              {#if definition.generatedKind === "brown"}<CloudHail size={19} strokeWidth={1.5} />{:else if definition.generatedKind === "pink"}<CloudRain size={19} strokeWidth={1.5} />{:else}<CloudRainWind size={19} strokeWidth={1.5} />{/if}
+              <span>{t(`music.soundscape.rainName.${definition.generatedKind ?? "brown"}`)}</span>
+            </button>
+          {/each}
+        </div>
+        {#if local.length > 0}
+          <div class="mt-3 px-1"><MusicSoundscapeSectionControls title={t("music.soundscape.localLoops")} section="local" idPrefix="player-soundscape" compact /></div>
+          <div use:scrollEdgeFadeAction class="max-h-40 space-y-0.5 overflow-y-auto" data-music-scrollable="true">
+            {#each soundscape.groups as group (group.id)}
+              {#if local.some((entry) => entry.groupId === group.id)}
+                <p class="flex items-center gap-1.5 px-2 pt-2 text-panel-detail text-muted-foreground"><MusicSoundscapeGroupIcon icon={group.icon} size={12} />{group.name}</p>
+                <div class="grid grid-cols-3 gap-1.5">
+                  {#each local.filter((entry) => entry.groupId === group.id) as definition (definition.id)}
+                    <button type="button" aria-pressed={selectedIds.includes(definition.id)} aria-label={selectedIds.includes(definition.id) && soundscape.persisted?.multipleEnabled ? t("music.soundscape.stop", definition.name) : selectedIds.includes(definition.id) && playing ? t("music.soundscape.pause") : t("music.soundscape.play", definition.name)} disabled={definition.availability !== "available" || soundscape.saving} class={selectedIds.includes(definition.id) ? "flex min-h-16 min-w-0 flex-col items-center justify-center gap-1 rounded-floating-item bg-primary/10 px-1 text-panel-detail transition-colors hover:bg-accent/70 disabled:opacity-50" : "flex min-h-16 min-w-0 flex-col items-center justify-center gap-1 rounded-floating-item px-1 text-panel-detail transition-colors hover:bg-accent/70 disabled:opacity-50"} onclick={() => { void soundscape.toggleSelection(definition.id); }}><MusicSoundscapeGroupIcon icon={definition.icon} size={19} /><span class="max-w-full truncate">{definition.name}</span></button>
+                  {/each}
+                </div>
+              {/if}
+            {/each}
+            {#if ungrouped.length > 0 && soundscape.groups.length > 0}<p class="px-2 pt-2 text-panel-detail text-muted-foreground">{t("music.soundscape.ungrouped")}</p>{/if}
+            <div class="grid grid-cols-3 gap-1.5">
+              {#each ungrouped as definition (definition.id)}
+                <button type="button" aria-pressed={selectedIds.includes(definition.id)} aria-label={selectedIds.includes(definition.id) && soundscape.persisted?.multipleEnabled ? t("music.soundscape.stop", definition.name) : selectedIds.includes(definition.id) && playing ? t("music.soundscape.pause") : t("music.soundscape.play", definition.name)} disabled={definition.availability !== "available" || soundscape.saving} class={selectedIds.includes(definition.id) ? "flex min-h-16 min-w-0 flex-col items-center justify-center gap-1 rounded-floating-item bg-primary/10 px-1 text-panel-detail transition-colors hover:bg-accent/70 disabled:opacity-50" : "flex min-h-16 min-w-0 flex-col items-center justify-center gap-1 rounded-floating-item px-1 text-panel-detail transition-colors hover:bg-accent/70 disabled:opacity-50"} onclick={() => { void soundscape.toggleSelection(definition.id); }}><MusicSoundscapeGroupIcon icon={definition.icon} size={19} /><span class="max-w-full truncate">{definition.name}</span></button>
+              {/each}
+            </div>
+          </div>
+        {/if}
+        <button type="button" class="menu-item mt-3 justify-between text-muted-foreground hover:text-foreground" onclick={() => { open = false; onOpenSoundscapes(); }}><span>{t("music.soundscape.openBuilder")}</span><ChevronRight size={14} /></button>
+      </div>
     </div>
   {/if}
 </div>

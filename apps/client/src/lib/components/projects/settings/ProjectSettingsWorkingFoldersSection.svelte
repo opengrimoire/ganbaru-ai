@@ -273,45 +273,45 @@
             disabled={busy}
             triggerClass="size-6 h-6 shrink-0 justify-center px-0"
           >
-            <div class="flex flex-col gap-1 px-2 py-1.5 text-[0.733333rem] text-muted-foreground">
+            <div class="flex flex-col gap-1 px-2 py-1.5 text-panel-detail text-muted-foreground">
               <p class="break-all">{pathLabel(folder)}</p>
               {#if folder.workingFolder.repositoryKind === "git"}
                 <p>{folder.currentBranch ? t("projects.settings.workingFolders.gitBranch", folder.currentBranch) : t("projects.settings.workingFolders.gitRepository")}</p>
               {/if}
             </div>
-            <div class="my-1 h-px bg-border/70" aria-hidden="true"></div>
+            <div class="menu-separator" aria-hidden="true"></div>
             <button
               type="button"
-              class="working-folder-action"
+              class="menu-item"
               aria-label={t("projects.settings.workingFolders.openFolder", folder.workingFolder.displayName)}
               disabled={busy || !draft.canOpen(folder)}
               onclick={() => { void run(folder.workingFolder.id, () => chat.openWorkingFolder(folder.workingFolder.id)); }}
-            ><ExternalLink size={14} /><span>{t("projects.settings.workingFolders.open")}</span></button>
+            ><ExternalLink size={14} /><span class="min-w-0 truncate">{t("projects.settings.workingFolders.open")}</span></button>
             <button
               type="button"
-              class="working-folder-action"
+              class="menu-item"
               data-collection-menu-keep-open
               aria-pressed={isPrimary}
               disabled={busy || !draft.primaryReady || isPrimary || Boolean(folder.workingFolder.archivedAt)}
               onclick={() => draft.makePrimary(folder)}
-            ><Star size={14} fill={isPrimary ? "currentColor" : "none"} /><span>{isPrimary ? t("projects.settings.workingFolders.primary") : t("projects.settings.workingFolders.makePrimary")}</span></button>
+            ><Star size={14} fill={isPrimary ? "currentColor" : "none"} /><span class="min-w-0 truncate">{isPrimary ? t("projects.settings.workingFolders.primary") : t("projects.settings.workingFolders.makePrimary")}</span></button>
             <button
               type="button"
-              class="working-folder-action"
+              class="menu-item"
               disabled={busy || (!isExternal && !needsRecreate) || Boolean(folder.workingFolder.archivedAt)}
               onclick={() => changeFolderLocation(folder)}
             >
               {#if needsRecreate}<RefreshCw size={14} />{:else}<Link2 size={14} />{/if}
-              <span>{needsRecreate ? t("projects.settings.workingFolders.recreate") : folder.bindingStatus === "unbound" || folder.bindingStatus === "missing" ? t("projects.settings.workingFolders.locate") : t("projects.settings.workingFolders.rebind")}</span>
+              <span class="min-w-0 truncate">{needsRecreate ? t("projects.settings.workingFolders.recreate") : folder.bindingStatus === "unbound" || folder.bindingStatus === "missing" ? t("projects.settings.workingFolders.locate") : t("projects.settings.workingFolders.rebind")}</span>
             </button>
-            <button type="button" class="working-folder-action" disabled={busy || !isExternal} onclick={() => rename(folder)}><Pencil size={14} /><span>{t("projects.settings.workingFolders.rename")}</span></button>
+            <button type="button" class="menu-item" disabled={busy || !isExternal} onclick={() => rename(folder)}><Pencil size={14} /><span class="min-w-0 truncate">{t("projects.settings.workingFolders.rename")}</span></button>
             {#if folder.workingFolder.archivedAt}
-              <button type="button" class="working-folder-action" disabled={busy || !isExternal} onclick={() => draft.setArchived(folder, false)}><ArchiveRestore size={14} /><span>{t("projects.settings.workingFolders.restore")}</span></button>
+              <button type="button" class="menu-item" disabled={busy || !isExternal} onclick={() => draft.setArchived(folder, false)}><ArchiveRestore size={14} /><span class="min-w-0 truncate">{t("projects.settings.workingFolders.restore")}</span></button>
             {:else}
-              <button type="button" class="working-folder-action" disabled={busy || !isExternal} onclick={() => draft.setArchived(folder, true)}><Archive size={14} /><span>{t("projects.settings.workingFolders.archive")}</span></button>
+              <button type="button" class="menu-item" disabled={busy || !isExternal} onclick={() => draft.setArchived(folder, true)}><Archive size={14} /><span class="min-w-0 truncate">{t("projects.settings.workingFolders.archive")}</span></button>
             {/if}
-            <div class="my-1 h-px bg-border/70" aria-hidden="true"></div>
-            <button type="button" class="working-folder-action working-folder-remove" disabled={busy || !isExternal} onclick={() => remove(folder)}><Trash2 size={14} /><span>{t("projects.settings.workingFolders.remove")}</span></button>
+            <div class="menu-separator" aria-hidden="true"></div>
+            <button type="button" class="menu-item menu-item-destructive" disabled={busy || !isExternal} onclick={() => remove(folder)}><Trash2 size={14} /><span class="min-w-0 truncate">{t("projects.settings.workingFolders.remove")}</span></button>
           </CollectionMenu>
         </div>
         <Select
@@ -341,43 +341,3 @@
   </div>
 </section>
 
-<style>
-  .working-folder-action {
-    display: flex;
-    width: 100%;
-    min-height: 2rem;
-    align-items: center;
-    gap: 0.5rem;
-    border-radius: 0.25rem;
-    padding-inline: 0.5rem;
-    font-size: calc(0.8rem * var(--type-scale));
-    text-align: left;
-    color: var(--foreground);
-  }
-
-  .working-folder-action > span {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .working-folder-action:hover:not(:disabled) {
-    background: var(--accent);
-    color: var(--foreground);
-  }
-
-  .working-folder-action:disabled {
-    cursor: not-allowed;
-    color: var(--muted-foreground);
-  }
-
-  .working-folder-action:disabled > span,
-  .working-folder-action:disabled > :global(svg) {
-    opacity: 0.5;
-  }
-
-  .working-folder-remove,
-  .working-folder-remove:hover:not(:disabled) {
-    color: var(--destructive);
-  }
-</style>

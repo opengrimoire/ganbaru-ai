@@ -16,6 +16,7 @@
   import type { NotesDatabaseReference, NotesPageBreadcrumbItem } from "$lib/notes/types";
   import { dismissOnOutside } from "$lib/utils/dismiss-on-outside";
   import { portal } from "$lib/utils/portal";
+  import { scrollEdgeFadeAction } from "$lib/utils/scroll-edge-fade";
   import Database from "@lucide/svelte/icons/database";
   import FileText from "@lucide/svelte/icons/file-text";
 
@@ -48,6 +49,7 @@
   const isValidReference = $derived(isNotesUuid(referenceId));
   let anchor = $state<HTMLAnchorElement | null>(null);
   let card = $state<HTMLDivElement | null>(null);
+  let cardBody = $state<HTMLDivElement | null>(null);
   let previewOpen = $state(false);
   let previewStatus = $state<"idle" | "loading" | "ready" | "failed">("idle");
   let breadcrumbs = $state<readonly NotesPageBreadcrumbItem[]>([]);
@@ -254,7 +256,9 @@
       top: Math.min(viewportHeight, Math.max(0, rect.top - offsetTop)),
       bottom: Math.min(viewportHeight, Math.max(0, rect.bottom - offsetTop)),
     }, { width: viewportWidth, height: viewportHeight }, {
-      width: PREVIEW_WIDTH_PX, height: notesFloatingPanelContentHeight(card), align: "start",
+      width: PREVIEW_WIDTH_PX, height: notesFloatingPanelContentHeight({
+        scrollHeight: (cardBody ?? card).scrollHeight, clientHeight: card.clientHeight, offsetHeight: card.offsetHeight,
+      }), align: "start",
     });
     placement = { ...position, left: position.left + offsetLeft, top: position.top + offsetTop };
   }
@@ -315,7 +319,7 @@
     role="tooltip"
     contenteditable="false"
     data-notes-reference-preview
-    class="notes-reference-preview fixed z-60 overflow-auto rounded-xl border border-border bg-popover text-popover-foreground shadow-sm"
+    class="notes-reference-preview surface-floating fixed z-60 flex flex-col overflow-hidden"
     style:left={`${placement.left}px`}
     style:top={`${placement.top}px`}
     style:width={`${placement.width}px`}
@@ -323,29 +327,31 @@
     onpointerenter={keepPreviewOpen}
     onpointerleave={scheduleClose}
   >
-    <div class="flex items-start gap-3 p-3.5">
-      <span class="flex size-9 shrink-0 items-center justify-center rounded-lg border border-border/60 bg-muted/40 text-muted-foreground" aria-hidden="true">
-        {#if referenceType === "database"}<Database size={20} strokeWidth={1.5} />{:else}<FileText size={20} strokeWidth={1.5} />{/if}
-      </span>
-      <div class="min-w-0 flex-1">
-        <div class="text-[0.85em] text-muted-foreground">{typeLabel}</div>
-        <div class="wrap-anywhere leading-snug font-medium">{previewTitle}</div>
-        {#if containingPath}<div class="mt-1 wrap-anywhere text-[0.85em] leading-snug text-muted-foreground">{containingPath}</div>{/if}
+    <div bind:this={cardBody} class="min-h-0 flex-1 overflow-auto" use:scrollEdgeFadeAction>
+      <div class="flex items-start gap-3 p-3.5">
+        <span class="flex size-9 shrink-0 items-center justify-center rounded-floating-item border border-border/60 bg-muted/40 text-muted-foreground" aria-hidden="true">
+          {#if referenceType === "database"}<Database size={20} strokeWidth={1.5} />{:else}<FileText size={20} strokeWidth={1.5} />{/if}
+        </span>
+        <div class="min-w-0 flex-1">
+          <div class="text-[0.85em] text-muted-foreground">{typeLabel}</div>
+          <div class="wrap-anywhere leading-snug font-medium">{previewTitle}</div>
+          {#if containingPath}<div class="mt-1 wrap-anywhere text-[0.85em] leading-snug text-muted-foreground">{containingPath}</div>{/if}
+        </div>
       </div>
+      {#if hasNavigationError}
+        <div class="px-3.5 pb-3.5 text-[0.9em] text-muted-foreground" role="status">{t("notes.linkOpenFailed")}</div>
+      {:else if previewStatus === "failed"}
+        <div class="px-3.5 pb-3.5 text-[0.9em] text-muted-foreground" role="status">{t("notes.databaseGalleryPreviewUnavailable")}</div>
+      {:else if previewStatus === "loading"}
+        <div class="px-3.5 pb-3.5 text-[0.9em] text-muted-foreground" role="status">{t("common.loading")}</div>
+      {/if}
+      {#if referenceType === "database"}
+        <div class="notes-reference-database-thumbnail mx-3.5 mb-3.5 overflow-hidden rounded-md border border-border/60 bg-muted/20" aria-hidden="true">
+          <div class="notes-reference-thumbnail-row notes-reference-thumbnail-header">{#each THUMBNAIL_COLUMNS as column}<span class="notes-reference-thumbnail-cell"><i class:notes-reference-thumbnail-short={column > 0}></i></span>{/each}</div>
+          {#each THUMBNAIL_ROWS as row}<div class="notes-reference-thumbnail-row">{#each THUMBNAIL_COLUMNS as column}<span class="notes-reference-thumbnail-cell"><i class:notes-reference-thumbnail-short={(row + column) % 2 === 1}></i></span>{/each}</div>{/each}
+        </div>
+      {/if}
     </div>
-    {#if hasNavigationError}
-      <div class="px-3.5 pb-3.5 text-[0.9em] text-muted-foreground" role="status">{t("notes.linkOpenFailed")}</div>
-    {:else if previewStatus === "failed"}
-      <div class="px-3.5 pb-3.5 text-[0.9em] text-muted-foreground" role="status">{t("notes.databaseGalleryPreviewUnavailable")}</div>
-    {:else if previewStatus === "loading"}
-      <div class="px-3.5 pb-3.5 text-[0.9em] text-muted-foreground" role="status">{t("common.loading")}</div>
-    {/if}
-    {#if referenceType === "database"}
-      <div class="notes-reference-database-thumbnail mx-3.5 mb-3.5 overflow-hidden rounded-md border border-border/60 bg-muted/20" aria-hidden="true">
-        <div class="notes-reference-thumbnail-row notes-reference-thumbnail-header">{#each THUMBNAIL_COLUMNS as column}<span class="notes-reference-thumbnail-cell"><i class:notes-reference-thumbnail-short={column > 0}></i></span>{/each}</div>
-        {#each THUMBNAIL_ROWS as row}<div class="notes-reference-thumbnail-row">{#each THUMBNAIL_COLUMNS as column}<span class="notes-reference-thumbnail-cell"><i class:notes-reference-thumbnail-short={(row + column) % 2 === 1}></i></span>{/each}</div>{/each}
-      </div>
-    {/if}
   </div>
 {/if}<style>
   .notes-local-reference {

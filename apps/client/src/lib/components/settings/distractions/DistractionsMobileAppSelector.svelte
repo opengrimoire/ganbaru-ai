@@ -13,6 +13,7 @@
   import X from "@lucide/svelte/icons/x";
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
   import { getLocalization } from "$lib/i18n/translator.svelte";
+  import { scrollEdgeFadeAction } from "$lib/utils/scroll-edge-fade";
   import {
     listMobileDistractionsApps,
     type MobileDistractionsAppCandidate,
@@ -102,11 +103,11 @@
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div class="fixed inset-0 z-90 flex items-center justify-center px-3 py-4" onclick={onCancel}>
-  <div class="absolute inset-0 bg-black/50"></div>
+  <div class="surface-backdrop absolute inset-0"></div>
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
-    class="relative z-10 flex h-[min(36rem,calc(100vh-2rem))] w-full max-w-lg flex-col rounded-md border border-black/20 bg-card text-card-foreground outline-none dark:border-white/10 dark:bg-sidebar dark:text-sidebar-foreground"
+    class="surface-dialog relative z-10 flex h-[min(36rem,calc(100vh-2rem))] w-full max-w-lg flex-col outline-none"
     role="dialog"
     aria-modal="true"
     tabindex="-1"
@@ -125,15 +126,16 @@
     </div>
 
     <div class="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden px-4 pb-4 pt-3">
-      <div class="flex min-w-0 items-center gap-2 rounded-md border border-border bg-background/60 px-2.5 py-1.5 dark:bg-transparent">
+      <div class="field flex min-w-0 items-center gap-2 px-2.5 py-1.5">
         <Search size={14} class="shrink-0 text-muted-foreground" />
-        <input bind:this={searchInputEl} bind:value={query} placeholder={t("settings.distractions.appSelector.search")} class="h-7 min-w-0 flex-1 bg-transparent text-[0.866667rem] text-foreground outline-none placeholder:text-muted-foreground" />
+        <input bind:this={searchInputEl} bind:value={query} placeholder={t("settings.distractions.appSelector.search")} class="field-bare h-7 text-[0.866667rem] text-foreground" />
         <button type="button" onclick={loadApps} disabled={loading} aria-label={t("settings.distractions.appSelector.refresh")} class="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-40">
           {#if loading}<LoaderCircle size={14} class="animate-spin" />{:else}<RefreshCw size={14} />{/if}
         </button>
       </div>
 
-      <div class="min-h-0 flex-1 overflow-y-auto rounded-md border border-border">
+      <div class="min-h-0 flex-1 overflow-hidden rounded-floating-item border border-border">
+        <div use:scrollEdgeFadeAction class="h-full overflow-y-auto">
         {#if loading}
           <div class="flex min-h-36 items-center justify-center gap-2 text-[0.866667rem] text-muted-foreground"><LoaderCircle size={15} class="animate-spin" />{t("settings.distractions.appSelector.loading")}</div>
         {:else if error}
@@ -152,6 +154,7 @@
             </button>
           {/each}
         {/if}
+        </div>
       </div>
     </div>
   </div>

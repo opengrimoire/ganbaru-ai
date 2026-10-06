@@ -16,6 +16,7 @@
   import { portal } from "$lib/utils/portal";
   import ChatModelAvatar from "./ChatModelAvatar.svelte";
   import ChatParticipantAvatar from "./ChatParticipantAvatar.svelte";
+  import { FLOATING_WIDTH } from "$lib/components/ui/floating-width";
 
   type IdentityPresentation = "avatar" | "name" | "mention";
 
@@ -46,7 +47,7 @@
   const closeDelayMs = 140;
   const viewportInsetPx = 8;
   const cardGapPx = 7;
-  const cardWidthPx = 352;
+  const cardWidthPx = FLOATING_WIDTH.lg;
   let triggerElement = $state<HTMLButtonElement | null>(null);
   let cardElement = $state<HTMLElement | null>(null);
   let open = $state(false);
@@ -283,7 +284,7 @@
     bind:this={cardElement}
     use:portal
     id={cardId}
-    class="identity-card"
+    class="identity-card surface-floating w-floating-lg"
     style={cardStyle}
     role="dialog"
     tabindex="-1"
@@ -349,19 +350,19 @@
   .name-trigger:hover,.name-trigger[aria-expanded="true"] { color:color-mix(in srgb,var(--primary) 72%,var(--foreground)); }
   .mention-trigger { display:inline; border-radius:0.28rem; background:color-mix(in srgb,var(--primary) 14%,transparent); padding:0.05em 0.22em; color:color-mix(in srgb,var(--primary) 76%,var(--foreground)); font:inherit; font-weight:650; line-height:inherit; box-decoration-break:clone; -webkit-box-decoration-break:clone; }
   .mention-trigger:hover,.mention-trigger[aria-expanded="true"] { background:color-mix(in srgb,var(--primary) 23%,transparent); color:var(--foreground); }
-  .identity-card { position:fixed; z-index:140; width:min(22rem,calc(100vw - 1rem)); max-height:calc(100vh - 1rem); overflow:auto; overscroll-behavior:contain; border:1px solid color-mix(in srgb,var(--border) 92%,var(--foreground)); border-radius:0.7rem; background:var(--popover); color:var(--foreground); }
+  .identity-card { position:fixed; z-index:140; max-height:calc(100vh - 1rem); overflow:auto; overscroll-behavior:contain; }
   .identity-header { display:grid; grid-template-columns:40px minmax(0,1fr); align-items:center; gap:0.65rem; padding:0.75rem 0.8rem 0.4rem; }
   .identity-heading { display:grid; min-width:0; }
   .identity-name-line { display:flex; min-width:0; align-items:center; gap:0.38rem; }
   .identity-heading strong { overflow:hidden; font-size:calc(0.9rem * var(--type-scale)); font-weight:650; line-height:1.2rem; text-overflow:ellipsis; white-space:nowrap; }
-  .identity-heading small { overflow:hidden; color:var(--muted-foreground); font-size:calc(0.7rem * var(--type-scale)); text-overflow:ellipsis; white-space:nowrap; }
+  .identity-heading small { overflow:hidden; color:var(--muted-foreground); font-size:var(--panel-detail-font-size); text-overflow:ellipsis; white-space:nowrap; }
   .identity-status-dot { width:0.42rem; height:0.42rem; flex:0 0 auto; border-radius:999px; background:var(--status-tentative); }
   .identity-status-dot.available { background:var(--action-confirm); }
   .identity-body { display:grid; gap:0.65rem; padding:0.3rem 0.8rem 0.7rem; }
-  .identity-description { overflow-wrap:anywhere; font-size:calc(0.75rem * var(--type-scale)); line-height:1.1rem; }
+  .identity-description { overflow-wrap:anywhere; font-size:var(--panel-font-size); line-height:1.1rem; }
   .identity-settings-summary { display:grid; min-width:0; gap:0.18rem; }
-  .identity-settings-label { color:var(--muted-foreground); font-size:calc(0.62rem * var(--type-scale)); }
-  .identity-model-row { display:flex; min-width:0; align-items:center; gap:0.3rem; color:var(--foreground); font-size:calc(0.766667rem * var(--type-scale)); }
+  .identity-settings-label { color:var(--muted-foreground); font-size:var(--panel-detail-font-size); }
+  .identity-model-row { display:flex; min-width:0; align-items:center; gap:0.3rem; color:var(--foreground); font-size:var(--panel-font-size); }
   .identity-fast-indicator { display:grid; flex:0 0 auto; place-items:center; }
   .identity-model-name { overflow:hidden; min-width:0; text-overflow:ellipsis; white-space:nowrap; }
   .identity-effort-name { flex:0 0 auto; }
@@ -369,9 +370,9 @@
   .identity-approval { overflow:hidden; min-width:0; color:var(--foreground); text-overflow:ellipsis; white-space:nowrap; }
   .privacy-note { display:grid; grid-template-columns:1rem minmax(0,1fr); gap:0.55rem; align-items:start; color:var(--muted-foreground); }
   .privacy-note :global(svg) { margin-top:0.1rem; color:color-mix(in srgb,var(--primary) 70%,var(--foreground)); }
-  .privacy-note span { font-size:calc(0.7rem * var(--type-scale)); line-height:1rem; }
+  .privacy-note span { font-size:var(--panel-detail-font-size); line-height:1rem; }
   footer { display:flex; justify-content:flex-end; padding:0.25rem 0.65rem 0.5rem; }
-  footer button { display:inline-flex; min-height:1.75rem; align-items:center; gap:0.35rem; border-radius:0.4rem; padding:0.25rem 0.45rem; color:var(--muted-foreground); font-size:calc(0.68rem * var(--type-scale)); }
+  footer button { display:inline-flex; min-height:1.75rem; align-items:center; gap:0.35rem; border-radius:var(--floating-item-radius); padding:0.25rem 0.45rem; color:var(--muted-foreground); font-size:var(--panel-detail-font-size); }
   footer button:hover,footer button:focus-visible { background:var(--accent); color:var(--foreground); }
   @media (forced-colors:active) { .identity-card { border-color:CanvasText; } }
 </style>

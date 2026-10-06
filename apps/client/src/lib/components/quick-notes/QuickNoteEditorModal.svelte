@@ -62,6 +62,7 @@
   import QuickNoteColorPicker from "./QuickNoteColorPicker.svelte";
   import QuickNoteRichText from "./QuickNoteRichText.svelte";
   import QuickNoteTagPicker from "./QuickNoteTagPicker.svelte";
+  import { scrollEdgeFadeAction } from "$lib/utils/scroll-edge-fade";
 
   let {
     note,
@@ -567,13 +568,13 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <!-- svelte-ignore a11y_click_events_have_key_events -->
 <div
-  class={mobileLayout ? "fixed z-80 flex items-center justify-center bg-black/50" : "fixed inset-0 z-80 flex items-center justify-center bg-black/50 p-2 sm:p-4"}
+  class={mobileLayout ? "surface-backdrop fixed z-80 flex items-center justify-center" : "surface-backdrop fixed inset-0 z-80 flex items-center justify-center p-2 sm:p-4"}
   style={overlayStyle}
   onclick={(event) => { if (event.target === event.currentTarget) void requestClose(); }}
 >
   <div
     bind:this={dialog}
-    class={mobileLayout ? "quick-note-editor flex min-h-0 flex-col overflow-hidden outline-none" : "quick-note-editor flex min-h-0 w-[min(720px,calc(100vw-1rem))] flex-col overflow-hidden rounded-xl border border-black/15 shadow-2xl outline-none dark:border-white/10"}
+    class={mobileLayout ? "quick-note-editor flex min-h-0 flex-col overflow-hidden outline-none" : "quick-note-editor surface-dialog flex min-h-0 w-[min(720px,calc(100vw-1rem))] flex-col overflow-hidden outline-none"}
     style={dialogStyle}
     role="dialog"
     aria-modal="true"
@@ -610,6 +611,7 @@
       </div>
       <div
         bind:this={editor}
+        use:scrollEdgeFadeAction
         data-selectable-content
         class="quick-note-content relative my-3 min-h-0 flex-1 overflow-y-auto rounded-md py-1 text-[0.92rem] leading-relaxed outline-none"
         class:cursor-default={readOnly}

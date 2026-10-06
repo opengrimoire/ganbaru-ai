@@ -2,6 +2,7 @@
   import { onMount, tick, type Snippet } from "svelte";
   import ArrowLeft from "@lucide/svelte/icons/arrow-left";
   import X from "@lucide/svelte/icons/x";
+  import { scrollEdgeFadeAction } from "$lib/utils/scroll-edge-fade";
 
   let {
     title,
@@ -90,13 +91,13 @@
 </script>
 
 <div
-  class="fixed inset-0 z-90 flex bg-black/50 p-0 sm:p-5"
+  class="surface-backdrop fixed inset-0 z-90 flex p-0 sm:p-5"
   role="presentation"
   onclick={handleBackdropClick}
 >
   <div
     bind:this={dialogElement}
-    class="relative flex min-h-0 w-full flex-1 flex-col overflow-hidden bg-card text-foreground outline-none sm:mx-auto sm:max-w-7xl sm:rounded-xl sm:border sm:border-border sm:shadow-2xl"
+    class="surface-dialog relative flex min-h-0 w-full flex-1 flex-col overflow-hidden text-foreground outline-none max-sm:rounded-none max-sm:border-0 max-sm:shadow-none sm:mx-auto sm:max-w-7xl"
     role="dialog"
     aria-modal="true"
     aria-label={title}
@@ -162,6 +163,7 @@
 
           <div
             class="min-h-0 flex-1 overflow-auto px-2 pb-2"
+            use:scrollEdgeFadeAction
             aria-busy={versionsBusy}
           >
             {@render versionList()}

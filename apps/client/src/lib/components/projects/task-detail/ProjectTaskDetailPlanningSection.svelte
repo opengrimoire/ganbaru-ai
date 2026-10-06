@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Checkbox from "$lib/components/ui/Checkbox.svelte";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import ProjectTaskDetailDateField from "./ProjectTaskDetailDateField.svelte";
 
@@ -114,12 +115,7 @@
   </label>
   <label class="task-property-row">
     <span>{t("projects.detail.milestone")}</span>
-    <input
-      type="checkbox"
-      checked={milestone}
-      class="size-4 accent-primary"
-      onchange={(event) => onMilestoneChange(event.currentTarget.checked)}
-    />
+    <Checkbox checked={milestone} onChange={onMilestoneChange} />
   </label>
   <label class="task-property-row">
     <span>{t("projects.detail.blockerReason")}</span>

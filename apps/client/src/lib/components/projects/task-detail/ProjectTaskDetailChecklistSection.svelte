@@ -1,10 +1,10 @@
 <script lang="ts">
   import ArrowDown from "@lucide/svelte/icons/arrow-down";
   import ArrowUp from "@lucide/svelte/icons/arrow-up";
-  import Check from "@lucide/svelte/icons/check";
   import Plus from "@lucide/svelte/icons/plus";
   import Save from "@lucide/svelte/icons/save";
   import Trash2 from "@lucide/svelte/icons/trash-2";
+  import Checkbox from "$lib/components/ui/Checkbox.svelte";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import type { MoveDirection, ProjectChecklistItem, ProjectTask } from "$lib/projects/types";
   import { cn, type MaybePromise } from "$lib/utils";
@@ -64,19 +64,11 @@
       {@const previousChecklistItem = adjacentChecklistItem(item, -1)}
       {@const nextChecklistItem = adjacentChecklistItem(item, 1)}
       <div class="grid min-h-8 grid-cols-[auto_minmax(0,1fr)_auto_auto_auto_auto] items-center gap-1 rounded-md bg-transparent px-2 hover:bg-muted/40">
-        <button
-          type="button"
-          class={cn(
-            "flex h-5 w-5 shrink-0 items-center justify-center rounded border",
-            item.completedAt ? "border-emerald-500 bg-emerald-500 text-white" : "border-border hover:bg-accent",
-          )}
-          aria-label={t("projects.actions.toggleChecklistItem")}
-          onclick={() => { void onToggleCompleted(item, !item.completedAt); }}
-        >
-          {#if item.completedAt}
-            <Check size={13} strokeWidth={2} />
-          {/if}
-        </button>
+        <Checkbox
+          checked={Boolean(item.completedAt)}
+          label={t("projects.actions.toggleChecklistItem")}
+          onChange={(next) => { void onToggleCompleted(item, next); }}
+        />
         <input
           value={checklistItemDraftTitle(item)}
           class={cn(

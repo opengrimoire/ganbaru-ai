@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
+  import Check from "@lucide/svelte/icons/check";
   import Moon from "@lucide/svelte/icons/moon";
   import Sun from "@lucide/svelte/icons/sun";
   import X from "@lucide/svelte/icons/x";
@@ -9,6 +10,7 @@
   import type { ThemeId } from "$lib/themes";
   import ThemeMiniPreview from "./ThemeMiniPreview.svelte";
   import { cn } from "$lib/utils";
+  import { scrollEdgeFadeAction } from "$lib/utils/scroll-edge-fade";
 
   let { onClose }: { onClose: () => void } = $props();
 
@@ -122,11 +124,11 @@
     aria-modal="true"
     aria-label={t("settings.theme.pickerLabel")}
     tabindex="-1"
-    class="flex max-h-[min(26rem,calc(100dvh-var(--titlebar-h)-2.5rem))] w-[min(26rem,calc(100vw-1rem))] flex-col overflow-hidden rounded-lg border border-border bg-popover text-popover-foreground shadow-2xl"
+    class="flex max-h-[min(26rem,calc(100dvh-var(--titlebar-h)-2.5rem))] w-[min(26rem,calc(100vw-1rem))] flex-col overflow-hidden surface-floating"
     onclick={(e) => e.stopPropagation()}
   >
     <header class="flex shrink-0 items-center justify-between gap-3 border-b border-border/70 px-3 py-2">
-      <h2 class="truncate text-[0.866667rem] font-medium text-foreground">{t("settings.theme.pickerTitle")}</h2>
+      <h2 class="truncate font-medium text-foreground">{t("settings.theme.pickerTitle")}</h2>
       <button
         type="button"
         onclick={cancelSelection}
@@ -138,7 +140,7 @@
       </button>
     </header>
 
-    <div role="listbox" aria-label={t("settings.theme.themesHeading")} class="min-h-0 flex-1 overflow-y-auto p-1">
+    <div role="listbox" aria-label={t("settings.theme.themesHeading")} class="surface-floating-body min-h-0 flex-1 overflow-y-auto" use:scrollEdgeFadeAction>
       {#each orderedThemes as item, index (item.id)}
         {@const BaseIcon = item.iconLabel === "dark" ? Moon : Sun}
         {@const selected = item.id === selectedId}
@@ -148,21 +150,25 @@
           role="option"
           aria-selected={selected}
           onclick={() => commitSelection(item.id)}
+          data-highlighted={selected ? "" : undefined}
           onpointerenter={() => previewTheme(item.id)}
-          class={cn(
-            "flex w-full items-center gap-2 rounded-md px-2 py-2 text-left focus:outline-none focus:ring-1 focus:ring-ring",
-            selected ? "bg-accent text-accent-foreground" : "text-foreground hover:bg-accent/50",
-          )}
+          class="menu-item text-foreground"
         >
           <BaseIcon
             size={14}
             strokeWidth={1.75}
             class="shrink-0 text-muted-foreground"
           />
-          <span class="min-w-0 flex-1 truncate text-[0.866667rem]">
+          <span class="min-w-0 flex-1 truncate">
             {themeDisplayName(item, t)}
           </span>
           <ThemeMiniPreview theme={item} />
+          <Check
+            size={14}
+            strokeWidth={2}
+            aria-hidden="true"
+            class={cn("shrink-0", item.id !== originalId && "invisible")}
+          />
         </button>
       {/each}
     </div>

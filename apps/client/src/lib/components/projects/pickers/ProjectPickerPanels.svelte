@@ -14,8 +14,10 @@
     projectLifecycleBadgeClass,
     projectLifecycleLabel,
   } from "$lib/projects/display";
+  import { verticalBorderWidth } from "$lib/utils/anchored-panel";
   import {
     isPointerAimingAtSubmenu,
+    SUBMENU_AIM_TOLERANCES,
     type MenuAimPoint,
   } from "$lib/utils/menu-aim";
   import {
@@ -42,6 +44,7 @@
   import { getProjects } from "$lib/stores/projects.svelte";
   import { getMobileBackStack } from "$lib/stores/mobile-back-stack.svelte";
   import { cn, type MaybePromise } from "$lib/utils";
+  import { scrollEdgeFadeAction } from "$lib/utils/scroll-edge-fade";
   import type { ProjectNavigatorPanelMode } from "$lib/projects/toolbar";
   import ProjectIcon from "$lib/components/projects/ProjectIcon.svelte";
 
@@ -150,8 +153,6 @@
   let groupScrollElement = $state<HTMLElement | undefined>();
   let groupScrollContentElement = $state<HTMLElement | undefined>();
   let groupScrollable = $state(false);
-  let groupCanScrollUp = $state(false);
-  let groupCanScrollDown = $state(false);
   let groupScrollStateFrame: number | null = null;
   let projectSubpanelElement = $state<HTMLDivElement | undefined>();
   let projectSubpanelBridgeElement = $state<HTMLDivElement | undefined>();
@@ -161,8 +162,6 @@
   let projectScrollElement = $state<HTMLElement | undefined>();
   let projectScrollContentElement = $state<HTMLElement | undefined>();
   let projectScrollable = $state(false);
-  let projectCanScrollUp = $state(false);
-  let projectCanScrollDown = $state(false);
   let projectScrollStateFrame: number | null = null;
   let mobileBackButtonElement = $state<HTMLButtonElement | null>(null);
 
@@ -226,7 +225,15 @@
     return t("projects.templates.blank");
   }
 
+  /** Height of one rendered row in a list, or undefined before any row renders. */
+  function measuredRowHeight(content: HTMLElement | undefined): number | undefined {
+    const row = content?.querySelector<HTMLElement>(".menu-item");
+    return row && row.offsetHeight > 0 ? row.offsetHeight : undefined;
+  }
+
   function rowHeight(): number {
+    const measured = measuredRowHeight(groupScrollContentElement);
+    if (measured !== undefined) return measured;
     const rootFontSize = Number.parseFloat(getComputedStyle(document.documentElement).fontSize);
     return Number.isFinite(rootFontSize)
       ? rootFontSize * PANEL_ROW_HEIGHT_REM
@@ -266,7 +273,8 @@
       panelStyle = "height: 100%; max-height: 100%";
       return;
     }
-    const headerHeight = panelHeaderElement?.offsetHeight ?? PANEL_FALLBACK_HEADER_HEIGHT;
+    const headerHeight = (panelHeaderElement?.offsetHeight ?? PANEL_FALLBACK_HEADER_HEIGHT)
+      + verticalBorderWidth(panelRootElement);
     const footerHeight = searchActive
       ? 0
       : panelFooterElement?.offsetHeight ?? PANEL_FALLBACK_FOOTER_HEIGHT;
@@ -324,10 +332,7 @@
       point,
       submenu: projectPickerMenuAimRect(subpanelRect),
       side,
-      tolerance: 12,
-      topTolerance: 8,
-      bottomTolerance: 32,
-      minTowardDistance: 3,
+      ...SUBMENU_AIM_TOLERANCES,
     });
   }
 
@@ -337,7 +342,8 @@
     const anchorRect = activeGroupAnchorElement.getBoundingClientRect();
     const panelRect = panelRootElement.getBoundingClientRect();
     const bounds = currentPanelBounds();
-    const footerHeight = projectSubpanelFooterElement?.offsetHeight ?? SUBPANEL_FALLBACK_FOOTER_HEIGHT;
+    const footerHeight = (projectSubpanelFooterElement?.offsetHeight ?? SUBPANEL_FALLBACK_FOOTER_HEIGHT)
+      + verticalBorderWidth(projectSubpanelElement);
     const projectCount = activeGroup ? projectsInGroup(activeGroup).length : 0;
     const measuredListHeight = projectScrollContentElement
       ? projectScrollContentElement.scrollHeight + scrollAreaVerticalPadding(
@@ -355,7 +361,7 @@
       visibleRows: subpanelVisibleRows,
       listHeight: measuredListHeight,
       listPadding: SUBPANEL_LIST_PADDING,
-      rowHeight: SUBPANEL_ROW_HEIGHT,
+      rowHeight: measuredRowHeight(projectScrollContentElement) ?? SUBPANEL_ROW_HEIGHT,
     });
 
     projectSubpanelStyle = projectPickerPanelFrameStyle(geometry.panel);
@@ -367,14 +373,9 @@
     const element = groupScrollElement;
     if (!element) {
       groupScrollable = false;
-      groupCanScrollUp = false;
-      groupCanScrollDown = false;
       return;
     }
-    const state = projectPickerScrollState(element);
-    groupScrollable = state.scrollable;
-    groupCanScrollUp = state.canScrollUp;
-    groupCanScrollDown = state.canScrollDown;
+    groupScrollable = projectPickerScrollState(element).scrollable;
   }
 
   function requestGroupScrollStateRefresh(): void {
@@ -387,27 +388,14 @@
     const element = projectScrollElement;
     if (!element) {
       projectScrollable = false;
-      projectCanScrollUp = false;
-      projectCanScrollDown = false;
       return;
     }
-    const state = projectPickerScrollState(element);
-    projectScrollable = state.scrollable;
-    projectCanScrollUp = state.canScrollUp;
-    projectCanScrollDown = state.canScrollDown;
+    projectScrollable = projectPickerScrollState(element).scrollable;
   }
 
   function requestProjectScrollStateRefresh(): void {
     if (projectScrollStateFrame !== null) cancelAnimationFrame(projectScrollStateFrame);
     projectScrollStateFrame = requestAnimationFrame(refreshProjectScrollState);
-  }
-
-  function handleGroupScroll(): void {
-    refreshGroupScrollState();
-  }
-
-  function handleProjectScroll(): void {
-    refreshProjectScrollState();
   }
 
   function closeProjectSubpanel(): void {
@@ -715,8 +703,8 @@
 <div
   bind:this={panelRootElement}
   class={cn(
-    "project-picker-panel flex min-h-0 w-full flex-col overflow-hidden bg-popover text-popover-foreground shadow-lg ring-1 ring-border/60",
-    mobileLayout ? "h-full rounded-2xl" : "rounded-md",
+    "project-picker-panel surface-floating flex min-h-0 w-full flex-col overflow-hidden",
+    mobileLayout && "h-full rounded-2xl",
   )}
   style={panelStyle}
 >
@@ -753,8 +741,8 @@
       </div>
     {/if}
     <div class={cn(
-      "flex items-center gap-1.5 border border-border/70 bg-muted/20",
-      mobileLayout ? "min-h-12 rounded-xl pl-3" : "min-h-8 rounded-md pl-2 pr-1",
+      "field flex items-center gap-1.5",
+      mobileLayout ? "min-h-12 rounded-xl pl-3" : "py-0 pl-2 pr-1",
     )}>
       <Search size={mobileLayout ? 18 : 13} strokeWidth={iconStrokeWidth} class="shrink-0 text-popover-foreground/60" />
       <input
@@ -763,8 +751,8 @@
         oninput={(event) => updateProjectSearch(event.currentTarget.value)}
         placeholder={t("calendar.eventPanel.searchProjects")}
         class={cn(
-          "min-w-0 flex-1 bg-transparent text-popover-foreground placeholder:text-popover-foreground/45",
-          mobileLayout ? "h-12 text-base" : "text-[0.8rem]",
+          "field-bare text-popover-foreground",
+          mobileLayout && "h-12 text-base",
         )}
       />
       {#if showInactiveToggle}
@@ -816,34 +804,31 @@
   <div class="relative min-h-0 flex-1">
     <div
       bind:this={groupScrollElement}
+      use:scrollEdgeFadeAction
       class={cn(
-        "project-picker-scroll-area hide-scrollbar h-full min-h-0 overflow-y-auto",
+        "hide-scrollbar h-full min-h-0 overflow-y-auto",
         mobileLayout ? "overscroll-contain px-1 py-2" : "pb-1 pt-0.5",
         groupScrollable && "pr-2",
-        groupScrollable && groupCanScrollUp && groupCanScrollDown && "project-picker-scroll-both",
-        groupScrollable && groupCanScrollUp && !groupCanScrollDown && "project-picker-scroll-top",
-        groupScrollable && !groupCanScrollUp && groupCanScrollDown && "project-picker-scroll-bottom",
       )}
-      onscroll={handleGroupScroll}
     >
       <div bind:this={groupScrollContentElement}>
         {#if projects.loading && !projects.loaded}
-          <div class="px-3 py-2 text-[0.8rem] text-popover-foreground/60">
+          <div class="px-3 py-2 text-popover-foreground/60">
             {t("projects.loading")}
           </div>
         {:else if projects.loadError}
-          <div class="px-3 py-2 text-[0.8rem] text-destructive">
+          <div class="px-3 py-2 text-destructive">
             {t("projects.loadFailed", projects.loadError)}
           </div>
         {:else if searchActive && searchResultGroups.length === 0}
-          <div class="px-3 py-2 text-[0.8rem] text-popover-foreground/60">
+          <div class="px-3 py-2 text-popover-foreground/60">
             {t("calendar.eventPanel.noProjectsFound")}
           </div>
         {:else if searchActive}
           <div class="grid px-1">
             {#each searchResultGroups as resultGroup (resultGroup.group.id)}
               <div class="px-1 pb-1">
-                <div class="px-2 pb-0.5 pt-1 text-[0.7rem] font-medium text-popover-foreground/45">
+                <div class="menu-label">
                   {resultGroup.group.name}
                 </div>
                 <div class="grid">
@@ -851,8 +836,8 @@
                     <button
                       type="button"
                       class={cn(
-                        "flex w-full items-center gap-2 rounded-md text-left transition-colors hover:bg-accent hover:text-accent-foreground",
-                        mobileLayout ? "min-h-12 px-3 text-sm active:bg-accent" : "min-h-8 px-2 text-[0.8rem]",
+                        "menu-item gap-2",
+                        mobileLayout && "min-h-12 px-3 text-sm",
                         project.status === "active" ? "text-popover-foreground" : "text-popover-foreground/60",
                       )}
                       aria-label={t("projects.actions.selectProject", project.name, resultGroup.group.name)}
@@ -876,7 +861,7 @@
           </div>
         {:else if mode === "groups" && (!mobileLayout || mobilePane === "groups")}
           {#if visibleGroups.length === 0}
-            <div class="px-3 py-2 text-[0.8rem] text-popover-foreground/60">
+            <div class="px-3 py-2 text-popover-foreground/60">
               {t("calendar.eventPanel.noProjectsFound")}
             </div>
           {:else}
@@ -887,14 +872,12 @@
                     type="button"
                     data-mobile-project-group-id={mobileLayout ? group.id : undefined}
                     class={cn(
-                      "grid w-full items-center gap-2 rounded-md text-left transition-colors",
+                      "menu-item grid gap-2",
                       mobileLayout
                         ? "min-h-12 grid-cols-[1.125rem_minmax(0,1fr)_1.5rem] px-3"
-                        : "min-h-8 grid-cols-[0.8125rem_minmax(0,1fr)_1rem] px-2",
-                      activeGroupId === group.id
-                        ? "bg-accent text-accent-foreground"
-                        : "text-popover-foreground hover:bg-accent hover:text-accent-foreground",
+                        : "grid-cols-[1rem_minmax(0,1fr)_1rem]",
                     )}
+                    aria-expanded={mobileLayout ? undefined : activeGroupId === group.id}
                     onpointerenter={(event) => handleGroupPointerEnter(group, event)}
                     onpointermove={(event) => handleGroupPointerMove(group, event)}
                     onpointerleave={handleProjectSubpanelBoundaryLeave}
@@ -904,7 +887,7 @@
                     onclick={(event) => showProjectSubpanel(group, event.currentTarget)}
                   >
                     <ProjectIcon name={group.icon} size={iconSize} strokeWidth={iconStrokeWidth} emojiScale={EMOJI_SCALE} class="shrink-0" />
-                    <span class={cn("truncate", mobileLayout ? "text-sm" : "text-[0.8rem]")}>{group.name}</span>
+                    <span class={cn("truncate", mobileLayout && "text-sm")}>{group.name}</span>
                     <ChevronRight size={mobileLayout ? 18 : 13} strokeWidth={iconStrokeWidth} class="justify-self-end text-popover-foreground/60" />
                   </button>
                 </div>
@@ -912,11 +895,11 @@
             </div>
           {/if}
         {:else if !mainProjectGroup}
-          <div class="px-3 py-2 text-[0.8rem] text-popover-foreground/60">
+          <div class="px-3 py-2 text-popover-foreground/60">
             {t("projects.navigator.empty")}
           </div>
         {:else if mainProjects.length === 0}
-          <div class="px-3 py-2 text-[0.8rem] text-popover-foreground/60">
+          <div class="px-3 py-2 text-popover-foreground/60">
             {t("calendar.eventPanel.noProjectsFound")}
           </div>
         {:else}
@@ -926,16 +909,16 @@
                 <button
                   type="button"
                   class={cn(
-                    "w-full items-center gap-2 rounded-md text-left transition-colors hover:bg-accent hover:text-accent-foreground",
-                    mobileLayout ? "min-h-12 px-3 text-sm active:bg-accent" : "min-h-8 px-2 text-[0.8rem]",
+                    "menu-item gap-2",
+                    mobileLayout && "min-h-12 px-3 text-sm",
                     projectRowsHaveChildren
                       ? mobileLayout
                         ? "grid grid-cols-[1.5rem_minmax(0,1fr)_auto]"
                         : "grid grid-cols-[1rem_minmax(0,1fr)_auto]"
                       : "flex",
                     project.status === "active" ? "text-popover-foreground" : "text-popover-foreground/60",
-                    activeProjectId === project.id && "bg-accent text-accent-foreground",
                   )}
+                  data-highlighted={activeProjectId === project.id || undefined}
                   aria-label={t("projects.actions.selectProject", project.name, mainProjectGroup.name)}
                   onpointerenter={(event) => handleProjectPointerEnter(project, event)}
                   onpointermove={(event) => handleProjectPointerMove(project, event)}
@@ -988,15 +971,15 @@
               bind:value={groupDraft}
               placeholder={t("projects.navigator.groupNamePlaceholder")}
               class={cn(
-                "min-w-0 flex-1 border border-border bg-muted/40 text-popover-foreground placeholder:text-popover-foreground/45",
-                mobileLayout ? "min-h-12 rounded-xl px-3 text-base" : "min-h-8 rounded px-2 text-[0.8rem]",
+                "field min-w-0 flex-1 text-popover-foreground",
+                mobileLayout && "min-h-12 rounded-xl px-3 text-base",
               )}
             />
             <button
               type="submit"
               class={cn(
                 "bg-primary font-medium text-primary-foreground",
-                mobileLayout ? "min-h-12 rounded-xl px-4 text-sm" : "min-h-8 rounded px-2 text-[0.733333rem]",
+                mobileLayout ? "min-h-12 rounded-xl px-4 text-sm" : "min-h-(--panel-row-height) rounded-floating-item px-2",
               )}
             >
               {t("common.save")}
@@ -1017,8 +1000,8 @@
             type="button"
             data-mobile-create-project-group={mobileLayout ? "true" : undefined}
             class={cn(
-              "flex w-full items-center justify-center gap-1.5 text-popover-foreground transition-colors hover:bg-accent hover:text-accent-foreground",
-              mobileLayout ? "min-h-12 rounded-xl text-sm active:bg-accent" : "min-h-8 rounded-md text-[0.8rem]",
+              "menu-item justify-center",
+              mobileLayout && "min-h-12 rounded-xl text-sm",
             )}
             onclick={() => { createGroupOpen = true; }}
           >
@@ -1040,15 +1023,15 @@
                 }}
                 placeholder={t("projects.navigator.projectNamePlaceholder")}
                 class={cn(
-                  "min-w-0 flex-1 border border-border bg-muted/40 text-popover-foreground placeholder:text-popover-foreground/45",
-                  mobileLayout ? "min-h-12 rounded-xl px-3 text-base" : "min-h-7 rounded px-2 text-[0.8rem]",
+                  "field min-w-0 flex-1 text-popover-foreground",
+                  mobileLayout && "min-h-12 rounded-xl px-3 text-base",
                 )}
               />
               <button
                 type="submit"
                 class={cn(
                   "bg-primary font-medium text-primary-foreground",
-                  mobileLayout ? "min-h-12 rounded-xl px-4 text-sm" : "min-h-7 rounded px-2 text-[0.733333rem]",
+                  mobileLayout ? "min-h-12 rounded-xl px-4 text-sm" : "min-h-(--panel-row-height) rounded-floating-item px-2",
                 )}
               >
                 {t("common.save")}
@@ -1070,7 +1053,7 @@
                   type="button"
                   class={cn(
                     "rounded border",
-                    mobileLayout ? "min-h-12 px-3 text-sm" : "min-h-6 px-1.5 text-[0.7rem]",
+                    mobileLayout ? "min-h-12 px-3 text-sm" : "min-h-6 px-1.5 text-panel-detail",
                     (projectTemplateDraftByGroup[mainProjectGroup.id] ?? "blank") === templateId
                       ? "border-primary/60 bg-primary/10 text-primary"
                       : "border-border bg-transparent text-popover-foreground/60 hover:bg-accent hover:text-accent-foreground",
@@ -1086,15 +1069,15 @@
                 </button>
               {/each}
             </div>
-            <p class={cn("text-popover-foreground/55", mobileLayout ? "text-xs leading-5" : "text-[0.66rem] leading-4")}>{t("projects.navigator.managedFolderCreationHint")}</p>
+            <p class={cn("text-popover-foreground/55", mobileLayout ? "text-xs leading-5" : "text-panel-detail")}>{t("projects.navigator.managedFolderCreationHint")}</p>
           </form>
         {:else}
           <button
             type="button"
             data-mobile-create-project={mobileLayout ? "true" : undefined}
             class={cn(
-              "flex w-full items-center justify-center gap-1.5 text-popover-foreground transition-colors hover:bg-accent hover:text-accent-foreground",
-              mobileLayout ? "min-h-12 rounded-xl text-sm active:bg-accent" : "min-h-8 rounded-md text-[0.8rem]",
+              "menu-item justify-center",
+              mobileLayout && "min-h-12 rounded-xl text-sm",
             )}
             onclick={() => {
               createProjectGroupId = mainProjectGroup.id;
@@ -1122,25 +1105,22 @@
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
     bind:this={projectSubpanelElement}
-    class={cn("project-picker-panel fixed flex min-h-0 flex-col overflow-hidden rounded-md bg-popover text-popover-foreground shadow-lg ring-1 ring-border/60", zIndexClass)}
+    class={cn("project-picker-panel surface-floating fixed flex min-h-0 flex-col overflow-hidden", zIndexClass)}
     style={projectSubpanelStyle}
     onpointerleave={handleProjectSubpanelBoundaryLeave}
   >
     <div class="relative min-h-0 flex-1">
       <div
         bind:this={projectScrollElement}
+        use:scrollEdgeFadeAction
         class={cn(
-          "project-picker-scroll-area hide-scrollbar h-full min-h-0 overflow-y-auto py-1",
+          "hide-scrollbar h-full min-h-0 overflow-y-auto py-1",
           projectScrollable ? "px-1 pr-2" : "px-1",
-          projectScrollable && projectCanScrollUp && projectCanScrollDown && "project-picker-scroll-both",
-          projectScrollable && projectCanScrollUp && !projectCanScrollDown && "project-picker-scroll-top",
-          projectScrollable && !projectCanScrollUp && projectCanScrollDown && "project-picker-scroll-bottom",
         )}
-        onscroll={handleProjectScroll}
       >
         <div bind:this={projectScrollContentElement}>
           {#if activeGroupProjects.length === 0}
-            <div class="px-3 py-2 text-[0.8rem] text-popover-foreground/60">
+            <div class="px-3 py-2 text-popover-foreground/60">
               {t("calendar.eventPanel.noProjectsFound")}
             </div>
           {:else}
@@ -1149,13 +1129,13 @@
                 <button
                   type="button"
                   class={cn(
-                    "min-h-8 w-full items-center gap-2 rounded-md px-2 text-left text-[0.8rem] transition-colors hover:bg-accent hover:text-accent-foreground",
+                    "menu-item gap-2",
                     showProjectChildren
                       ? "grid grid-cols-[1rem_minmax(0,1fr)_auto]"
                       : "flex",
                     project.status === "active" ? "text-popover-foreground" : "text-popover-foreground/60",
-                    activeProjectId === project.id && "bg-accent text-accent-foreground",
                   )}
+                  data-highlighted={activeProjectId === project.id || undefined}
                   aria-label={t("projects.actions.selectProject", project.name, activeGroup.name)}
                   onpointerenter={(event) => handleProjectPointerEnter(project, event)}
                   onpointermove={(event) => handleProjectPointerMove(project, event)}
@@ -1203,9 +1183,9 @@
                 };
               }}
               placeholder={t("projects.navigator.projectNamePlaceholder")}
-              class="min-h-7 min-w-0 flex-1 rounded border border-border bg-muted/40 px-2 text-[0.8rem] text-popover-foreground placeholder:text-popover-foreground/45"
+              class="field min-w-0 flex-1 text-popover-foreground"
             />
-            <button type="submit" class="min-h-7 rounded bg-primary px-2 text-[0.733333rem] font-medium text-primary-foreground">
+            <button type="submit" class="min-h-(--panel-row-height) rounded-floating-item bg-primary px-2 font-medium text-primary-foreground">
               {t("common.save")}
             </button>
           </div>
@@ -1214,7 +1194,7 @@
               <button
                 type="button"
                 class={cn(
-                  "min-h-6 rounded border px-1.5 text-[0.7rem]",
+                  "min-h-6 rounded border px-1.5 text-panel-detail",
                   (projectTemplateDraftByGroup[activeGroup.id] ?? "blank") === templateId
                     ? "border-primary/60 bg-primary/10 text-primary"
                     : "border-border bg-transparent text-popover-foreground/60 hover:bg-accent hover:text-accent-foreground",
@@ -1230,12 +1210,12 @@
               </button>
             {/each}
           </div>
-          <p class="text-[0.66rem] leading-4 text-popover-foreground/55">{t("projects.navigator.managedFolderCreationHint")}</p>
+          <p class="text-panel-detail text-popover-foreground/55">{t("projects.navigator.managedFolderCreationHint")}</p>
         </form>
       {:else}
         <button
           type="button"
-          class="flex min-h-8 w-full items-center justify-center gap-1.5 rounded-md text-[0.8rem] text-popover-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+          class="menu-item justify-center"
           onclick={() => {
             createProjectGroupId = activeGroup.id;
             void tick().then(updateProjectSubpanelGeometry);
@@ -1253,38 +1233,5 @@
   .project-picker-panel {
     --cal-scrollbar-thumb: color-mix(in srgb, var(--popover-foreground) 18%, var(--popover));
     --cal-scrollbar-thumb-hover: color-mix(in srgb, var(--popover-foreground) 36%, var(--popover));
-  }
-
-  .project-picker-scroll-area {
-    --project-picker-scroll-fade: 28px;
-
-    transition: -webkit-mask-image 120ms ease, mask-image 120ms ease;
-  }
-
-  .project-picker-scroll-top {
-    -webkit-mask-image: linear-gradient(to bottom, transparent, black var(--project-picker-scroll-fade), black);
-    mask-image: linear-gradient(to bottom, transparent, black var(--project-picker-scroll-fade), black);
-  }
-
-  .project-picker-scroll-bottom {
-    -webkit-mask-image: linear-gradient(to bottom, black, black calc(100% - var(--project-picker-scroll-fade)), transparent);
-    mask-image: linear-gradient(to bottom, black, black calc(100% - var(--project-picker-scroll-fade)), transparent);
-  }
-
-  .project-picker-scroll-both {
-    -webkit-mask-image: linear-gradient(
-      to bottom,
-      transparent,
-      black var(--project-picker-scroll-fade),
-      black calc(100% - var(--project-picker-scroll-fade)),
-      transparent
-    );
-    mask-image: linear-gradient(
-      to bottom,
-      transparent,
-      black var(--project-picker-scroll-fade),
-      black calc(100% - var(--project-picker-scroll-fade)),
-      transparent
-    );
   }
 </style>

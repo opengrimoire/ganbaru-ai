@@ -1,5 +1,6 @@
 <script lang="ts">
   import CollectionMenu from "$lib/components/collections/CollectionMenu.svelte";
+  import CollectionMenuSeparator from "$lib/components/collections/CollectionMenuSeparator.svelte";
   import CollectionPanel from "$lib/components/collections/CollectionPanel.svelte";
   import CollectionSettings from "$lib/components/collections/CollectionSettings.svelte";
   import Archive from "@lucide/svelte/icons/archive";
@@ -282,12 +283,9 @@
     };
   });
 
-  /** Keep desktop choices compact while preserving touch targets on mobile. */
+  /** Shared option row; touch layouts raise its height through the panel row token. */
   function optionClass(): string {
-    return cn(
-      "flex w-full min-w-0 items-center justify-between gap-2 rounded-md px-2 text-left text-foreground transition-colors hover:bg-accent/70 focus-visible:bg-accent focus-visible:outline-none",
-      mobileLayout ? "min-h-12 text-sm" : "min-h-8 text-[0.8rem]",
-    );
+    return "menu-item min-w-0 justify-between";
   }
 
   function taskStatusFilterLabel(filter: ProjectTaskStatusFilter): string {
@@ -467,7 +465,7 @@
     {@const mode = customFieldSortMode(field)}
     {@render optionRow(field.name, taskSortMode === mode, () => { taskSortMode = mode; })}
   {/each}
-  <div class="my-1 border-t border-border"></div>
+  <CollectionMenuSeparator />
   {@render toggleRow(taskSortDirectionLabel(taskSortDirection), true, taskSortDirection === "asc" ? ArrowUp : ArrowDown, () => { taskSortDirection = taskSortDirection === "asc" ? "desc" : "asc"; })}
 {/snippet}
 
@@ -522,19 +520,19 @@
             {@render optionRow(taskDueFilterLabel(filter), taskDueFilter === filter, () => { taskDueFilter = filter; })}
           {/each}
           {#if taskDueFilter === "range"}
-            <div class="mt-1 grid grid-cols-[1fr_auto_1fr] items-center gap-1 rounded-md border border-border bg-background p-1">
+            <div class="mt-1 grid grid-cols-[1fr_auto_1fr] items-center gap-1">
               <input
                 bind:value={taskDueRangeStart}
                 placeholder={t("projects.filters.dueRangeStart")}
                 aria-label={t("projects.filters.dueRangeStart")}
-                class="h-8 min-w-0 rounded-md bg-transparent px-2 text-[0.8rem] text-foreground placeholder:text-muted-foreground"
+                class="field min-w-0 text-foreground"
               />
-              <span class="text-[0.733333rem] text-muted-foreground">{t("projects.filters.dueRangeTo")}</span>
+              <span class="text-panel-detail text-muted-foreground">{t("projects.filters.dueRangeTo")}</span>
               <input
                 bind:value={taskDueRangeEnd}
                 placeholder={t("projects.filters.dueRangeEnd")}
                 aria-label={t("projects.filters.dueRangeEnd")}
-                class="h-8 min-w-0 rounded-md bg-transparent px-2 text-[0.8rem] text-foreground placeholder:text-muted-foreground"
+                class="field min-w-0 text-foreground"
               />
             </div>
           {/if}
@@ -594,7 +592,7 @@
             {/if}
           </CollectionMenu>
         {/each}
-        <div class="my-1 border-t border-border/60"></div>
+        <CollectionMenuSeparator />
         <CollectionMenu fullWidth kind="sort" icon={ArrowUpDown} label={t("projects.toolbar.sort")} summary={taskSortModeLabel(taskSortMode)}>
           {@render sortOptions()}
         </CollectionMenu>
@@ -602,7 +600,7 @@
           {@render visibilityOptions()}
         </CollectionMenu>
         {#if taskFiltersActive}
-          <div class="my-1 border-t border-border/60"></div>
+          <CollectionMenuSeparator />
           <button type="button" data-collection-settings-row class={optionClass()} onclick={onClearTaskFilters}>
             <span class="flex min-w-0 items-center gap-2">
               <RotateCcw size={14} strokeWidth={1.75} class="shrink-0 text-muted-foreground" />
@@ -617,7 +615,7 @@
             {@render optionRow(control.label, control.visible, () => { void onToggleTaskListColumn(control.column); }, listColumnsSaving)}
           {/each}
           {#if listColumnsError}
-            <p class="px-2 py-1 text-[0.8rem] text-destructive" role="alert">{listColumnsError}</p>
+            <p class="px-2 py-1 text-destructive" role="alert">{listColumnsError}</p>
           {/if}
         </CollectionMenu>
         <CollectionMenu fullWidth kind="layout" icon={Save} label={t("projects.savedViews.title")} summary={savedTaskViews.length > 0 ? formatNumber(localization.locale, savedTaskViews.length) : t("projects.toolbar.none")}>
@@ -629,11 +627,11 @@
               bind:value={savedViewNameDraft}
               placeholder={t("projects.savedViews.namePlaceholder")}
               aria-label={t("projects.savedViews.namePlaceholder")}
-              class="min-h-8 min-w-0 flex-1 rounded-md bg-accent/40 px-2 text-[0.8rem] placeholder:text-muted-foreground"
+              class="field min-w-0 flex-1"
             />
             <button
               type="submit"
-              class="flex min-h-8 shrink-0 items-center gap-1.5 rounded-md px-2 text-[0.8rem] font-medium text-muted-foreground hover:bg-accent hover:text-foreground disabled:cursor-not-allowed"
+              class="flex min-h-(--panel-row-height) shrink-0 items-center gap-1.5 rounded-floating-item px-2 font-medium text-muted-foreground hover:bg-accent hover:text-foreground disabled:cursor-not-allowed"
               disabled={savedViewSaving || listColumnsSaving}
             >
               <Save size={13} strokeWidth={1.75} />
@@ -641,11 +639,11 @@
             </button>
           </form>
           {#each savedTaskViews as view (view.id)}
-            <div class="grid grid-cols-[minmax(0,1fr)_2rem] rounded-md hover:bg-accent/70">
+            <div class="grid grid-cols-[minmax(0,1fr)_2rem] gap-0.5">
               <button
                 type="button"
                 data-collection-settings-row
-                class="flex min-h-8 min-w-0 items-center rounded-md px-2 text-left text-foreground hover:bg-accent focus-visible:bg-accent focus-visible:outline-none"
+                class="menu-item min-w-0"
                 title={view.name}
                 disabled={savedViewSaving || listColumnsSaving}
                 onclick={() => {
@@ -656,7 +654,7 @@
               </button>
               <button
                 type="button"
-                class="flex min-h-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground disabled:cursor-not-allowed"
+                class="flex min-h-(--panel-row-height) items-center justify-center rounded-floating-item text-muted-foreground hover:bg-accent hover:text-foreground disabled:cursor-not-allowed"
                 disabled={savedViewSaving}
                 aria-label={t("projects.savedViews.delete", view.name)}
                 title={t("projects.savedViews.delete", view.name)}
@@ -669,7 +667,7 @@
             </div>
           {/each}
           {#if savedViewError}
-            <p class="px-2 py-1 text-[0.8rem] text-destructive" role="alert">{savedViewError}</p>
+            <p class="px-2 py-1 text-destructive" role="alert">{savedViewError}</p>
           {/if}
         </CollectionMenu>
       {/if}

@@ -1,12 +1,13 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
   import { getLocalization } from "$lib/i18n/translator.svelte";
+  import { scrollEdgeFadeAction } from "$lib/utils/scroll-edge-fade";
   import {
     roundTripWarningCount,
     toRoundTripDiagnosticItem,
   } from "$lib/notes/round-trip-diagnostics";
   import type { NotesNotionExportImportResult } from "$lib/notes/types";
-  import NotesCheckboxField from "$lib/components/notes/NotesCheckboxField.svelte";
+  import Checkbox from "$lib/components/ui/Checkbox.svelte";
   import NotesImportDestinationRow from "./NotesImportDestinationRow.svelte";
   import NotesRoundTripDiagnostics from "$lib/components/notes/NotesRoundTripDiagnostics.svelte";
   import NotesTransferFieldRow from "./NotesTransferFieldRow.svelte";
@@ -168,13 +169,13 @@
   }}
 >
   {#if !embedded}
-    <div class="absolute inset-0 bg-black/50"></div>
+    <div class="surface-backdrop absolute inset-0"></div>
   {/if}
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
     class={embedded
       ? "flex min-h-0 flex-col text-card-foreground outline-none"
-      : "relative z-10 flex max-h-[min(92vh,44rem)] w-[min(42rem,100%)] flex-col rounded-md border border-border bg-card text-card-foreground shadow-lg outline-none"}
+      : "relative z-10 flex max-h-[min(92vh,44rem)] w-[min(42rem,100%)] flex-col surface-dialog outline-none"}
     role={embedded ? "region" : "dialog"}
     aria-modal={embedded ? undefined : "true"}
     aria-label={t("notes.notionExportImportDialogTitle")}
@@ -191,7 +192,7 @@
       {/if}
     </div>
 
-    <div class={embedded ? "px-4 py-3" : "min-h-0 flex-1 overflow-auto px-4 py-3"}>
+    <div class={embedded ? "px-4 py-3" : "min-h-0 flex-1 overflow-auto px-4 py-3"} use:scrollEdgeFadeAction>
       <div class="grid gap-3">
         <NotesImportDestinationRow bind:projectId />
 
@@ -203,7 +204,7 @@
           <input
             id="notes-notion-export-folder-path"
             bind:this={pathInputEl}
-            class="h-7 w-72 max-w-full rounded-md border border-border bg-card px-2.5 text-[0.8rem] text-foreground outline-none focus:border-ring dark:bg-transparent max-[560px]:w-full"
+            class="field w-72 max-w-full text-panel text-foreground max-[560px]:w-full"
             bind:value={exportRootPath}
             spellcheck="false"
           />
@@ -216,7 +217,7 @@
         >
           <input
             id="notes-notion-export-workspace"
-            class="h-7 w-72 max-w-full rounded-md border border-border bg-card px-2.5 text-[0.8rem] text-foreground outline-none focus:border-ring dark:bg-transparent max-[560px]:w-full"
+            class="field w-72 max-w-full text-panel text-foreground max-[560px]:w-full"
             bind:value={sourceWorkspaceId}
             spellcheck="false"
           />
@@ -227,7 +228,7 @@
             label={t("notes.notionExportImportMarkdown")}
             description={t("notes.notionExportImportMarkdownDescription")}
           >
-            <NotesCheckboxField
+            <Checkbox
               bind:checked={importMarkdown}
               label={t("notes.notionExportImportMarkdown")}
             />
@@ -236,7 +237,7 @@
             label={t("notes.notionExportImportHtml")}
             description={t("notes.notionExportImportHtmlDescription")}
           >
-            <NotesCheckboxField
+            <Checkbox
               bind:checked={importHtml}
               label={t("notes.notionExportImportHtml")}
             />
@@ -245,7 +246,7 @@
             label={t("notes.notionExportImportCsv")}
             description={t("notes.notionExportImportCsvDescription")}
           >
-            <NotesCheckboxField
+            <Checkbox
               bind:checked={importCsv}
               label={t("notes.notionExportImportCsv")}
             />
@@ -254,7 +255,7 @@
             label={t("notes.notionExportImportCopyFiles")}
             description={t("notes.notionExportImportCopyFilesDescription")}
           >
-            <NotesCheckboxField
+            <Checkbox
               bind:checked={copyLocalFileReferences}
               label={t("notes.notionExportImportCopyFiles")}
             />
@@ -263,7 +264,7 @@
             label={t("notes.notionExportImportKeepExternalFiles")}
             description={t("notes.notionExportImportKeepExternalFilesDescription")}
           >
-            <NotesCheckboxField
+            <Checkbox
               bind:checked={keepExternalFileReferences}
               label={t("notes.notionExportImportKeepExternalFiles")}
             />

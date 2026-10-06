@@ -13,6 +13,7 @@
   import * as chatApi from "$lib/api/chat";
   import type { ChatExecutionEnvironmentRead, GitChangedPathRead, GitStatusRead, HostedChangeRequestRead, HostedSourceControlRead } from "$lib/chat/contracts";
   import { subscribeChatWorkspaceChanges } from "$lib/chat/workspace/observer-client";
+  import Checkbox from "$lib/components/ui/Checkbox.svelte";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import { getChat } from "$lib/stores/chat.svelte";
 
@@ -529,10 +530,10 @@
     </div>
     {#if worktreeFormOpen}
       <form class="worktree-form" onsubmit={(event) => { event.preventDefault(); void createWorktree(); }}>
-        <input bind:value={worktreeBranch} maxlength="1024" placeholder={t("chat.sourceControl.branchName")} aria-label={t("chat.sourceControl.branchName")} />
-        <input bind:value={worktreeBase} maxlength="1024" placeholder={t("chat.sourceControl.baseReference")} aria-label={t("chat.sourceControl.baseReference")} />
-        <input bind:value={worktreeRemote} maxlength="240" placeholder={t("chat.sourceControl.remoteName")} aria-label={t("chat.sourceControl.remoteName")} />
-        <label><input type="checkbox" bind:checked={fetchRemote} />{t("chat.sourceControl.fetchBeforeCreate")}</label>
+        <input class="field" bind:value={worktreeBranch} maxlength="1024" placeholder={t("chat.sourceControl.branchName")} aria-label={t("chat.sourceControl.branchName")} />
+        <input class="field" bind:value={worktreeBase} maxlength="1024" placeholder={t("chat.sourceControl.baseReference")} aria-label={t("chat.sourceControl.baseReference")} />
+        <input class="field" bind:value={worktreeRemote} maxlength="240" placeholder={t("chat.sourceControl.remoteName")} aria-label={t("chat.sourceControl.remoteName")} />
+        <label><Checkbox bind:checked={fetchRemote} />{t("chat.sourceControl.fetchBeforeCreate")}</label>
         <button type="submit" class="chat-primary-button" disabled={!worktreeBranch.trim() || !worktreeBase.trim() || operation !== null}>{t("chat.sourceControl.createWorktree")}</button>
       </form>
     {/if}
@@ -551,8 +552,8 @@
     {/if}
     {#if bitbucketCredentialOpen && hostedProvider?.kind === "bitbucket"}
       <form class="credential-form" onsubmit={(event) => { event.preventDefault(); void configureBitbucket(); }}>
-        <input bind:value={bitbucketUsername} autocomplete="username" maxlength="512" placeholder={t("chat.sourceControl.bitbucketUsername")} aria-label={t("chat.sourceControl.bitbucketUsername")} />
-        <input type="password" bind:value={bitbucketToken} autocomplete="off" maxlength="8192" placeholder={t("chat.sourceControl.bitbucketToken")} aria-label={t("chat.sourceControl.bitbucketToken")} />
+        <input class="field" bind:value={bitbucketUsername} autocomplete="username" maxlength="512" placeholder={t("chat.sourceControl.bitbucketUsername")} aria-label={t("chat.sourceControl.bitbucketUsername")} />
+        <input class="field" type="password" bind:value={bitbucketToken} autocomplete="off" maxlength="8192" placeholder={t("chat.sourceControl.bitbucketToken")} aria-label={t("chat.sourceControl.bitbucketToken")} />
         <p>{t("chat.sourceControl.bitbucketCredentialNotice")}</p>
         <button type="submit" class="chat-primary-button" disabled={!bitbucketUsername.trim() || !bitbucketToken || operation !== null}>{t("chat.sourceControl.saveBitbucketCredential")}</button>
       </form>
@@ -567,10 +568,10 @@
     </div>
     {#if changeRequestFormOpen}
       <form class="change-request-form" onsubmit={(event) => { event.preventDefault(); void createChangeRequest(); }}>
-        <input bind:value={changeRequestTitle} maxlength="1024" placeholder={t("chat.sourceControl.changeRequestTitle")} aria-label={t("chat.sourceControl.changeRequestTitle")} />
-        <div><input bind:value={changeRequestBase} maxlength="1024" placeholder={t("chat.sourceControl.baseBranch")} aria-label={t("chat.sourceControl.baseBranch")} /><input bind:value={changeRequestHead} maxlength="1024" placeholder={t("chat.sourceControl.headBranch")} aria-label={t("chat.sourceControl.headBranch")} /></div>
-        <textarea bind:value={changeRequestBody} maxlength="262144" rows="3" placeholder={t("chat.sourceControl.changeRequestBody")} aria-label={t("chat.sourceControl.changeRequestBody")}></textarea>
-        <label><input type="checkbox" bind:checked={isChangeRequestDraft} />{t("chat.sourceControl.draftChangeRequest")}</label>
+        <input class="field" bind:value={changeRequestTitle} maxlength="1024" placeholder={t("chat.sourceControl.changeRequestTitle")} aria-label={t("chat.sourceControl.changeRequestTitle")} />
+        <div><input class="field" bind:value={changeRequestBase} maxlength="1024" placeholder={t("chat.sourceControl.baseBranch")} aria-label={t("chat.sourceControl.baseBranch")} /><input class="field" bind:value={changeRequestHead} maxlength="1024" placeholder={t("chat.sourceControl.headBranch")} aria-label={t("chat.sourceControl.headBranch")} /></div>
+        <textarea class="field" bind:value={changeRequestBody} maxlength="262144" rows="3" placeholder={t("chat.sourceControl.changeRequestBody")} aria-label={t("chat.sourceControl.changeRequestBody")}></textarea>
+        <label><Checkbox bind:checked={isChangeRequestDraft} />{t("chat.sourceControl.draftChangeRequest")}</label>
         <button type="submit" class="chat-primary-button" disabled={!changeRequestTitle.trim() || !changeRequestBase.trim() || !changeRequestHead.trim() || operation !== null}>{t("chat.sourceControl.createChangeRequest")}</button>
       </form>
     {/if}
@@ -600,11 +601,11 @@
       </button>
       {#if repositorySetupOpen}
         <form onsubmit={(event) => { event.preventDefault(); void initializeRepository(); }}>
-          <input bind:value={initialBranch} maxlength="1024" aria-label={t("chat.sourceControl.initialBranch")} placeholder={t("chat.sourceControl.initialBranch")} />
+          <input class="field" bind:value={initialBranch} maxlength="1024" aria-label={t("chat.sourceControl.initialBranch")} placeholder={t("chat.sourceControl.initialBranch")} />
           <button type="submit" class="chat-secondary-button" disabled={operation !== null}>{t("chat.sourceControl.initializeRepository")}</button>
         </form>
         <form onsubmit={(event) => { event.preventDefault(); void cloneRepository(); }}>
-          <input bind:value={cloneUrl} maxlength="8192" aria-label={t("chat.sourceControl.cloneUrl")} placeholder={t("chat.sourceControl.cloneUrl")} />
+          <input class="field" bind:value={cloneUrl} maxlength="8192" aria-label={t("chat.sourceControl.cloneUrl")} placeholder={t("chat.sourceControl.cloneUrl")} />
           <button type="submit" class="chat-primary-button" disabled={!cloneUrl.trim() || operation !== null}>{t("chat.sourceControl.cloneRepository")}</button>
         </form>
         <p>{t("chat.sourceControl.cloneEmptyFolderNotice")}</p>
@@ -639,7 +640,7 @@
     </div>
     <form class="commit" onsubmit={(event) => { event.preventDefault(); void commit(); }}>
       <label for="chat-commit-message">{t("chat.sourceControl.commitMessage")}</label>
-      <textarea id="chat-commit-message" maxlength="4000" rows="3" bind:value={commitMessage} placeholder={t("chat.sourceControl.commitPlaceholder")}></textarea>
+      <textarea class="field" id="chat-commit-message" maxlength="4000" rows="3" bind:value={commitMessage} placeholder={t("chat.sourceControl.commitPlaceholder")}></textarea>
       <button type="submit" class="chat-primary-button" disabled={!commitMessage.trim() || staged.length === 0 || operation !== null}><Check size={14} />{t("chat.sourceControl.commit")}</button>
     </form>
   {/if}
@@ -669,7 +670,7 @@
   .environment-list span strong, .environment-list span small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: calc(0.66rem * var(--type-scale)); }
   .environment-list span small { color: var(--muted-foreground); }
   .worktree-form { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.35rem; margin-top: 0.45rem; }
-  .worktree-form > input { min-width: 0; border: 1px solid var(--border); border-radius: 0.35rem; background: var(--background); padding: 0.35rem; font-size: calc(0.68rem * var(--type-scale)); }
+  .worktree-form > input { min-width: 0; font-size: var(--panel-detail-font-size); }
   .worktree-form > label { display: flex; align-items: center; gap: 0.3rem; color: var(--muted-foreground); font-size: calc(0.66rem * var(--type-scale)); }
   .worktree-form > button { grid-column: -2 / -1; }
   .hosted-providers { display: grid; gap: 0.35rem; border-bottom: 1px solid var(--border); padding: 0.45rem 0.7rem; }
@@ -684,10 +685,10 @@
   .credential-actions button { display: inline-flex; align-items: center; gap: 0.25rem; border-radius: 0.35rem; padding: 0.25rem 0.35rem; color: var(--muted-foreground); font-size: calc(0.66rem * var(--type-scale)); }
   .credential-actions button:hover:not(:disabled) { background: var(--accent); color: var(--foreground); }
   .credential-form { display: grid; gap: 0.35rem; border-top: 1px solid var(--border); padding-top: 0.45rem; }
-  .credential-form input { min-width: 0; border: 1px solid var(--border); border-radius: 0.35rem; background: var(--background); padding: 0.35rem; font-size: calc(0.68rem * var(--type-scale)); }
+  .credential-form input { min-width: 0; font-size: var(--panel-detail-font-size); }
   .credential-form p { color: var(--muted-foreground); font-size: calc(0.62rem * var(--type-scale)); }
   .change-request-form { display: grid; gap: 0.35rem; border-top: 1px solid var(--border); padding-top: 0.45rem; }
-  .change-request-form > input, .change-request-form textarea, .change-request-form div input { min-width: 0; border: 1px solid var(--border); border-radius: 0.35rem; background: var(--background); padding: 0.35rem; font-size: calc(0.68rem * var(--type-scale)); }
+  .change-request-form > input, .change-request-form textarea, .change-request-form div input { min-width: 0; font-size: var(--panel-detail-font-size); }
   .change-request-form > div { display: grid; grid-template-columns: 1fr 1fr; gap: 0.35rem; }
   .change-request-form > label { display: flex; align-items: center; gap: 0.3rem; color: var(--muted-foreground); font-size: calc(0.66rem * var(--type-scale)); }
   .change-request-list { display: grid; max-height: 11rem; gap: 0.15rem; overflow: auto; }
@@ -700,7 +701,7 @@
   .repository-setup { display: grid; gap: 0.35rem; border-bottom: 1px solid var(--border); padding: 0.55rem 0.7rem; }
   .repository-setup > button { justify-self: start; border-radius: 0.35rem; color: var(--muted-foreground); font-size: calc(0.68rem * var(--type-scale)); }
   .repository-setup form { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.35rem; }
-  .repository-setup input { min-width: 0; border: 1px solid var(--border); border-radius: 0.35rem; background: var(--background); padding: 0.35rem; font-size: calc(0.68rem * var(--type-scale)); }
+  .repository-setup input { min-width: 0; font-size: var(--panel-detail-font-size); }
   .repository-setup p { color: var(--muted-foreground); font-size: calc(0.62rem * var(--type-scale)); }
   .changes section { margin-bottom: 0.4rem; }
   h3 { display: flex; align-items: center; gap: 0.35rem; padding: 0.4rem; font-size: calc(0.72rem * var(--type-scale)); font-weight: 600; }
@@ -714,7 +715,7 @@
   .file-row > .file-actions { display: flex; overflow: visible; font-family: inherit; }
   .commit { display: grid; gap: 0.4rem; border-top: 1px solid var(--border); padding: 0.6rem 0.7rem; }
   .commit label { font-size: calc(0.68rem * var(--type-scale)); font-weight: 600; }
-  .commit textarea { min-height: 3.8rem; resize: vertical; border: 1px solid var(--border); border-radius: 0.45rem; background: var(--background); padding: 0.45rem; font-size: calc(0.72rem * var(--type-scale)); }
+  .commit textarea { min-height: 3.8rem; resize: vertical; font-size: var(--panel-font-size); }
   .commit button { display: inline-flex; align-items: center; justify-content: center; gap: 0.3rem; }
   .empty { padding: 1rem; text-align: center; color: var(--muted-foreground); font-size: calc(0.72rem * var(--type-scale)); }
   .empty.compact { padding: 0.4rem; }

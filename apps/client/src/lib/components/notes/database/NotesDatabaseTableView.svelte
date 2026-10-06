@@ -25,6 +25,7 @@
   import { NOTES_DATABASE_MAX_COLLAPSED_ROWS, NOTES_DATABASE_ROW_MAX_DEPTH, notesDatabaseCollapsedRows, notesDatabaseHierarchyRows } from "$lib/notes/database/row-hierarchy";
   import { NOTES_DATABASE_QUERY_MAX_SORTS, notesDatabaseFilterCount, notesDatabaseFilterConditions, notesDatabaseNewFilter, notesDatabaseRowMatchesFilters, notesDatabaseSortsWithColumn } from "$lib/notes/database/query-controls";
   import Select from "$lib/components/ui/Select.svelte";
+  import Checkbox from "$lib/components/ui/Checkbox.svelte";
   import { onDestroy, tick, untrack, type Snippet } from "svelte";
   import { databaseResource, notesDatabaseSession, rememberDatabaseScroll } from "$lib/notes/database/session.svelte";
   import { createNotesDatabaseRowCreation } from "$lib/notes/database/row-creation.svelte";
@@ -1069,7 +1070,7 @@
                 onChange={(nextValue) => { selectedTemplateId = nextValue; }} />
               <CollectionMenuItem icon={Trash2} label={t("notes.databaseTemplatesDelete")} destructive disabled={mutating || !selectedTemplateId} onclick={() => { void deleteSelectedTemplate(); }} />
               <CollectionMenuSeparator />
-              <input class="mb-1 h-8 w-full min-w-0 rounded-md border border-border bg-transparent px-2 text-[length:inherit] outline-none" aria-label={t("notes.databaseTemplatesName")}
+              <input class="field mb-1 w-full min-w-0" aria-label={t("notes.databaseTemplatesName")}
                 value={templateName} placeholder={t("notes.databaseTemplatesNamePlaceholder")} disabled={mutating}
                 oninput={(event) => { templateName = event.currentTarget.value; }}
                 onkeydown={(event) => event.stopPropagation()} />
@@ -1290,16 +1291,15 @@
                     {/if}
                     {#if column.type === "checkbox"}
                       <label class="flex h-8 items-center justify-center" data-collection-cell-primary>
-                        <input
+                        <Checkbox
                           data-table-cell="true"
                           data-row-index={rowIndex}
                           data-column-index={columnIndex}
-                          type="checkbox"
                           checked={editValue === true}
                           disabled={mutating || rowCreation.blocked(row.id) || !notesDatabaseTableColumnCanEdit(column)}
-                          aria-label={column.name}
-                          onchange={(event) => {
-                            void saveCell(row, column, event.currentTarget.checked);
+                          label={column.name}
+                          onChange={(checked) => {
+                            void saveCell(row, column, checked);
                           }}
                           onkeydown={(event) => handleCellKeydown(event, rowIndex, columnIndex)}
                         />
@@ -1379,7 +1379,7 @@
                         data-table-cell="true" data-collection-cell-primary
                         data-row-index={rowIndex}
                         data-column-index={columnIndex}
-                        class="h-8 w-full min-w-0 rounded-sm border border-transparent bg-transparent px-1 text-foreground outline-none focus:border-transparent focus-visible:ring-0"
+                        class="h-8 w-full min-w-0 rounded-sm border border-transparent bg-transparent px-1 text-foreground outline-none"
                         value={String(editValue)}
                         inputmode="text"
                         aria-label={column.name}

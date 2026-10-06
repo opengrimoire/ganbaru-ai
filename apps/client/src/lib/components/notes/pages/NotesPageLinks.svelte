@@ -113,7 +113,7 @@
     {/if}
     <div class="flex min-w-0 flex-wrap items-center gap-2">
       <input
-        class="min-w-36 flex-1 rounded-md border border-input bg-background px-2 py-1.5 text-[0.8rem] text-foreground outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring"
+        class="field min-w-36 flex-1 text-[0.8rem] text-foreground"
         bind:value={aliasDraft}
         placeholder={t("notes.pageAliasPlaceholder")}
         aria-label={t("notes.pageAliasInput")}

@@ -47,6 +47,8 @@
     NotesWorkingMarkdownTreeRead,
   } from "$lib/notes/types";
   import { getNotes } from "$lib/stores/notes.svelte";
+  import { cn } from "$lib/utils";
+  import { scrollEdgeFadeAction } from "$lib/utils/scroll-edge-fade";
   import NotesFolderRow from "$lib/components/notes/navigation/NotesFolderRow.svelte";
   import NotesPageRow from "$lib/components/notes/navigation/NotesPageRow.svelte";
   import {
@@ -661,8 +663,7 @@
   }
 
   function sortOptionClass(order: NotesNavigationSortOrder): string {
-    const minimumHeightClass = mobileLayout ? "min-h-12" : "min-h-7";
-    return `grid ${minimumHeightClass} w-full grid-cols-[max-content_1rem] items-center gap-2 px-3 text-left hover:bg-accent ${hoveredSortOrder === order ? "bg-accent" : ""}`;
+    return cn("menu-item grid grid-cols-[max-content_1rem]", hoveredSortOrder === order && "bg-accent");
   }
 
   function highlightNearestSortOption(
@@ -951,7 +952,7 @@
       {#if sortMenuOpen}
         <div
           bind:this={sortMenuElement}
-          class="fixed z-60 overflow-y-auto rounded-lg border border-border bg-popover py-1 text-[0.8rem] text-popover-foreground shadow-lg"
+          class="surface-floating fixed z-60 flex flex-col overflow-hidden"
           style={sortMenuStyle}
           role="menu"
           tabindex="-1"
@@ -960,94 +961,96 @@
             hoveredSortOrder = null;
           }}
         >
-          <button
-            type="button"
-            class={sortOptionClass("name-asc")}
-            role="menuitemradio"
-            aria-checked={sortOrder === "name-asc"}
-            onmouseenter={() => {
-              hoveredSortOrder = "name-asc";
-            }}
-            onclick={() => selectSortOrder("name-asc")}
-          >
-            <span>{t("notes.sortNameAscending")}</span>
-            {#if sortOrder === "name-asc"}<Check class="size-4" />{/if}
-          </button>
-          <button
-            type="button"
-            class={sortOptionClass("name-desc")}
-            role="menuitemradio"
-            aria-checked={sortOrder === "name-desc"}
-            onmouseenter={() => {
-              hoveredSortOrder = "name-desc";
-            }}
-            onclick={() => selectSortOrder("name-desc")}
-          >
-            <span>{t("notes.sortNameDescending")}</span>
-            {#if sortOrder === "name-desc"}<Check class="size-4" />{/if}
-          </button>
-          <div
-            class="my-1 border-t border-border"
-            role="separator"
-            onmousemove={(event) => highlightNearestSortOption(event, "name-desc", "modified-desc")}
-          ></div>
-          <button
-            type="button"
-            class={sortOptionClass("modified-desc")}
-            role="menuitemradio"
-            aria-checked={sortOrder === "modified-desc"}
-            onmouseenter={() => {
-              hoveredSortOrder = "modified-desc";
-            }}
-            onclick={() => selectSortOrder("modified-desc")}
-          >
-            <span>{t("notes.sortModifiedDescending")}</span>
-            {#if sortOrder === "modified-desc"}<Check class="size-4" />{/if}
-          </button>
-          <button
-            type="button"
-            class={sortOptionClass("modified-asc")}
-            role="menuitemradio"
-            aria-checked={sortOrder === "modified-asc"}
-            onmouseenter={() => {
-              hoveredSortOrder = "modified-asc";
-            }}
-            onclick={() => selectSortOrder("modified-asc")}
-          >
-            <span>{t("notes.sortModifiedAscending")}</span>
-            {#if sortOrder === "modified-asc"}<Check class="size-4" />{/if}
-          </button>
-          <div
-            class="my-1 border-t border-border"
-            role="separator"
-            onmousemove={(event) => highlightNearestSortOption(event, "modified-asc", "created-desc")}
-          ></div>
-          <button
-            type="button"
-            class={sortOptionClass("created-desc")}
-            role="menuitemradio"
-            aria-checked={sortOrder === "created-desc"}
-            onmouseenter={() => {
-              hoveredSortOrder = "created-desc";
-            }}
-            onclick={() => selectSortOrder("created-desc")}
-          >
-            <span>{t("notes.sortCreatedDescending")}</span>
-            {#if sortOrder === "created-desc"}<Check class="size-4" />{/if}
-          </button>
-          <button
-            type="button"
-            class={sortOptionClass("created-asc")}
-            role="menuitemradio"
-            aria-checked={sortOrder === "created-asc"}
-            onmouseenter={() => {
-              hoveredSortOrder = "created-asc";
-            }}
-            onclick={() => selectSortOrder("created-asc")}
-          >
-            <span>{t("notes.sortCreatedAscending")}</span>
-            {#if sortOrder === "created-asc"}<Check class="size-4" />{/if}
-          </button>
+          <div class="surface-floating-body flex min-h-0 flex-1 flex-col overflow-y-auto" use:scrollEdgeFadeAction>
+            <button
+              type="button"
+              class={sortOptionClass("name-asc")}
+              role="menuitemradio"
+              aria-checked={sortOrder === "name-asc"}
+              onmouseenter={() => {
+                hoveredSortOrder = "name-asc";
+              }}
+              onclick={() => selectSortOrder("name-asc")}
+            >
+              <span>{t("notes.sortNameAscending")}</span>
+              {#if sortOrder === "name-asc"}<Check class="size-4" />{/if}
+            </button>
+            <button
+              type="button"
+              class={sortOptionClass("name-desc")}
+              role="menuitemradio"
+              aria-checked={sortOrder === "name-desc"}
+              onmouseenter={() => {
+                hoveredSortOrder = "name-desc";
+              }}
+              onclick={() => selectSortOrder("name-desc")}
+            >
+              <span>{t("notes.sortNameDescending")}</span>
+              {#if sortOrder === "name-desc"}<Check class="size-4" />{/if}
+            </button>
+            <div
+              class="menu-separator"
+              role="separator"
+              onmousemove={(event) => highlightNearestSortOption(event, "name-desc", "modified-desc")}
+            ></div>
+            <button
+              type="button"
+              class={sortOptionClass("modified-desc")}
+              role="menuitemradio"
+              aria-checked={sortOrder === "modified-desc"}
+              onmouseenter={() => {
+                hoveredSortOrder = "modified-desc";
+              }}
+              onclick={() => selectSortOrder("modified-desc")}
+            >
+              <span>{t("notes.sortModifiedDescending")}</span>
+              {#if sortOrder === "modified-desc"}<Check class="size-4" />{/if}
+            </button>
+            <button
+              type="button"
+              class={sortOptionClass("modified-asc")}
+              role="menuitemradio"
+              aria-checked={sortOrder === "modified-asc"}
+              onmouseenter={() => {
+                hoveredSortOrder = "modified-asc";
+              }}
+              onclick={() => selectSortOrder("modified-asc")}
+            >
+              <span>{t("notes.sortModifiedAscending")}</span>
+              {#if sortOrder === "modified-asc"}<Check class="size-4" />{/if}
+            </button>
+            <div
+              class="menu-separator"
+              role="separator"
+              onmousemove={(event) => highlightNearestSortOption(event, "modified-asc", "created-desc")}
+            ></div>
+            <button
+              type="button"
+              class={sortOptionClass("created-desc")}
+              role="menuitemradio"
+              aria-checked={sortOrder === "created-desc"}
+              onmouseenter={() => {
+                hoveredSortOrder = "created-desc";
+              }}
+              onclick={() => selectSortOrder("created-desc")}
+            >
+              <span>{t("notes.sortCreatedDescending")}</span>
+              {#if sortOrder === "created-desc"}<Check class="size-4" />{/if}
+            </button>
+            <button
+              type="button"
+              class={sortOptionClass("created-asc")}
+              role="menuitemradio"
+              aria-checked={sortOrder === "created-asc"}
+              onmouseenter={() => {
+                hoveredSortOrder = "created-asc";
+              }}
+              onclick={() => selectSortOrder("created-asc")}
+            >
+              <span>{t("notes.sortCreatedAscending")}</span>
+              {#if sortOrder === "created-asc"}<Check class="size-4" />{/if}
+            </button>
+          </div>
         </div>
       {/if}
     </div>
@@ -1311,18 +1314,18 @@
       />
     {/if}
   {:else if confirmDialogLoadState?.status === "failed"}
-    <div class="fixed inset-0 z-100 flex items-center justify-center bg-black/45 p-4" role="alert">
-      <div class="rounded-md border border-border bg-popover p-4 text-sm text-popover-foreground shadow-lg">
+    <div class="fixed inset-0 z-100 flex items-center justify-center surface-backdrop p-4" role="alert">
+      <div class="surface-dialog p-4 text-sm">
         <p>{t("common.viewLoadFailed", t("common.confirm"))}</p>
         <div class="mt-3 flex gap-2">
-          <button class="min-h-8 rounded-md border border-border px-2 hover:bg-accent" type="button" onclick={() => requestConfirmDialog(true)}>{t("common.retry")}</button>
-          <button class="min-h-8 rounded-md border border-border px-2 hover:bg-accent" type="button" onclick={clearPendingConfirmation}>{t("common.cancel")}</button>
+          <button class="min-h-8 rounded-floating-item border border-border px-2 hover:bg-accent" type="button" onclick={() => requestConfirmDialog(true)}>{t("common.retry")}</button>
+          <button class="min-h-8 rounded-floating-item border border-border px-2 hover:bg-accent" type="button" onclick={clearPendingConfirmation}>{t("common.cancel")}</button>
         </div>
       </div>
     </div>
   {:else}
-    <div class="fixed inset-0 z-100 flex items-center justify-center bg-black/45 p-4" role="dialog" aria-modal="true" aria-busy="true">
-      <div class="rounded-md border border-border bg-popover px-4 py-3 text-sm text-muted-foreground shadow-lg">{t("common.loading")}</div>
+    <div class="fixed inset-0 z-100 flex items-center justify-center surface-backdrop p-4" role="dialog" aria-modal="true" aria-busy="true">
+      <div class="surface-dialog px-4 py-3 text-sm text-muted-foreground">{t("common.loading")}</div>
     </div>
   {/if}
 {/if}

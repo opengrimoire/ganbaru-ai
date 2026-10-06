@@ -23,6 +23,7 @@
     type SelectPopoverRect,
   } from "$lib/utils/select-popover-position";
   import { portal } from "$lib/utils/portal";
+  import { scrollEdgeFadeAction } from "$lib/utils/scroll-edge-fade";
 
   export type ChatControlIcon =
     | "bot"
@@ -88,6 +89,7 @@
   let ready = $state(false);
   let trigger: HTMLButtonElement | undefined = $state();
   let popover: HTMLDivElement | undefined = $state();
+  let list: HTMLDivElement | undefined = $state();
   let geometry = $state<SelectPopoverGeometry>(DEFAULT_GEOMETRY);
   const current = $derived(options.find((option) => option.value === value) ?? placeholder ?? options[0]);
 
@@ -102,6 +104,12 @@
     };
   }
 
+  /** Full popover height including content hidden by the inner scroll list, so placement stays correct after a max height applies. */
+  function popoverContentHeight(): number | null {
+    if (!popover || !list) return null;
+    return list.scrollHeight + popover.offsetHeight - popover.clientHeight;
+  }
+
   function computePosition(): void {
     if (!trigger) return;
     geometry = pickSelectPopoverGeometry({
@@ -114,7 +122,7 @@
         width: window.innerWidth,
         height: window.innerHeight,
       },
-      contentHeight: popover?.scrollHeight ?? 220,
+      contentHeight: popoverContentHeight() ?? 220,
       contentWidth: popover?.scrollWidth ?? 260,
       horizontalAlign: "start",
     });
@@ -232,7 +240,7 @@
   <div
     bind:this={popover}
     use:portal
-    class="control-popover"
+    class="control-popover surface-floating flex flex-col overflow-hidden"
     class:below={geometry.placement === "below"}
     class:positioned={ready}
     role="listbox"
@@ -242,19 +250,22 @@
     style={popoverStyle()}
     onkeydown={handlePopoverKeydown}
   >
-    {#each options as option (option.value)}
-      <button
-        type="button"
-        role="option"
-        aria-selected={option.value === value}
-        disabled={option.disabled}
-        onclick={() => select(option)}
-      >
-        <span class="option-icon">{@render controlIcon(option.icon, 15)}</span>
-        <span class="option-copy"><strong>{option.label}</strong>{#if option.description}<small>{option.description}</small>{/if}</span>
-        <Check size={13} class={option.value === value ? "visible" : ""} />
-      </button>
-    {/each}
+    <div bind:this={list} class="surface-floating-body min-h-0 flex-1 overflow-y-auto" use:scrollEdgeFadeAction>
+      {#each options as option (option.value)}
+        <button
+          type="button"
+          role="option"
+          class="menu-item"
+          aria-selected={option.value === value}
+          disabled={option.disabled}
+          onclick={() => select(option)}
+        >
+          <span class="option-icon">{@render controlIcon(option.icon, 15)}</span>
+          <span class="option-copy"><span class="option-title">{option.label}</span>{#if option.description}<span class="option-description text-panel-detail">{option.description}</span>{/if}</span>
+          <Check size={13} class={option.value === value ? "visible" : ""} />
+        </button>
+      {/each}
+    </div>
   </div>
 {/if}
 
@@ -268,17 +279,14 @@
   .control-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   .control-trigger :global(svg:last-child) { flex: 0 0 auto; transition: transform 120ms ease; }
   .control-trigger :global(svg.open:last-child) { transform: rotate(180deg); }
-  .control-popover { position: fixed; z-index: 80; overflow-y: auto; border: 1px solid var(--border); border-radius: 0.65rem; background: var(--popover); padding: 0.3rem; color: var(--popover-foreground); box-shadow: 0 2px 6px rgb(0 0 0 / 0.06); }
+  .control-popover { position: fixed; z-index: 80; }
   .control-popover.positioned { animation: control-popover-enter 180ms cubic-bezier(0.22, 0.75, 0.18, 1); }
   .control-popover.below { --control-popover-enter-y: -0.25rem; }
-  .control-popover button { display: grid; width: 100%; grid-template-columns: 1.5rem minmax(0, 1fr) 1rem; align-items: center; gap: 0.45rem; border-radius: 0.4rem; padding: 0.45rem 0.5rem; text-align: left; }
-  .control-popover button:hover, .control-popover button:focus-visible { background: var(--accent); outline: none; }
-  .control-popover button:disabled { cursor: not-allowed; opacity: 0.45; }
-  .option-icon { display: grid; place-items: center; color: inherit; }
-  .option-copy { min-width: 0; }
-  .option-copy strong, .option-copy small { display: block; overflow: hidden; text-overflow: ellipsis; }
-  .option-copy strong { font-size: calc(0.8rem * var(--type-scale)); font-weight: 500; }
-  .option-copy small { margin-top: 0.1rem; color: var(--muted-foreground); font-size: calc(0.733333rem * var(--type-scale)); line-height: calc(1.05rem * var(--type-scale)); white-space: normal; }
+  .option-icon { display: grid; place-items: center; color: inherit; width: 1.5rem; flex: 0 0 auto; }
+  .option-copy { min-width: 0; flex: 1 1 0%; }
+  .option-title, .option-description { display: block; overflow: hidden; text-overflow: ellipsis; }
+  .option-title { font-weight: 500; }
+  .option-description { margin-top: 0.1rem; color: var(--muted-foreground); white-space: normal; }
   .control-popover button > :global(svg:last-child) { visibility: hidden; }
   .control-popover button > :global(svg.visible:last-child) { visibility: visible; }
   @keyframes control-popover-enter { from { opacity: 0; transform: translateY(var(--control-popover-enter-y, 0.25rem)); } to { opacity: 1; transform: translateY(0); } }

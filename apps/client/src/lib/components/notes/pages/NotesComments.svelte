@@ -14,7 +14,8 @@
   import MessageSquare from "@lucide/svelte/icons/message-square";
   import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
   import Trash2 from "@lucide/svelte/icons/trash-2";
-  import NotesCheckboxField from "$lib/components/notes/NotesCheckboxField.svelte";
+  import Checkbox from "$lib/components/ui/Checkbox.svelte";
+  import { scrollEdgeFadeAction } from "$lib/utils/scroll-edge-fade";
 
   const notes = getNotesEditor();
   const localization = getLocalization();
@@ -160,14 +161,15 @@
             {parentLabel(activeParent)}
           </div>
         </div>
-        <NotesCheckboxField
-          checked={notes.commentsIncludeResolved}
-          label={t("notes.showResolvedComments")}
-          showLabel
-          onChange={(checked) => {
-            void notes.setCommentsIncludeResolved(checked);
-          }}
-        />
+        <label class="inline-flex shrink-0 cursor-pointer items-center gap-1.5 text-[0.733333rem] text-muted-foreground hover:text-foreground">
+          <Checkbox
+            checked={notes.commentsIncludeResolved}
+            onChange={(checked) => {
+              void notes.setCommentsIncludeResolved(checked);
+            }}
+          />
+          <span>{t("notes.showResolvedComments")}</span>
+        </label>
       </div>
 
       {#if notes.commentsError}
@@ -179,7 +181,7 @@
       <div class="flex min-w-0 flex-col gap-2 px-4 pb-3 pt-2">
         <textarea
           bind:this={newCommentInput}
-          class="min-h-18 w-full resize-y rounded-lg border border-input bg-background px-3 py-2 text-[0.866667rem] outline-none placeholder:text-muted-foreground focus-visible:bg-muted/20"
+          class="field min-h-18 w-full resize-y px-3 py-2 text-[0.866667rem]"
           bind:value={newCommentDraft}
           placeholder={t("notes.commentPlaceholder")}
           aria-label={t("notes.commentInput")}
@@ -207,7 +209,7 @@
         </div>
       </div>
 
-      <div class="min-h-0 min-w-0 space-y-2 overflow-y-auto px-1 pb-2">
+      <div class="min-h-0 min-w-0 space-y-2 overflow-y-auto px-1 pb-2" use:scrollEdgeFadeAction>
         {#if notes.commentsLoading && notes.commentThreads.length === 0}
           <div class="px-4 py-6 text-center text-[0.8rem] text-muted-foreground">{t("notes.loadingComments")}</div>
         {:else if notes.commentThreads.length === 0}
@@ -286,7 +288,7 @@
                     </div>
                     {#if editingCommentId === comment.id}
                       <textarea
-                        class="mt-1 min-h-14 w-full resize-y rounded-md border border-input bg-background px-2 py-1.5 text-[0.866667rem] outline-none focus-visible:bg-muted/20"
+                        class="field mt-1 min-h-14 w-full resize-y py-1.5 text-[0.866667rem]"
                         bind:value={editingDraft}
                         aria-label={t("notes.editCommentInput")}
                       ></textarea>
@@ -324,7 +326,7 @@
               {#if replyThreadId === thread.id}
                 <div class="mt-2">
                   <textarea
-                    class="min-h-14 w-full resize-y rounded-md border border-input bg-background px-2 py-1.5 text-[0.866667rem] outline-none placeholder:text-muted-foreground focus-visible:bg-muted/20"
+                    class="field min-h-14 w-full resize-y py-1.5 text-[0.866667rem]"
                     value={replyDrafts[thread.id] ?? ""}
                     placeholder={t("notes.replyPlaceholder")}
                     aria-label={t("notes.replyCommentInput")}

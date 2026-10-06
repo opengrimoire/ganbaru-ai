@@ -186,9 +186,9 @@
                 : t("settings.chat.permissions.newFile", selectedFile.format.toUpperCase())}
             </p>
           </div>
-          <div class="overflow-hidden rounded-md border border-border">
+          <div class="overflow-hidden rounded-floating-item border border-border">
             <textarea
-              class="h-[min(26rem,48vh)] min-h-48 w-full resize-y bg-background p-3 font-mono text-[0.766667rem] leading-5 text-foreground outline-none placeholder:text-muted-foreground focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
+              class="h-[min(26rem,48vh)] min-h-48 w-full resize-y bg-transparent p-3 font-mono text-[0.766667rem] leading-5 text-foreground outline-none placeholder:text-muted-foreground"
               value={draft}
               aria-label={fileLabel(selectedFile)}
               placeholder={selectedFile.kind === "instructions"

@@ -113,7 +113,7 @@
         />
         <input
           value={tagNameDraftValue(tag)}
-          class="h-7 min-w-0 rounded-md border border-border bg-background px-2 text-[0.8rem] text-foreground outline-none transition-colors focus:border-ring placeholder:text-muted-foreground"
+          class="field min-w-0 text-foreground"
           aria-label={t("projects.settings.tagName")}
           onpointerdown={moveTextInputCaretToPointer}
           oninput={(event) => setTagNameDraft(tag.id, event.currentTarget.value)}
@@ -145,7 +145,7 @@
       />
       <input
         bind:value={newTagName}
-        class="h-7 min-w-0 rounded-md border border-border bg-background px-2 text-[0.8rem] text-foreground outline-none transition-colors focus:border-ring placeholder:text-muted-foreground"
+        class="field min-w-0 text-foreground"
         placeholder={t("projects.settings.newTagPlaceholder")}
         onpointerdown={moveTextInputCaretToPointer}
         onkeydown={(event) => {

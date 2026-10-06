@@ -33,6 +33,7 @@
   import Users from "@lucide/svelte/icons/users";
   import X from "@lucide/svelte/icons/x";
   import CalendarScrollbar from "$lib/components/calendar/CalendarScrollbar.svelte";
+  import { scrollEdgeFadeAction } from "$lib/utils/scroll-edge-fade";
 
   let {
     anchorDate,
@@ -477,11 +478,11 @@
     class="fixed inset-0 z-40 flex items-center justify-center px-3 py-4"
     onclick={(e) => { e.stopPropagation(); closeMonthMoreModal(); }}
   >
-    <div class="absolute inset-0 bg-black/45"></div>
+    <div class="surface-backdrop absolute inset-0"></div>
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div
       bind:this={monthMoreDialogEl}
-      class="month-more-dialog relative z-10 flex max-h-[min(82vh,42rem)] min-h-0 flex-col rounded-md border border-border text-foreground outline-none"
+      class="month-more-dialog surface-dialog relative z-10 flex max-h-[min(82vh,42rem)] min-h-0 flex-col text-foreground outline-none"
       style="
         width: min(calc(100vw - 1.5rem), {monthMoreModalWidthPx}px);
         background-color: var(--cal-bg);
@@ -511,6 +512,7 @@
       <div class="relative min-h-0">
         <div
           bind:this={monthMoreScrollEl}
+          use:scrollEdgeFadeAction
           class="hide-scrollbar min-h-0 overflow-y-auto overflow-x-hidden px-3 py-3"
           style="max-height: min(62vh, 34rem);"
         >

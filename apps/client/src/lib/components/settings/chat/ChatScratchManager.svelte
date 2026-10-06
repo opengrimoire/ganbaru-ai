@@ -25,6 +25,7 @@
   import Select from "$lib/components/ui/Select.svelte";
   import { formatNumber } from "$lib/i18n/formatters";
   import { getLocalization } from "$lib/i18n/translator.svelte";
+  import { scrollEdgeFadeAction } from "$lib/utils/scroll-edge-fade";
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
 
   let {
@@ -358,8 +359,8 @@
   }
 </script>
 
-<div class="scratch-manager-backdrop" role="presentation" onclick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-  <div bind:this={dialog} class="scratch-manager" role="dialog" aria-modal="true" aria-labelledby="chat-scratch-manager-title" tabindex="-1">
+<div class="scratch-manager-backdrop surface-backdrop" role="presentation" onclick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+  <div bind:this={dialog} class="scratch-manager surface-dialog" role="dialog" aria-modal="true" aria-labelledby="chat-scratch-manager-title" tabindex="-1">
     <header>
       <div><h3 id="chat-scratch-manager-title">{t("settings.chat.teammates.scratchManager.heading")}</h3><p>{t("settings.chat.teammates.scratchManager.description")}</p></div>
       <button type="button" aria-label={t("settings.chat.teammates.scratchManager.close")} onclick={onClose}><X size={17} /></button>
@@ -367,7 +368,7 @@
     <div class="scratch-manager-body">
       <aside>
         <label class="scratch-search"><Search size={14} /><input bind:value={search} aria-label={t("settings.chat.teammates.scratchManager.search")} placeholder={t("settings.chat.teammates.scratchManager.search")} /></label>
-        <nav aria-label={t("settings.chat.teammates.scratchManager.scopeList")}>
+        <nav aria-label={t("settings.chat.teammates.scratchManager.scopeList")} use:scrollEdgeFadeAction>
           {#if loading}<p class="empty" role="status">{t("common.loading")}</p>
           {:else if scopes.length === 0}<p class="empty">{t("settings.chat.teammates.scratchManager.empty")}</p>
           {:else if filteredScopes.length === 0}<p class="empty">{t("settings.chat.teammates.scratchManager.noMatch")}</p>
@@ -379,7 +380,7 @@
         </nav>
       </aside>
 
-      <main>
+      <main use:scrollEdgeFadeAction>
         {#if error}<p class="alert" role="alert">{error}</p>{/if}
         {#if notice}<p class="notice" role="status">{notice}</p>{/if}
         {#if selectedScope}
@@ -455,8 +456,8 @@
 {/if}
 
 <style>
-  .scratch-manager-backdrop { position:fixed; z-index:110; inset:0; display:grid; place-items:center; background:color-mix(in srgb,#000 48%,transparent); padding:1rem; }
-  .scratch-manager { display:grid; width:min(56rem,90vw); height:min(40rem,80dvh); grid-template-rows:auto minmax(0,1fr); border:1px solid var(--border); border-radius:0.8rem; background:var(--card); color:var(--card-foreground); box-shadow:0 24px 70px color-mix(in srgb,#000 35%,transparent); overflow:hidden; outline:0; }
+  .scratch-manager-backdrop { position:fixed; z-index:110; inset:0; display:grid; place-items:center; padding:1rem; }
+  .scratch-manager { display:grid; width:min(56rem,90vw); height:min(40rem,80dvh); grid-template-rows:auto minmax(0,1fr); overflow:hidden; outline:0; }
   .scratch-manager > header { display:flex; align-items:center; justify-content:space-between; gap:1rem; border-bottom:1px solid var(--border); padding:0.8rem 0.95rem; }
   .scratch-manager h3 { font-size:calc(0.92rem * var(--type-scale)); font-weight:650; }
   .scratch-manager > header p,.scope-heading p,.promotion header p { margin-top:0.15rem; color:var(--muted-foreground); font-size:calc(0.67rem * var(--type-scale)); }
@@ -465,7 +466,7 @@
   .scratch-manager button:disabled { cursor:not-allowed; opacity:0.5; }
   .scratch-manager-body { display:grid; min-height:0; grid-template-columns:minmax(14rem,0.72fr) minmax(0,2fr); }
   .scratch-manager-body > aside { display:grid; min-height:0; grid-template-rows:auto minmax(0,1fr); gap:0.55rem; border-right:1px solid var(--border); padding:0.65rem; }
-  .scratch-search { display:flex; min-height:2.25rem; align-items:center; gap:0.4rem; border:1px solid var(--border); border-radius:0.45rem; padding-inline:0.55rem; color:var(--muted-foreground); }
+  .scratch-search { display:flex; min-height:2.25rem; align-items:center; gap:0.4rem; border:1px solid var(--border); border-radius:var(--floating-item-radius); padding-inline:0.55rem; color:var(--muted-foreground); }
   .scratch-search input { width:100%; min-width:0; border:0; background:transparent; color:var(--foreground); outline:0; font-size:calc(0.68rem * var(--type-scale)); }
   .scratch-manager nav { display:grid; align-content:start; gap:0.18rem; overflow-y:auto; }
   .scratch-manager nav button { display:grid; min-height:3rem; grid-template-columns:auto minmax(0,1fr) auto; align-items:center; gap:0.5rem; border-radius:0.5rem; padding:0.48rem; text-align:left; }
@@ -511,7 +512,7 @@
   .promotion-fields { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:0.55rem; }
   .promotion-fields label,.promotion-fields .select-field { display:grid; gap:0.28rem; color:var(--muted-foreground); font-size:calc(0.64rem * var(--type-scale)); }
   .promotion-fields .full { grid-column:1/-1; }
-  .promotion-fields input { min-height:2.25rem; border:1px solid var(--border); border-radius:0.42rem; background:var(--card); padding:0.4rem 0.5rem; color:var(--foreground); }
+  .promotion-fields input { min-height:2.25rem; border:1px solid var(--border); border-radius:var(--floating-item-radius); background:transparent; outline:0; padding:0.4rem 0.5rem; color:var(--foreground); }
   .promotion footer { display:flex; justify-content:flex-end; gap:0.4rem; }
   .promotion footer .primary { background:var(--primary); color:var(--primary-foreground); }
   .empty,.alert,.notice { padding:0.65rem; border-radius:0.5rem; font-size:calc(0.67rem * var(--type-scale)); }

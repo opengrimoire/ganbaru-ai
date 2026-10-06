@@ -223,10 +223,9 @@
   <div
     bind:this={panelEl}
     class={cn(
-      "fixed z-75 flex flex-col overflow-hidden border border-border bg-card shadow-2xl dark:bg-background",
-      editorGeometry.layout === "fullscreen"
-        ? "rounded-none border-x-0 border-b-0"
-        : "rounded-lg",
+      "surface-dialog fixed z-75 flex flex-col overflow-hidden",
+      editorGeometry.layout === "fullscreen" &&
+        "rounded-none border-x-0 border-b-0 shadow-none",
     )}
     style={panelStyle}
     data-theme-editor-layout={editorGeometry.layout}

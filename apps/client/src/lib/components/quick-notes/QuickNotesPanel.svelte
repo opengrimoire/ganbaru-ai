@@ -40,6 +40,7 @@
   import QuickNoteEditorModal from "./QuickNoteEditorModal.svelte";
   import QuickNoteTagManager from "./QuickNoteTagManager.svelte";
   import QuickNotesMasonry from "./QuickNotesMasonry.svelte";
+  import { scrollEdgeFadeAction } from "$lib/utils/scroll-edge-fade";
 
   let {
     onClose,
@@ -106,8 +107,8 @@
         : null);
   const childOverlayOpen = $derived(editorNote !== undefined || deleteTarget !== null || confirmEmptyTrash);
   const panelClass = $derived(mobileLayout
-    ? "fixed z-50 flex flex-col overflow-hidden rounded-xl border border-border text-foreground shadow-xl outline-none"
-    : "fixed right-2 z-50 flex w-[min(760px,calc(100vw-1rem))] flex-col overflow-hidden rounded-xl text-foreground shadow-lg outline-none");
+    ? "surface-dialog fixed z-50 flex flex-col overflow-hidden text-foreground outline-none"
+    : "surface-dialog fixed right-2 z-50 flex w-[min(760px,calc(100vw-1rem))] flex-col overflow-hidden text-foreground outline-none");
   const panelStyle = $derived(mobileLayout
     ? `${mobilePanelStyle || "left:calc(var(--visual-viewport-offset-left) + var(--safe-area-left) + 0.5rem);top:calc(var(--visual-viewport-offset-top) + var(--safe-area-top) + var(--mobile-topbar-h) + 0.25rem);width:calc(var(--visual-viewport-width) - var(--safe-area-left) - var(--safe-area-right) - 1rem);height:calc(var(--visual-viewport-height) - var(--safe-area-top) - var(--safe-area-bottom) - var(--mobile-topbar-h) - 0.75rem)"};background-color:var(--cal-bg);`
     : "top: calc(var(--titlebar-h) + 4px); height: min(680px, calc(100dvh - var(--titlebar-h) - 12px)); background-color: var(--cal-bg);");
@@ -564,7 +565,7 @@
               bind:this={searchInput}
               type="search"
               value={searchText}
-              class={mobileLayout ? "min-h-12 w-full rounded-xl border border-border bg-background/65 pl-10 pr-12 text-base outline-none focus-visible:ring-2 focus-visible:ring-ring" : "h-7 w-full rounded-md border border-border bg-background/65 pl-8 pr-7 text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"}
+              class={mobileLayout ? "field min-h-12 w-full pl-10 pr-12 text-base" : "field w-full pl-8 pr-7 text-xs"}
               placeholder={t("quickNotes.search")}
               aria-label={t("quickNotes.search")}
               oninput={(event) => updateSearch(event.currentTarget.value)}
@@ -608,7 +609,7 @@
     </div>
   </header>
 
-  <div data-quick-notes-scroll class={mobileLayout ? "min-h-0 flex-1 overscroll-contain overflow-y-auto px-3 pb-4 pt-2" : "min-h-0 flex-1 overflow-y-auto px-3 pb-3 pt-1.5 sm:px-4"} aria-busy={loading}>
+  <div data-quick-notes-scroll use:scrollEdgeFadeAction class={mobileLayout ? "min-h-0 flex-1 overscroll-contain overflow-y-auto px-3 pb-4 pt-2" : "min-h-0 flex-1 overflow-y-auto px-3 pb-3 pt-1.5 sm:px-4"} aria-busy={loading}>
     {#if renderedCollection === "active"}
       <button
         type="button"
@@ -648,7 +649,7 @@
   </div>
 
   {#if undoAction}
-    <div class={`absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 items-center gap-3 rounded-lg bg-foreground px-3 py-2 text-xs text-background shadow-lg ${mobileLayout ? "max-w-[calc(100%-1.5rem)]" : ""}`}>
+    <div class={`surface-floating absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 items-center gap-3 px-3 py-2 ${mobileLayout ? "max-w-[calc(100%-1.5rem)]" : ""}`}>
       <span>{undoMessage}</span>
       <button type="button" class={mobileLayout ? "min-h-12 shrink-0 px-2 font-semibold underline" : "font-semibold underline"} onclick={() => { const action = undoAction; undoAction = null; undoMessage = ""; if (action) void action(); }}>{t("quickNotes.action.undo")}</button>
     </div>

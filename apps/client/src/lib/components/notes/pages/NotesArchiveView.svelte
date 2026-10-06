@@ -65,10 +65,10 @@
   </div>
 
   <div class="shrink-0 px-4 py-3 sm:px-6">
-    <label class="flex max-w-xl items-center gap-1.5 rounded-md border border-border bg-background px-2 py-1.5">
+    <label class="field flex max-w-xl items-center gap-1.5">
       <Search class="size-4 shrink-0 text-muted-foreground" />
       <input
-        class="min-w-0 flex-1 bg-transparent text-[0.866667rem] text-foreground outline-none placeholder:text-muted-foreground"
+        class="field-bare text-[0.866667rem] text-foreground"
         bind:value={search}
         placeholder={t("notes.searchArchivePlaceholder")}
         aria-label={t("notes.searchArchiveLabel")}

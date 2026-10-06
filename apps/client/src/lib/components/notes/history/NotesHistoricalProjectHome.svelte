@@ -83,10 +83,10 @@
 
 <div class="flex h-full min-h-0 flex-col overflow-auto px-4 py-4">
   <div class="mx-auto flex w-full max-w-208 shrink-0 flex-wrap items-center gap-2">
-    <label class="flex min-w-64 flex-1 items-center gap-1.5 rounded-md border border-border bg-background px-2 py-1.5">
+    <label class="field flex min-w-64 flex-1 items-center gap-1.5">
       <Search class="size-4 shrink-0 text-muted-foreground" />
       <input
-        class="min-w-0 flex-1 bg-transparent text-[0.866667rem] text-foreground outline-none placeholder:text-muted-foreground"
+        class="field-bare text-[0.866667rem] text-foreground"
         bind:value={search}
         placeholder={t("notes.searchPlaceholder")}
         aria-label={t("notes.searchLabel")}

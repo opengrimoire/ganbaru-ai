@@ -716,7 +716,7 @@
 {#if !mobilePresentation}
   <div
     hidden={!visible}
-    class="pointer-events-none fixed right-2 z-50 w-[min(1000px,calc(100vw-1rem))] overflow-hidden rounded-xl shadow-lg"
+    class="pointer-events-none fixed right-2 z-50 w-[min(1000px,calc(100vw-1rem))] overflow-hidden rounded-floating shadow-floating"
     style={desktopPanelStyle}
     aria-hidden="true"
   >
@@ -731,8 +731,8 @@
     mobileBuilderPresentation
       ? "bg-background"
       : mobilePresentation
-        ? "rounded-xl border border-border shadow-xl"
-        : "right-2 w-[min(1000px,calc(100vw-1rem))] rounded-xl",
+        ? "rounded-floating border border-border shadow-floating"
+        : "right-2 w-[min(1000px,calc(100vw-1rem))] rounded-floating border border-border",
   )}
   style={mobilePresentation
     ? mobileBuilderPresentation
@@ -1137,7 +1137,7 @@
               {/if}
             </button>
             {#if volumeMenuOpen}
-              <div class="music-volume-panel absolute bottom-full left-1/2 z-30 mb-2 flex -translate-x-1/2 flex-col items-center gap-2 rounded-md border border-border p-2 text-foreground shadow-lg">
+              <div class="music-volume-panel absolute bottom-full left-1/2 z-30 mb-2 flex -translate-x-1/2 flex-col items-center gap-2 surface-floating p-2 text-foreground">
                 <button
                   type="button"
                   onclick={() => { void player.toggleMute(); }}

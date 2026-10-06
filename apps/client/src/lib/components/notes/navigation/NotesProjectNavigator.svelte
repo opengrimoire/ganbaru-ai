@@ -13,8 +13,10 @@
   } from "$lib/projects/display";
   import {
     isPointerAimingAtSubmenu,
+    SUBMENU_AIM_TOLERANCES,
     type MenuAimPoint,
   } from "$lib/utils/menu-aim";
+  import { verticalBorderWidth } from "$lib/utils/anchored-panel";
   import {
     projectPickerBridgeFrameStyle,
     projectPickerMenuAimRect,
@@ -205,9 +207,9 @@
 
   function updatePanelStyle(): void {
     const headerHeight = panelHeaderElement?.offsetHeight ?? panelFallbackHeaderHeightPx;
-    const footerHeight = isSearchActive
+    const footerHeight = verticalBorderWidth(panelRootElement) + (isSearchActive
       ? 0
-      : panelFooterElement?.offsetHeight ?? panelFallbackFooterHeightPx;
+      : panelFooterElement?.offsetHeight ?? panelFallbackFooterHeightPx);
     const measuredListHeight = groupScrollContentElement
       ? groupScrollContentElement.scrollHeight + scrollAreaVerticalPadding(
         groupScrollElement,
@@ -258,10 +260,7 @@
       point,
       submenu: projectPickerMenuAimRect(subpanelRect),
       side,
-      tolerance: 12,
-      topTolerance: 8,
-      bottomTolerance: 32,
-      minTowardDistance: 3,
+      ...SUBMENU_AIM_TOLERANCES,
     });
   }
 
@@ -275,10 +274,7 @@
       point,
       submenu: projectPickerMenuAimRect(subpanelRect),
       side,
-      tolerance: 12,
-      topTolerance: 8,
-      bottomTolerance: 32,
-      minTowardDistance: 3,
+      ...SUBMENU_AIM_TOLERANCES,
     });
   }
 
@@ -287,7 +283,8 @@
     const anchorRect = activeGroupAnchorElement.getBoundingClientRect();
     const panelRect = panelRootElement.getBoundingClientRect();
     const bounds = currentPanelBounds();
-    const footerHeight = projectSubpanelFooterElement?.offsetHeight ?? subpanelFallbackFooterHeightPx;
+    const footerHeight = verticalBorderWidth(projectSubpanelElement)
+      + (projectSubpanelFooterElement?.offsetHeight ?? subpanelFallbackFooterHeightPx);
     const projectCount = activeGroup ? projectsInGroup(activeGroup).length : 0;
     const measuredListHeight = projectScrollContentElement
       ? projectScrollContentElement.scrollHeight + scrollAreaVerticalPadding(
@@ -629,10 +626,10 @@
   <button
     type="button"
     class={cn(
-      "grid min-h-8 w-full grid-cols-[1rem_minmax(0,1fr)_auto] items-center gap-2 rounded-md px-2 text-left text-[0.8rem] transition-colors hover:bg-accent hover:text-accent-foreground",
+      "menu-item grid grid-cols-[1rem_minmax(0,1fr)_auto]",
       project.status === "active" ? "text-popover-foreground" : "text-popover-foreground/60",
-      activeProjectId === project.id && "bg-accent text-accent-foreground",
     )}
+    aria-expanded={activeProjectId === project.id}
     aria-label={t("projects.actions.selectProject", project.name, group.name)}
     onpointerenter={(event) => handleProjectPointerEnter(project, event, sourcePanelElement)}
     onpointermove={(event) => handleProjectPointerMove(project, event, sourcePanelElement)}
@@ -655,21 +652,21 @@
 
 <div
   bind:this={panelRootElement}
-  class="project-picker-panel flex min-h-0 w-full flex-col overflow-hidden rounded-md bg-popover text-popover-foreground shadow-lg ring-1 ring-border/60"
+  class="project-picker-panel surface-floating flex min-h-0 w-full flex-col overflow-hidden"
   style={panelStyle}
 >
   <div bind:this={panelHeaderElement} class="px-1.5 pb-0.5 pt-1.5">
-    <div class="flex min-h-8 items-center gap-1.5 rounded-md border border-border/70 bg-muted/20 pl-2 pr-1">
+    <div class="field flex items-center gap-1.5 pr-1">
       <Search size={13} strokeWidth={iconStrokeWidth} class="shrink-0 text-popover-foreground/60" />
       <input
         bind:value={projectSearch}
         placeholder={t("calendar.eventPanel.searchProjects")}
-        class="min-w-0 flex-1 bg-transparent text-[0.8rem] text-popover-foreground placeholder:text-popover-foreground/45"
+        class="field-bare text-popover-foreground"
       />
       <button
         type="button"
         class={cn(
-          "flex h-6 w-6 shrink-0 items-center justify-center rounded text-popover-foreground/60 hover:bg-accent hover:text-accent-foreground",
+          "flex size-6 shrink-0 items-center justify-center rounded-floating-item text-popover-foreground/60 hover:bg-accent hover:text-accent-foreground",
           showInactiveProjects && "bg-accent text-accent-foreground",
         )}
         aria-label={showInactiveProjects ? t("projects.navigator.hideInactive") : t("projects.navigator.showInactive")}
@@ -702,22 +699,22 @@
     >
       <div bind:this={groupScrollContentElement}>
         {#if projects.loading && !projects.loaded}
-          <div class="px-3 py-2 text-[0.8rem] text-popover-foreground/60">
+          <div class="px-3 py-2 text-popover-foreground/60">
             {t("projects.loading")}
           </div>
         {:else if projects.loadError}
-          <div class="px-3 py-2 text-[0.8rem] text-destructive">
+          <div class="px-3 py-2 text-destructive">
             {t("projects.loadFailed", projects.loadError)}
           </div>
         {:else if isSearchActive && searchResultGroups.length === 0}
-          <div class="px-3 py-2 text-[0.8rem] text-popover-foreground/60">
+          <div class="px-3 py-2 text-popover-foreground/60">
             {t("calendar.eventPanel.noProjectsFound")}
           </div>
         {:else if isSearchActive}
           <div class="grid px-1">
             {#each searchResultGroups as resultGroup (resultGroup.group.id)}
               <div class="px-1 pb-1">
-                <div class="px-2 pb-0.5 pt-1 text-[0.7rem] font-medium text-popover-foreground/45">
+                <div class="menu-label">
                   {resultGroup.group.name}
                 </div>
                 <div class="grid">
@@ -725,7 +722,7 @@
                     <button
                       type="button"
                       class={cn(
-                        "flex min-h-8 w-full items-center gap-2 rounded-md px-2 text-left text-[0.8rem] transition-colors hover:bg-accent hover:text-accent-foreground",
+                        "menu-item",
                         project.status === "active" ? "text-popover-foreground" : "text-popover-foreground/60",
                       )}
                       aria-label={t("projects.actions.selectProject", project.name, resultGroup.group.name)}
@@ -746,7 +743,7 @@
           </div>
         {:else if panelMode === "groups"}
           {#if visibleGroups.length === 0}
-            <div class="px-3 py-2 text-[0.8rem] text-popover-foreground/60">
+            <div class="px-3 py-2 text-popover-foreground/60">
               {t("calendar.eventPanel.noProjectsFound")}
             </div>
           {:else}
@@ -755,12 +752,8 @@
                 <div class="pl-1 pr-1">
                   <button
                     type="button"
-                    class={cn(
-                      "grid min-h-8 w-full grid-cols-[1.25rem_minmax(0,1fr)_1rem] items-center gap-2 rounded-md px-2 text-left transition-colors",
-                      activeGroupId === group.id
-                        ? "bg-accent text-accent-foreground"
-                        : "text-popover-foreground hover:bg-accent hover:text-accent-foreground",
-                    )}
+                    class="menu-item grid grid-cols-[1.25rem_minmax(0,1fr)_1rem] text-popover-foreground"
+                    aria-expanded={activeGroupId === group.id}
                     onpointerenter={(event) => handleGroupPointerEnter(group, event)}
                     onpointermove={(event) => handleGroupPointerMove(group, event)}
                     onpointerleave={handleProjectSubpanelBoundaryLeave}
@@ -768,7 +761,7 @@
                     onclick={(event) => showProjectSubpanel(group, event.currentTarget)}
                   >
                     <ProjectIcon name={group.icon} size={iconSize} strokeWidth={iconStrokeWidth} emojiScale={emojiScale} class="shrink-0" />
-                    <span class="truncate text-[0.8rem] font-medium">{group.name}</span>
+                    <span class="truncate font-medium">{group.name}</span>
                     <ChevronRight size={13} strokeWidth={iconStrokeWidth} class="justify-self-end text-popover-foreground/60" />
                   </button>
                 </div>
@@ -776,11 +769,11 @@
             </div>
           {/if}
         {:else if !directProjectGroup}
-          <div class="px-3 py-2 text-[0.8rem] text-popover-foreground/60">
+          <div class="px-3 py-2 text-popover-foreground/60">
             {t("projects.navigator.empty")}
           </div>
         {:else if directProjects.length === 0}
-          <div class="px-3 py-2 text-[0.8rem] text-popover-foreground/60">
+          <div class="px-3 py-2 text-popover-foreground/60">
             {t("calendar.eventPanel.noProjectsFound")}
           </div>
         {:else}
@@ -811,16 +804,16 @@
             <input
               bind:value={groupDraft}
               placeholder={t("projects.navigator.groupNamePlaceholder")}
-              class="min-h-8 min-w-0 flex-1 rounded border border-border bg-muted/40 px-2 text-[0.8rem] text-popover-foreground placeholder:text-popover-foreground/45"
+              class="field min-w-0 flex-1 text-popover-foreground"
             />
-            <button type="submit" class="min-h-8 rounded bg-primary px-2 text-[0.733333rem] font-medium text-primary-foreground">
+            <button type="submit" class="min-h-(--panel-row-height) rounded-floating-item bg-primary px-2 text-panel-detail font-medium text-primary-foreground">
               {t("common.save")}
             </button>
           </form>
         {:else}
           <button
             type="button"
-            class="flex min-h-8 w-full items-center justify-center gap-1.5 rounded-md text-[0.8rem] text-popover-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+            class="menu-item justify-center text-popover-foreground"
             onclick={() => { isCreateGroupOpen = true; }}
           >
             <Plus size={13} strokeWidth={iconStrokeWidth} />
@@ -840,9 +833,9 @@
                   };
                 }}
                 placeholder={t("projects.navigator.projectNamePlaceholder")}
-                class="min-h-7 min-w-0 flex-1 rounded border border-border bg-muted/40 px-2 text-[0.8rem] text-popover-foreground placeholder:text-popover-foreground/45"
+                class="field min-w-0 flex-1 text-popover-foreground"
               />
-              <button type="submit" class="min-h-7 rounded bg-primary px-2 text-[0.733333rem] font-medium text-primary-foreground">
+              <button type="submit" class="min-h-(--panel-row-height) rounded-floating-item bg-primary px-2 text-panel-detail font-medium text-primary-foreground">
                 {t("common.save")}
               </button>
             </div>
@@ -851,7 +844,7 @@
                 <button
                   type="button"
                   class={cn(
-                    "min-h-6 rounded border px-1.5 text-[0.7rem]",
+                    "min-h-6 rounded-floating-item border px-1.5 text-panel-detail",
                     (projectTemplateDraftByGroup[directProjectGroup.id] ?? "blank") === templateId
                       ? "border-primary/60 bg-primary/10 text-primary"
                       : "border-border bg-transparent text-popover-foreground/60 hover:bg-accent hover:text-accent-foreground",
@@ -871,7 +864,7 @@
         {:else}
           <button
             type="button"
-            class="flex min-h-8 w-full items-center justify-center gap-1.5 rounded-md text-[0.8rem] text-popover-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+            class="menu-item justify-center text-popover-foreground"
             onclick={() => {
               createProjectGroupId = directProjectGroup.id;
             }}
@@ -898,7 +891,7 @@
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
     bind:this={projectSubpanelElement}
-    class={cn("project-picker-panel fixed flex min-h-0 flex-col overflow-hidden rounded-md bg-popover text-popover-foreground shadow-lg ring-1 ring-border/60", zIndexClass)}
+    class={cn("project-picker-panel surface-floating fixed flex min-h-0 flex-col overflow-hidden", zIndexClass)}
     style={projectSubpanelStyle}
     onpointerleave={handleProjectSubpanelBoundaryLeave}
   >
@@ -916,7 +909,7 @@
       >
         <div bind:this={projectScrollContentElement}>
           {#if activeGroupProjects.length === 0}
-            <div class="px-3 py-2 text-[0.8rem] text-popover-foreground/60">
+            <div class="px-3 py-2 text-popover-foreground/60">
               {t("calendar.eventPanel.noProjectsFound")}
             </div>
           {:else}
@@ -950,9 +943,9 @@
                 };
               }}
               placeholder={t("projects.navigator.projectNamePlaceholder")}
-              class="min-h-7 min-w-0 flex-1 rounded border border-border bg-muted/40 px-2 text-[0.8rem] text-popover-foreground placeholder:text-popover-foreground/45"
+              class="field min-w-0 flex-1 text-popover-foreground"
             />
-            <button type="submit" class="min-h-7 rounded bg-primary px-2 text-[0.733333rem] font-medium text-primary-foreground">
+            <button type="submit" class="min-h-(--panel-row-height) rounded-floating-item bg-primary px-2 text-panel-detail font-medium text-primary-foreground">
               {t("common.save")}
             </button>
           </div>
@@ -961,7 +954,7 @@
               <button
                 type="button"
                 class={cn(
-                  "min-h-6 rounded border px-1.5 text-[0.7rem]",
+                  "min-h-6 rounded-floating-item border px-1.5 text-panel-detail",
                   (projectTemplateDraftByGroup[activeGroup.id] ?? "blank") === templateId
                     ? "border-primary/60 bg-primary/10 text-primary"
                     : "border-border bg-transparent text-popover-foreground/60 hover:bg-accent hover:text-accent-foreground",
@@ -981,7 +974,7 @@
       {:else}
         <button
           type="button"
-          class="flex min-h-8 w-full items-center justify-center gap-1.5 rounded-md text-[0.8rem] text-popover-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+          class="menu-item justify-center text-popover-foreground"
           onclick={() => {
             createProjectGroupId = activeGroup.id;
             void tick().then(updateProjectSubpanelGeometry);

@@ -292,7 +292,7 @@
 {#if selectedProject}
   <div
     bind:this={panelElement}
-    class="fixed z-80 flex min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-card text-[0.8rem] text-foreground shadow-xl"
+    class="surface-floating fixed z-80 flex min-h-0 flex-col overflow-hidden"
     style={panelStyle}
     role="dialog"
     tabindex="-1"
@@ -343,7 +343,7 @@
           class="w-44"
         />
         {#if effectiveHistoryRetentionDraft === 365}
-          <div class="flex items-center gap-1.5 px-1 text-[0.733333rem] text-warning">
+          <div class="flex items-center gap-1.5 px-1 text-panel-detail text-warning">
             <TriangleAlert class="size-3.5 shrink-0" />
             <span>{t("settings.notesGeneral.historyRetention365Warning")}</span>
           </div>
@@ -351,7 +351,7 @@
         <div class="flex flex-wrap justify-start gap-2 px-1 py-1">
           <button
             type="button"
-            class="flex h-7 items-center gap-1.5 rounded-md border border-border bg-card px-2.5 text-[0.8rem] font-medium text-foreground transition-colors hover:bg-accent dark:bg-transparent"
+            class="flex min-h-(--panel-row-height) items-center gap-1.5 rounded-floating-item border border-border px-2.5 font-medium text-popover-foreground transition-colors hover:bg-accent"
             onclick={onOpenVersionHistory}
           >
             <History size={13} strokeWidth={1.75} />
@@ -359,7 +359,7 @@
           </button>
           <button
             type="button"
-            class="flex h-7 items-center gap-1.5 rounded-md border border-border bg-card px-2.5 text-[0.8rem] font-medium text-foreground transition-colors hover:bg-accent dark:bg-transparent"
+            class="flex min-h-(--panel-row-height) items-center gap-1.5 rounded-floating-item border border-border px-2.5 font-medium text-popover-foreground transition-colors hover:bg-accent"
             onclick={onOpenArchive}
           >
             <Archive size={13} strokeWidth={1.75} />
@@ -367,7 +367,7 @@
           </button>
           <button
             type="button"
-            class="flex h-7 items-center gap-1.5 rounded-md border border-border bg-card px-2.5 text-[0.8rem] font-medium text-foreground transition-colors hover:bg-accent dark:bg-transparent"
+            class="flex min-h-(--panel-row-height) items-center gap-1.5 rounded-floating-item border border-border px-2.5 font-medium text-popover-foreground transition-colors hover:bg-accent"
             onclick={onOpenTrash}
           >
             <Trash2 size={13} strokeWidth={1.75} />

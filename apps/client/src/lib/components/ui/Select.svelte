@@ -7,6 +7,7 @@
   import { cn } from "$lib/utils";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import { portal } from "$lib/utils/portal";
+  import { scrollEdgeFadeAction } from "$lib/utils/scroll-edge-fade";
   import ShortcutDescription from "./ShortcutDescription.svelte";
   import {
     pickSelectPopoverGeometry,
@@ -106,6 +107,7 @@
   let open = $state(false);
   let triggerEl: HTMLButtonElement | undefined = $state();
   let popoverEl: HTMLDivElement | undefined = $state();
+  let scrollEl: HTMLDivElement | undefined = $state();
   let popoverGeometry = $state<SelectPopoverGeometry>(DEFAULT_POPOVER_GEOMETRY);
   let popoverReady = $state(false);
 
@@ -171,7 +173,7 @@
     popoverGeometry = pickSelectPopoverGeometry({
       triggerRect: toRect(triggerEl.getBoundingClientRect()),
       boundaryRect: getBoundaryRect(),
-      contentHeight: popoverEl?.scrollHeight ?? ESTIMATED_DROPDOWN_HEIGHT,
+      contentHeight: popoverEl ? popoverEl.offsetHeight - (scrollEl?.clientHeight ?? 0) + (scrollEl?.scrollHeight ?? 0) : ESTIMATED_DROPDOWN_HEIGHT,
       contentWidth: popoverEl?.scrollWidth,
       horizontalAlign: popoverAlign,
     });
@@ -247,13 +249,12 @@
       : (index <= 0 ? buttons.length : index) - 1;
     buttons[next]?.focus({ preventScroll: true });
     const button = buttons[next];
-    if (button && popoverEl) {
-      const top = button.offsetTop;
+    if (button && scrollEl) {
+      const top = button.offsetTop - scrollEl.offsetTop;
       const bottom = top + button.offsetHeight;
-      const searchHeight = popoverEl.querySelector("input")?.offsetHeight ?? 0;
-      if (top < popoverEl.scrollTop + searchHeight) popoverEl.scrollTop = Math.max(0, top - searchHeight);
-      else if (bottom > popoverEl.scrollTop + popoverEl.clientHeight) {
-        popoverEl.scrollTop = bottom - popoverEl.clientHeight;
+      if (top < scrollEl.scrollTop) scrollEl.scrollTop = Math.max(0, top);
+      else if (bottom > scrollEl.scrollTop + scrollEl.clientHeight) {
+        scrollEl.scrollTop = bottom - scrollEl.clientHeight;
       }
     }
   }
@@ -318,7 +319,7 @@
         textClass,
         appearance === "quiet"
           ? "justify-end px-1.5 hover:bg-accent/60 disabled:opacity-45 disabled:hover:bg-transparent"
-          : "justify-between border border-border bg-card px-2.5 hover:bg-accent disabled:hover:bg-card dark:bg-transparent dark:disabled:hover:bg-transparent",
+          : "justify-between border border-border bg-transparent px-2.5 hover:bg-accent disabled:hover:bg-transparent",
       )}
     >
       <span class={cn("flex min-w-0 flex-1 items-center gap-1.5", appearance === "quiet" && contentAlign === "end" && "justify-end text-right")}>
@@ -342,7 +343,7 @@
         role={searchPlaceholder ? "dialog" : "listbox"}
         aria-label={ariaLabel ?? label}
         data-app-floating-surface
-        class="fixed z-80 overflow-x-hidden overflow-y-auto rounded-md border border-border bg-popover py-1 shadow-lg"
+        class="surface-floating fixed z-80 flex flex-col overflow-hidden"
         style={popoverStyle()}
       >
         {#if searchPlaceholder}
@@ -350,14 +351,14 @@
             value={query}
             aria-label={searchPlaceholder}
             placeholder={searchPlaceholder}
-            class={cn("sticky top-0 mb-1 min-h-9 w-full border-b border-border bg-popover px-3 outline-none", textClass)}
+            class="field-bare min-h-9 w-full flex-none border-b border-border px-3"
             oninput={(event) => {
               localSearch = event.currentTarget.value;
               onSearchChange?.(event.currentTarget.value);
             }}
           />
         {/if}
-        <div role={searchPlaceholder ? "listbox" : undefined} aria-label={ariaLabel ?? label}>
+        <div bind:this={scrollEl} use:scrollEdgeFadeAction class="surface-floating-body min-h-0 overflow-x-hidden overflow-y-auto" role={searchPlaceholder ? "listbox" : undefined} aria-label={searchPlaceholder ? (ariaLabel ?? label) : undefined}>
         {#each visibleOptions as option (option.value)}
           {@const isActive = option.value === value}
           <button
@@ -366,13 +367,7 @@
             aria-selected={isActive}
             disabled={option.disabled}
             onclick={() => select(option.value)}
-            class={cn(
-              "flex w-full items-center justify-between gap-3 px-2.5 py-1.5 text-left transition-colors disabled:cursor-not-allowed disabled:text-muted-foreground disabled:hover:bg-transparent",
-              textClass,
-              isActive
-                ? "bg-accent/60 text-foreground"
-                : "text-foreground hover:bg-accent/40",
-            )}
+            class="menu-item justify-between gap-3"
           >
             <span
               class={cn(
@@ -385,7 +380,7 @@
               {#if leading}{@render leading(option.value)}{/if}
               <span class="truncate" style={option.style}>{option.label}</span>
               {#if option.summary}
-                <span class="max-w-72 truncate justify-self-end text-[0.733333rem] text-muted-foreground" title={option.summary}>{option.summary}</span>
+                <span class="max-w-72 truncate justify-self-end text-panel-detail text-muted-foreground" title={option.summary}>{option.summary}</span>
               {/if}
             </span>
             {#if showActiveCheck && isActive}
@@ -393,7 +388,7 @@
             {/if}
           </button>
         {:else}
-          {#if emptyLabel}<p class={cn("px-3 py-2 text-muted-foreground", textClass)}>{emptyLabel}</p>{/if}
+          {#if emptyLabel}<p class="px-2 py-1.5 text-muted-foreground">{emptyLabel}</p>{/if}
         {/each}
         </div>
       </div>

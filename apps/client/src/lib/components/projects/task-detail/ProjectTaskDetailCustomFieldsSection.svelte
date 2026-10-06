@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Checkbox from "$lib/components/ui/Checkbox.svelte";
   import Select from "$lib/components/ui/Select.svelte";
   import Check from "@lucide/svelte/icons/check";
   import Save from "@lucide/svelte/icons/save";
@@ -140,12 +141,10 @@
             onCancel={onCancelDatePicker}
           />
         {:else if field.fieldType === "checkbox"}
-          <label class="flex min-h-8 items-center gap-2 rounded-md border border-border bg-card px-2 text-[0.8rem]">
-            <input
-              type="checkbox"
+          <label class="flex min-h-8 items-center gap-2 rounded-floating-item border border-border px-2 text-[0.8rem]">
+            <Checkbox
               checked={checkboxDrafts[field.id] ?? false}
-              class="h-4 w-4 accent-primary"
-              onchange={(event) => onCheckboxDraftChange(field.id, event.currentTarget.checked)}
+              onChange={(next) => onCheckboxDraftChange(field.id, next)}
             />
             <span>{field.name}</span>
           </label>

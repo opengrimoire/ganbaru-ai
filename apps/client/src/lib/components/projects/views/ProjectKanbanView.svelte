@@ -1,5 +1,5 @@
 <script lang="ts">
-  import Check from "@lucide/svelte/icons/check";
+  import Checkbox from "$lib/components/ui/Checkbox.svelte";
   import ArrowUp from "@lucide/svelte/icons/arrow-up";
   import ArrowDown from "@lucide/svelte/icons/arrow-down";
   import CollectionBoard from "$lib/components/collections/CollectionBoard.svelte";
@@ -81,19 +81,19 @@
     <CollectionCard title={task.title} onOpen={() => onOpenTask(task)} selected={selectedTaskIdSet.has(task.id)} muted={Boolean(task.archivedAt)}>
       {#snippet leading()}
         {@render dragHandle()}
-        <button type="button" class="mt-1 flex shrink-0 items-center justify-center rounded border border-border hover:bg-accent {mobileLayout ? 'size-11' : 'size-6'}" class:bg-primary={selectedTaskIdSet.has(task.id)} class:text-primary-foreground={selectedTaskIdSet.has(task.id)} aria-label={selectedTaskIdSet.has(task.id) ? t("projects.actions.unselectTask", task.title) : t("projects.actions.selectTask", task.title)} onclick={() => onToggleTaskSelection(task)}>{#if selectedTaskIdSet.has(task.id)}<Check class="size-3.5" />{/if}</button>
+        <label class="mt-1 flex shrink-0 cursor-pointer items-center justify-center {mobileLayout ? 'size-11' : 'size-6'}"><Checkbox checked={selectedTaskIdSet.has(task.id)} label={t("projects.actions.selectTask", task.title)} onChange={() => onToggleTaskSelection(task)} /></label>
       {/snippet}
       {#snippet actions()}
         <CollectionMenu kind="actions" iconOnly showHeader={false} label={t("projects.actions.openTaskDetails", task.title)}>
-          <button type="button" class="min-h-9 w-full rounded-md px-2 text-left hover:bg-accent" onclick={() => onOpenTask(task)}>{t("projects.kanban.openDetails")}</button>
+          <button type="button" class="menu-item" onclick={() => onOpenTask(task)}>{t("projects.kanban.openDetails")}</button>
           {#each statuses.filter((entry) => entry.id !== status.id) as destination (destination.id)}
-            <button type="button" class="min-h-9 w-full rounded-md px-2 text-left hover:bg-accent disabled:opacity-40" disabled={!canMove(task, destination)} onclick={() => { void perform(() => projects.setTaskStatus(task, destination.id)); }}>{t("projects.actions.moveTaskToStatus", task.title, destination.name)}</button>
+            <button type="button" class="menu-item" disabled={!canMove(task, destination)} onclick={() => { void perform(() => projects.setTaskStatus(task, destination.id)); }}>{t("projects.actions.moveTaskToStatus", task.title, destination.name)}</button>
           {/each}
           {#if taskSortMode === "manual"}
             {#each [-1, 1] as direction}
               {@const order = tasksForStatus(status)}
               {@const index = order.findIndex((entry) => entry.id === task.id)}
-              <button type="button" class="flex min-h-9 w-full items-center gap-2 rounded-md px-2 text-left hover:bg-accent disabled:opacity-40" disabled={Boolean(task.archivedAt) || !order[index + direction]} onclick={() => { void perform(() => projects.moveTaskInStatus(task, (taskSortDirection === "asc" ? direction : -direction) as -1 | 1)); }}>{#if direction === -1}<ArrowUp class="size-4" />{:else}<ArrowDown class="size-4" />{/if}{direction === -1 ? t("projects.actions.moveTaskUp", task.title) : t("projects.actions.moveTaskDown", task.title)}</button>
+              <button type="button" class="menu-item" disabled={Boolean(task.archivedAt) || !order[index + direction]} onclick={() => { void perform(() => projects.moveTaskInStatus(task, (taskSortDirection === "asc" ? direction : -direction) as -1 | 1)); }}>{#if direction === -1}<ArrowUp class="size-4" />{:else}<ArrowDown class="size-4" />{/if}{direction === -1 ? t("projects.actions.moveTaskUp", task.title) : t("projects.actions.moveTaskDown", task.title)}</button>
             {/each}
           {/if}
         </CollectionMenu>

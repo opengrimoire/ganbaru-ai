@@ -834,8 +834,7 @@
   .form-row { display:flex; min-width:0; align-items:center; justify-content:space-between; gap:1rem; padding:0.15rem 0.25rem; }
   .form-row > label,.form-row > span { min-width:0; flex:1; color:var(--foreground); font-size:calc(0.82rem * var(--type-scale)); }
   .field-control { display:flex; width:min(22rem,55%); min-width:0; flex-direction:column; gap:0.25rem; }
-  input { height:1.75rem; min-width:0; border:1px solid var(--border); border-radius:0.375rem; background:var(--background); padding:0.25rem 0.5rem; color:var(--foreground); font-size:calc(0.78rem * var(--type-scale)); outline:none; }
-  input:focus { border-color:var(--ring); }
+  input { height:1.75rem; min-width:0; border:1px solid var(--border); border-radius:var(--floating-item-radius); background:transparent; padding:0.25rem 0.5rem; color:var(--foreground); font-size:calc(0.78rem * var(--type-scale)); outline:none; }
   input:disabled { cursor:not-allowed; opacity:0.55; }
   .field-control small,.argument-row small,.environment-error,.field-error { color:var(--destructive); font-size:calc(0.68rem * var(--type-scale)); }
   .field-error { padding-inline:0.25rem; }

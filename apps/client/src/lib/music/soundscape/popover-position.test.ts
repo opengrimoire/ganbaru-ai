@@ -24,7 +24,7 @@ describe("soundscape flyout placement", () => {
     );
     expect(position.placement).toBe("above");
     expect(position.top).toBe(234);
-    expect(position.left).toBe(300);
+    expect(position.left).toBe(306);
     expect(position.width).toBe(SOUNDSCAPE_POPOVER_WIDTH);
   });
 
@@ -46,7 +46,7 @@ describe("soundscape flyout placement", () => {
       SOUNDSCAPE_POPOVER_WIDTH,
       60,
     );
-    expect(position.left).toBe(240);
+    expect(position.left).toBe(252);
     expect(position.width).toBe(SOUNDSCAPE_POPOVER_WIDTH);
     expect(position.left + (position.width ?? 0)).toBe(492);
   });

@@ -6,6 +6,7 @@ import type { ChatChannelRead } from "$lib/chat/contracts";
 import { readChatSidebarSections, saveChatSidebarSections } from "$lib/chat/channel-sections";
 import { getChat } from "$lib/stores/chat.svelte";
 import { setActiveVaultIdentity } from "$lib/vault/active-vault";
+import { SUBMENU_CLOSE_DELAY_MS } from "$lib/utils/menu-aim";
 import ChatChannelRail from "./ChatChannelRail.svelte";
 
 const projectState = vi.hoisted(() => ({
@@ -480,8 +481,11 @@ describe("ChatChannelRail", () => {
     await vi.waitFor(() => expect(target.querySelector(".channel-move-menu")).not.toBeNull());
     expect(moveTrigger?.getAttribute("aria-expanded")).toBe("true");
     group?.dispatchEvent(new PointerEvent("pointerleave", { pointerType: "mouse" }));
-    await tick();
-    expect(target.querySelector(".channel-move-menu")).toBeNull();
+    group?.dispatchEvent(new PointerEvent("pointerenter", { pointerType: "mouse" }));
+    await new Promise((resolve) => setTimeout(resolve, SUBMENU_CLOSE_DELAY_MS + 20));
+    expect(target.querySelector(".channel-move-menu")).not.toBeNull();
+    group?.dispatchEvent(new PointerEvent("pointerleave", { pointerType: "mouse" }));
+    await vi.waitFor(() => expect(target.querySelector(".channel-move-menu")).toBeNull());
 
     moveTrigger?.focus();
     await vi.waitFor(() => expect(target.querySelector(".channel-move-menu")).not.toBeNull());

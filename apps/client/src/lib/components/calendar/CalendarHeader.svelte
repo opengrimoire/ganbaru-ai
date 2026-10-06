@@ -23,6 +23,7 @@
   import Minus from "@lucide/svelte/icons/minus";
   import Plus from "@lucide/svelte/icons/plus";
   import MiniDatePicker from "$lib/components/ui/MiniDatePicker.svelte";
+  import Checkbox from "$lib/components/ui/Checkbox.svelte";
 
   const calendarsStore = getCalendars();
   const settingsLauncher = getSettingsLauncher();
@@ -295,8 +296,8 @@
         <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div
           data-calendar-edit-close-ignore
-          class="absolute left-0 top-full z-50 mt-1 w-56 rounded-md border border-border bg-card text-card-foreground p-2.5 shadow-lg"
-          style="--foreground: var(--card-foreground);"
+          class="surface-floating absolute left-0 top-full z-50 mt-1 w-56 p-2.5"
+          style="--foreground: var(--popover-foreground);"
         >
           <MiniDatePicker
             selectedDate={anchorDateStr}
@@ -348,7 +349,7 @@
       <div data-calendar-edit-close-ignore class="fixed inset-0 z-40" onclick={() => (showViewPicker = false)}></div>
       <div
         data-calendar-edit-close-ignore
-        class="absolute right-0 top-full z-50 mt-1 w-48 rounded-md border border-border bg-card p-1.5 text-card-foreground shadow-lg"
+        class="surface-floating surface-floating-body absolute right-0 top-full z-50 mt-1 w-floating-sm"
         role="menu"
         aria-label={t("calendar.toolbar.views")}
       >
@@ -357,18 +358,20 @@
             type="button"
             role="menuitemradio"
             aria-checked={viewMode === option.mode}
-            class="flex min-h-12 w-full items-center gap-3 rounded-md px-3 text-left hover:bg-accent {viewMode === option.mode ? 'bg-accent text-foreground' : 'text-muted-foreground'}"
+            class="menu-item"
             onclick={() => selectView(option.mode)}
           >
-            <span class="w-7 text-xs font-semibold text-foreground">{option.label}</span>
-            <span class="text-sm">{option.title}</span>
+            <span class="w-7 text-panel-detail font-semibold">{option.label}</span>
+            <span class="min-w-0 flex-1 truncate">{option.title}</span>
+            {#if viewMode === option.mode}<Check size={14} class="shrink-0" aria-hidden="true" />{/if}
           </button>
         {/each}
-        <div class="mt-1 flex items-center justify-end border-t border-border pt-1">
+        <div role="separator" class="menu-separator"></div>
+        <div class="flex items-center justify-end">
           <button
             type="button"
             disabled={!calendarZoom.canZoomOut}
-            class="flex h-12 w-12 items-center justify-center rounded-md transition-colors {!calendarZoom.canZoomOut ? 'text-muted-foreground/30' : 'text-foreground active:bg-accent'}"
+            class="flex h-12 w-12 items-center justify-center rounded-floating-item transition-colors {!calendarZoom.canZoomOut ? 'text-muted-foreground/30' : 'text-foreground active:bg-accent'}"
             title={t("calendar.toolbar.zoomOut")}
             aria-label={t("calendar.toolbar.zoomOut")}
             onclick={() => calendarZoom.zoomStep(-1)}
@@ -378,7 +381,7 @@
           <button
             type="button"
             disabled={!calendarZoom.canZoomIn}
-            class="flex h-12 w-12 items-center justify-center rounded-md transition-colors {!calendarZoom.canZoomIn ? 'text-muted-foreground/30' : 'text-foreground active:bg-accent'}"
+            class="flex h-12 w-12 items-center justify-center rounded-floating-item transition-colors {!calendarZoom.canZoomIn ? 'text-muted-foreground/30' : 'text-foreground active:bg-accent'}"
             title={t("calendar.toolbar.zoomIn")}
             aria-label={t("calendar.toolbar.zoomIn")}
             onclick={() => calendarZoom.zoomStep(1)}
@@ -459,37 +462,27 @@
       <!-- svelte-ignore a11y_click_events_have_key_events -->
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div data-calendar-edit-close-ignore class="fixed inset-0 z-40" onclick={() => (showAccountPicker = false)}></div>
-      <div data-calendar-edit-close-ignore class="absolute right-0 top-full z-50 mt-1 w-56 rounded-md border border-border bg-card text-card-foreground p-2.5 shadow-lg" style="--foreground: var(--card-foreground);">
-        <p class="mb-2 px-1 text-xs font-semibold tracking-wide text-muted-foreground uppercase">{t("calendar.toolbar.calendars")}</p>
+      <div data-calendar-edit-close-ignore class="surface-floating surface-floating-body absolute right-0 top-full z-50 mt-1 w-floating-sm" style="--foreground: var(--popover-foreground);">
+        <p class="menu-label">{t("calendar.toolbar.calendars")}</p>
         {#each calendarsStore.list as calendar}
-          {@const checked = calendar.visible}
           {@const displayName = calendarDisplayName(calendar)}
-          <button
-            onclick={() => calendarsStore.toggleVisibility(calendar.id)}
-            class="flex w-full cursor-pointer items-center gap-2 rounded px-1.5 hover:bg-accent {mobileLayout ? 'min-h-12 py-2' : 'py-1.5'}"
-          >
-            <span
-              class="flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border {checked ? 'border-primary bg-primary' : 'border-muted-foreground'}"
-            >
-              {#if checked}
-                <Check size={12} class="text-primary-foreground" />
-              {/if}
-            </span>
-            <span class="truncate text-sm text-foreground">{displayName}</span>
+          <label class="menu-item cursor-pointer">
+            <Checkbox checked={calendar.visible} onChange={() => calendarsStore.toggleVisibility(calendar.id)} />
+            <span class="min-w-0 truncate text-foreground">{displayName}</span>
             {#if calendar.readOnly}
-              <span class="ml-auto text-[0.6rem] text-muted-foreground/60">
+              <span class="ml-auto shrink-0 text-panel-detail text-muted-foreground/60">
                 {t("calendar.toolbar.readOnly")}
               </span>
             {/if}
-          </button>
+          </label>
         {/each}
-        <div class="my-1.5 border-t border-border"></div>
+        <div role="separator" class="menu-separator"></div>
         <button
           onclick={() => {
             showAccountPicker = false;
             settingsLauncher.open("calendars");
           }}
-          class="flex w-full items-center gap-2 rounded px-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground {mobileLayout ? 'min-h-12 py-2' : 'py-1.5'}"
+          class="menu-item text-muted-foreground hover:text-foreground"
         >
           <Settings size={14} />
           <span>{t("calendar.toolbar.settings")}</span>

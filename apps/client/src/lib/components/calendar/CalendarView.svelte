@@ -1406,7 +1406,7 @@
       type="button"
       aria-label={t("mobile.createEvent")}
       onclick={(event) => openMobileEventCreate(event.currentTarget)}
-      class="absolute bottom-4 right-4 z-50 flex min-h-14 min-w-14 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-lg active:opacity-85"
+      class="absolute bottom-4 right-4 z-50 flex min-h-14 min-w-14 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-floating active:opacity-85"
     >
       <Plus size={25} strokeWidth={2} aria-hidden="true" />
     </button>

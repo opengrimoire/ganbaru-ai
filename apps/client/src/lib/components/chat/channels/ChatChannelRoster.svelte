@@ -21,6 +21,8 @@
   import { portal } from "$lib/utils/portal";
   import ChatParticipantAvatar from "$lib/components/chat/identity/ChatParticipantAvatar.svelte";
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
+  import { FLOATING_WIDTH } from "$lib/components/ui/floating-width";
+  import { scrollEdgeFadeAction } from "$lib/utils/scroll-edge-fade";
 
   const chat = getChat();
   const { t } = getLocalization();
@@ -115,7 +117,7 @@
 
   function popoverStyle(): string {
     if (!popoverReady) return "visibility:hidden;top:0;left:0;";
-    return `visibility:visible;top:${popoverGeometry.top}px;left:${popoverGeometry.left}px;width:${popoverGeometry.width ?? 336}px;max-height:${popoverGeometry.maxHeight}px;`;
+    return `visibility:visible;top:${popoverGeometry.top}px;left:${popoverGeometry.left}px;width:${popoverGeometry.width ?? FLOATING_WIDTH.lg}px;max-height:${popoverGeometry.maxHeight}px;`;
   }
 
   async function toggle(): Promise<void> {
@@ -279,16 +281,16 @@
     <Users size={15} />
   </button>
   {#if open}
-    <div bind:this={popover} use:portal id="chat-channel-roster" class="roster-popover" role="dialog" aria-label={t("chat.organization.channelRoster")} data-app-floating-surface style={popoverStyle()}>
+    <div bind:this={popover} use:portal id="chat-channel-roster" class="roster-popover surface-floating w-floating-lg" role="dialog" aria-label={t("chat.organization.channelRoster")} data-app-floating-surface style={popoverStyle()}>
       <header><div><strong>{channel ? `#${channel.name}` : t("chat.organization.channelRoster")}</strong><small>{t("chat.organization.members", memberships.length)}</small></div><button type="button" aria-label={t("chat.organization.addTeammate")} aria-expanded={showAdd} onclick={() => { showAdd = !showAdd; }}><Plus size={14} /></button></header>
-      <label class="roster-search"><Search size={13} /><input bind:this={searchInput} bind:value={query} placeholder={t("chat.organization.searchMembers")} aria-label={t("chat.organization.searchMembers")} /></label>
-      <div class="roster-list">
+      <label class="roster-search field"><Search size={13} /><input class="field-bare" bind:this={searchInput} bind:value={query} placeholder={t("chat.organization.searchMembers")} aria-label={t("chat.organization.searchMembers")} /></label>
+      <div class="roster-list" use:scrollEdgeFadeAction>
         {#each matchingMembers as membership (membership.participant.id)}
           {@const teammate = chat.teammates.find((entry) => entry.participant.id === membership.participant.id)}
           <div class="roster-row"><button type="button" class="member-identity" onclick={() => membership.participant.kind === "ai_teammate" && configure(membership.participant.id)}><ChatParticipantAvatar participant={membership.participant} {teammate} size={30} /><span><strong>{membership.participant.displayName}</strong><small>{membership.participant.kind === "ai_teammate" ? accessSummary(membership.participant.id) : t("chat.organization.humanMember")}</small></span></button>{#if membership.participant.kind === "ai_teammate"}<button type="button" class="remove-member" aria-label={t("chat.organization.removeTeammate", membership.participant.displayName)} disabled={removalBusy} onclick={() => void prepareRemoval(membership.participant.id)}><Trash2 size={13} /></button>{/if}</div>
         {/each}
         {#if (showAdd || query) && availableTeammates.length}
-          <div class="section-label">{t("chat.organization.addExistingTeammate")}</div>
+          <div class="menu-label">{t("chat.organization.addExistingTeammate")}</div>
           {#each availableTeammates as teammate (teammate.participant.id)}
             <button type="button" class="roster-row" onclick={() => configure(teammate.participant.id)}><ChatParticipantAvatar participant={teammate.participant} {teammate} size={30} /><span><strong>{teammate.participant.displayName}</strong><small>{t("chat.organization.reviewChannelAccess")}</small></span><Plus size={13} /></button>
           {/each}
@@ -310,30 +312,28 @@
   .roster-anchor { position:relative; }
   .roster-trigger { display:flex; width:1.75rem; height:1.75rem; align-items:center; justify-content:center; border-radius:0.375rem; color:var(--foreground); }
   .roster-trigger:hover,.roster-trigger[aria-expanded="true"] { background:var(--accent); }
-  .roster-popover { position:fixed; z-index:90; display:grid; width:min(21rem,calc(100vw - 1rem)); grid-template-rows:auto auto minmax(0,1fr) auto; border:1px solid var(--border); border-radius:0.65rem; background:var(--popover); color:var(--popover-foreground); box-shadow:0 18px 42px color-mix(in srgb,#000 22%,transparent); overflow:hidden; }
+  .roster-popover { position:fixed; z-index:90; display:grid; grid-template-rows:auto auto minmax(0,1fr) auto; overflow:hidden; }
   .roster-popover > header { display:flex; align-items:center; justify-content:space-between; gap:0.5rem; border-bottom:1px solid var(--border); padding:0.65rem; }
   .roster-popover > header div { display:grid; }
-  .roster-popover > header strong { font-size:calc(0.75rem * var(--type-scale)); }
-  .roster-popover > header small { color:var(--muted-foreground); font-size:calc(0.62rem * var(--type-scale)); }
-  .roster-popover > header button { display:grid; width:1.8rem; height:1.8rem; place-items:center; border-radius:0.4rem; }
+  .roster-popover > header strong { font-weight:600; }
+  .roster-popover > header small { color:var(--muted-foreground); font-size:var(--panel-detail-font-size); }
+  .roster-popover > header button { display:grid; width:1.8rem; height:1.8rem; place-items:center; border-radius:var(--floating-item-radius); }
   .roster-popover > header button:hover { background:var(--accent); }
-  .roster-search { display:flex; min-height:2rem; align-items:center; gap:0.4rem; margin:0.55rem; border:1px solid var(--border); border-radius:0.42rem; padding-inline:0.5rem; color:var(--muted-foreground); }
-  .roster-search input { width:100%; min-width:0; border:0; background:transparent; color:var(--foreground); outline:0; font-size:calc(0.68rem * var(--type-scale)); }
+  .roster-search { display:flex; align-items:center; gap:0.4rem; margin:0.55rem; color:var(--muted-foreground); }
+  .roster-search input { color:var(--foreground); }
   .roster-list { overflow-y:auto; padding:0 0.4rem 0.45rem; }
-  .roster-row { display:grid; width:100%; min-width:0; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:0.25rem; border-radius:0.45rem; }
+  .roster-row { display:grid; width:100%; min-width:0; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:0.25rem; border-radius:var(--floating-item-radius); }
   .roster-row:hover { background:var(--accent); }
   .member-identity { display:grid; min-width:0; grid-template-columns:auto minmax(0,1fr); align-items:center; gap:0.5rem; padding:0.45rem; text-align:left; }
   .member-identity > span { display:grid; min-width:0; }
   .roster-row strong,.roster-row small { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .roster-row strong { font-size:calc(0.7rem * var(--type-scale)); }
-  .roster-row small { color:var(--muted-foreground); font-size:calc(0.6rem * var(--type-scale)); }
-  .section-label { padding:0.55rem 0.45rem 0.25rem; color:var(--muted-foreground); font-size:calc(0.58rem * var(--type-scale)); font-weight:650; text-transform:uppercase; }
-  .remove-member { display:grid; width:1.75rem; height:1.75rem; place-items:center; border-radius:0.38rem; color:var(--muted-foreground); }
+  .roster-row small { color:var(--muted-foreground); font-size:var(--panel-detail-font-size); }
+  .remove-member { display:grid; width:1.75rem; height:1.75rem; place-items:center; border-radius:var(--floating-item-radius); color:var(--muted-foreground); }
   .remove-member:hover { background:color-mix(in srgb,var(--destructive) 12%,transparent); color:var(--destructive); }
   .roster-error { color:var(--destructive) !important; }
-  .roster-list > p { padding:1rem; color:var(--muted-foreground); font-size:calc(0.68rem * var(--type-scale)); text-align:center; }
+  .roster-list > p { padding:1rem; color:var(--muted-foreground); font-size:var(--panel-detail-font-size); text-align:center; }
   .roster-popover > footer { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:0.3rem; border-top:1px solid var(--border); padding:0.45rem; }
-  .roster-popover > footer button { display:flex; min-height:2rem; width:100%; align-items:center; justify-content:center; gap:0.4rem; border-radius:0.42rem; font-size:calc(0.68rem * var(--type-scale)); font-weight:600; }
+  .roster-popover > footer button { display:flex; min-height:2rem; width:100%; align-items:center; justify-content:center; gap:0.4rem; border-radius:var(--floating-item-radius); font-size:var(--panel-detail-font-size); font-weight:600; }
   .roster-popover > footer button:hover { background:var(--accent); }
   @media (pointer:coarse) { .roster-trigger,.roster-popover > header button,.remove-member { min-width:2.75rem; min-height:2.75rem; }.member-identity,.roster-popover > footer button { min-height:2.75rem; } }
 </style>

@@ -220,13 +220,13 @@
           </button>
           <input
             value={customFieldNameDraftValue(field)}
-            class="h-7 min-w-0 rounded-md border border-border bg-background px-2 text-[0.8rem] text-foreground outline-none transition-colors focus:border-ring placeholder:text-muted-foreground"
+            class="field min-w-0 text-foreground"
             aria-label={t("projects.customFields.fieldName")}
             onpointerdown={moveTextInputCaretToPointer}
             oninput={(event) => setCustomFieldNameDraft(field.id, event.currentTarget.value)}
           />
           <div
-            class="flex h-7 w-32 shrink-0 cursor-not-allowed items-center justify-between gap-2 rounded-md border border-border bg-card px-2.5 text-[0.8rem] font-medium text-foreground transition-colors dark:bg-transparent"
+            class="flex h-7 w-32 shrink-0 cursor-not-allowed items-center justify-between gap-2 rounded-md border border-border bg-transparent px-2.5 text-[0.8rem] font-medium text-foreground transition-colors"
             aria-label={t("projects.customFields.fieldType")}
             data-app-tooltip={t("projects.customFields.typeLockedTooltip")}
           >
@@ -296,7 +296,7 @@
                     </button>
                     <input
                       value={customFieldOptionNameDraftValue(option)}
-                      class="h-7 min-w-0 rounded-md border border-border bg-background px-2 text-[0.8rem] text-foreground outline-none transition-colors focus:border-ring placeholder:text-muted-foreground"
+                      class="field min-w-0 text-foreground"
                       aria-label={t("projects.customFields.optionName")}
                       onpointerdown={moveTextInputCaretToPointer}
                       oninput={(event) => setCustomFieldOptionNameDraft(option.id, event.currentTarget.value)}
@@ -326,7 +326,7 @@
                     </div>
                     <input
                       value={option.name}
-                      class="h-7 min-w-0 rounded-md border border-border bg-background px-2 text-[0.8rem] text-foreground outline-none transition-colors focus:border-ring placeholder:text-muted-foreground"
+                      class="field min-w-0 text-foreground"
                       aria-label={t("projects.customFields.optionName")}
                       onpointerdown={moveTextInputCaretToPointer}
                       oninput={(event) => {
@@ -350,7 +350,7 @@
               <ProjectSettingsNewRowDragHandle showIcon={displayedFieldOptionCount === 0} />
               <input
                 value={newCustomFieldOptionDrafts[field.id] ?? ""}
-                class="h-7 min-w-0 rounded-md border border-border bg-background px-2 text-[0.8rem] text-foreground outline-none transition-colors focus:border-ring placeholder:text-muted-foreground"
+                class="field min-w-0 text-foreground"
                 placeholder={t("projects.customFields.newOptionPlaceholder")}
                 onpointerdown={moveTextInputCaretToPointer}
                 oninput={(event) => setNewOptionDraft(field.id, event.currentTarget.value)}
@@ -392,13 +392,13 @@
           </div>
           <input
             value={field.name}
-            class="h-7 min-w-0 rounded-md border border-border bg-background px-2 text-[0.8rem] text-foreground outline-none transition-colors focus:border-ring placeholder:text-muted-foreground"
+            class="field min-w-0 text-foreground"
             aria-label={t("projects.customFields.fieldName")}
             onpointerdown={moveTextInputCaretToPointer}
             oninput={(event) => setCustomFieldCreateDraftName(field.id, event.currentTarget.value)}
           />
           <div
-            class="flex h-7 w-32 shrink-0 cursor-not-allowed items-center justify-between gap-2 rounded-md border border-border bg-card px-2.5 text-[0.8rem] font-medium text-foreground transition-colors dark:bg-transparent"
+            class="flex h-7 w-32 shrink-0 cursor-not-allowed items-center justify-between gap-2 rounded-md border border-border bg-transparent px-2.5 text-[0.8rem] font-medium text-foreground transition-colors"
             aria-label={t("projects.customFields.fieldType")}
             data-app-tooltip={t("projects.customFields.typeLockedTooltip")}
           >
@@ -442,7 +442,7 @@
                     </div>
                     <input
                       value={option.name}
-                      class="h-7 min-w-0 rounded-md border border-border bg-background px-2 text-[0.8rem] text-foreground outline-none transition-colors focus:border-ring placeholder:text-muted-foreground"
+                      class="field min-w-0 text-foreground"
                       aria-label={t("projects.customFields.optionName")}
                       onpointerdown={moveTextInputCaretToPointer}
                       oninput={(event) =>
@@ -465,7 +465,7 @@
               <ProjectSettingsNewRowDragHandle showIcon={displayedFieldOptionCount === 0} />
               <input
                 value={field.optionName}
-                class="h-7 min-w-0 rounded-md border border-border bg-background px-2 text-[0.8rem] text-foreground outline-none transition-colors focus:border-ring placeholder:text-muted-foreground"
+                class="field min-w-0 text-foreground"
                 placeholder={t("projects.customFields.newOptionPlaceholder")}
                 onpointerdown={moveTextInputCaretToPointer}
                 oninput={(event) =>
@@ -502,7 +502,7 @@
         />
         <input
           bind:value={newCustomFieldName}
-          class="h-7 min-w-0 rounded-md border border-border bg-background px-2 text-[0.8rem] text-foreground outline-none transition-colors focus:border-ring placeholder:text-muted-foreground"
+          class="field min-w-0 text-foreground"
           placeholder={t("projects.customFields.newFieldPlaceholder")}
           onpointerdown={moveTextInputCaretToPointer}
           onkeydown={(event) => {
@@ -539,7 +539,7 @@
               </div>
               <input
                 value={option.name}
-                class="h-7 min-w-0 rounded-md border border-border bg-background px-2 text-[0.8rem] text-foreground outline-none transition-colors focus:border-ring placeholder:text-muted-foreground"
+                class="field min-w-0 text-foreground"
                 aria-label={t("projects.customFields.optionName")}
                 onpointerdown={moveTextInputCaretToPointer}
                 oninput={(event) => setNewCustomFieldOptionDraftName(option.id, event.currentTarget.value)}
@@ -559,7 +559,7 @@
             <ProjectSettingsNewRowDragHandle showIcon={newCustomFieldOptionRows.length === 0} />
             <input
               bind:value={newCustomFieldOptionName}
-              class="h-7 min-w-0 rounded-md border border-border bg-background px-2 text-[0.8rem] text-foreground outline-none transition-colors focus:border-ring placeholder:text-muted-foreground"
+              class="field min-w-0 text-foreground"
               placeholder={t("projects.customFields.newOptionPlaceholder")}
               onpointerdown={moveTextInputCaretToPointer}
               onkeydown={(event) => {

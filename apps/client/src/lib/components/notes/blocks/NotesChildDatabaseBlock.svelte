@@ -1,6 +1,9 @@
 <script lang="ts">
   import CollectionSaveIndicator from "$lib/components/collections/CollectionSaveIndicator.svelte";
   import CollectionMenu from "$lib/components/collections/CollectionMenu.svelte";
+  import CollectionMenuItem from "$lib/components/collections/CollectionMenuItem.svelte";
+  import CollectionMenuSeparator from "$lib/components/collections/CollectionMenuSeparator.svelte";
+  import Checkbox from "$lib/components/ui/Checkbox.svelte";
   import CollectionSettings from "$lib/components/collections/CollectionSettings.svelte";
   import Select from "$lib/components/ui/Select.svelte";
   import { tick, untrack } from "svelte";
@@ -724,7 +727,7 @@
       <input
         bind:this={titleInput}
         data-notes-database-title
-        class="min-h-10 min-w-0 flex-1 border-0 bg-transparent px-0 text-[1.4rem] font-semibold leading-tight text-foreground outline-none placeholder:text-muted-foreground/50 focus:ring-0"
+        class="min-h-10 min-w-0 flex-1 border-0 bg-transparent px-0 text-[1.4rem] font-semibold leading-tight text-foreground outline-none placeholder:text-muted-foreground/50"
         aria-label={t("notes.databaseTitle")}
         placeholder={t("notes.databaseTitlePlaceholder")}
         bind:value={titleDraft}
@@ -747,18 +750,12 @@
       <CollectionSaveIndicator pending={saving || titleSaving || linking || viewSaving} label={t("notes.databaseSaving")} />
       <CollectionMenu label={t("notes.databaseMore")} kind="actions" iconOnly showHeader={false}>
         {#if onOpenDatabase}
-          <button type="button" class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-accent" onclick={() => void openDatabase(block.id)}>
-            <ArrowUpRight class="size-4" aria-hidden="true" />{t("notes.databaseOpen")}
-          </button>
+          <CollectionMenuItem icon={ArrowUpRight} label={t("notes.databaseOpen")} onclick={() => void openDatabase(block.id)} />
         {/if}
-        <button type="button" class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-accent" onclick={() => void copyDatabaseLink()}>
-          <Copy class="size-4" aria-hidden="true" />{t("notes.databaseCopyLink")}
-        </button>
+        <CollectionMenuItem icon={Copy} label={t("notes.databaseCopyLink")} onclick={() => void copyDatabaseLink()} />
         {#if onDeleteDatabase}
-          <div class="mx-2 my-1 border-t border-border"></div>
-          <button type="button" class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-destructive hover:bg-accent" onclick={() => void deleteDatabase()}>
-            <Trash2 class="size-4" aria-hidden="true" />{t("notes.databaseMoveToTrash")}
-          </button>
+          <CollectionMenuSeparator />
+          <CollectionMenuItem icon={Trash2} label={t("notes.databaseMoveToTrash")} destructive onclick={() => void deleteDatabase()} />
         {/if}
       </CollectionMenu>
     {/if}
@@ -799,7 +796,7 @@
 </section>
 
 {#snippet schemaStatus()}
-  <div class="flex min-w-0 flex-wrap items-center gap-2 text-[0.8rem] text-muted-foreground">
+  <div class="flex min-w-0 flex-wrap items-center gap-2 text-panel-detail text-muted-foreground">
     <span class="min-w-0 flex-1 truncate" role="status">
       {#if error}
         {schema
@@ -839,10 +836,10 @@
   <div class="grid min-w-0 gap-3 @container">
     <div class={["grid min-w-0 gap-2", standalone ? "@lg:grid-cols-[minmax(7rem,1fr)_minmax(7rem,12rem)_auto]" : "grid-cols-[minmax(0,1fr)_auto]"]}>
       {#if standalone}
-        <label class="min-w-0 text-[0.733333rem] text-muted-foreground">
+        <label class="min-w-0 text-panel-detail text-muted-foreground">
           <span class="mb-1 block">{t("notes.databaseSchemaName")}</span>
           <input
-            class="h-8 w-full min-w-0 rounded-md border border-input bg-background px-2 text-[0.866667rem] text-foreground outline-none focus:border-ring"
+            class="field w-full min-w-0 text-foreground"
             value={property.name}
             aria-label={t("notes.databaseSchemaName")}
             disabled={loading || saving || editingLocked}
@@ -854,7 +851,7 @@
           />
         </label>
       {/if}
-      <div class="min-w-0 text-[0.733333rem] text-muted-foreground">
+      <div class="min-w-0 text-panel-detail text-muted-foreground">
         <span class="mb-1 block">{t("notes.databaseSchemaType")}</span>
         <Select textSize="collection"
           inline
@@ -886,10 +883,10 @@
       </div>
     </div>
 
-    <label class="min-w-0 text-[0.733333rem] text-muted-foreground">
+    <label class="min-w-0 text-panel-detail text-muted-foreground">
       <span class="mb-1 block">{t("notes.databaseSchemaDescription")}</span>
       <input
-        class="h-8 w-full min-w-0 rounded-md border border-input bg-background px-2 text-[0.866667rem] text-foreground outline-none focus:border-ring"
+        class="field w-full min-w-0 text-foreground"
         value={property.description}
         placeholder={t("notes.databaseSchemaDescriptionPlaceholder")}
         disabled={loading || saving || editingLocked}
@@ -902,7 +899,7 @@
     </label>
 
     {#if property.type === "number"}
-      <div class="min-w-0 text-[0.733333rem] text-muted-foreground">
+      <div class="min-w-0 text-panel-detail text-muted-foreground">
         <span class="mb-1 block">{t("notes.databaseSchemaNumberFormat")}</span>
         <Select textSize="collection"
           inline
@@ -920,10 +917,10 @@
         />
       </div>
     {:else if property.type === "unique_id"}
-      <label class="min-w-0 text-[0.733333rem] text-muted-foreground">
+      <label class="min-w-0 text-panel-detail text-muted-foreground">
         <span class="mb-1 block">{t("notes.databaseSchemaUniquePrefix")}</span>
         <input
-          class="h-8 w-full min-w-0 rounded-md border border-input bg-background px-2 text-[0.866667rem] text-foreground outline-none focus:border-ring"
+          class="field w-full min-w-0 text-foreground"
           value={property.uniquePrefix}
           placeholder={t("notes.databaseSchemaUniquePrefixPlaceholder")}
           oninput={(event) => {
@@ -935,7 +932,7 @@
       </label>
     {:else if property.type === "relation"}
       <div class="grid min-w-0 gap-2 @lg:grid-cols-3">
-        <div class="min-w-0 text-[0.733333rem] text-muted-foreground">
+        <div class="min-w-0 text-panel-detail text-muted-foreground">
           <span class="mb-1 block">{t("notes.databaseSchemaRelationTarget")}</span>
           <Select textSize="collection"
             inline
@@ -953,10 +950,10 @@
             }}
           />
         </div>
-        <label class="min-w-0 text-[0.733333rem] text-muted-foreground">
+        <label class="min-w-0 text-panel-detail text-muted-foreground">
           <span class="mb-1 block">{t("notes.databaseSchemaRelationSyncedPropertyId")}</span>
           <input
-            class="h-8 w-full min-w-0 rounded-md border border-input bg-background px-2 text-[0.866667rem] text-foreground outline-none focus:border-ring"
+            class="field w-full min-w-0 text-foreground"
             value={property.relationSyncedPropertyId}
             placeholder={t("notes.databaseSchemaRelationSyncedPropertyIdPlaceholder")}
             oninput={(event) => {
@@ -966,10 +963,10 @@
             }}
           />
         </label>
-        <label class="min-w-0 text-[0.733333rem] text-muted-foreground">
+        <label class="min-w-0 text-panel-detail text-muted-foreground">
           <span class="mb-1 block">{t("notes.databaseSchemaRelationSyncedPropertyName")}</span>
           <input
-            class="h-8 w-full min-w-0 rounded-md border border-input bg-background px-2 text-[0.866667rem] text-foreground outline-none focus:border-ring"
+            class="field w-full min-w-0 text-foreground"
             value={property.relationSyncedPropertyName}
             placeholder={t("notes.databaseSchemaRelationSyncedPropertyNamePlaceholder")}
             oninput={(event) => {
@@ -996,10 +993,10 @@
         onFunctionChange={(rollupFunction) => updateProperty(property.id, { rollupFunction })}
       />
     {:else if property.type === "formula"}
-      <label class="min-w-0 text-[0.733333rem] text-muted-foreground">
+      <label class="min-w-0 text-panel-detail text-muted-foreground">
         <span class="mb-1 block">{t("notes.databaseSchemaFormulaExpression")}</span>
         <textarea
-          class="min-h-20 w-full min-w-0 resize-y rounded-md border border-input bg-background px-2 py-1.5 font-mono text-[0.8rem] text-foreground outline-none focus:border-ring"
+          class="field min-h-20 w-full min-w-0 resize-y font-mono text-foreground"
           value={property.formulaExpression}
           placeholder={t("notes.databaseSchemaFormulaExpressionPlaceholder")}
           disabled={loading || saving || editingLocked}
@@ -1012,10 +1009,10 @@
       </label>
     {:else if property.type === "button"}
       <div class="grid min-w-0 gap-2 @lg:grid-cols-3">
-        <label class="min-w-0 text-[0.733333rem] text-muted-foreground">
+        <label class="min-w-0 text-panel-detail text-muted-foreground">
           <span class="mb-1 block">{t("notes.databaseSchemaButtonLabel")}</span>
           <input
-            class="h-8 w-full min-w-0 rounded-md border border-input bg-background px-2 text-[0.866667rem] text-foreground outline-none focus:border-ring"
+            class="field w-full min-w-0 text-foreground"
             value={property.buttonLabel}
             placeholder={t("notes.databaseSchemaButtonDefaultLabel")}
             oninput={(event) => {
@@ -1025,7 +1022,7 @@
             }}
           />
         </label>
-        <div class="min-w-0 text-[0.733333rem] text-muted-foreground">
+        <div class="min-w-0 text-panel-detail text-muted-foreground">
           <span class="mb-1 block">{t("notes.databaseSchemaButtonTarget")}</span>
           <Select textSize="collection"
             inline
@@ -1039,14 +1036,13 @@
             onChange={(nextValue) => updateButtonTarget(property, nextValue)}
           />
         </div>
-        <label class="flex min-w-0 items-end gap-2 text-[0.733333rem] text-muted-foreground">
-          <input
+        <label class="flex min-w-0 items-end gap-2 text-panel-detail text-muted-foreground">
+          <Checkbox
             class="mb-2"
-            type="checkbox"
             checked={property.buttonRequiresConfirmation}
-            onchange={(event) => {
+            onChange={(checked) => {
               updateProperty(property.id, {
-                buttonRequiresConfirmation: event.currentTarget.checked,
+                buttonRequiresConfirmation: checked,
               });
             }}
           />
@@ -1054,7 +1050,7 @@
         </label>
         {#if property.buttonActionPropertyId}
           {#if property.buttonActionPropertyType === "checkbox"}
-            <div class="min-w-0 text-[0.733333rem] text-muted-foreground">
+            <div class="min-w-0 text-panel-detail text-muted-foreground">
               <span class="mb-1 block">{t("notes.databaseSchemaButtonValue")}</span>
               <Select textSize="collection"
                 inline
@@ -1069,10 +1065,10 @@
               />
             </div>
           {:else}
-            <label class="min-w-0 text-[0.733333rem] text-muted-foreground @lg:col-span-2">
+            <label class="min-w-0 text-panel-detail text-muted-foreground @lg:col-span-2">
               <span class="mb-1 block">{t("notes.databaseSchemaButtonValue")}</span>
               <input
-                class="h-8 w-full min-w-0 rounded-md border border-input bg-background px-2 text-[0.866667rem] text-foreground outline-none focus:border-ring"
+                class="field w-full min-w-0 text-foreground"
                 value={buttonActionValueText(property.buttonActionValue)}
                 placeholder={t("notes.databaseSchemaButtonValuePlaceholder")}
                 oninput={(event) => updateButtonValue(property, event.currentTarget.value)}
@@ -1085,10 +1081,10 @@
       <div class="space-y-2">
         {#each property.options as option (option.id)}
           <div class="grid min-w-0 gap-2 @lg:grid-cols-[minmax(7rem,1fr)_minmax(7rem,10rem)_minmax(7rem,10rem)_auto]">
-            <label class="min-w-0 text-[0.733333rem] text-muted-foreground">
+            <label class="min-w-0 text-panel-detail text-muted-foreground">
               <span class="mb-1 block">{t("notes.databaseSchemaOptionName")}</span>
               <input
-                class="h-8 w-full min-w-0 rounded-md border border-input bg-background px-2 text-[0.866667rem] text-foreground outline-none focus:border-ring"
+                class="field w-full min-w-0 text-foreground"
                 value={option.name}
                 oninput={(event) => {
                   updateOption(property.id, option.id, {
@@ -1097,7 +1093,7 @@
                 }}
               />
             </label>
-            <div class="min-w-0 text-[0.733333rem] text-muted-foreground">
+            <div class="min-w-0 text-panel-detail text-muted-foreground">
               <span class="mb-1 block">{t("notes.databaseSchemaOptionColor")}</span>
               <Select textSize="collection"
                 inline
@@ -1115,7 +1111,7 @@
               />
             </div>
             {#if property.type === "status"}
-              <div class="min-w-0 text-[0.733333rem] text-muted-foreground">
+              <div class="min-w-0 text-panel-detail text-muted-foreground">
                 <span class="mb-1 block">{t("notes.databaseSchemaOptionGroup")}</span>
                 <Select textSize="collection"
                   inline
@@ -1148,7 +1144,7 @@
         {/each}
         <button
           type="button"
-          class="inline-flex h-8 items-center gap-1 rounded-md px-2 text-[0.8rem] hover:bg-accent"
+          class="inline-flex h-8 items-center gap-1 rounded-md px-2 hover:bg-accent"
           onclick={() => addOption(property.id)}
         >
           <Plus class="size-3.5" aria-hidden="true" />
@@ -1156,9 +1152,9 @@
         </button>
       </div>
     {:else if property.type === "title"}
-      <p class="text-[0.8rem] text-muted-foreground">{t("notes.databaseSchemaReadOnlyTitle")}</p>
+      <p class="text-panel-detail text-muted-foreground">{t("notes.databaseSchemaReadOnlyTitle")}</p>
     {:else}
-      <p class="text-[0.8rem] text-muted-foreground">
+      <p class="text-panel-detail text-muted-foreground">
         {t("notes.databaseSchemaReadonlyPlaceholder")}
       </p>
     {/if}
@@ -1209,7 +1205,7 @@
         />
         <button
           type="button"
-          class="inline-flex h-8 items-center gap-1 rounded-md px-2 text-[0.8rem] hover:bg-accent"
+          class="inline-flex h-8 items-center gap-1 rounded-md px-2 hover:bg-accent"
           onclick={addProperty}
         >
           <Plus class="size-3.5" aria-hidden="true" />

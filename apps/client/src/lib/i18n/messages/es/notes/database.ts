@@ -15,7 +15,6 @@ export const database = {
   databaseSourceSharedDescription: "Las fuentes vinculadas comparten sus propiedades y páginas. Las vistas conservan sus propios ajustes de diseño.",
   databaseEditingLock: "Bloqueo del diseño de la base de datos",
   databaseLockLayout: "Bloquear el diseño de la base de datos",
-  databaseUnlockLayout: "Desbloquear el diseño de la base de datos",
   databaseEditingLockDescription: "El diseño está bloqueado para evitar cambios accidentales. Puedes editar y añadir páginas. Las bases de datos vinculadas tienen su propio bloqueo de diseño.",
   databaseSchemaDuplicateName: (name: string) => `${name} (copia)`,
   databaseTablePresentation: {

@@ -120,7 +120,7 @@
             onwheel={handleVolumeWheel}
           ></div>
           <div
-            class="absolute right-0 top-9 z-50 w-60 max-w-[calc(100vw-1rem)] rounded-lg border border-border bg-popover py-1 shadow-lg"
+            class="surface-floating surface-floating-body absolute right-0 top-9 z-50 w-floating-sm"
             onwheel={handleVolumeWheel}
           >
             <PomodoroMenuContent
