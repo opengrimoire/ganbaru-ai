@@ -90,8 +90,9 @@ function relationships(): ProjectsOptionalData {
 }
 
 describe("project optional data", () => {
-  it("keeps project-wide optional families out of every task view", () => {
-    for (const view of ["list", "kanban", "calendar", "gantt", "dashboard"] as const) {
+  it("loads view preferences only for List, which renders saved columns and widths", () => {
+    expect(projectViewOptionalDataKinds("list")).toEqual(["saved_views"]);
+    for (const view of ["kanban", "calendar", "gantt", "dashboard"] as const) {
       expect(projectViewOptionalDataKinds(view)).toEqual([]);
     }
   });

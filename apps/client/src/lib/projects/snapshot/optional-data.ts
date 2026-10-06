@@ -21,10 +21,13 @@ export function projectOptionalDataKey(
   return kind === "custom_emojis" ? kind : `${projectId ?? ""}:${kind}`;
 }
 
-/** Lists optional collections needed by a visible project view. */
+/**
+ * Lists optional collections a project view needs before it renders.
+ *
+ * List reads its visible columns, column widths, and presentation from view preferences, which load with saved views. Rendering it without them shows defaults, and a resize or column change made then would overwrite the saved preference.
+ */
 export function projectViewOptionalDataKinds(view: ProjectViewId): readonly ProjectOptionalDataKind[] {
-  void view;
-  return [];
+  return view === "list" ? ["saved_views"] : [];
 }
 
 function projectTaskIds(source: ProjectsSnapshot, projectId: string): Set<string> {

@@ -13,6 +13,7 @@
     ProjectSection,
     ProjectStatus,
     ProjectTask,
+    ProjectViewId,
   } from "$lib/projects/types";
   import {
     projectCalendarCreateDefaults as buildProjectCalendarCreateDefaults,
@@ -178,12 +179,23 @@
     });
   });
 
+  let viewDataFailure = $state<{ projectId: string; view: ProjectViewId } | null>(null);
+  const viewDataFailed = $derived(
+    viewDataFailure?.projectId === selectedProjectId && viewDataFailure?.view === projects.activeView,
+  );
+
+  function requestViewData(projectId: string, view: ProjectViewId): void {
+    viewDataFailure = null;
+    void projects.ensureProjectViewData(projectId, view).catch((error) => {
+      viewDataFailure = { projectId, view };
+      console.error(`load optional Project ${view} data failed`, error);
+    });
+  }
+
   $effect(() => {
     const view = projects.activeView;
     if (!selectedProject || !selectedGroup) return;
-    void projects.ensureProjectViewData(selectedProject.id, view).catch((error) => {
-      console.error(`load optional Project ${view} data failed`, error);
-    });
+    requestViewData(selectedProject.id, view);
   });
 
   $effect(() => {
@@ -438,7 +450,7 @@
       {#if selectedProject && selectedGroup}
           {#if projects.activeView === "list"}
             {@const ProjectListView = viewComponents?.list ?? null}
-            {#if ProjectListView}
+            {#if ProjectListView && projects.isProjectViewDataLoaded(selectedProjectId, "list")}
             <ProjectListView
               {taskQuery}
               {mobileLayout}
@@ -466,6 +478,17 @@
               onTaskListColumnWidthsChange={(widths, options) => taskQuery.updateColumnWidths(widths, options)}
               onNeedMore={() => taskQuery.loadNextList(routeUi.selectedTaskIds)}
             />
+            {:else if viewDataFailed}
+              <div class="flex h-full items-center justify-center gap-2 text-sm text-muted-foreground" role="alert">
+                <span>{t("common.viewLoadFailed", t("projects.tabs.list"))}</span>
+                <button
+                  type="button"
+                  class="font-medium text-foreground underline-offset-2 hover:underline"
+                  onclick={() => { if (selectedProjectId) requestViewData(selectedProjectId, "list"); }}
+                >
+                  {t("common.retry")}
+                </button>
+              </div>
             {:else}
               <div class="flex h-full items-center justify-center text-sm text-muted-foreground" aria-busy="true">
                 {t("common.loading")}

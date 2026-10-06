@@ -277,6 +277,12 @@ async function ensureProjectViewData(
   ));
 }
 
+/** Reports whether every optional collection a project view needs has loaded. */
+function isProjectViewDataLoaded(projectId: string | null | undefined, view: ProjectViewId): boolean {
+  if (!projectId) return false;
+  return projectViewOptionalDataKinds(view).every((kind) => isProjectOptionalDataLoaded(kind, projectId));
+}
+
 async function ensureProjectToolbarData(projectId: string | null | undefined): Promise<void> {
   if (!projectId) return;
   await Promise.all([
@@ -640,6 +646,7 @@ export function getProjects() {
     ensureTaskDetailData,
     ensureCustomEmojis,
     isProjectOptionalDataLoaded,
+    isProjectViewDataLoaded,
     isProjectDataLoaded,
     selectProject,
     projectById,
