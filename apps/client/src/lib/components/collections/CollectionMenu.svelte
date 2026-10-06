@@ -1,6 +1,7 @@
 <script lang="ts">
   import { tick, untrack, type Component, type Snippet } from "svelte";
   import { portal } from "$lib/utils/portal";
+  import { scrollEdgeFadeAction } from "$lib/utils/scroll-edge-fade";
   import { anchoredPanelContentHeight, anchoredPanelStyle, anchoredPanelWidth, anchoredSidePanelStyle, anchoredSubmenuWidth } from "$lib/utils/anchored-panel";
   import SlidersHorizontal from "@lucide/svelte/icons/sliders-horizontal";
   import ListFilter from "@lucide/svelte/icons/list-filter";
@@ -362,7 +363,7 @@
   </button>
   {#if open && !settingsRow}
     <CollectionPanel bind:element={panel} {label} id={id} data-collection-menu-dismiss={dismisses ? "" : undefined} class="fixed z-80 max-w-[calc(100vw-1rem)]">
-      <div class="min-h-0 overflow-x-hidden overflow-y-auto">
+      <div use:scrollEdgeFadeAction class="min-h-0 overflow-x-hidden overflow-y-auto">
         <div data-collection-menu-content class="@container flow-root h-max p-1.5">
           {#if headerVisible}
             <div class="mb-1.5 flex items-center justify-between gap-2 px-1">

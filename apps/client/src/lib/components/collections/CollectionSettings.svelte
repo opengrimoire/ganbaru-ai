@@ -3,6 +3,7 @@
   import ArrowLeft from "@lucide/svelte/icons/arrow-left";
   import X from "@lucide/svelte/icons/x";
   import { portal } from "$lib/utils/portal";
+  import { scrollEdgeFadeAction } from "$lib/utils/scroll-edge-fade";
   import { anchoredPanelContentHeight, anchoredPanelStyle, anchoredPanelWidth } from "$lib/utils/anchored-panel";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import CollectionPanel from "./CollectionPanel.svelte";
@@ -184,7 +185,7 @@
     <h3 class="min-w-0 flex-1 truncate px-1 font-medium">{activePage?.label ?? label}</h3>
     <button type="button" class="collection-settings-control flex size-7 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground" aria-label={t("common.close")} onclick={close}><X class="size-3.5" /></button>
   </div>
-  <div class="min-h-0 overflow-x-hidden overflow-y-auto">
+  <div use:scrollEdgeFadeAction class="min-h-0 overflow-x-hidden overflow-y-auto">
     <div data-collection-settings-content class="@container flow-root h-max p-1.5">
       <div data-collection-settings-page hidden={pages.length > 0} inert={pages.length > 0}>
         {@render children()}

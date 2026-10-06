@@ -673,6 +673,23 @@ svg.lucide[stroke-width="1.5"]:not(.app-title-bar *, .explorer-sidebar *) {
   display: none;
 }
 
+/* Scroll containers using the scroll edge fade action fade the edges that have more content beyond them. */
+[data-scroll-fade] {
+  --scroll-fade-size: 1.5rem;
+}
+[data-scroll-fade="top"] {
+  -webkit-mask-image: linear-gradient(to bottom, transparent, black var(--scroll-fade-size), black);
+  mask-image: linear-gradient(to bottom, transparent, black var(--scroll-fade-size), black);
+}
+[data-scroll-fade="bottom"] {
+  -webkit-mask-image: linear-gradient(to bottom, black, black calc(100% - var(--scroll-fade-size)), transparent);
+  mask-image: linear-gradient(to bottom, black, black calc(100% - var(--scroll-fade-size)), transparent);
+}
+[data-scroll-fade="both"] {
+  -webkit-mask-image: linear-gradient(to bottom, transparent, black var(--scroll-fade-size), black calc(100% - var(--scroll-fade-size)), transparent);
+  mask-image: linear-gradient(to bottom, transparent, black var(--scroll-fade-size), black calc(100% - var(--scroll-fade-size)), transparent);
+}
+
 /*
  * Collection tables highlight one surface at a time. Cells, column names, and standalone header controls share one
  * square highlight, and an open cell or column menu, or a focused text field, suppresses hover feedback everywhere else.
