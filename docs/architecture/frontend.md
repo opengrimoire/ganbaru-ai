@@ -51,7 +51,7 @@ The Notes workspace can show a main pane and a preview pane. Each pane has its o
 
 ## UI foundations
 
-Handwritten shared primitives (dialogs, selects, switches, pickers, tooltips, toasts) live under `components/ui/`. Product components compose them rather than restyling one-off copies. Tailwind CSS provides layout utilities, while semantic CSS variables provide theme colors.
+Handwritten shared primitives (dialogs, selects, checkboxes, switches, pickers, tooltips, toasts) live under `components/ui/`, and shared surface, row, and field utilities live in `ui-foundations.css`. Product components compose them rather than restyling one-off copies. Tailwind CSS provides layout utilities, while semantic CSS variables provide theme colors. [UI foundations](ui-foundations.md) owns the rules for panels, menus, dialogs, rows, fields, and controls.
 
 Themes are data-driven and validated before application. Feature code consumes semantic tokens, not palette values. See [Themes](../features/themes/README.md).
 

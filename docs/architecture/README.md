@@ -58,6 +58,7 @@ Dependencies are added for an implemented boundary, not speculative future use. 
 ## Detailed documents
 
 - [Frontend](frontend.md): Svelte structure, state, localization, and loading boundaries.
+- [UI foundations](ui-foundations.md): shared surfaces, rows, fields, controls, scroll fades, and hover submenus.
 - [Native backend](native-backend.md): Rust workspace, Tauri composition, persistence, and native services.
 - [Integration boundaries](integrations.md): Chat providers, browser integration, media, platform adapters, and future networked systems.
 - [Architecture decisions](decisions/README.md): focused decisions whose rationale should outlive a particular implementation.

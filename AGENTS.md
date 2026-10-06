@@ -40,6 +40,7 @@ apps/
   client/: Tauri app (Svelte frontend + Rust backend)
     src/: Svelte frontend
       App.svelte, MobileApp.svelte: desktop and mobile shell roots
+      app.css, ui-foundations.css: global styles and shared surface, row, and field utilities
       main-desktop.ts, main-mobile.ts, main.ts: platform bootstraps and virtual entry selector
       lib/: shared frontend code
         api/: typed wrappers around Tauri commands, split by domain (Chat and Notes have several clients)
@@ -211,6 +212,11 @@ Read `docs/testing/README.md` when changing tests, validation scripts, task orde
 - New UI uses existing semantic theme tokens first. Add an editable token only for a stable, user-facing customization choice users can understand and value.
 - Do not add editable tokens for one-off paint details (borders, shadows, dividers, placeholder text, selected outlines, editor tints, drag previews, temporary affordances) that can be derived from an existing surface, foreground, event color, or semantic signal. Keep the editor broad but curated.
 - When adding, renaming, or removing theme tokens, update `docs/features/themes/README.md`, import/export validation, SQLite migrations or cleanup paths, seed/reset behavior, and tests in the same change.
+
+### UI foundations
+
+- Panels, menus, popovers, dialogs, rows, and fields follow `docs/architecture/ui-foundations.md`. Build them from the shared utilities in `apps/client/src/ui-foundations.css` (`surface-floating`, `surface-dialog`, `menu-item`, `field`, `text-panel`, `w-floating*`) and the `components/ui/` controls (`Checkbox`, `Switch`, `Select`) instead of restyling local copies.
+- Do not add per-panel radii, shadows, focus rings on text entry, row heights, or hover delays. Change the shared token when the whole app should change, and record a reason in that doc for any deliberate exception.
 
 ### Code and docs style
 
