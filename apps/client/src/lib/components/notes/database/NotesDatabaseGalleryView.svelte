@@ -4,13 +4,18 @@
   import { databaseResource, notesDatabaseSession } from "$lib/notes/database/session.svelte";
   import NotesDatabasePropertyValue from "./NotesDatabasePropertyValue.svelte";
   import CollectionSettings from "$lib/components/collections/CollectionSettings.svelte";
+  import { COLLECTION_VIEW_SETTINGS_PANEL_WIDTH } from "$lib/components/collections/collection-panel-width";
   import CollectionCard from "$lib/components/collections/CollectionCard.svelte";
   import CollectionMenu from "$lib/components/collections/CollectionMenu.svelte";
+  import CollectionMenuItem from "$lib/components/collections/CollectionMenuItem.svelte";
+  import CollectionMenuSelect from "$lib/components/collections/CollectionMenuSelect.svelte";
+  import { COLLECTION_PROPERTY_ICONS } from "$lib/components/collections/property-icons";
+  import { notesPropertyKind } from "./property-kinds";
+  import NotesDatabaseSettingsFooter from "./NotesDatabaseSettingsFooter.svelte";
   import NotesDatabaseFilterControls from "./NotesDatabaseFilterControls.svelte";
   import { notesDatabaseFilterCount } from "$lib/notes/database/query-controls";
   import NotesDatabaseSortControls from "./NotesDatabaseSortControls.svelte";
   import NotesDatabaseQueryBar from "./NotesDatabaseQueryBar.svelte";
-  import Select from "$lib/components/ui/Select.svelte";
   import {
     duplicateNotesPage,
     getNotesDataSourceGalleryView,
@@ -46,9 +51,13 @@
   } from "$lib/notes/types";
   import Copy from "@lucide/svelte/icons/copy";
   import ExternalLink from "@lucide/svelte/icons/external-link";
+  import Crop from "@lucide/svelte/icons/crop";
   import FileText from "@lucide/svelte/icons/file-text";
+  import ImageIcon from "@lucide/svelte/icons/image";
+  import PanelsTopLeft from "@lucide/svelte/icons/panels-top-left";
+  import Paperclip from "@lucide/svelte/icons/paperclip";
+  import Scaling from "@lucide/svelte/icons/scaling";
   import Plus from "@lucide/svelte/icons/plus";
-  import RefreshCw from "@lucide/svelte/icons/refresh-cw";
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import NotesPageCover from "$lib/components/notes/pages/NotesPageCover.svelte";
   import NotesDatabaseWindowSentinel from "./NotesDatabaseWindowSentinel.svelte";
@@ -314,132 +323,49 @@
   }
 </script>
 {#snippet viewControls()}
-  <div class="flex min-w-0 flex-col items-stretch gap-1 text-[0.8rem]">
-    <span class="sr-only" role="status">
-      {#if loading}
-        {t("notes.databaseGalleryLoading")}
-      {:else if error}
-        {t("notes.databaseGalleryFailed", error)}
-      {:else}
-        {t("notes.databaseGalleryCardsCount", gallery?.rows.length ?? 0)}
-      {/if}
-    </span>
-    <CollectionMenu fullWidth disabled={editingLocked} label={t("notes.databaseLayout")} summary={t("notes.databaseViewGallery")}>
-      <div class="grid gap-3">
-        <div class="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(8rem,1fr)] items-center gap-3">
-          <span>{t("notes.databaseGalleryPreview")}</span>
-          <Select textSize="collection"
-            inline
-            appearance="quiet"
-            contentAlign="start"
-            class="w-full min-w-0"
-            ariaLabel={t("notes.databaseGalleryPreview")}
-            value={String(configuration.cover_source ?? "")}
-            disabled={editingLocked || loading || mutating || !gallery}
-            options={[{ value: "page_cover", label: t("notes.databaseGalleryPreviewPageCover") },
-              { value: "files_property", label: t("notes.databaseGalleryPreviewFilesProperty") },
-              { value: "none", label: t("notes.databaseGalleryPreviewNone") }]}
-            onChange={(nextValue) => updateCoverSource(nextValue as NotesDatabaseGalleryCoverSource)}
-            triggerProps={{ "onkeydown": (event) => event.stopPropagation() }}
-          />
-        </div>
-        {#if configuration.cover_source === "files_property"}
-          <div class="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(8rem,1fr)] items-center gap-3">
-            <span>{t("notes.databaseGalleryCoverProperty")}</span>
-            <Select textSize="collection"
-              inline
-              appearance="quiet"
-              contentAlign="start"
-              class="w-full min-w-0"
-              ariaLabel={t("notes.databaseGalleryCoverProperty")}
-              value={String(configuration.cover_property_id ?? "")}
-              disabled={editingLocked || loading || mutating || !gallery || coverColumns.length === 0}
-              options={[{ value: "", label: t("notes.databaseTableEmptyCell") },
-                ...(coverColumns).map((column) => ({ value: String(column.id), label: String(column.name) }))]}
-              onChange={(nextValue) => updateCoverProperty(nextValue)}
-              triggerProps={{ "onkeydown": (event) => event.stopPropagation() }}
-            />
-          </div>
-        {/if}
-        <div class="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(8rem,1fr)] items-center gap-3">
-          <span>{t("notes.databaseGalleryCardSize")}</span>
-          <Select textSize="collection"
-            inline
-            appearance="quiet"
-            contentAlign="start"
-            class="w-full min-w-0"
-            ariaLabel={t("notes.databaseGalleryCardSize")}
-            value={String(configuration.card_size ?? "")}
-            disabled={editingLocked || loading || mutating || !gallery}
-            options={[{ value: "small", label: t("notes.databaseGalleryCardSizeSmall") },
-              { value: "medium", label: t("notes.databaseGalleryCardSizeMedium") },
-              { value: "large", label: t("notes.databaseGalleryCardSizeLarge") }]}
-            onChange={(nextValue) => updateCardSize(nextValue as NotesDatabaseGalleryCardSize)}
-            triggerProps={{ "onkeydown": (event) => event.stopPropagation() }}
-          />
-        </div>
-        <label class="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(8rem,1fr)] items-center gap-3">
-          <input
-            type="checkbox"
-            checked={configuration.fit_image}
-            disabled={editingLocked || loading || mutating || !gallery || configuration.cover_source === "none"}
-            onchange={(event) => updateFitImage(event.currentTarget.checked)}
-            onkeydown={(event) => event.stopPropagation()}
-          />
-          <span>{t("notes.databaseGalleryFitImage")}</span>
-        </label>
-        <div class="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(8rem,1fr)] items-center gap-3">
-          <span>{t("notes.databaseTableOpenMode")}</span>
-          <Select textSize="collection"
-            inline
-            appearance="quiet"
-            contentAlign="start"
-            class="w-full min-w-0"
-            ariaLabel={t("notes.databaseTableOpenMode")}
-            value={String(configuration.row_open_mode ?? "")}
-            disabled={editingLocked || loading || mutating || !gallery}
-            options={[{ value: "full_page", label: t("notes.databaseTableOpenFullPage") },
-              { value: "side_panel", label: t("notes.databaseTableOpenSidePanel") }]}
-            onChange={(nextValue) => updateRowOpenMode(nextValue as NotesDatabaseGalleryRowOpenMode)}
-            triggerProps={{ "onkeydown": (event) => event.stopPropagation() }}
-          />
-        </div>
-      </div>
-    </CollectionMenu>
-  </div>
+  <span class="sr-only" role="status">
+    {#if loading}
+      {t("notes.databaseGalleryLoading")}
+    {:else if error}
+      {t("notes.databaseGalleryFailed", error)}
+    {:else}
+      {t("notes.databaseGalleryCardsCount", gallery?.rows.length ?? 0)}
+    {/if}
+  </span>
+  <CollectionMenu fullWidth disabled={editingLocked} label={t("notes.databaseLayout")} icon={PanelsTopLeft} summary={t("notes.databaseViewGallery")}>
+    <CollectionMenuSelect label={t("notes.databaseGalleryPreview")} icon={ImageIcon} value={configuration.cover_source} disabled={editingLocked || loading || mutating || !gallery}
+      options={[{ value: "page_cover", label: t("notes.databaseGalleryPreviewPageCover") }, { value: "files_property", label: t("notes.databaseGalleryPreviewFilesProperty") }, { value: "none", label: t("notes.databaseGalleryPreviewNone") }]}
+      onChange={updateCoverSource} />
+    {#if configuration.cover_source === "files_property"}
+      <CollectionMenuSelect label={t("notes.databaseGalleryCoverProperty")} icon={Paperclip} value={configuration.cover_property_id ?? ""} disabled={editingLocked || loading || mutating || !gallery || coverColumns.length === 0}
+        options={[{ value: "", label: t("notes.databaseTableEmptyCell") }, ...coverColumns.map((column) => ({ value: column.id, label: column.name }))]}
+        onChange={updateCoverProperty} />
+    {/if}
+    <CollectionMenuSelect label={t("notes.databaseGalleryCardSize")} icon={Scaling} value={configuration.card_size} disabled={editingLocked || loading || mutating || !gallery}
+      options={[{ value: "small", label: t("notes.databaseGalleryCardSizeSmall") }, { value: "medium", label: t("notes.databaseGalleryCardSizeMedium") }, { value: "large", label: t("notes.databaseGalleryCardSizeLarge") }]}
+      onChange={updateCardSize} />
+    <CollectionMenuItem icon={Crop} label={t("notes.databaseGalleryFitImage")} checked={configuration.fit_image}
+      disabled={editingLocked || loading || mutating || !gallery || configuration.cover_source === "none"} onclick={() => updateFitImage(!configuration.fit_image)} />
+    <CollectionMenuSelect label={t("notes.databaseTableOpenMode")} icon={ExternalLink} value={configuration.row_open_mode} disabled={editingLocked || loading || mutating || !gallery}
+      options={[{ value: "full_page", label: t("notes.databaseTableOpenFullPage") }, { value: "side_panel", label: t("notes.databaseTableOpenSidePanel") }]}
+      onChange={updateRowOpenMode} />
+  </CollectionMenu>
 {/snippet}
 
 {#snippet propertyControls()}
-      <div class="flex flex-col items-stretch gap-1">
-        <CollectionMenu fullWidth disabled={editingLocked} label={t("notes.databaseTableColumns")} kind="properties" summary={formatNumber(localization.locale, visibleColumns.length)}>
-
-          <div class="mt-2 grid gap-1">
-            {#each columns.filter((column) => column.type !== "title") as column (column.id)}
-              <label class="flex min-w-0 items-center gap-2 rounded-sm px-1 py-0.5 hover:bg-accent/60">
-                <input
-                  type="checkbox"
-                  checked={visibleColumns.some((visibleColumn) => visibleColumn.id === column.id)}
-                  disabled={mutating || editingLocked}
-                  onchange={(event) => updateCardProperty(column.id, event.currentTarget.checked)}
-                  onkeydown={(event) => event.stopPropagation()}
-                />
-                <span class="min-w-0 flex-1 truncate">{column.name}</span>
-              </label>
-            {/each}
-          </div>
-        </CollectionMenu>
-
-        <CollectionMenu fullWidth disabled={editingLocked} label={t("notes.databaseTableSorts")} kind="sort" activeCount={sorts.length} summary={formatList(localization.locale, sorts.map((sort) => columns.find((column) => column.id === sort.property_id)?.name ?? ""))}>
-
-          <NotesDatabaseSortControls properties={columns} {sorts} pending={mutating || editingLocked} onChange={saveSorts} />
-        </CollectionMenu>
-
-        <CollectionMenu fullWidth disabled={editingLocked} label={t("notes.databaseTableFilters")} kind="filter" activeCount={notesDatabaseFilterCount(filters)} summary={notesDatabaseFilterCount(filters) ? formatNumber(localization.locale, notesDatabaseFilterCount(filters)) : ""}>
-
-          <NotesDatabaseFilterControls properties={columns} {filters} pending={mutating || editingLocked} onChange={saveFilters} />
-        </CollectionMenu>
-      </div>
-
+  <CollectionMenu fullWidth disabled={editingLocked} label={t("notes.databaseTableColumns")} kind="properties" summary={formatNumber(localization.locale, visibleColumns.length)}>
+    {#each columns.filter((column) => column.type !== "title") as column (column.id)}
+      {@const visible = visibleColumns.some((visibleColumn) => visibleColumn.id === column.id)}
+      <CollectionMenuItem icon={COLLECTION_PROPERTY_ICONS[notesPropertyKind(column.type)]} label={column.name} checked={visible} disabled={mutating || editingLocked}
+        onclick={() => updateCardProperty(column.id, !visible)} />
+    {/each}
+  </CollectionMenu>
+  <CollectionMenu fullWidth disabled={editingLocked} label={t("notes.databaseTableSorts")} kind="sort" activeCount={sorts.length} summary={formatList(localization.locale, sorts.map((sort) => columns.find((column) => column.id === sort.property_id)?.name ?? ""))}>
+    <NotesDatabaseSortControls properties={columns} {sorts} pending={mutating || editingLocked} onChange={saveSorts} />
+  </CollectionMenu>
+  <CollectionMenu fullWidth disabled={editingLocked} label={t("notes.databaseTableFilters")} kind="filter" activeCount={notesDatabaseFilterCount(filters)} summary={notesDatabaseFilterCount(filters) ? formatNumber(localization.locale, notesDatabaseFilterCount(filters)) : ""}>
+    <NotesDatabaseFilterControls properties={columns} {filters} pending={mutating || editingLocked} onChange={saveFilters} />
+  </CollectionMenu>
 {/snippet}
 
 <section class="space-y-3 pt-2" aria-label={t("notes.databaseGalleryTitle")}>
@@ -447,13 +373,12 @@
   <NotesDatabaseQueryBar properties={columns} {filters} {sorts} pending={mutating || editingLocked} onFiltersChange={saveFilters} onSortsChange={saveSorts} />
   {#if error}<p class="text-[0.8rem] text-destructive" role="alert">{error}</p>{/if}
   {#if settingsOpen}
-    <CollectionSettings label={t("notes.databaseViewSettings")} anchor={settingsAnchor} onClose={onCloseSettings}>
+    <CollectionSettings label={t("notes.databaseViewSettings")} anchor={settingsAnchor} preferredWidth={COLLECTION_VIEW_SETTINGS_PANEL_WIDTH} showHeader={false} onClose={onCloseSettings}>
       {@render settingsHeader?.()}
       {@render viewControls()}
       {#if gallery}{@render propertyControls()}{/if}
-      <p class="mt-2 border-t border-border px-2 pt-2 text-[0.8rem] text-muted-foreground">{t("notes.databaseDataSourceSettings")}</p>
-      <button data-collection-settings-row type="button" disabled={editingLocked} class="min-h-8 w-full rounded-md px-2 text-left hover:bg-accent" onclick={() => { onCloseSettings(); onEditProperties(); }}>{t("notes.databaseViewEditProperties")}</button>
-      <button data-collection-settings-row type="button" class="flex min-h-8 w-full items-center gap-2 rounded px-2 text-left text-muted-foreground hover:bg-accent hover:text-foreground" disabled={loading || mutating} onclick={() => { void loadGallery(); }}><RefreshCw class="size-3.5 shrink-0" aria-hidden="true" />{t("notes.databaseGalleryReload")}</button>
+      <NotesDatabaseSettingsFooter reloadLabel={t("notes.databaseGalleryReload")} {editingLocked} reloadDisabled={loading || mutating}
+        onEditProperties={() => { onCloseSettings(); onEditProperties(); }} onReload={() => { void loadGallery(); }} />
     </CollectionSettings>
   {/if}
 

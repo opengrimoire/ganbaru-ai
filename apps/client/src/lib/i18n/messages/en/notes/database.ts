@@ -61,7 +61,6 @@ export const database = {
   databaseUnavailable: "This database is no longer available.",
   databaseViewActions: "View options",
   databaseViewSettings: "View settings",
-  databaseDataSourceSettings: "Data source settings",
   databaseGroup: "Group",
   databaseViewEditProperties: "Edit properties",
   databaseViewName: "View name",

@@ -8,12 +8,15 @@
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import CollectionMenu from "$lib/components/collections/CollectionMenu.svelte";
   import CollectionMenuItem from "$lib/components/collections/CollectionMenuItem.svelte";
+  import CollectionMenuSelect from "$lib/components/collections/CollectionMenuSelect.svelte";
+  import CollectionMenuSeparator from "$lib/components/collections/CollectionMenuSeparator.svelte";
   import CollectionPropertyCreator from "$lib/components/collections/CollectionPropertyCreator.svelte";
   import CollectionPropertyNameField from "$lib/components/collections/CollectionPropertyNameField.svelte";
   import { COLLECTION_PROPERTY_ICONS } from "$lib/components/collections/property-icons";
   import { notesPropertyKind, notesPropertyTypeOptions } from "./property-kinds";
   import NotesDatabaseFilterControls from "./NotesDatabaseFilterControls.svelte";
   import NotesDatabaseSortControls from "./NotesDatabaseSortControls.svelte";
+  import NotesDatabaseSettingsFooter from "./NotesDatabaseSettingsFooter.svelte";
   import NotesDatabaseQueryBar from "./NotesDatabaseQueryBar.svelte";
   import NotesDatabaseDateCell from "./NotesDatabaseDateCell.svelte";
   import NotesDatabaseNumberCell from "./NotesDatabaseNumberCell.svelte";
@@ -28,6 +31,7 @@
   import { NOTES_DATA_SOURCE_PROPERTY_NAME_MAX_CHARACTERS, type NotesDatabasePropertyActionRequest } from "$lib/notes/database/data-source-schema";
   import { notesTableColumnPresentation, notesTableCompatibleCalculations, notesTableFrozenOffset, notesTableGroupableColumns, notesTableGroups, notesTableViewSettings } from "$lib/notes/database/table-presentation";
   import CollectionSettings from "$lib/components/collections/CollectionSettings.svelte";
+  import { COLLECTION_VIEW_SETTINGS_PANEL_WIDTH } from "$lib/components/collections/collection-panel-width";
   import {
     beginLazyComponentLoad,
     rejectLazyComponentLoad,
@@ -92,9 +96,15 @@
   import ArrowUp from "@lucide/svelte/icons/arrow-up";
   import Copy from "@lucide/svelte/icons/copy";
   import ExternalLink from "@lucide/svelte/icons/external-link";
-  import Eye from "@lucide/svelte/icons/eye";
   import EyeOff from "@lucide/svelte/icons/eye-off";
   import FileText from "@lucide/svelte/icons/file-text";
+  import FileDown from "@lucide/svelte/icons/file-down";
+  import FileUp from "@lucide/svelte/icons/file-up";
+  import PanelsTopLeft from "@lucide/svelte/icons/panels-top-left";
+  import LayoutTemplate from "@lucide/svelte/icons/layout-template";
+  import Palette from "@lucide/svelte/icons/palette";
+  import Rows3 from "@lucide/svelte/icons/rows-3";
+  import Star from "@lucide/svelte/icons/star";
   import Plus from "@lucide/svelte/icons/plus";
   import Sigma from "@lucide/svelte/icons/sigma";
   import Trash2 from "@lucide/svelte/icons/trash-2";
@@ -993,193 +1003,94 @@
   {#if table}
     <div class="grid gap-2 @container">
       {#if settingsOpen}
-        <CollectionSettings label={t("notes.databaseViewSettings")} anchor={settingsAnchor} onClose={onCloseSettings}>
-              {@render settingsHeader?.()}
-              {#if editingLocked}
-                <p class="px-2 py-2 text-muted-foreground">{t("notes.databaseEditingLockDescription")}</p>
-              {:else}
-              <div class="flex flex-col items-stretch gap-0.5">
-              <CollectionMenu label={t("notes.databaseLayout")} summary={t("notes.databaseViewTable")} fullWidth>
-                <div class="grid gap-2">
-                  <span>{t("notes.databaseTableOpenMode")}</span>
-                  <Select textSize="collection" inline appearance="quiet" contentAlign="start" class="w-full min-w-0" ariaLabel={t("notes.databaseTableOpenMode")} value={String(rowOpenMode ?? "")} disabled={loading || mutating || !table} options={[{ value: "full_page", label: String(rowOpenModeLabel("full_page")) }, { value: "side_panel", label: String(rowOpenModeLabel("side_panel")) }]} onChange={(nextValue) => updateRowOpenMode(nextValue as NotesDatabaseTableRowOpenMode)} triggerProps={{ "onkeydown": (event) => event.stopPropagation() }} />
-                </div>
-              </CollectionMenu>
-              <CollectionMenu label={t("notes.databaseTablePresentation.groupBy")} kind="group" summary={columns.find((column) => column.id === tableConfiguration?.group_property_id)?.name ?? t("notes.databaseTablePresentation.noGroup")} fullWidth>
-                <div class="grid gap-2">
-                  <Select textSize="collection" inline appearance="quiet" contentAlign="start" class="w-full min-w-0" ariaLabel={t("notes.databaseTablePresentation.groupBy")} value={tableConfiguration?.group_property_id ?? ""} disabled={mutating}
-                    options={[{ value: "", label: t("notes.databaseTablePresentation.noGroup") }, ...notesTableGroupableColumns(columns).map((column) => ({ value: column.id, label: column.name }))]}
-                    onChange={(id) => updateGrouping(id || null)} />
-                  <label class="flex min-h-8 items-center gap-2"><input type="checkbox" checked={tableConfiguration?.hide_empty_groups ?? false} disabled={mutating} onchange={(event) => { void persistTable(columns, rowOpenMode, filters, sorts, { ...tableConfiguration, hide_empty_groups: event.currentTarget.checked }); }} />{t("notes.databaseTablePresentation.hideEmptyGroups")}</label>
-                  {#if tableConfiguration?.group_property_id}
-                    {#each groups as group, index (group.id)}
-                      <div class="flex min-h-8 items-center gap-2"><span class="min-w-0 flex-1 truncate">{groupName(group)}</span><span class="text-muted-foreground">{formatNumber(localization.locale, group.count)}</span>
-                        <button type="button" class="flex size-7 items-center justify-center rounded hover:bg-accent disabled:text-muted-foreground/50" aria-label={t("notes.databaseTablePresentation.moveGroupUp", groupName(group))} disabled={mutating || index === 0} onclick={() => moveGroup(group.id, -1)}><ArrowUp class="size-3.5" /></button>
-                        <button type="button" class="flex size-7 items-center justify-center rounded hover:bg-accent disabled:text-muted-foreground/50" aria-label={t("notes.databaseTablePresentation.moveGroupDown", groupName(group))} disabled={mutating || index === groups.length - 1} onclick={() => moveGroup(group.id, 1)}><ArrowDown class="size-3.5" /></button>
-                      </div>
-                    {/each}
-                  {/if}
-                </div>
-              </CollectionMenu>
-                <CollectionMenu label={t("notes.databaseTableColumns")} kind="properties" summary={formatNumber(localization.locale, visibleColumns.length)} fullWidth>
-
-          <div class="mt-2 grid gap-1">
-            {#each columns as column (column.id)}
-              <label class="flex min-w-0 items-center gap-2 rounded-sm px-1 py-0.5 hover:bg-accent/60">
-                <input
-                  type="checkbox"
-                  checked={!column.hidden}
-                  disabled={mutating || column.type === "title"}
-                  onchange={(event) => updateColumnVisibility(column.id, !event.currentTarget.checked)}
-                  onkeydown={(event) => event.stopPropagation()}
-                />
-                <span class="min-w-0 flex-1 truncate">{column.name}</span>
-                {#if column.hidden}
-                  <EyeOff class="size-3.5 text-muted-foreground" aria-hidden="true" />
-                {:else}
-                  <Eye class="size-3.5 text-muted-foreground" aria-hidden="true" />
-                {/if}
-              </label>
-            {/each}
-          </div>
-        </CollectionMenu>
-
-        <CollectionMenu label={t("notes.databaseTableSorts")} kind="sort" activeCount={sorts.length}
-          summary={formatList(localization.locale, sorts.flatMap((sort) => {
-            const column = columns.find((candidate) => candidate.id === sort.property_id);
-            return column ? [column.name] : [];
-          }))} fullWidth>
-
-          <NotesDatabaseSortControls properties={columns} {sorts} pending={mutating} onChange={saveSorts} />
-        </CollectionMenu>
-
-        <CollectionMenu label={t("notes.databaseTableFilters")} kind="filter" activeCount={notesDatabaseFilterCount(filters)} summary={notesDatabaseFilterCount(filters) > 0 ? formatNumber(localization.locale, notesDatabaseFilterCount(filters)) : ""} fullWidth>
-
-          <NotesDatabaseFilterControls properties={columns} {filters} pending={mutating} onChange={saveFilters} />
-        </CollectionMenu>
-        <CollectionMenu label={t("notes.databaseTablePresentation.conditionalColor")} summary={formatNumber(localization.locale, tableConfiguration?.presentation?.color_rules?.length ?? 0)} fullWidth>
-          <div class="grid gap-3">
-            {#each tableConfiguration?.presentation?.color_rules ?? [] as rule (rule.id)}
-              <div class="grid gap-2 rounded border border-border p-2">
-                <div class="flex items-center gap-2">
-                  <Select textSize="collection" inline appearance="quiet" class="min-w-0 flex-1" ariaLabel={t("notes.databaseTablePresentation.target")} value={rule.property_id ?? ""} disabled={mutating}
-                    options={[{ value: "", label: t("notes.databaseTablePresentation.rowColor") }, ...columns.map((column) => ({ value: column.id, label: column.name }))]}
-                    onChange={(value) => updateColorRule(rule.id, { property_id: value || null })} />
-                  <button type="button" class="flex size-7 items-center justify-center rounded text-muted-foreground hover:bg-accent" aria-label={t("notes.databaseTablePresentation.removeColorRule")} disabled={mutating} onclick={() => saveColorRules((tableConfiguration?.presentation?.color_rules ?? []).filter((candidate) => candidate.id !== rule.id))}><Trash2 class="size-3.5" /></button>
-                </div>
-                <Select textSize="collection" inline appearance="quiet" class="w-full" ariaLabel={t("notes.databaseTablePresentation.color")} value={rule.color} disabled={mutating}
-                  options={NOTES_TEXT_COLORS.filter((color) => color !== "default").map((color) => ({ value: color, label: t(`notes.blockColor.${color}`) }))}
-                  onChange={(value) => updateColorRule(rule.id, { color: value as NotesDatabaseTableColorRule["color"] })} />
-                <NotesDatabaseFilterControls properties={columns} filters={rule.filters} pending={mutating} onChange={(next) => { if (next.length) updateColorRule(rule.id, { filters: next }); }} />
-              </div>
-            {/each}
-            <button type="button" class="flex min-h-8 items-center gap-2 rounded px-2 text-left hover:bg-accent" disabled={mutating || (tableConfiguration?.presentation?.color_rules?.length ?? 0) >= 16} onclick={addColorRule}><Plus class="size-3.5" />{t("notes.databaseTablePresentation.addColorRule")}</button>
-          </div>
-        </CollectionMenu>
-        <CollectionMenu label={t("notes.databaseTemplatesTitle")} kind="layout" fullWidth>
-
-          <div class="mt-2 grid min-w-0 gap-2 @lg:grid-cols-[minmax(8rem,1fr)_minmax(8rem,1fr)_auto]">
-            <div class="min-w-0 text-muted-foreground">
-              <span class="mb-1 block">{t("notes.databaseTemplatesUse")}</span>
-              <Select textSize="collection"
-                inline
-                appearance="quiet"
-                contentAlign="start"
-                class="w-full min-w-0"
-                ariaLabel={t("notes.databaseTemplatesUse")}
-                value={String(selectedTemplateId ?? "")}
-                disabled={mutating}
-                options={[{ value: "", label: t("notes.databaseTemplatesNone") },
-                  ...(templates).map((template) => ({ value: String(template.id), label: String(template.is_default ? t("notes.databaseTemplatesDefaultOption", template.name) : template.name) }))]}
-                onChange={(nextValue) => {
-                  selectedTemplateId = nextValue;
-                }}
-                triggerProps={{ "onkeydown": (event) => event.stopPropagation() }}
-              />
-            </div>
-            <label class="min-w-0 text-muted-foreground">
-              <span class="mb-1 block">{t("notes.databaseTemplatesName")}</span>
-              <input
-                class="h-8 w-full min-w-0 rounded-md border border-input bg-background px-2 text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                value={templateName}
-                placeholder={t("notes.databaseTemplatesNamePlaceholder")}
-                disabled={mutating}
-                oninput={(event) => {
-                  templateName = event.currentTarget.value;
-                }}
-                onkeydown={(event) => event.stopPropagation()}
-              />
-            </label>
-            <div class="min-w-0 text-muted-foreground">
-              <span class="mb-1 block">{t("notes.databaseTemplatesSourceRow")}</span>
-              <Select textSize="collection"
-                inline
-                appearance="quiet"
-                contentAlign="start"
-                class="w-full min-w-0"
-                ariaLabel={t("notes.databaseTemplatesSourceRow")}
-                value={String(templateSourceRowId ?? "")}
-                disabled={mutating || templateSourceRows.length === 0}
-                options={[{ value: "", label: t("notes.databaseTemplatesFirstRow") },
-                  ...(templateSourceRows).map((row) => ({ value: String(row.id), label: String(rowTitle(row)) }))]}
-                onChange={(nextValue) => {
-                  templateSourceRowId = nextValue;
-                }}
-                triggerProps={{ "onkeydown": (event) => event.stopPropagation() }}
-              />
-            </div>
-            <label class="flex min-w-0 items-center gap-2 text-muted-foreground">
-              <input
-                type="checkbox"
-                checked={createTemplateAsDefault}
-                disabled={mutating}
-                onchange={(event) => {
-                  createTemplateAsDefault = event.currentTarget.checked;
-                }}
-                onkeydown={(event) => event.stopPropagation()}
-              />
-              <span>{t("notes.databaseTemplatesMakeDefault")}</span>
-            </label>
-            <div class="flex min-w-0 flex-wrap items-center gap-1 @lg:col-span-2">
-              <button
-                type="button"
-                class="inline-flex h-8 items-center gap-1 rounded-md px-2 hover:bg-accent disabled:pointer-events-none"
-                disabled={mutating || !templateName.trim() || templateSourceRows.length === 0}
-                onclick={() => {
-                  void createTemplateFromRow();
-                }}
-              >
-                <Plus class="size-3.5" aria-hidden="true" />
-                <span>{t("notes.databaseTemplatesCreate")}</span>
-              </button>
-              <button
-                type="button"
-                class="inline-flex h-8 items-center gap-1 rounded-md text-destructive hover:bg-destructive/10 disabled:pointer-events-none"
-                disabled={mutating || !selectedTemplateId}
-                onclick={() => {
-                  void deleteSelectedTemplate();
-                }}
-              >
-                <Trash2 class="size-3.5" aria-hidden="true" />
-                <span>{t("notes.databaseTemplatesDelete")}</span>
-              </button>
-            </div>
-          </div>
-        </CollectionMenu>
-
-        <p class="mt-2 border-t border-border px-2 pt-2 text-[0.8rem] text-muted-foreground">{t("notes.databaseDataSourceSettings")}</p>
-        <button data-collection-settings-row type="button" class="min-h-8 w-full rounded-md px-2 text-left hover:bg-accent" onclick={() => { onCloseSettings(); onEditProperties(); }}>{t("notes.databaseViewEditProperties")}</button>
-        <CollectionMenu label={t("notes.databaseMore")} kind="actions" fullWidth>
-          <div class="grid gap-1">
-            <button class="min-h-8 rounded-md px-2 text-left text-[0.8rem] hover:bg-accent" type="button" onclick={() => requestCsvPanel("database-csv-import")}>{t("notes.databaseCsvImportTitle")}</button>
-            {#if fileExportAvailable}
-              <button class="min-h-8 rounded-md px-2 text-left text-[0.8rem] hover:bg-accent" type="button" onclick={() => requestCsvPanel("database-csv-export")}>{t("notes.databaseCsvExportTitle")}</button>
-            {/if}
-          </div>
-        </CollectionMenu>
-              </div>
+        <CollectionSettings label={t("notes.databaseViewSettings")} anchor={settingsAnchor} preferredWidth={COLLECTION_VIEW_SETTINGS_PANEL_WIDTH} showHeader={false} onClose={onCloseSettings}>
+          {@render settingsHeader?.()}
+          {#if !editingLocked}
+            <CollectionMenu label={t("notes.databaseLayout")} icon={PanelsTopLeft} summary={t("notes.databaseViewTable")} fullWidth>
+              <CollectionMenuSelect label={t("notes.databaseTableOpenMode")} icon={ExternalLink} value={rowOpenMode} disabled={loading || mutating || !table}
+                options={[{ value: "full_page", label: rowOpenModeLabel("full_page") }, { value: "side_panel", label: rowOpenModeLabel("side_panel") }]}
+                onChange={updateRowOpenMode} />
+            </CollectionMenu>
+            <CollectionMenu label={t("notes.databaseTablePresentation.groupBy")} kind="group" summary={columns.find((column) => column.id === tableConfiguration?.group_property_id)?.name ?? t("notes.databaseTablePresentation.noGroup")} fullWidth>
+              <CollectionMenuItem label={t("notes.databaseTablePresentation.noGroup")} checked={!tableConfiguration?.group_property_id} disabled={mutating} onclick={() => updateGrouping(null)} />
+              {#each notesTableGroupableColumns(columns) as column (column.id)}
+                <CollectionMenuItem icon={COLLECTION_PROPERTY_ICONS[notesPropertyKind(column.type)]} label={column.name} checked={tableConfiguration?.group_property_id === column.id} disabled={mutating} onclick={() => updateGrouping(column.id)} />
+              {/each}
+              <CollectionMenuSeparator />
+              <CollectionMenuItem icon={EyeOff} label={t("notes.databaseTablePresentation.hideEmptyGroups")} checked={tableConfiguration?.hide_empty_groups ?? false} disabled={mutating}
+                onclick={() => { void persistTable(columns, rowOpenMode, filters, sorts, { ...tableConfiguration, hide_empty_groups: !(tableConfiguration?.hide_empty_groups ?? false) }); }} />
+              {#if tableConfiguration?.group_property_id && groups.length > 0}
+                <CollectionMenuSeparator />
+                {#each groups as group, index (group.id)}
+                  <div class="collection-menu-row flex min-w-0 items-center gap-1 pl-2">
+                    <span class="min-w-0 flex-1 truncate">{groupName(group)}</span>
+                    <span class="px-1 tabular-nums text-muted-foreground">{formatNumber(localization.locale, group.count)}</span>
+                    <button type="button" class="collection-settings-control flex items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground disabled:text-muted-foreground/50 disabled:hover:bg-transparent" aria-label={t("notes.databaseTablePresentation.moveGroupUp", groupName(group))} disabled={mutating || index === 0} onclick={() => moveGroup(group.id, -1)}><ArrowUp class="size-3.5" /></button>
+                    <button type="button" class="collection-settings-control flex items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground disabled:text-muted-foreground/50 disabled:hover:bg-transparent" aria-label={t("notes.databaseTablePresentation.moveGroupDown", groupName(group))} disabled={mutating || index === groups.length - 1} onclick={() => moveGroup(group.id, 1)}><ArrowDown class="size-3.5" /></button>
+                  </div>
+                {/each}
               {/if}
-              <button data-collection-settings-row type="button" class="min-h-8 w-full rounded-md px-2 text-left text-muted-foreground hover:bg-accent" disabled={loading || mutating} onclick={() => { void loadTable(); }}>{t("notes.databaseTableReload")}</button>
+            </CollectionMenu>
+            <CollectionMenu label={t("notes.databaseTableColumns")} kind="properties" summary={formatNumber(localization.locale, visibleColumns.length)} fullWidth>
+              {#each columns as column (column.id)}
+                <CollectionMenuItem icon={COLLECTION_PROPERTY_ICONS[notesPropertyKind(column.type)]} label={column.name} checked={!column.hidden} disabled={mutating || column.type === "title"}
+                  onclick={() => updateColumnVisibility(column.id, !column.hidden)} />
+              {/each}
+            </CollectionMenu>
+            <CollectionMenu label={t("notes.databaseTableSorts")} kind="sort" activeCount={sorts.length}
+              summary={formatList(localization.locale, sorts.flatMap((sort) => {
+                const column = columns.find((candidate) => candidate.id === sort.property_id);
+                return column ? [column.name] : [];
+              }))} fullWidth>
+              <NotesDatabaseSortControls properties={columns} {sorts} pending={mutating} onChange={saveSorts} />
+            </CollectionMenu>
+            <CollectionMenu label={t("notes.databaseTableFilters")} kind="filter" activeCount={notesDatabaseFilterCount(filters)} summary={notesDatabaseFilterCount(filters) > 0 ? formatNumber(localization.locale, notesDatabaseFilterCount(filters)) : ""} fullWidth>
+              <NotesDatabaseFilterControls properties={columns} {filters} pending={mutating} onChange={saveFilters} />
+            </CollectionMenu>
+            <CollectionMenu label={t("notes.databaseTablePresentation.conditionalColor")} icon={Palette} summary={formatNumber(localization.locale, tableConfiguration?.presentation?.color_rules?.length ?? 0)} fullWidth>
+              {#each tableConfiguration?.presentation?.color_rules ?? [] as rule (rule.id)}
+                <CollectionMenuSelect label={t("notes.databaseTablePresentation.target")} value={rule.property_id ?? ""} disabled={mutating}
+                  options={[{ value: "", label: t("notes.databaseTablePresentation.rowColor") }, ...columns.map((column) => ({ value: column.id, label: column.name, icon: COLLECTION_PROPERTY_ICONS[notesPropertyKind(column.type)] }))]}
+                  onChange={(value) => updateColorRule(rule.id, { property_id: value || null })} />
+                <CollectionMenuSelect label={t("notes.databaseTablePresentation.color")} icon={Palette} value={rule.color} disabled={mutating}
+                  options={NOTES_TEXT_COLORS.filter((color) => color !== "default").map((color) => ({ value: color, label: t(`notes.blockColor.${color}`) }))}
+                  onChange={(value) => updateColorRule(rule.id, { color: value })} />
+                <NotesDatabaseFilterControls properties={columns} filters={rule.filters} pending={mutating} onChange={(next) => { if (next.length) updateColorRule(rule.id, { filters: next }); }} />
+                <CollectionMenuItem icon={Trash2} label={t("notes.databaseTablePresentation.removeColorRule")} destructive disabled={mutating}
+                  onclick={() => saveColorRules((tableConfiguration?.presentation?.color_rules ?? []).filter((candidate) => candidate.id !== rule.id))} />
+                <CollectionMenuSeparator />
+              {/each}
+              <CollectionMenuItem icon={Plus} label={t("notes.databaseTablePresentation.addColorRule")} disabled={mutating || (tableConfiguration?.presentation?.color_rules?.length ?? 0) >= 16} onclick={addColorRule} />
+            </CollectionMenu>
+            <CollectionMenu label={t("notes.databaseTemplatesTitle")} icon={LayoutTemplate} summary={templates.length > 0 ? formatNumber(localization.locale, templates.length) : ""} fullWidth>
+              <CollectionMenuSelect label={t("notes.databaseTemplatesUse")} icon={FileText} value={selectedTemplateId} disabled={mutating}
+                options={[{ value: "", label: t("notes.databaseTemplatesNone") },
+                  ...templates.map((template) => ({ value: String(template.id), label: template.is_default ? t("notes.databaseTemplatesDefaultOption", template.name) : template.name }))]}
+                onChange={(nextValue) => { selectedTemplateId = nextValue; }} />
+              <CollectionMenuItem icon={Trash2} label={t("notes.databaseTemplatesDelete")} destructive disabled={mutating || !selectedTemplateId} onclick={() => { void deleteSelectedTemplate(); }} />
+              <CollectionMenuSeparator />
+              <input class="mb-1 h-8 w-full min-w-0 rounded-md border border-border bg-background px-2 text-[length:inherit] outline-none" aria-label={t("notes.databaseTemplatesName")}
+                value={templateName} placeholder={t("notes.databaseTemplatesNamePlaceholder")} disabled={mutating}
+                oninput={(event) => { templateName = event.currentTarget.value; }}
+                onkeydown={(event) => event.stopPropagation()} />
+              <CollectionMenuSelect label={t("notes.databaseTemplatesSourceRow")} icon={Rows3} value={templateSourceRowId} disabled={mutating || templateSourceRows.length === 0}
+                options={[{ value: "", label: t("notes.databaseTemplatesFirstRow") }, ...templateSourceRows.map((row) => ({ value: String(row.id), label: rowTitle(row) }))]}
+                onChange={(nextValue) => { templateSourceRowId = nextValue; }} />
+              <CollectionMenuItem icon={Star} label={t("notes.databaseTemplatesMakeDefault")} checked={createTemplateAsDefault} disabled={mutating} onclick={() => { createTemplateAsDefault = !createTemplateAsDefault; }} />
+              <CollectionMenuItem icon={Plus} label={t("notes.databaseTemplatesCreate")} disabled={mutating || !templateName.trim() || templateSourceRows.length === 0} onclick={() => { void createTemplateFromRow(); }} />
+            </CollectionMenu>
+          {/if}
+          <NotesDatabaseSettingsFooter reloadLabel={t("notes.databaseTableReload")} {editingLocked} reloadDisabled={loading || mutating}
+            onEditProperties={() => { onCloseSettings(); onEditProperties(); }} onReload={() => { void loadTable(); }}>
+            {#snippet actions()}
+              <CollectionMenu label={t("notes.databaseMore")} kind="actions" fullWidth>
+                <CollectionMenuItem icon={FileUp} label={t("notes.databaseCsvImportTitle")} onclick={() => requestCsvPanel("database-csv-import")} />
+                {#if fileExportAvailable}
+                  <CollectionMenuItem icon={FileDown} label={t("notes.databaseCsvExportTitle")} onclick={() => requestCsvPanel("database-csv-export")} />
+                {/if}
+              </CollectionMenu>
+            {/snippet}
+          </NotesDatabaseSettingsFooter>
         </CollectionSettings>
       {/if}
 

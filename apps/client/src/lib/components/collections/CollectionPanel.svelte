@@ -33,9 +33,12 @@
     line-height: 1.5;
     white-space: nowrap;
   }
-  .collection-panel :global([data-collection-menu-body] button.collection-menu-control) {
+  .collection-panel :global(:is([data-collection-menu-body], [data-collection-settings-page]) button:is(.collection-menu-control, .collection-settings-control)) {
     justify-content: center;
     padding: 0;
+  }
+  .collection-panel :global([role="separator"] + [role="separator"]) {
+    display: none;
   }
   .collection-panel :global(.collection-menu-row) {
     height: var(--collection-row-height);
@@ -63,7 +66,7 @@
     box-shadow: var(--shadow-sm);
   }
   .collection-panel :global([role="option"]) {
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-md);
   }
   .collection-panel :global(input:not([type="checkbox"]):not([type="radio"]):focus),
   .collection-panel :global(textarea:focus) {

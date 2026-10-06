@@ -14,14 +14,14 @@ afterEach(async () => {
 });
 
 /** Mount settings inside a clipped page preview and wait for initial focus. */
-async function openSettings(onClose = vi.fn(), onCommit = vi.fn()) {
+async function openSettings(onClose = vi.fn(), onCommit = vi.fn(), showHeader = true) {
   const preview = document.createElement("div");
   preview.dataset.floatingRoot = "";
   const clipped = document.createElement("div");
   clipped.style.overflow = "hidden";
   preview.append(clipped);
   document.body.append(preview);
-  component = mount(SettingsFixture, { target: clipped, props: { onClose, onCommit } });
+  component = mount(SettingsFixture, { target: clipped, props: { onClose, onCommit, showHeader } });
   const anchor = clipped.querySelector<HTMLButtonElement>("button")!;
   vi.spyOn(anchor, "getBoundingClientRect").mockReturnValue(new DOMRect(800, 32, 32, 32));
   anchor.focus();
@@ -113,6 +113,25 @@ describe("Collection settings navigation", () => {
     await key("Escape");
     expect(panel.isConnected).toBe(false);
     expect(document.activeElement).toBe(anchor);
+  });
+
+  it("omits the first page title and close button when the header is hidden but keeps Back on drill-in pages", async () => {
+    const { panel } = await openSettings(vi.fn(), vi.fn(), false);
+    expect(panel.querySelector("[data-collection-settings-header]")).toBeNull();
+    expect(panel.getAttribute("aria-label")).toBe("View settings");
+
+    panel.querySelector<HTMLButtonElement>('[aria-label="Layout"]')!.click();
+    await tick();
+    await tick();
+    const header = panel.querySelector<HTMLElement>("[data-collection-settings-header]");
+    expect(header?.textContent).toContain("Layout");
+    expect(header?.querySelector('[aria-label="Back"]')).not.toBeNull();
+    expect(header?.querySelector('[aria-label="Close"]')).toBeNull();
+
+    header!.querySelector<HTMLButtonElement>('[aria-label="Back"]')!.click();
+    await tick();
+    await tick();
+    expect(panel.querySelector("[data-collection-settings-header]")).toBeNull();
   });
 
   it("shows details in the same panel, keeps root drafts mounted, and returns one level on Back or Escape", async () => {

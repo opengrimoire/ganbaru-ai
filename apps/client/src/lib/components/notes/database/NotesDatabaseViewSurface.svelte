@@ -16,6 +16,8 @@
   import Database from "@lucide/svelte/icons/database";
   import Lock from "@lucide/svelte/icons/lock";
   import LockOpen from "@lucide/svelte/icons/lock-open";
+  import Link from "@lucide/svelte/icons/link";
+  import Plus from "@lucide/svelte/icons/plus";
   import type { NotesDatabasePropertyActionRequest, NotesDatabaseSourceEditingScope } from "$lib/notes/database/data-source-schema";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
@@ -53,6 +55,8 @@
     type LazyComponentLoadState,
   } from "$lib/lazy-component-loader";
   import CollectionMenu from "$lib/components/collections/CollectionMenu.svelte";
+  import CollectionMenuItem from "$lib/components/collections/CollectionMenuItem.svelte";
+  import CollectionMenuSeparator from "$lib/components/collections/CollectionMenuSeparator.svelte";
   import {
     loadNotesDatabaseView,
     retryNotesDatabaseView,
@@ -481,53 +485,46 @@
 {#snippet settingsHeader()}
   {#if selectedView}
     {@const Icon = viewIcons[selectedView.type as NotesDatabaseViewKind]}
-    <div class="mb-1 flex min-w-0 items-center gap-2 rounded-md border border-border/60 px-2">
-      <Icon class="size-4 shrink-0 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />
-      <input class="h-8 min-w-0 flex-1 bg-transparent outline-none" aria-label={t("notes.databaseViewName")} value={selectedView.name} disabled={selectionDisabled || editingLocked}
+    <div class="flex min-w-0 items-center gap-1.5 pb-1.5">
+      <span class="inline-flex size-8 shrink-0 items-center justify-center rounded-md border border-border text-muted-foreground">
+        <Icon class="size-4" strokeWidth={1.75} aria-hidden="true" />
+      </span>
+      <input class="h-8 min-w-0 flex-1 rounded-md border border-border bg-background px-2 text-[length:inherit] outline-none" aria-label={t("notes.databaseViewName")} value={selectedView.name} disabled={selectionDisabled || editingLocked}
         onblur={(event) => { nameDraft = event.currentTarget.value; void saveName(); }}
         onkeydown={(event) => { if (event.key === "Enter") { event.preventDefault(); event.currentTarget.blur(); } }} />
     </div>
   {/if}
-  <CollectionMenu fullWidth label={t("notes.databaseSources")} summary={activeSource?.title ?? ""} kind="properties" icon={Database} disabled={selectionDisabled}>
-    <div class="grid gap-2">
-      {#if sourceError}<p class="text-destructive" role="alert">{sourceError}</p>{/if}
-      {#if sourcesLoading}<p class="text-muted-foreground" role="status">{t("notes.databaseSourcesLoading")}</p>{/if}
-      <p class="text-muted-foreground">{t("notes.databaseSourcesAttached")}</p>
-      <div class="grid gap-0">
-        {#each attachedSources as source (source.id)}
-          <button type="button" class="flex min-h-8 min-w-0 items-center gap-2 rounded-sm px-2 text-left hover:bg-accent" disabled={selectionDisabled}
-            aria-pressed={source.id === activeSourceId} onclick={() => {
-              const view = supportedViews.find((candidate) => candidate.data_source_id === source.id && candidate.type === activeViewKind)
-                ?? supportedViews.find((candidate) => candidate.data_source_id === source.id);
-              if (view) selectViewFromToolbar(view.id);
-            }}><Database class="size-3.5 shrink-0 text-muted-foreground" /><span class="min-w-0 flex-1 truncate">{source.title || t("notes.databaseSourcesUnnamed")}</span>
-            <span class="shrink-0 text-muted-foreground">{t(source.parent.database_id === databaseId ? "notes.databaseSourceOwned" : "notes.databaseSourceLinked")}</span></button>
-        {/each}
-      </div>
-      <div class="grid gap-1.5 border-t border-border pt-2">
-        <label class="grid gap-1 text-muted-foreground">{t("notes.databaseSourceName")}
-          <input class="h-8 min-w-0 rounded-sm border border-input bg-background px-2 text-foreground outline-none focus-visible:ring-1 focus-visible:ring-ring" aria-label={t("notes.databaseSourceName")} bind:value={sourceName} disabled={selectionDisabled || editingLocked} />
-        </label>
-        <button type="button" class="min-h-8 rounded-sm px-2 text-left hover:bg-accent" disabled={selectionDisabled || editingLocked || !sourceName.trim()}
-          onclick={() => { void manageSource(); }}>{t("notes.databaseSourceCreate")}</button>
-      </div>
-      <div class="grid gap-0 border-t border-border pt-2">
-        <p class="text-muted-foreground">{t("notes.databaseSourceAttach")}</p>
-        {#each otherSources as source (source.id)}
-          <button type="button" class="min-h-8 truncate rounded-sm px-2 text-left hover:bg-accent" disabled={selectionDisabled || editingLocked}
-            onclick={() => { void manageSource(source.id); }}>{source.title || t("notes.databaseSourcesUnnamed")}</button>
-        {/each}
-        {#if otherSources.length === 0 && !sourcesLoading}<p class="px-2 text-muted-foreground">{t("notes.databaseSourceNoOtherSources")}</p>{/if}
-      </div>
-      <p class="text-muted-foreground">{t("notes.databaseSourceSharedDescription")}</p>
-    </div>
+  <CollectionMenu fullWidth label={t("notes.databaseSources")} summary={activeSource?.title ?? ""} icon={Database} disabled={selectionDisabled}>
+    {#if sourceError}<p class="px-2 py-1 text-destructive" role="alert">{sourceError}</p>{/if}
+    {#if sourcesLoading}<p class="px-2 py-1 text-muted-foreground" role="status">{t("notes.databaseSourcesLoading")}</p>{/if}
+    <p class="px-2 py-1 text-muted-foreground">{t("notes.databaseSourcesAttached")}</p>
+    {#each attachedSources as source (source.id)}
+      <CollectionMenuItem icon={Database} label={source.title || t("notes.databaseSourcesUnnamed")} detail={t(source.parent.database_id === databaseId ? "notes.databaseSourceOwned" : "notes.databaseSourceLinked")}
+        checked={source.id === activeSourceId} disabled={selectionDisabled} onclick={() => {
+          const view = supportedViews.find((candidate) => candidate.data_source_id === source.id && candidate.type === activeViewKind)
+            ?? supportedViews.find((candidate) => candidate.data_source_id === source.id);
+          if (view) selectViewFromToolbar(view.id);
+        }} />
+    {/each}
+    <CollectionMenuSeparator />
+    <input class="mb-1 h-8 w-full min-w-0 rounded-md border border-border bg-background px-2 text-[length:inherit] outline-none" aria-label={t("notes.databaseSourceName")} placeholder={t("notes.databaseSourceName")}
+      bind:value={sourceName} disabled={selectionDisabled || editingLocked} onkeydown={(event) => event.stopPropagation()} />
+    <CollectionMenuItem icon={Plus} label={t("notes.databaseSourceCreate")} disabled={selectionDisabled || editingLocked || !sourceName.trim()} onclick={() => { void manageSource(); }} />
+    <CollectionMenuSeparator />
+    <p class="px-2 py-1 text-muted-foreground">{t("notes.databaseSourceAttach")}</p>
+    {#each otherSources as source (source.id)}
+      <CollectionMenuItem icon={Link} label={source.title || t("notes.databaseSourcesUnnamed")} disabled={selectionDisabled || editingLocked} onclick={() => { void manageSource(source.id); }} />
+    {/each}
+    {#if otherSources.length === 0 && !sourcesLoading}<p class="px-2 py-1 text-muted-foreground">{t("notes.databaseSourceNoOtherSources")}</p>{/if}
+    <p class="px-2 py-1 text-muted-foreground">{t("notes.databaseSourceSharedDescription")}</p>
   </CollectionMenu>
-  <button type="button" role="switch" aria-checked={editingLocked} aria-label={t("notes.databaseEditingLock")} disabled={selectionDisabled}
-    class="flex min-h-8 w-full items-center gap-2 rounded-sm px-2 text-left hover:bg-accent" onclick={() => { void toggleEditingLock(); }}>
-    {#if editingLocked}<Lock class="size-3.5 text-muted-foreground" />{:else}<LockOpen class="size-3.5 text-muted-foreground" />{/if}
-    <span>{t(editingLocked ? "notes.databaseUnlockLayout" : "notes.databaseLockLayout")}</span>
+  <button data-collection-settings-row type="button" role="switch" aria-checked={editingLocked} aria-label={t("notes.databaseEditingLock")} disabled={selectionDisabled}
+    class="flex min-h-8 w-full min-w-0 items-center gap-2 rounded-md px-2 text-left hover:bg-accent disabled:cursor-not-allowed disabled:text-muted-foreground/60 disabled:hover:bg-transparent" onclick={() => { void toggleEditingLock(); }}>
+    {#if editingLocked}<Lock class="size-3.5 shrink-0 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />{:else}<LockOpen class="size-3.5 shrink-0 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />{/if}
+    <span class="min-w-0 flex-1 truncate">{t(editingLocked ? "notes.databaseUnlockLayout" : "notes.databaseLockLayout")}</span>
   </button>
-  {#if editingLocked}<p class="px-2 text-muted-foreground">{t("notes.databaseEditingLockDescription")}</p>{/if}
+  {#if editingLocked}<p class="px-2 py-1 text-muted-foreground">{t("notes.databaseEditingLockDescription")}</p>{/if}
+  <CollectionMenuSeparator />
 {/snippet}
 
 <div class="flex min-w-0 flex-wrap items-center gap-1 py-1">

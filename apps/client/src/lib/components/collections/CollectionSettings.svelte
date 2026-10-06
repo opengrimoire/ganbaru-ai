@@ -9,10 +9,12 @@
   import CollectionPanel from "./CollectionPanel.svelte";
   import { setCollectionSettingsNavigation, type CollectionSettingsPage } from "./collection-settings-context";
 
-  let { label, anchor = null, preferredWidth = 320, onClose, children }: {
+  let { label, anchor = null, preferredWidth = 320, showHeader = true, onClose, children }: {
     label: string;
     anchor?: HTMLElement | null;
     preferredWidth?: number;
+    /** Shows the title and close button on the first page; drill-in pages always show a back header. */
+    showHeader?: boolean;
     onClose: () => void;
     children: Snippet;
   } = $props();
@@ -68,7 +70,7 @@
     const owner = anchor ?? (previousFocus instanceof HTMLElement ? previousFocus : null);
     const moved = portal(node, owner?.closest<HTMLElement>("[data-floating-root]") ?? "body");
     const content = node.querySelector<HTMLElement>("[data-collection-settings-content]");
-    const header = node.querySelector<HTMLElement>("[data-collection-settings-header]");
+    const header = () => node.querySelector<HTMLElement>("[data-collection-settings-header]");
     let disposed = false;
     let dismissed = false;
     let restoreFocus = true;
@@ -89,7 +91,7 @@
       };
       const width = `${Math.round(anchoredPanelWidth(input))}px`;
       if (node.style.width !== width) node.style.width = width;
-      const measured = [header, content].filter((element): element is HTMLElement => element !== null);
+      const measured = [header(), content].filter((element): element is HTMLElement => element !== null);
       const style = anchoredPanelStyle({ ...input, contentHeight: anchoredPanelContentHeight(node, measured) });
       if (style !== previousStyle) {
         node.style.cssText = style;
@@ -141,15 +143,21 @@
     };
     const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(place);
     if (content) observer?.observe(content);
-    if (header) observer?.observe(header);
+    const observeHeader = () => {
+      const current = header();
+      if (current) observer?.observe(current);
+    };
+    observeHeader();
     const changes = new MutationObserver(() => {
       if (content) for (const page of content.children) observer?.observe(page);
+      observeHeader();
       place();
     });
     if (content) {
       for (const page of content.children) observer?.observe(page);
       changes.observe(content, { childList: true, subtree: true, attributes: true, attributeFilter: ["hidden"] });
     }
+    changes.observe(node, { childList: true });
     document.addEventListener("pointerdown", outside, true);
     document.addEventListener("focusin", focusin);
     window.addEventListener("keydown", keydown, true);
@@ -178,20 +186,24 @@
 </script>
 
 <CollectionPanel bind:element={panel} label={activePage?.label ?? label} class="fixed z-80">
-  <div data-collection-settings-header class="flex shrink-0 items-center gap-1 border-b border-border px-2 py-1.5">
-    {#if activePage}
-      <button type="button" class="collection-settings-control flex size-7 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground" aria-label={t("common.back")} onclick={back}><ArrowLeft class="size-3.5" /></button>
-    {/if}
-    <h3 class="min-w-0 flex-1 truncate px-1 font-medium">{activePage?.label ?? label}</h3>
-    <button type="button" class="collection-settings-control flex size-7 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground" aria-label={t("common.close")} onclick={close}><X class="size-3.5" /></button>
-  </div>
+  {#if showHeader || activePage}
+    <div data-collection-settings-header class="flex shrink-0 items-center gap-1 border-b border-border px-2 py-1.5">
+      {#if activePage}
+        <button type="button" class="collection-settings-control flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground" aria-label={t("common.back")} onclick={back}><ArrowLeft class="size-3.5" /></button>
+      {/if}
+      <h3 class="min-w-0 flex-1 truncate px-1 font-medium">{activePage?.label ?? label}</h3>
+      {#if showHeader}
+        <button type="button" class="collection-settings-control flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground" aria-label={t("common.close")} onclick={close}><X class="size-3.5" /></button>
+      {/if}
+    </div>
+  {/if}
   <div use:scrollEdgeFadeAction class="min-h-0 overflow-x-hidden overflow-y-auto">
     <div data-collection-settings-content class="@container flow-root h-max p-1.5">
       <div data-collection-settings-page hidden={pages.length > 0} inert={pages.length > 0}>
         {@render children()}
       </div>
       {#each pages as page, index (page.trigger)}
-        <div data-collection-settings-page hidden={index !== pages.length - 1} inert={index !== pages.length - 1} class="p-1">
+        <div data-collection-settings-page hidden={index !== pages.length - 1} inert={index !== pages.length - 1}>
           {@render page.children()}
         </div>
       {/each}

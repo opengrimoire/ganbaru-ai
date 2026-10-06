@@ -18,6 +18,7 @@
   import { cn } from "$lib/utils";
   import CollectionPanel from "./CollectionPanel.svelte";
   import { getCollectionSettingsNavigation } from "./collection-settings-context";
+  import { COLLECTION_ACTION_PANEL_WIDTH, COLLECTION_PANEL_WIDTH } from "./collection-panel-width";
 
   /**
    * A collection toolbar menu, settings row, or column menu.
@@ -52,8 +53,6 @@
   const rowTrigger = $derived(settingsRow || (fullWidth && !leading));
   const countLabel = $derived(activeCount > 0 ? formatNumber(localization.locale, activeCount) : "");
   const id = $props.id();
-  const PANEL_WIDTH = 320;
-  const ACTION_PANEL_WIDTH = 240;
   const VIEWPORT_HEIGHT_FRACTION = 0.7;
   /** How much narrower a submenu is than the menu it opens from. */
   const SUBMENU_WIDTH_INSET = 32;
@@ -188,7 +187,7 @@
       + (content ? Number.parseFloat(window.getComputedStyle(content).paddingTop) || 0 : 0);
     const place = () => {
       if (disposed || !trigger) return;
-      const preferredWidth = kind === "actions" || kind === "property" || kind === "new-options" ? ACTION_PANEL_WIDTH : PANEL_WIDTH;
+      const preferredWidth = kind === "actions" || kind === "property" || kind === "new-options" ? COLLECTION_ACTION_PANEL_WIDTH : COLLECTION_PANEL_WIDTH;
       const input = {
         triggerRect: trigger.getBoundingClientRect(),
         viewportWidth: window.innerWidth,
@@ -327,7 +326,7 @@
     type="button"
     {...triggerAttributes}
     {disabled}
-    class={cn("collection-menu-trigger inline-flex h-8 min-w-0 items-center gap-1.5 rounded px-2 text-collection font-normal transition-colors focus-visible:outline-none focus-visible:bg-accent disabled:cursor-not-allowed disabled:text-muted-foreground", primary ? "bg-primary text-primary-foreground hover:bg-primary/90" : "text-muted-foreground hover:bg-accent/60 hover:text-foreground", rowTrigger && "justify-start text-foreground transition-none hover:bg-accent", triggerClass)}
+    class={cn("collection-menu-trigger inline-flex h-8 min-w-0 items-center gap-1.5 rounded px-2 text-collection font-normal transition-colors focus-visible:outline-none focus-visible:bg-accent disabled:cursor-not-allowed disabled:text-muted-foreground", primary ? "bg-primary text-primary-foreground hover:bg-primary/90" : "text-muted-foreground hover:bg-accent/60 hover:text-foreground", rowTrigger && "justify-start rounded-md text-foreground transition-none hover:bg-accent", triggerClass)}
     class:w-full={fullWidth}
     class:bg-accent={expanded && !primary && !(submenu && pointerElsewhere)}
     class:text-foreground={!primary && (expanded || activeCount > 0)}
@@ -368,7 +367,7 @@
           {#if headerVisible}
             <div class="mb-1.5 flex items-center justify-between gap-2 px-1">
               <span class="font-medium">{label}</span>
-              <button type="button" class="collection-menu-control inline-flex size-7 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground" aria-label={t("common.close")} onclick={close}>
+              <button type="button" class="collection-menu-control inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground" aria-label={t("common.close")} onclick={close}>
                 <X class="size-3.5" aria-hidden="true" />
               </button>
             </div>

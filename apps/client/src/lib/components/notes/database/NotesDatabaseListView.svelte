@@ -4,14 +4,20 @@
   import { databaseResource, notesDatabaseSession } from "$lib/notes/database/session.svelte";
   import NotesDatabasePropertyValue from "./NotesDatabasePropertyValue.svelte";
   import CollectionSettings from "$lib/components/collections/CollectionSettings.svelte";
+  import { COLLECTION_VIEW_SETTINGS_PANEL_WIDTH } from "$lib/components/collections/collection-panel-width";
   import CollectionRow from "$lib/components/collections/CollectionRow.svelte";
   import CollectionCell from "$lib/components/collections/CollectionCell.svelte";
   import CollectionMenu from "$lib/components/collections/CollectionMenu.svelte";
+  import CollectionMenuItem from "$lib/components/collections/CollectionMenuItem.svelte";
+  import CollectionMenuSelect from "$lib/components/collections/CollectionMenuSelect.svelte";
+  import CollectionMenuSeparator from "$lib/components/collections/CollectionMenuSeparator.svelte";
+  import { COLLECTION_PROPERTY_ICONS } from "$lib/components/collections/property-icons";
+  import { notesPropertyKind } from "./property-kinds";
+  import NotesDatabaseSettingsFooter from "./NotesDatabaseSettingsFooter.svelte";
   import NotesDatabaseFilterControls from "./NotesDatabaseFilterControls.svelte";
   import { notesDatabaseFilterCount } from "$lib/notes/database/query-controls";
   import NotesDatabaseSortControls from "./NotesDatabaseSortControls.svelte";
   import NotesDatabaseQueryBar from "./NotesDatabaseQueryBar.svelte";
-  import Select from "$lib/components/ui/Select.svelte";
   import {
     duplicateNotesPage,
     getNotesDataSourceListView,
@@ -50,8 +56,8 @@
   import Eye from "@lucide/svelte/icons/eye";
   import EyeOff from "@lucide/svelte/icons/eye-off";
   import FileText from "@lucide/svelte/icons/file-text";
+  import PanelsTopLeft from "@lucide/svelte/icons/panels-top-left";
   import Plus from "@lucide/svelte/icons/plus";
-  import RefreshCw from "@lucide/svelte/icons/refresh-cw";
   import Trash2 from "@lucide/svelte/icons/trash-2";
 
   let {
@@ -310,124 +316,54 @@
   const listTemplate = $derived(`minmax(12rem, 1fr) ${visibleColumns.map(() => "minmax(0, 1fr)").join(" ")} 2rem`);
 </script>
 {#snippet viewControls()}
-  <div class="flex min-w-0 flex-col items-stretch gap-1 text-[0.8rem]">
-    <span class="sr-only" role="status">
-      {#if loading}
-        {t("notes.databaseListLoading")}
-      {:else if error}
-        {t("notes.databaseListFailed", error)}
-      {:else}
-        {t("notes.databaseListRowsCount", list?.rows.length ?? 0)}
-      {/if}
-    </span>
-    <CollectionMenu fullWidth disabled={editingLocked} label={t("notes.databaseLayout")} summary={t("notes.databaseViewList")}>
-      <div class="grid gap-3">
-        <div class="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(8rem,1fr)] items-center gap-3">
-          <span>{t("notes.databaseTableOpenMode")}</span>
-          <Select textSize="collection"
-            inline
-            appearance="quiet"
-            contentAlign="start"
-            class="w-full min-w-0"
-            ariaLabel={t("notes.databaseTableOpenMode")}
-            value={String(configuration.row_open_mode ?? "")}
-            disabled={editingLocked || loading || mutating || !list}
-            options={[{ value: "side_panel", label: t("notes.databaseTableOpenSidePanel") },
-              { value: "full_page", label: t("notes.databaseTableOpenFullPage") }]}
-            onChange={(nextValue) => updateRowOpenMode(nextValue as NotesDatabaseListRowOpenMode)}
-            triggerProps={{ "onkeydown": (event) => event.stopPropagation() }}
-          />
-        </div>
-      </div>
-    </CollectionMenu>
-    <CollectionMenu fullWidth disabled={editingLocked} label={t("notes.databaseGroup")} kind="group" summary={groupColumn?.name ?? t("common.none")}>
-      <div class="grid gap-2">
-        <div class="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(8rem,1fr)] items-center gap-3">
-          <span>{t("notes.databaseListGroupBy")}</span>
-          <Select textSize="collection"
-            inline
-            appearance="quiet"
-            contentAlign="start"
-            class="w-full min-w-0"
-            ariaLabel={t("notes.databaseListGroupBy")}
-            value={String(configuration.group_property_id ?? "")}
-            disabled={editingLocked || loading || mutating || !list}
-            options={[{ value: "", label: t("notes.databaseListNoGroupProperty") },
-              ...(groupableColumns).map((column) => ({ value: String(column.id), label: String(column.name) }))]}
-            onChange={(nextValue) => updateGroupProperty(nextValue)}
-            triggerProps={{ "onkeydown": (event) => event.stopPropagation() }}
-          />
-        </div>
-      </div>
-    </CollectionMenu>
-  </div>
+  <span class="sr-only" role="status">
+    {#if loading}
+      {t("notes.databaseListLoading")}
+    {:else if error}
+      {t("notes.databaseListFailed", error)}
+    {:else}
+      {t("notes.databaseListRowsCount", list?.rows.length ?? 0)}
+    {/if}
+  </span>
+  <CollectionMenu fullWidth disabled={editingLocked} label={t("notes.databaseLayout")} icon={PanelsTopLeft} summary={t("notes.databaseViewList")}>
+    <CollectionMenuSelect label={t("notes.databaseTableOpenMode")} icon={ExternalLink} value={configuration.row_open_mode} disabled={editingLocked || loading || mutating || !list}
+      options={[{ value: "side_panel", label: t("notes.databaseTableOpenSidePanel") }, { value: "full_page", label: t("notes.databaseTableOpenFullPage") }]}
+      onChange={updateRowOpenMode} />
+  </CollectionMenu>
+  <CollectionMenu fullWidth disabled={editingLocked} label={t("notes.databaseGroup")} kind="group" summary={groupColumn?.name ?? t("common.none")}>
+    <CollectionMenuItem label={t("notes.databaseListNoGroupProperty")} checked={!configuration.group_property_id} disabled={editingLocked || loading || mutating || !list} onclick={() => updateGroupProperty("")} />
+    {#each groupableColumns as column (column.id)}
+      <CollectionMenuItem icon={COLLECTION_PROPERTY_ICONS[notesPropertyKind(column.type)]} label={column.name} checked={configuration.group_property_id === column.id}
+        disabled={editingLocked || loading || mutating || !list} onclick={() => updateGroupProperty(column.id)} />
+    {/each}
+  </CollectionMenu>
 {/snippet}
 
 {#snippet propertyControls()}
-      <div class="flex flex-col items-stretch gap-1">
-        <CollectionMenu fullWidth disabled={editingLocked} label={t("notes.databaseTableColumns")} kind="properties" summary={formatNumber(localization.locale, visibleColumns.length)}>
-
-          <div class="mt-2 grid gap-1">
-            {#each columns.filter((column) =>
-              column.type !== "title" && column.id !== configuration.group_property_id
-            ) as column (column.id)}
-              <label class="flex min-w-0 items-center gap-2 rounded-sm px-1 py-0.5 hover:bg-accent/60">
-                <input
-                  type="checkbox"
-                  checked={visibleColumns.some((visibleColumn) => visibleColumn.id === column.id)}
-                  disabled={mutating || editingLocked}
-                  onchange={(event) => updateRowProperty(column.id, event.currentTarget.checked)}
-                  onkeydown={(event) => event.stopPropagation()}
-                />
-                <span class="min-w-0 flex-1 truncate">{column.name}</span>
-              </label>
-            {/each}
-          </div>
-        </CollectionMenu>
-
-        {#if groupColumn}
-          <CollectionMenu fullWidth disabled={editingLocked} label={t("notes.databaseListHiddenGroups")} kind="layout">
-
-            <div class="mt-2 grid gap-1">
-              {#each visibleGroups as group (group.id)}
-                <button
-                  type="button"
-                  class="flex min-w-0 items-center gap-2 rounded-sm px-1 py-1 text-left hover:bg-accent/60 disabled:pointer-events-none"
-                  disabled={mutating || editingLocked}
-                  aria-label={t("notes.databaseListHideGroup", group.name)}
-                  onclick={() => setGroupHidden(group.id, true)}
-                >
-                  <EyeOff class="size-3.5 shrink-0" aria-hidden="true" />
-                  <span class="min-w-0 flex-1 truncate">{group.name}</span>
-                </button>
-              {/each}
-              {#each hiddenGroups as group (group.id)}
-                <button
-                  type="button"
-                  class="flex min-w-0 items-center gap-2 rounded-sm px-1 py-1 text-left hover:bg-accent/60 disabled:pointer-events-none"
-                  disabled={mutating || editingLocked}
-                  aria-label={t("notes.databaseListShowGroup", group.name)}
-                  onclick={() => setGroupHidden(group.id, false)}
-                >
-                  <Eye class="size-3.5 shrink-0" aria-hidden="true" />
-                  <span class="min-w-0 flex-1 truncate">{group.name}</span>
-                </button>
-              {/each}
-            </div>
-          </CollectionMenu>
-        {/if}
-
-        <CollectionMenu fullWidth disabled={editingLocked} label={t("notes.databaseTableSorts")} kind="sort" activeCount={sorts.length} summary={formatList(localization.locale, sorts.map((sort) => columns.find((column) => column.id === sort.property_id)?.name ?? ""))}>
-
-          <NotesDatabaseSortControls properties={columns} {sorts} pending={mutating || editingLocked} onChange={saveSorts} />
-        </CollectionMenu>
-
-        <CollectionMenu fullWidth disabled={editingLocked} label={t("notes.databaseTableFilters")} kind="filter" activeCount={notesDatabaseFilterCount(filters)} summary={notesDatabaseFilterCount(filters) ? formatNumber(localization.locale, notesDatabaseFilterCount(filters)) : ""}>
-
-          <NotesDatabaseFilterControls properties={columns} {filters} pending={mutating || editingLocked} onChange={saveFilters} />
-        </CollectionMenu>
-      </div>
-
+  <CollectionMenu fullWidth disabled={editingLocked} label={t("notes.databaseTableColumns")} kind="properties" summary={formatNumber(localization.locale, visibleColumns.length)}>
+    {#each columns.filter((column) => column.type !== "title" && column.id !== configuration.group_property_id) as column (column.id)}
+      {@const visible = visibleColumns.some((visibleColumn) => visibleColumn.id === column.id)}
+      <CollectionMenuItem icon={COLLECTION_PROPERTY_ICONS[notesPropertyKind(column.type)]} label={column.name} checked={visible} disabled={mutating || editingLocked}
+        onclick={() => updateRowProperty(column.id, !visible)} />
+    {/each}
+  </CollectionMenu>
+  {#if groupColumn}
+    <CollectionMenu fullWidth disabled={editingLocked} label={t("notes.databaseListHiddenGroups")} icon={EyeOff} summary={hiddenGroups.length > 0 ? formatNumber(localization.locale, hiddenGroups.length) : ""}>
+      {#each visibleGroups as group (group.id)}
+        <CollectionMenuItem icon={EyeOff} label={t("notes.databaseListHideGroup", group.name)} disabled={mutating || editingLocked} onclick={() => setGroupHidden(group.id, true)} />
+      {/each}
+      {#if visibleGroups.length > 0 && hiddenGroups.length > 0}<CollectionMenuSeparator />{/if}
+      {#each hiddenGroups as group (group.id)}
+        <CollectionMenuItem icon={Eye} label={t("notes.databaseListShowGroup", group.name)} disabled={mutating || editingLocked} onclick={() => setGroupHidden(group.id, false)} />
+      {/each}
+    </CollectionMenu>
+  {/if}
+  <CollectionMenu fullWidth disabled={editingLocked} label={t("notes.databaseTableSorts")} kind="sort" activeCount={sorts.length} summary={formatList(localization.locale, sorts.map((sort) => columns.find((column) => column.id === sort.property_id)?.name ?? ""))}>
+    <NotesDatabaseSortControls properties={columns} {sorts} pending={mutating || editingLocked} onChange={saveSorts} />
+  </CollectionMenu>
+  <CollectionMenu fullWidth disabled={editingLocked} label={t("notes.databaseTableFilters")} kind="filter" activeCount={notesDatabaseFilterCount(filters)} summary={notesDatabaseFilterCount(filters) ? formatNumber(localization.locale, notesDatabaseFilterCount(filters)) : ""}>
+    <NotesDatabaseFilterControls properties={columns} {filters} pending={mutating || editingLocked} onChange={saveFilters} />
+  </CollectionMenu>
 {/snippet}
 
 <section class="space-y-3 pt-2" aria-label={t("notes.databaseListTitle")}>
@@ -435,13 +371,12 @@
   <NotesDatabaseQueryBar properties={columns} {filters} {sorts} pending={mutating || editingLocked} onFiltersChange={saveFilters} onSortsChange={saveSorts} />
   {#if error}<p class="text-[0.8rem] text-destructive" role="alert">{error}</p>{/if}
   {#if settingsOpen}
-    <CollectionSettings label={t("notes.databaseViewSettings")} anchor={settingsAnchor} onClose={onCloseSettings}>
+    <CollectionSettings label={t("notes.databaseViewSettings")} anchor={settingsAnchor} preferredWidth={COLLECTION_VIEW_SETTINGS_PANEL_WIDTH} showHeader={false} onClose={onCloseSettings}>
       {@render settingsHeader?.()}
       {@render viewControls()}
       {#if list}{@render propertyControls()}{/if}
-      <p class="mt-2 border-t border-border px-2 pt-2 text-[0.8rem] text-muted-foreground">{t("notes.databaseDataSourceSettings")}</p>
-      <button data-collection-settings-row type="button" disabled={editingLocked} class="min-h-8 w-full rounded-md px-2 text-left hover:bg-accent" onclick={() => { onCloseSettings(); onEditProperties(); }}>{t("notes.databaseViewEditProperties")}</button>
-      <button data-collection-settings-row type="button" class="flex min-h-8 w-full items-center gap-2 rounded px-2 text-left text-muted-foreground hover:bg-accent hover:text-foreground" disabled={loading || mutating} onclick={() => { void loadList(); }}><RefreshCw class="size-3.5 shrink-0" aria-hidden="true" />{t("notes.databaseListReload")}</button>
+      <NotesDatabaseSettingsFooter reloadLabel={t("notes.databaseListReload")} {editingLocked} reloadDisabled={loading || mutating}
+        onEditProperties={() => { onCloseSettings(); onEditProperties(); }} onReload={() => { void loadList(); }} />
     </CollectionSettings>
   {/if}
 

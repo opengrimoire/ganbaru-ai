@@ -64,7 +64,6 @@ export const database = {
   databaseUnavailable: "Esta base de datos ya no está disponible.",
   databaseViewActions: "Opciones de la vista",
   databaseViewSettings: "Ajustes de la vista",
-  databaseDataSourceSettings: "Configuración de la fuente de datos",
   databaseGroup: "Agrupar",
   databaseViewEditProperties: "Editar propiedades",
   databaseViewName: "Nombre de la vista",
