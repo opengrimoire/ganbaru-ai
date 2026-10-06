@@ -138,7 +138,8 @@
 {#if query}
   <CollectionMenu label={label} kind={addOnly ? "new" : "property"} fullWidth={!addOnly} showHeader={false} dismissOnAction={!addOnly}
     iconOnly={addOnly}
-    disabled={pending} triggerClass={addOnly ? "" : "h-9 justify-start rounded-sm px-2 font-normal"}>
+    disabled={pending} triggerClass={addOnly ? "size-9 justify-center px-0" : "h-auto justify-start rounded-none px-2 font-normal"}
+    triggerAttributes={addOnly ? { "data-collection-hover-target": "" } : { "data-collection-cell-primary": "" }}>
     <div class="grid gap-0.5">
       {#if !addOnly}
         {#if field}

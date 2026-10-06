@@ -18,7 +18,7 @@
   import CollectionPanel from "./CollectionPanel.svelte";
   import { getCollectionSettingsNavigation } from "./collection-settings-context";
 
-  let { label, ariaLabel, kind = "layout", iconOnly = false, fullWidth = false, primary = false, showHeader, activeCount = 0, dismissOnAction = false, summary, leading, icon, triggerClass, disabled = false, children }: {
+  let { label, ariaLabel, kind = "layout", iconOnly = false, fullWidth = false, primary = false, showHeader, activeCount = 0, dismissOnAction = false, summary, leading, icon, triggerClass, triggerAttributes, disabled = false, children }: {
     label: string;
     ariaLabel?: string;
     kind?: "layout" | "filter" | "sort" | "properties" | "property" | "group" | "actions" | "new" | "new-options";
@@ -32,6 +32,8 @@
     leading?: Snippet;
     icon?: Component;
     triggerClass?: string;
+    /** Data attributes for the trigger, such as the markers that let collection tables own its highlight. */
+    triggerAttributes?: Partial<Record<`data-${string}`, string>>;
     disabled?: boolean;
     children: Snippet;
   } = $props();
@@ -190,6 +192,7 @@
   <button
     bind:this={trigger}
     type="button"
+    {...triggerAttributes}
     {disabled}
     class={cn("collection-menu-trigger inline-flex h-8 min-w-0 items-center gap-1.5 rounded px-2 text-[0.8125rem] font-normal transition-colors focus-visible:outline-none focus-visible:bg-accent disabled:cursor-not-allowed disabled:text-muted-foreground", primary ? "bg-primary text-primary-foreground hover:bg-primary/90" : "text-muted-foreground hover:bg-accent/60 hover:text-foreground", rowTrigger && "justify-start text-foreground", triggerClass)}
     class:w-full={fullWidth}

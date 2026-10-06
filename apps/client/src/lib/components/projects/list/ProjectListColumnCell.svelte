@@ -470,7 +470,7 @@
   {#if column === "status"}
     <button
       type="button"
-      class="absolute inset-0 z-0 cursor-pointer rounded-md disabled:cursor-not-allowed"
+      data-collection-cell-primary class="absolute inset-0 z-0 cursor-pointer disabled:cursor-not-allowed"
       disabled={Boolean(task.archivedAt)}
       aria-label={status?.name ?? t("projects.list.status")}
       data-app-tooltip-disabled="true"
@@ -517,7 +517,7 @@
     {@const selectedPriorityColor = projectPriorityDisplayColor(task.priority, priorities)}
     <button
       type="button"
-      class="absolute inset-0 z-0 cursor-pointer rounded-md disabled:cursor-not-allowed"
+      data-collection-cell-primary class="absolute inset-0 z-0 cursor-pointer disabled:cursor-not-allowed"
       disabled={Boolean(task.archivedAt)}
       aria-label={selectedPriorityLabel}
       data-app-tooltip-disabled="true"
@@ -576,7 +576,7 @@
       <button
         bind:this={dateTriggerEl}
         type="button"
-        class="absolute inset-0 z-0 cursor-pointer rounded-md disabled:cursor-not-allowed"
+        data-collection-cell-primary class="absolute inset-0 z-0 cursor-pointer disabled:cursor-not-allowed"
         disabled={Boolean(task.archivedAt)}
         aria-label={dateButtonText(dateValue, timeValue, emptyDateLabel)}
         data-app-tooltip-disabled="true"
@@ -720,20 +720,20 @@
             <FieldIcon size={13} strokeWidth={1.75} class="shrink-0 text-muted-foreground" />
           {/if}
           {#if context?.query.listPresentation.wrappedColumns.includes(column)}
-            <textarea
+            <textarea data-collection-cell-primary
               value={customFieldInputValue(customField, customValue)}
-              class="min-h-9 min-w-0 flex-1 resize-y rounded border border-transparent bg-transparent px-1 py-1 text-[0.8rem] outline-none hover:bg-background focus:bg-background"
+              class="min-h-9 min-w-0 flex-1 resize-y rounded border border-transparent bg-transparent px-1 py-1 text-[0.8rem] outline-none"
               aria-label={customField.name}
               placeholder={t("projects.customFields.emptyValue")}
               disabled={Boolean(task.archivedAt)}
               onblur={(event) => { void saveCustomFieldText(customField, event.currentTarget.value, event.currentTarget); }}
               onkeydown={(event) => handleCustomFieldInputKeydown(event, customField, customValue)}
             ></textarea>
-          {:else}<input
+          {:else}<input data-collection-cell-primary
             type={projectCustomFieldInputType(customField.fieldType)}
             inputmode={projectCustomFieldTextInputMode(customField.fieldType)}
             value={customFieldInputValue(customField, customValue)}
-            class="h-7 min-w-0 flex-1 rounded-md border border-transparent bg-transparent px-1 text-[0.8rem] text-foreground outline-none transition-colors placeholder:text-muted-foreground hover:border-border hover:bg-background focus:border-ring focus:bg-background disabled:cursor-not-allowed disabled:opacity-60"
+            class="h-7 min-w-0 flex-1 rounded-md border border-transparent bg-transparent px-1 text-[0.8rem] text-foreground outline-none transition-colors placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-60"
             placeholder={t("projects.customFields.emptyValue")}
             title={customDisplayValue}
             disabled={Boolean(task.archivedAt)}
@@ -743,7 +743,7 @@
           {/if}
         </div>
       {:else if customField.fieldType === "number"}
-        <input
+        <input data-collection-cell-primary
           type="text"
           inputmode="decimal"
           value={numericDraft ?? (customValue?.numberValue === undefined ? "" : projectListNumberLabel(customValue.numberValue, context?.query.listPresentation.numberFormats[column] ?? "number", localization.locale))}
@@ -753,7 +753,7 @@
             event.currentTarget.setCustomValidity("");
             valueSaveError = null;
           }}
-          class="relative z-10 h-7 min-w-0 flex-1 rounded-md border border-transparent bg-transparent px-1 text-[0.8rem] text-foreground outline-none transition-colors placeholder:text-muted-foreground hover:border-border hover:bg-background focus:border-ring focus:bg-background disabled:cursor-not-allowed disabled:opacity-60"
+          class="relative z-10 h-7 min-w-0 flex-1 rounded-md border border-transparent bg-transparent px-1 text-[0.8rem] text-foreground outline-none transition-colors placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-60"
           placeholder={t("projects.customFields.emptyValue")}
           title={customDisplayValue}
           disabled={Boolean(task.archivedAt) || numericSaving}
@@ -767,7 +767,7 @@
         <button
           type="button"
           class="relative z-10 flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-md border border-border bg-background text-foreground hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
-          role="checkbox"
+          role="checkbox" data-collection-cell-primary
           aria-checked={checked}
           aria-label={customField.name}
           disabled={Boolean(task.archivedAt)}
@@ -780,10 +780,10 @@
       {:else if customField.fieldType === "date"}
         <div bind:this={customFieldRootEl} class="relative z-10 flex min-w-0 flex-1 items-center gap-1">
           <button
-            bind:this={customFieldTriggerEl}
+            bind:this={customFieldTriggerEl} data-collection-cell-primary
             type="button"
             class={cn(
-              "flex h-7 min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded-md px-1 text-left text-[0.8rem] hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60",
+              "flex h-7 min-w-0 flex-1 cursor-pointer items-center gap-1.5 rounded-md px-1 text-left text-[0.8rem] disabled:cursor-not-allowed disabled:opacity-60",
               customValue?.dateValue ? "text-foreground" : "text-muted-foreground",
             )}
             aria-haspopup="dialog"
@@ -797,7 +797,7 @@
           {#if customValue?.dateValue}
             <button
               type="button"
-              class="flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+              class="relative z-10 flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
               aria-label={t("projects.detail.clearDate", customField.name)}
               disabled={Boolean(task.archivedAt)}
               onclick={() => { void saveCustomFieldDate(customField, null); }}
@@ -831,10 +831,10 @@
         {@const multiple = projectCustomFieldAllowsMultipleOptions(customField.fieldType)}
         <div bind:this={customFieldRootEl} class="relative z-10 min-w-0 flex-1">
           <button
-            bind:this={customFieldTriggerEl}
+            bind:this={customFieldTriggerEl} data-collection-cell-primary
             type="button"
             class={cn(
-              "flex h-7 min-w-0 max-w-full cursor-pointer items-center justify-between gap-2 rounded-md px-1.5 text-left text-[0.8rem] hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60",
+              "flex h-7 min-w-0 max-w-full cursor-pointer items-center justify-between gap-2 rounded-md px-1.5 text-left text-[0.8rem] disabled:cursor-not-allowed disabled:opacity-60",
               selectedOptionIds.length > 0 ? "text-foreground" : "text-muted-foreground",
             )}
             aria-haspopup="menu"

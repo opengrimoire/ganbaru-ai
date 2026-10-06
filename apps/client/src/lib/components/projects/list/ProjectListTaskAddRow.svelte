@@ -38,11 +38,8 @@
 <CollectionRow template={gridTemplate} minWidth={gridMinWidth} divider={false} class="project-list-divider"
   data-section-task-add-row={mode === "section" ? rowId : undefined}
   data-group-task-add-row={mode === "group" ? rowId : undefined}>
-  <div class="col-span-2"></div>
-  <div style="grid-column: 3 / -1;">
-    <CollectionQuickAdd {label} {draft} {active} disabled={pending} {onDraftChange} {onActiveChange}
-      inputAttributes={{ "data-section-task-input": mode === "section" ? rowId : undefined, "data-group-task-input": mode === "group" ? rowId : undefined }}
-      onSubmit={async () => { await onSubmit(); return !error; }} />
-  </div>
+  <CollectionQuickAdd {label} {draft} {active} disabled={pending} contentColumn={3} {onDraftChange} {onActiveChange}
+    inputAttributes={{ "data-section-task-input": mode === "section" ? rowId : undefined, "data-group-task-input": mode === "group" ? rowId : undefined }}
+    onSubmit={async () => { await onSubmit(); return !error; }} />
   {#if error}<p class="col-span-full px-2 py-1 text-[0.8rem] text-destructive" role="alert">{error}</p>{/if}
 </CollectionRow>

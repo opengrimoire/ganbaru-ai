@@ -16,7 +16,7 @@
   } = $props();
 </script>
 
-<CollectionCell role="columnheader" class={`${actions ? "gap-0 px-0" : "gap-1.5"} ${className}`} {style}>
+<CollectionCell role="columnheader" class={`${actions ? "items-stretch gap-0 p-0" : "gap-1.5"} ${className}`} {style}>
   {#if actions}
     {@render actions()}
   {:else}

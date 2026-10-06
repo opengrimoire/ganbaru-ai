@@ -3,17 +3,22 @@
   import type { HTMLInputAttributes } from "svelte/elements";
   import Plus from "@lucide/svelte/icons/plus";
   import { getLocalization } from "$lib/i18n/translator.svelte";
-  let { label, draft = $bindable(""), active = $bindable(false), disabled = false, inputAttributes, onDraftChange, onActiveChange, onSubmit, onCreate }: {
+  import { cn } from "$lib/utils";
+  let { label, draft = $bindable(""), active = $bindable(false), disabled = false, inputAttributes, contentColumn, onDraftChange, onActiveChange, onSubmit, onCreate }: {
     label: string;
     draft?: string;
     active?: boolean;
     disabled?: boolean;
     inputAttributes?: HTMLInputAttributes;
+    /** Grid column where content starts when the control fills a whole collection row and relies on the row hover. */
+    contentColumn?: number;
     onDraftChange?: (draft: string) => void;
     onActiveChange?: (active: boolean) => void;
   } & ({ onSubmit: (title: string) => Promise<boolean>; onCreate?: never }
     | { onCreate: () => void; onSubmit?: never }) = $props();
   const { t } = getLocalization();
+  const spansRow = $derived(contentColumn !== undefined);
+  const contentStyle = $derived(spansRow ? `grid-column: ${contentColumn} / -1;` : undefined);
   let input: HTMLInputElement | undefined = $state();
   let trigger: HTMLButtonElement | undefined = $state();
   let pending = $state(false);
@@ -52,15 +57,19 @@
   }
 </script>
 
-<div class="min-w-0">
+<div class={spansRow ? "col-span-full grid min-w-0 grid-cols-subgrid self-stretch" : "min-w-0"}>
   {#if active || draft}
-    <form class="flex min-h-10 min-w-0 items-center gap-1 rounded-md bg-accent/20 px-2" onsubmit={(event) => { event.preventDefault(); void submit(); }}>
+    <form class={cn("flex min-h-10 min-w-0 items-center gap-1 rounded-md px-2", !spansRow && "bg-accent/20")} style={contentStyle} onsubmit={(event) => { event.preventDefault(); void submit(); }}>
       <input {...inputAttributes} bind:this={input} value={draft} oninput={(event) => { draft = event.currentTarget.value; onDraftChange?.(draft); }} aria-label={label} placeholder={label} disabled={disabled || pending} class="min-h-9 w-full min-w-0 bg-transparent text-[0.866667rem] text-foreground outline-none" onkeydown={(event) => { event.stopPropagation(); if (event.key === "Escape" && !pending) { event.preventDefault(); cancel(); } }} />
       <button type="submit" class="flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground" disabled={disabled || pending || !draft.trim()} aria-label={label}><Plus class="size-4" /></button>
       <button type="button" class="rounded-md px-2 py-1 text-[0.8rem] text-muted-foreground hover:bg-accent" disabled={pending} onclick={cancel}>{t("common.cancel")}</button>
     </form>
+  {:else if spansRow}
+    <button bind:this={trigger} type="button" class="col-span-full grid min-h-10 grid-cols-subgrid items-center text-left text-[0.866667rem] text-muted-foreground outline-none hover:text-foreground focus-visible:bg-accent/40 focus-visible:text-foreground" {disabled} onclick={() => { void begin(); }}>
+      <span class="flex min-w-0 items-center gap-2 px-2" style={contentStyle}><Plus class="size-4 shrink-0" /><span class="truncate">{label}</span></span>
+    </button>
   {:else}
     <button bind:this={trigger} type="button" class="flex min-h-10 w-full items-center gap-2 rounded-md px-2 text-left text-[0.866667rem] text-muted-foreground hover:bg-accent/40 hover:text-foreground" {disabled} onclick={() => { void begin(); }}><Plus class="size-4" />{label}</button>
   {/if}
-  {#if error}<p role="alert" class="px-2 py-1 text-[0.8rem] text-destructive">{error}</p>{/if}
+  {#if error}<p role="alert" class="px-2 py-1 text-[0.8rem] text-destructive" style={contentStyle}>{error}</p>{/if}
 </div>

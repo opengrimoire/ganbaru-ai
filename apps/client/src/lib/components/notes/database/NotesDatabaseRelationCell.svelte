@@ -104,7 +104,7 @@
           <span class="min-w-0 truncate">{item.title || item.id}</span>
           <button
             type="button"
-            class="inline-flex size-4 shrink-0 items-center justify-center rounded-sm hover:bg-accent disabled:pointer-events-none disabled:opacity-50"
+            class="relative z-10 inline-flex size-4 shrink-0 items-center justify-center rounded-sm hover:bg-accent disabled:pointer-events-none disabled:opacity-50"
             disabled={mutating}
             aria-label={t("notes.databaseRelationRemove", item.title || item.id)}
             title={t("notes.databaseRelationRemove", item.title || item.id)}
@@ -136,7 +136,7 @@
         onChange={(nextValue) => {
           addRelation(nextValue);
         }}
-        triggerProps={{ "data-table-cell": "true", "data-row-index": rowIndex, "data-column-index": columnIndex, "onfocus": () => {
+        triggerProps={{ "data-table-cell": "true", "data-collection-cell-primary": "", "data-row-index": rowIndex, "data-column-index": columnIndex, "onfocus": () => {
               void loadTargets();
           }, "onkeydown": (event) => onNavigate(event, rowIndex, columnIndex) }}
       />

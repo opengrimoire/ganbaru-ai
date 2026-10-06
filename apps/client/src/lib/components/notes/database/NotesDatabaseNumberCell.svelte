@@ -29,8 +29,8 @@
   }
 </script>
 
-<input data-table-cell="true" data-row-index={rowIndex} data-column-index={columnIndex}
-  class="h-8 w-full min-w-0 rounded-sm border border-transparent bg-transparent px-1 text-foreground outline-none hover:bg-accent/20 focus:bg-accent/20"
+<input data-table-cell="true" data-collection-cell-primary data-row-index={rowIndex} data-column-index={columnIndex}
+  class="h-8 w-full min-w-0 rounded-sm border border-transparent bg-transparent px-1 text-foreground outline-none"
   value={focused || failed ? draft : display} inputmode="decimal" aria-label={column.name} disabled={mutating}
   onfocus={() => { if (!failed) draft = raw; focused = true; onEditingChange(true); }}
   oninput={(event) => { draft = event.currentTarget.value; }} onblur={() => { void commit(); }}

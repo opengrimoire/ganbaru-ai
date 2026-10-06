@@ -67,8 +67,8 @@
   }
 </script>
 
-<button bind:this={anchor} data-table-cell="true" data-row-index={rowIndex} data-column-index={columnIndex}
-  type="button" class="flex h-8 w-full min-w-0 items-center rounded-sm px-1 text-left text-foreground outline-none hover:bg-accent/20 focus-visible:bg-accent/20"
+<button bind:this={anchor} data-table-cell="true" data-collection-cell-primary data-row-index={rowIndex} data-column-index={columnIndex}
+  type="button" class="flex h-8 w-full min-w-0 items-center rounded-sm px-1 text-left text-foreground outline-none"
   disabled={mutating || saving} aria-label={column.name} aria-haspopup="dialog" aria-expanded={expanded} title={text}
   onclick={open} onkeydown={(event) => { if (event.key !== "Enter" && event.key !== " ") onNavigate(event, rowIndex, columnIndex); }}>
   <span class="min-w-0 truncate">{text || t("notes.databaseTableEmptyCell")}</span>

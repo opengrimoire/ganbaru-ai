@@ -659,6 +659,37 @@ svg.lucide[stroke-width="1.5"]:not(.app-title-bar *, .explorer-sidebar *) {
   display: none;
 }
 
+/*
+ * Collection tables highlight one surface at a time. Cells, column names, and standalone header controls share one
+ * square highlight, and an open cell or column menu, or a focused text field, suppresses hover feedback everywhere else.
+ */
+:root {
+  --collection-highlight: color-mix(in srgb, var(--accent) 40%, transparent);
+  --collection-row-highlight: color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+[data-collection-hover-target] {
+  border-radius: 0;
+  background-color: transparent;
+}
+
+:root:not(:has(:is([data-collection-cell-primary], [data-collection-hover-target])[aria-expanded="true"], [data-collection-cell-primary]:is(textarea, input:not([type="checkbox"], [type="radio"])):focus)) :is(
+  .collection-cell:has([data-collection-cell-primary]:not(:disabled)),
+  [data-collection-hover-target]:not(:disabled)
+):hover,
+.collection-cell:has([data-collection-cell-primary][aria-expanded="true"], [data-collection-cell-primary]:is(textarea, input:not([type="checkbox"], [type="radio"])):focus, :focus-visible),
+[data-collection-hover-target]:is([aria-expanded="true"], :focus-visible) {
+  background-image: linear-gradient(var(--collection-highlight), var(--collection-highlight));
+}
+
+:root:not(:has(:is([data-collection-cell-primary], [data-collection-hover-target])[aria-expanded="true"], [data-collection-cell-primary]:is(textarea, input:not([type="checkbox"], [type="radio"])):focus)) .collection-row[data-collection-hoverable]:hover {
+  background-image: linear-gradient(var(--collection-row-highlight), var(--collection-row-highlight));
+}
+
+:root:has(:is([data-collection-cell-primary], [data-collection-hover-target])[aria-expanded="true"], [data-collection-cell-primary]:is(textarea, input:not([type="checkbox"], [type="radio"])):focus) .collection-row :is(a, button, label):not([aria-expanded="true"]):not(:is([role="menu"], [role="dialog"], [role="listbox"]) *):hover {
+  background-color: transparent;
+}
+
 /* Cover geometry follows the page container, including narrow page previews. */
 .notes-page-banner {
   height: min(clamp(8rem, 20cqw, 15rem), 25svh);

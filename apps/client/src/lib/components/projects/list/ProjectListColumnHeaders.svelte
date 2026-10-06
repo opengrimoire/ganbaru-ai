@@ -53,7 +53,7 @@
   {#each taskListColumns as column (column)}
     {@render columnHeaderCell(taskListColumnLabel(column), column)}
   {/each}
-  <div class="flex min-h-11 min-w-0 items-center justify-center self-stretch text-muted-foreground">
+  <div class="grid min-h-11 min-w-0 place-items-center self-stretch text-muted-foreground">
     <ProjectListPropertyMenu column={taskListColumns.at(-1) ?? "name"} label={t("projects.columns.insertProperty")} addOnly />
   </div>
 </CollectionRow>

@@ -994,7 +994,7 @@
 
 {#snippet calculationRow(groupId: string | null)}
   {#if visibleColumns.some((column) => notesTableColumnPresentation(tableConfiguration?.presentation, column.id).calculation)}
-    <CollectionRow template={gridTemplate} role="row" data-table-calculation-group={groupId ?? "__all__"} class="border-t border-border bg-muted/20 text-muted-foreground">
+    <CollectionRow template={gridTemplate} role="row" data-table-calculation-group={groupId ?? "__all__"} class="border-t border-(--cal-gridline) bg-muted/20 text-muted-foreground">
       <div role="cell"></div><div role="cell"></div>
       {#each visibleColumns as column (column.id)}
         {@const calculation = notesTableColumnPresentation(tableConfiguration?.presentation, column.id).calculation}
@@ -1240,7 +1240,7 @@
 
       <div bind:this={tableRoot} use:rememberDatabaseScroll={databaseResource("table", dataSourceId, viewScope()).key} class="min-w-0 overflow-x-auto overflow-y-hidden">
         <div role="table" aria-label={t("notes.databaseViewTable")} class="min-w-max">
-          <CollectionRow template={gridTemplate} header role="row">
+          <CollectionRow template={gridTemplate} header role="row" class="border-t border-(--cal-gridline)">
             <div role="columnheader"><span class="sr-only">{t("notes.databaseTableRowActions")}</span></div>
             <div role="columnheader"></div>
             {#each visibleColumns as column (column.id)}
@@ -1252,7 +1252,7 @@
                 onpointerdown={(event) => startColumnResize(event, column)} onkeydown={(event) => resizeColumnKey(event, column)}>
                 {#snippet actions()}
                   <CollectionMenu label={column.name} kind="property" fullWidth showHeader={false} dismissOnAction
-                    triggerClass="h-9 justify-start rounded-sm px-2 text-[0.8rem] font-normal" disabled={mutating || editingLocked}>
+                    triggerClass="h-auto justify-start rounded-none px-2 text-[0.8rem] font-normal" triggerAttributes={{ "data-collection-cell-primary": "" }} disabled={mutating || editingLocked}>
                     {#snippet leading()}{@const Icon = propertyIcons[column.type]}<Icon class="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />{/snippet}
                     <div class="grid gap-0 font-normal">
                       <button type="button" class="flex min-h-8 items-center gap-2 rounded-sm px-2 text-left hover:bg-accent" disabled={mutating} onclick={() => onEditProperties(column.id)}>
@@ -1325,8 +1325,8 @@
                 {/snippet}
               </CollectionColumnHeader>
             {/each}
-            <div role="columnheader" class="min-w-0 font-normal">
-                <CollectionMenu label={t("notes.databaseSchemaAddProperty")} kind="new" showHeader={false} dismissOnAction disabled={mutating || editingLocked}>
+            <div role="columnheader" class="grid min-h-11 min-w-0 justify-items-start self-stretch font-normal">
+                <CollectionMenu label={t("notes.databaseSchemaAddProperty")} kind="new" showHeader={false} dismissOnAction triggerClass="h-auto text-[0.8rem]" triggerAttributes={{ "data-collection-hover-target": "" }} disabled={mutating || editingLocked}>
                   <input class="mb-1.5 h-8 w-full rounded border border-border bg-background px-2 text-[length:inherit] outline-none focus:border-ring" aria-label={t("notes.databaseSchemaName")} placeholder={t("notes.databasePropertyNamePlaceholder")} bind:value={propertyName} onkeydown={(event) => event.stopPropagation()} />
                   <input class="mb-1.5 h-8 w-full rounded border border-border bg-background px-2 text-[length:inherit] outline-none focus:border-ring" aria-label={t("notes.databasePropertySearchType")} placeholder={t("notes.databasePropertySearchType")} bind:value={propertySearch} onkeydown={(event) => event.stopPropagation()} />
                   <div class="grid gap-0">
@@ -1340,7 +1340,7 @@
           </CollectionRow>
             {#each tableItems as item (item.id)}
               {#if item.type === "group"}
-                <div role="row" data-table-group-id={item.group.id} class="flex min-h-10 items-center gap-2 border-t border-border px-2 text-[0.8rem]">
+                <div role="row" data-table-group-id={item.group.id} class="flex min-h-10 items-center gap-2 border-t border-(--cal-gridline) px-2 text-[0.8rem]">
                   <button type="button" class="flex min-h-8 min-w-0 items-center gap-2 rounded px-1 text-left hover:bg-accent" disabled={mutating || editingLocked} aria-expanded={!item.group.collapsed} onclick={() => toggleGroup(item.group.id)}><ChevronRight class={`size-3.5 shrink-0 ${item.group.collapsed ? "" : "rotate-90"}`} /><span>{groupName(item.group)}</span><span class="text-muted-foreground">{formatNumber(localization.locale, item.group.count)}</span></button>
                   {#if ["select", "multi_select", "status", "checkbox", "date"].includes(columns.find((column) => column.id === tableConfiguration?.group_property_id)?.type ?? "")}
                     <button type="button" class="ml-auto flex size-7 items-center justify-center rounded text-muted-foreground hover:bg-accent" aria-label={t("notes.databaseNewPage")} disabled={mutating || loading} onclick={() => createRow(item.group.id)}><Plus class="size-3.5" /></button>
@@ -1414,7 +1414,7 @@
                     <div class={column.type === "title" ? "flex w-full min-w-0 items-start gap-0.5" : "contents"}
                       style={column.type === "title" ? `padding-left: ${Math.min((hierarchy?.depth ?? 0) * rowIndentPixels, column.width / 2)}px;` : ""}>
                     {#if column.type === "title" && (hierarchy?.child_count ?? 0) > 0}
-                      <button type="button" class="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent"
+                      <button type="button" class="relative z-10 mt-0.5 flex size-7 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent"
                         aria-label={collapsedRowIds.includes(row.id) ? t("notes.databaseSubitemExpand", title) : t("notes.databaseSubitemCollapse", title)}
                         aria-expanded={!collapsedRowIds.includes(row.id)}
                         title={t("notes.databaseSubitemCount", formatNumber(localization.locale, hierarchy?.child_count ?? 0))}
@@ -1423,7 +1423,7 @@
                       </button>
                     {/if}
                     {#if column.type === "checkbox"}
-                      <label class="flex h-8 items-center justify-center">
+                      <label class="flex h-8 items-center justify-center" data-collection-cell-primary>
                         <input
                           data-table-cell="true"
                           data-row-index={rowIndex}
@@ -1452,7 +1452,7 @@
                         onChange={(nextValue) => {
                           void saveCell(row, column, nextValue || null);
                         }}
-                        triggerProps={{ "data-table-cell": "true", "data-row-index": rowIndex, "data-column-index": columnIndex, "onkeydown": (event) => handleCellKeydown(event, rowIndex, columnIndex) }}
+                        triggerProps={{ "data-table-cell": "true", "data-collection-cell-primary": "", "data-row-index": rowIndex, "data-column-index": columnIndex, "onkeydown": (event) => handleCellKeydown(event, rowIndex, columnIndex) }}
                       >
                         {#snippet leading(value)}
                           {@const color = column.options.find((option) => option.name === value)?.color}
@@ -1500,8 +1500,8 @@
                         </span>
                       </button>
                     {:else if notesDatabaseTableColumnCanEdit(column) && column.displayFormat?.wrap}
-                      <textarea use:fitWrappedCell={String(editValue)} data-table-cell="true" data-row-index={rowIndex} data-column-index={columnIndex} rows={1}
-                        class="min-h-8 w-full min-w-0 resize-none rounded-sm border border-transparent bg-transparent px-1 py-1.5 text-foreground outline-none hover:bg-accent/20 focus:bg-accent/20"
+                      <textarea use:fitWrappedCell={String(editValue)} data-table-cell="true" data-collection-cell-primary data-row-index={rowIndex} data-column-index={columnIndex} rows={1}
+                        class="min-h-8 w-full min-w-0 resize-none rounded-sm border border-transparent bg-transparent px-1 py-1.5 text-foreground outline-none"
                         style="field-sizing: content;" value={String(editValue)} aria-label={column.name}
                         disabled={mutating || (column.type !== "title" && rowCreation.blocked(row.id))}
                         onfocus={() => { isEditingCell = true; }}
@@ -1510,10 +1510,10 @@
                         onkeydown={(event) => handleCellKeydown(event, rowIndex, columnIndex)}></textarea>
                     {:else if notesDatabaseTableColumnCanEdit(column)}
                       <input
-                        data-table-cell="true"
+                        data-table-cell="true" data-collection-cell-primary
                         data-row-index={rowIndex}
                         data-column-index={columnIndex}
-                        class="h-8 w-full min-w-0 rounded-sm border border-transparent bg-transparent px-1 text-foreground outline-none hover:bg-accent/20 focus:bg-accent/20 focus:border-transparent focus-visible:ring-0"
+                        class="h-8 w-full min-w-0 rounded-sm border border-transparent bg-transparent px-1 text-foreground outline-none focus:border-transparent focus-visible:ring-0"
                         value={String(editValue)}
                         inputmode="text"
                         aria-label={column.name}
@@ -1557,9 +1557,8 @@
             {@render calculationRow(null)}
 
           {#key addRowKey}
-            <CollectionRow template={gridTemplate}>
-              <div class="col-span-2"></div>
-              <div data-database-new-row style={`grid-column: 3 / -1;`}><CollectionQuickAdd label={t("notes.databaseNewPage")} disabled={mutating || loading} onCreate={() => { void createRow(); }} /></div>
+            <CollectionRow template={gridTemplate} data-database-new-row>
+              <CollectionQuickAdd label={t("notes.databaseNewPage")} contentColumn={3} disabled={mutating || loading} onCreate={() => { void createRow(); }} />
             </CollectionRow>
           {/key}
         </div>

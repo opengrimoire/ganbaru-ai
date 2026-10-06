@@ -207,7 +207,7 @@
     <CollectionCell class={context?.cellClass("name")} style={context?.cellStyle("name")}>
     <button
       type="button"
-      data-list-row-drag-source="true"
+      data-list-row-drag-source="true" data-collection-cell-primary
       class="flex min-h-9 w-full min-w-0 cursor-pointer flex-col justify-center rounded-sm text-left outline-none focus-visible:bg-accent/40"
       aria-label={t("projects.actions.openTaskDetails", task.title)}
       onclick={() => onOpenTask(task)}
