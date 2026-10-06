@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from "vitest";
-import { anchoredPanelContentHeight, anchoredPanelStyle, anchoredPanelWidth, anchoredSidePanelStyle, type AnchoredPanelInput, type AnchoredSidePanelInput } from "./anchored-panel";
+import { anchoredPanelContentHeight, anchoredPanelStyle, anchoredPanelWidth, anchoredSidePanelStyle, anchoredSubmenuWidth, type AnchoredPanelInput, type AnchoredSidePanelInput } from "./anchored-panel";
 
 const ANCHOR: AnchoredPanelInput = {
   triggerRect: { top: 40, right: 480, bottom: 72, left: 448 },
@@ -97,5 +97,20 @@ describe("Anchored submenu geometry", () => {
     const tall = anchoredSidePanelStyle({ ...SUBMENU, contentHeight: 2_000, viewportHeight: 300 });
     expect(tall).toContain("top:8px");
     expect(tall).toContain("max-height:284px");
+  });
+});
+
+describe("Anchored submenu width", () => {
+  it("keeps a submenu narrower than the menu it opens from", () => {
+    expect(anchoredSubmenuWidth(320, 240, 32)).toBe(208);
+    expect(anchoredSubmenuWidth(240, 320, 32)).toBe(240);
+  });
+
+  it("keeps the preferred width while the parent menu has no layout width", () => {
+    expect(anchoredSubmenuWidth(320, 0, 32)).toBe(320);
+  });
+
+  it("never returns a negative width for a parent narrower than the inset", () => {
+    expect(anchoredSubmenuWidth(320, 20, 32)).toBe(0);
   });
 });

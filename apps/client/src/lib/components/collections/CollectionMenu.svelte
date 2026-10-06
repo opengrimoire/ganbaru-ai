@@ -1,7 +1,7 @@
 <script lang="ts">
   import { tick, untrack, type Component, type Snippet } from "svelte";
   import { portal } from "$lib/utils/portal";
-  import { anchoredPanelContentHeight, anchoredPanelStyle, anchoredPanelWidth, anchoredSidePanelStyle } from "$lib/utils/anchored-panel";
+  import { anchoredPanelContentHeight, anchoredPanelStyle, anchoredPanelWidth, anchoredSidePanelStyle, anchoredSubmenuWidth } from "$lib/utils/anchored-panel";
   import SlidersHorizontal from "@lucide/svelte/icons/sliders-horizontal";
   import ListFilter from "@lucide/svelte/icons/list-filter";
   import ArrowDownUp from "@lucide/svelte/icons/arrow-down-up";
@@ -54,6 +54,8 @@
   const PANEL_WIDTH = 320;
   const ACTION_PANEL_WIDTH = 240;
   const VIEWPORT_HEIGHT_FRACTION = 0.7;
+  /** How much narrower a submenu is than the menu it opens from. */
+  const SUBMENU_WIDTH_INSET = 32;
   /** Delay before a hovered row opens its submenu, so a pointer crossing several rows does not open each one. */
   const SUBMENU_OPEN_DELAY_MS = 100;
   /** Grace period before a hover-opened submenu closes, so the pointer can travel from its row into it. */
@@ -181,11 +183,12 @@
       + (content ? Number.parseFloat(window.getComputedStyle(content).paddingTop) || 0 : 0);
     const place = () => {
       if (disposed || !trigger) return;
+      const preferredWidth = kind === "actions" || kind === "property" || kind === "new-options" ? ACTION_PANEL_WIDTH : PANEL_WIDTH;
       const input = {
         triggerRect: trigger.getBoundingClientRect(),
         viewportWidth: window.innerWidth,
         viewportHeight: window.innerHeight,
-        preferredWidth: kind === "actions" || kind === "property" || kind === "new-options" ? ACTION_PANEL_WIDTH : PANEL_WIDTH,
+        preferredWidth: parentSurface ? anchoredSubmenuWidth(preferredWidth, parentSurface.getBoundingClientRect().width, SUBMENU_WIDTH_INSET) : preferredWidth,
         preferredMaxHeight: window.innerHeight * VIEWPORT_HEIGHT_FRACTION,
       };
       const width = `${Math.round(anchoredPanelWidth(input))}px`;

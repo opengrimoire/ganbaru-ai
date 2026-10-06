@@ -18,6 +18,15 @@ export function anchoredPanelWidth(input: AnchoredPanelInput): number {
   return Math.max(0, Math.min(input.preferredWidth ?? 256, input.viewportWidth - margin * 2));
 }
 
+/**
+ * Preferred width of a submenu, kept narrower than the menu it opens from.
+ * A parent without layout width, such as one not yet rendered, leaves the preferred width unchanged.
+ */
+export function anchoredSubmenuWidth(preferredWidth: number, parentWidth: number, inset: number): number {
+  if (parentWidth <= 0) return preferredWidth;
+  return Math.max(0, Math.min(preferredWidth, parentWidth - inset));
+}
+
 /** Measure intrinsic content and fractional borders without scrollbar rounding. */
 export function anchoredPanelContentHeight(panel: HTMLElement, content: readonly HTMLElement[]): number {
   const style = window.getComputedStyle(panel);
