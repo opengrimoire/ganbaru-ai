@@ -428,6 +428,28 @@ describe("Collection submenus", () => {
     expect(panel.querySelector('button[aria-label="Close"]')).toBeNull();
   });
 
+  it("keeps a submenu row highlighted across menu padding and moves the highlight to another hovered row", async () => {
+    const { parent, rows } = await openWithSubmenus();
+    vi.useFakeTimers();
+    hover(rows.edit);
+    await vi.advanceTimersByTimeAsync(150);
+    const edit = submenuPanel(parent, "Edit property")!;
+    expect(rows.edit.classList.contains("bg-accent")).toBe(true);
+
+    hover(rows.edit.parentElement!);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(rows.edit.classList.contains("bg-accent")).toBe(true);
+
+    hover(parent.querySelector("button")!);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(edit.isConnected).toBe(true);
+    expect(rows.edit.classList.contains("bg-accent")).toBe(false);
+
+    hover(edit.querySelector("button")!);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(rows.edit.classList.contains("bg-accent")).toBe(true);
+  });
+
   it("closes a hover-opened submenu when the mouse settles on another row and replaces it with a sibling", async () => {
     const { parent, rows } = await openWithSubmenus();
     vi.useFakeTimers();

@@ -62,6 +62,8 @@
   const SUBMENU_CLOSE_DELAY_MS = 250;
   /** Dispatched on the parent menu when one of its submenus opens, so sibling submenus close. */
   const SUBMENU_OPEN_EVENT = "collection-submenu-open";
+  /** Parent menu controls whose hover takes the highlight from an open submenu's row; padding, dividers, and labels do not. */
+  const HOVER_TARGET_SELECTOR = "button, a[href], input, select, textarea, [role^='menuitem']";
   const icons = { layout: SlidersHorizontal, filter: ListFilter, sort: ArrowDownUp, properties: Columns3, property: Columns3, group: Group, actions: Ellipsis, new: Plus, "new-options": ChevronDown };
   const Icon = $derived(icon ?? icons[kind]);
   const dismisses = $derived(kind === "actions" || dismissOnAction);
@@ -73,6 +75,8 @@
   const headerVisible = $derived(showHeader ?? (!submenu && kind !== "actions" && kind !== "property"));
   /** Set while a submenu was opened by hover and keyboard focus has not moved into it. */
   let hoverOpened = false;
+  /** Set while the mouse rests on another control of the parent menu, so an open submenu's row drops its highlight and only the hovered control shows one. */
+  let pointerElsewhere = $state(false);
   let openTimer: ReturnType<typeof setTimeout> | undefined;
   let closeTimer: ReturnType<typeof setTimeout> | undefined;
   let reportedOpen = false;
@@ -224,9 +228,11 @@
     const hoverAway = (event: PointerEvent) => {
       if (event.pointerType !== "mouse" || !(event.target instanceof Node)) return;
       if (node.contains(event.target) || trigger?.contains(event.target)) {
+        pointerElsewhere = false;
         cancelHoverClose();
         return;
       }
+      pointerElsewhere = event.target instanceof Element && event.target.closest(HOVER_TARGET_SELECTOR) !== null;
       if (node.contains(document.activeElement) || closeTimer !== undefined) return;
       closeTimer = setTimeout(() => {
         closeTimer = undefined;
@@ -306,6 +312,7 @@
         document.removeEventListener("focusin", focusin);
         node.removeEventListener("click", closeAfterAction);
         hoverOpened = false;
+        pointerElsewhere = false;
         if (restoreFocus && node.contains(document.activeElement) && trigger?.isConnected) trigger.focus({ preventScroll: true });
         moved.destroy();
       },
@@ -319,9 +326,9 @@
     type="button"
     {...triggerAttributes}
     {disabled}
-    class={cn("collection-menu-trigger inline-flex h-8 min-w-0 items-center gap-1.5 rounded px-2 text-collection font-normal transition-colors focus-visible:outline-none focus-visible:bg-accent disabled:cursor-not-allowed disabled:text-muted-foreground", primary ? "bg-primary text-primary-foreground hover:bg-primary/90" : "text-muted-foreground hover:bg-accent/60 hover:text-foreground", rowTrigger && "justify-start text-foreground", triggerClass)}
+    class={cn("collection-menu-trigger inline-flex h-8 min-w-0 items-center gap-1.5 rounded px-2 text-collection font-normal transition-colors focus-visible:outline-none focus-visible:bg-accent disabled:cursor-not-allowed disabled:text-muted-foreground", primary ? "bg-primary text-primary-foreground hover:bg-primary/90" : "text-muted-foreground hover:bg-accent/60 hover:text-foreground", rowTrigger && "justify-start text-foreground transition-none hover:bg-accent", triggerClass)}
     class:w-full={fullWidth}
-    class:bg-accent={expanded && !primary}
+    class:bg-accent={expanded && !primary && !(submenu && pointerElsewhere)}
     class:text-foreground={!primary && (expanded || activeCount > 0)}
     data-collection-settings-row={settingsRow ? "" : undefined}
     data-collection-submenu-trigger={submenu ? "" : undefined}
