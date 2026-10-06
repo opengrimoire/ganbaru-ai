@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { projectListStickyRow } from "./viewport-controller.svelte";
   import type { MaybePromise } from "$lib/utils";
   import Plus from "@lucide/svelte/icons/plus";
   import { getLocalization } from "$lib/i18n/translator.svelte";
@@ -33,6 +34,7 @@
 <div
   class="project-list-sticky-row grid min-h-(--collection-table-row-height) cursor-text items-center px-1 text-collection"
   data-add-section-row="true"
+  use:projectListStickyRow
   style={`grid-template-columns: ${gridTemplate}; min-width: max(100%, ${gridMinWidth});`}
   use:projectListAddRowInputFocus={{
     selector: "[data-add-section-input='true']",
