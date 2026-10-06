@@ -285,7 +285,7 @@
   /** Keep desktop choices compact while preserving touch targets on mobile. */
   function optionClass(): string {
     return cn(
-      "flex w-full min-w-0 items-center justify-between gap-2 rounded px-2 text-left text-foreground transition-colors hover:bg-accent/70 focus-visible:bg-accent focus-visible:outline-none",
+      "flex w-full min-w-0 items-center justify-between gap-2 rounded-md px-2 text-left text-foreground transition-colors hover:bg-accent/70 focus-visible:bg-accent focus-visible:outline-none",
       mobileLayout ? "min-h-12 text-sm" : "min-h-8 text-[0.8rem]",
     );
   }
@@ -527,14 +527,14 @@
                 bind:value={taskDueRangeStart}
                 placeholder={t("projects.filters.dueRangeStart")}
                 aria-label={t("projects.filters.dueRangeStart")}
-                class="h-8 min-w-0 rounded bg-transparent px-2 text-[0.8rem] text-foreground placeholder:text-muted-foreground"
+                class="h-8 min-w-0 rounded-md bg-transparent px-2 text-[0.8rem] text-foreground placeholder:text-muted-foreground"
               />
               <span class="text-[0.733333rem] text-muted-foreground">{t("projects.filters.dueRangeTo")}</span>
               <input
                 bind:value={taskDueRangeEnd}
                 placeholder={t("projects.filters.dueRangeEnd")}
                 aria-label={t("projects.filters.dueRangeEnd")}
-                class="h-8 min-w-0 rounded bg-transparent px-2 text-[0.8rem] text-foreground placeholder:text-muted-foreground"
+                class="h-8 min-w-0 rounded-md bg-transparent px-2 text-[0.8rem] text-foreground placeholder:text-muted-foreground"
               />
             </div>
           {/if}
@@ -629,7 +629,7 @@
               bind:value={savedViewNameDraft}
               placeholder={t("projects.savedViews.namePlaceholder")}
               aria-label={t("projects.savedViews.namePlaceholder")}
-              class="min-h-8 min-w-0 flex-1 rounded bg-accent/40 px-2 text-[0.8rem] placeholder:text-muted-foreground"
+              class="min-h-8 min-w-0 flex-1 rounded-md bg-accent/40 px-2 text-[0.8rem] placeholder:text-muted-foreground"
             />
             <button
               type="submit"
@@ -641,11 +641,11 @@
             </button>
           </form>
           {#each savedTaskViews as view (view.id)}
-            <div class="grid grid-cols-[minmax(0,1fr)_2rem] rounded hover:bg-accent/70">
+            <div class="grid grid-cols-[minmax(0,1fr)_2rem] rounded-md hover:bg-accent/70">
               <button
                 type="button"
                 data-collection-settings-row
-                class="flex min-h-8 min-w-0 items-center rounded px-2 text-left text-foreground hover:bg-accent focus-visible:bg-accent focus-visible:outline-none"
+                class="flex min-h-8 min-w-0 items-center rounded-md px-2 text-left text-foreground hover:bg-accent focus-visible:bg-accent focus-visible:outline-none"
                 title={view.name}
                 disabled={savedViewSaving || listColumnsSaving}
                 onclick={() => {
@@ -656,7 +656,7 @@
               </button>
               <button
                 type="button"
-                class="flex min-h-8 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground disabled:cursor-not-allowed"
+                class="flex min-h-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground disabled:cursor-not-allowed"
                 disabled={savedViewSaving}
                 aria-label={t("projects.savedViews.delete", view.name)}
                 title={t("projects.savedViews.delete", view.name)}

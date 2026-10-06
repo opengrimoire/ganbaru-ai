@@ -41,7 +41,7 @@
 </script>
 
 <div class="grid gap-1" data-collection-property-creator>
-  <input class="h-8 w-full rounded border border-border bg-background px-2 text-[length:inherit] outline-none" aria-label={t("collections.property.name")}
+  <input class="h-8 w-full rounded-md border border-border bg-background px-2 text-[length:inherit] outline-none" aria-label={t("collections.property.name")}
     placeholder={t("collections.property.namePlaceholder")} maxlength={maxLength} disabled={pending} bind:value={name} onkeydown={createFirstMatch} />
   <div class="flex min-h-7 items-center gap-1.5 pl-2 text-[0.75rem] text-muted-foreground">
     {#if searching}
@@ -50,7 +50,7 @@
         placeholder={t("collections.property.searchTypes")} bind:value={search} onkeydown={createFirstMatch} />
     {:else}
       <span>{t("collections.property.selectType")}</span>
-      <button type="button" class="collection-menu-control ml-auto inline-flex items-center justify-center rounded-sm hover:bg-accent hover:text-foreground" data-collection-menu-keep-open
+      <button type="button" class="collection-menu-control ml-auto inline-flex items-center justify-center rounded-md hover:bg-accent hover:text-foreground" data-collection-menu-keep-open
         aria-label={t("collections.property.searchTypes")} onclick={() => { void startSearch(); }}>
         <Search class="size-3.5" aria-hidden="true" />
       </button>
@@ -61,7 +61,7 @@
     <div class="grid grid-cols-2 gap-0.5">
       {#each section as option (option.value)}
         {@const Icon = COLLECTION_PROPERTY_ICONS[option.kind]}
-        <button type="button" class="flex min-h-8 min-w-0 items-center gap-2 rounded-sm px-2 text-left text-foreground hover:bg-accent" data-property-type={option.value}
+        <button type="button" class="flex min-h-8 min-w-0 items-center gap-2 rounded-md px-2 text-left text-foreground hover:bg-accent" data-property-type={option.value}
           disabled={pending} onclick={() => onCreate(option.value, name)}>
           <Icon class="size-3.5 shrink-0 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" /><span class="truncate">{option.label}</span>
         </button>

@@ -121,8 +121,8 @@
           <div class="grid gap-1">
             {#each projects.customFieldOptionsForField(field.id) as option (option.id)}<span class="truncate px-2 py-1">{option.name}</span>{/each}
             <form class="flex min-w-0 gap-1" onsubmit={(event) => { event.preventDefault(); void addOption(); }}>
-              <input class="h-8 min-w-0 flex-1 rounded border border-input bg-transparent px-2" aria-label={t("projects.customFields.optionName")} placeholder={t("projects.customFields.optionName")} bind:value={optionDraft} disabled={optionSaving} />
-              <button type="submit" class="collection-menu-control inline-flex items-center justify-center rounded hover:bg-accent" aria-label={t("projects.columns.addOption")} disabled={optionSaving || !optionDraft.trim()}><Plus class="size-3.5" aria-hidden="true" /></button>
+              <input class="h-8 min-w-0 flex-1 rounded-md border border-input bg-transparent px-2" aria-label={t("projects.customFields.optionName")} placeholder={t("projects.customFields.optionName")} bind:value={optionDraft} disabled={optionSaving} />
+              <button type="submit" class="collection-menu-control inline-flex items-center justify-center rounded-md hover:bg-accent" aria-label={t("projects.columns.addOption")} disabled={optionSaving || !optionDraft.trim()}><Plus class="size-3.5" aria-hidden="true" /></button>
             </form>
             {#if optionError}<p role="alert" class="px-1 py-1 text-destructive">{optionError}</p>{/if}
           </div>

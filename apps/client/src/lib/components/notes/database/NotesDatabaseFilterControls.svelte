@@ -96,14 +96,14 @@
                 const condition = property && notesDatabaseFilterConditions(property).find((candidate) => candidate === value);
                 if (condition) update(path, { condition });
               }} />
-            <button type="button" class="inline-flex size-7 items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground"
+            <button type="button" class="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
               disabled={pending} aria-label={t("notes.databaseTableRemoveFilter")}
               onclick={() => { if (!pending) onChange(notesDatabaseTransformFilter(filters, path, () => null)); }}>
               <X class="size-3.5" aria-hidden="true" />
             </button>
           </div>
           {#if notesDatabaseFilterNeedsValue(filter.condition)}
-            <input class="h-8 min-w-0 rounded-sm border border-input bg-background px-2 text-foreground outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            <input class="h-8 min-w-0 rounded-md border border-input bg-background px-2 text-foreground outline-none focus-visible:ring-1 focus-visible:ring-ring"
               type={property?.type === "number" ? "number" : property && notesDatabaseIsDateFilterProperty(property) && String(filter.value ?? "").length === 10 ? "date" : "text"}
               step={property?.type === "number" ? "any" : undefined}
               value={String(filter.value ?? "")} disabled={pending} aria-label={t("notes.databaseTableFilterValue")}
@@ -114,12 +114,12 @@
         </div>
       {/if}
     {:else if propertyId === null || notesDatabaseFilterCount(filter.filters, propertyId)}
-      <div class="grid min-w-0 gap-2 rounded-sm border border-border/60 p-2" data-notes-filter-group={filter.type}>
+      <div class="grid min-w-0 gap-2 rounded-md border border-border/60 p-2" data-notes-filter-group={filter.type}>
         <div class="flex min-w-0 items-center gap-1">
           <Select textSize="collection" inline appearance="quiet" class="min-w-0 flex-1" ariaLabel={t("notes.databaseTableFilterGroupOperator")}
             value={filter.type} disabled={pending} options={[{ value: "and", label: t("notes.databaseTableFilterMatchAll") }, { value: "or", label: t("notes.databaseTableFilterMatchAny") }]}
             onChange={(value) => { if (!pending && (value === "and" || value === "or")) onChange(notesDatabaseTransformFilter(filters, path, () => ({ type: value, filters: filter.filters }))); }} />
-          <button type="button" class="inline-flex size-7 items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground"
+          <button type="button" class="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
             disabled={pending} aria-label={t("notes.databaseTableRemoveFilterGroup")}
             onclick={() => { if (!pending) onChange(notesDatabaseTransformFilter(filters, path, () => null)); }}><X class="size-3.5" aria-hidden="true" /></button>
         </div>
@@ -132,12 +132,12 @@
 
 {#snippet addButtons(path: number[], depth: number)}
   <div class="flex flex-wrap gap-1">
-    <button type="button" class="flex min-h-7 items-center gap-1.5 rounded-sm px-2 text-left text-muted-foreground hover:bg-accent hover:text-foreground"
+    <button type="button" class="flex min-h-7 items-center gap-1.5 rounded-md px-2 text-left text-muted-foreground hover:bg-accent hover:text-foreground"
       disabled={pending || !target || filterCount >= NOTES_DATABASE_QUERY_MAX_FILTERS} onclick={() => add(path)}>
       <Plus class="size-3.5 shrink-0" aria-hidden="true" />{t("notes.databaseTableAddFilter")}
     </button>
     {#if propertyId === null}
-      <button type="button" class="flex min-h-7 items-center gap-1.5 rounded-sm px-2 text-left text-muted-foreground hover:bg-accent hover:text-foreground"
+      <button type="button" class="flex min-h-7 items-center gap-1.5 rounded-md px-2 text-left text-muted-foreground hover:bg-accent hover:text-foreground"
         disabled={pending || !target || filterCount >= NOTES_DATABASE_QUERY_MAX_FILTERS || groupCount >= NOTES_DATABASE_QUERY_MAX_FILTER_GROUPS || depth >= NOTES_DATABASE_QUERY_MAX_FILTER_DEPTH}
         onclick={() => add(path, true)}><Plus class="size-3.5 shrink-0" aria-hidden="true" />{t("notes.databaseTableAddFilterGroup")}</button>
     {/if}

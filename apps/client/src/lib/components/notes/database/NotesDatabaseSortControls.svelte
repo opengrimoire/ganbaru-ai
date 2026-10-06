@@ -42,13 +42,13 @@
         options={[{ value: "ascending", label: t("notes.databaseTableSortAscending") }, { value: "descending", label: t("notes.databaseTableSortDescending") }]}
         onChange={(direction) => update(index, { direction: direction === "descending" ? "descending" : "ascending" })}
         triggerProps={{ "onkeydown": (event) => event.stopPropagation() }} />
-      <button type="button" class="inline-flex size-7 items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground"
+      <button type="button" class="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
         disabled={pending} aria-label={t("notes.databaseTableRemoveSort")} onclick={() => onChange(sorts.filter((_, sortIndex) => sortIndex !== index))}>
         <X class="size-3.5" aria-hidden="true" />
       </button>
     </div>
   {/each}
-  <button type="button" class="flex min-h-7 items-center gap-1.5 rounded-sm px-2 text-left text-muted-foreground hover:bg-accent hover:text-foreground"
+  <button type="button" class="flex min-h-7 items-center gap-1.5 rounded-md px-2 text-left text-muted-foreground hover:bg-accent hover:text-foreground"
     disabled={pending || !unusedProperty || sorts.length >= NOTES_DATABASE_QUERY_MAX_SORTS} onclick={add}>
     <Plus class="size-3.5 shrink-0" aria-hidden="true" />{t("notes.databaseTableAddSort")}
   </button>

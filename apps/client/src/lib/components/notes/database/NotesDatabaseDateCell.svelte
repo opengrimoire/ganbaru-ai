@@ -77,13 +77,13 @@
 {#if expanded}
   <CollectionSettings label={column.name} {anchor} onClose={close}>
     <fieldset disabled={saving || mutating} class="m-0 grid min-w-0 gap-2 border-0 p-1 font-normal">
-      <label class="grid gap-1">{t("notes.databaseDateStart")}<input class="h-8 min-w-0 rounded border border-input bg-background px-2 outline-none" aria-label={t("notes.databaseDateStart")} placeholder={t("notes.databaseDateBoundaryHint")} bind:value={start} /></label>
-      <label class="grid gap-1">{t("notes.databaseDateEnd")}<input class="h-8 min-w-0 rounded border border-input bg-background px-2 outline-none" aria-label={t("notes.databaseDateEnd")} placeholder={t("notes.databaseDateBoundaryHint")} bind:value={end} /></label>
-      <label class="grid gap-1">{t("notes.databaseDateTimeZone")}<input class="h-8 min-w-0 rounded border border-input bg-background px-2 outline-none" aria-label={t("notes.databaseDateTimeZone")} placeholder={t("notes.databaseDateZoneHint")} bind:value={timeZone} /></label>
+      <label class="grid gap-1">{t("notes.databaseDateStart")}<input class="h-8 min-w-0 rounded-md border border-input bg-background px-2 outline-none" aria-label={t("notes.databaseDateStart")} placeholder={t("notes.databaseDateBoundaryHint")} bind:value={start} /></label>
+      <label class="grid gap-1">{t("notes.databaseDateEnd")}<input class="h-8 min-w-0 rounded-md border border-input bg-background px-2 outline-none" aria-label={t("notes.databaseDateEnd")} placeholder={t("notes.databaseDateBoundaryHint")} bind:value={end} /></label>
+      <label class="grid gap-1">{t("notes.databaseDateTimeZone")}<input class="h-8 min-w-0 rounded-md border border-input bg-background px-2 outline-none" aria-label={t("notes.databaseDateTimeZone")} placeholder={t("notes.databaseDateZoneHint")} bind:value={timeZone} /></label>
       {#if error}<p class="text-destructive" role="alert">{error}</p>{/if}
       <div class="flex items-center gap-2">
-        <button type="button" class="min-h-8 rounded bg-primary px-2 text-primary-foreground disabled:opacity-50" onclick={() => { void save(); }}>{t("notes.databaseDateApply")}</button>
-        <button type="button" class="min-h-8 rounded px-2 text-muted-foreground hover:bg-accent" disabled={!date} onclick={() => { void save(true); }}>{t("notes.databaseDateClear")}</button>
+        <button type="button" class="min-h-8 rounded-md bg-primary px-2 text-primary-foreground disabled:opacity-50" onclick={() => { void save(); }}>{t("notes.databaseDateApply")}</button>
+        <button type="button" class="min-h-8 rounded-md px-2 text-muted-foreground hover:bg-accent" disabled={!date} onclick={() => { void save(true); }}>{t("notes.databaseDateClear")}</button>
       </div>
     </fieldset>
   </CollectionSettings>
