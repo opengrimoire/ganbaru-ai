@@ -131,8 +131,12 @@
   --default-type-scale: 1.066667;
   --font-scale: 1;
   --type-scale: calc(var(--default-type-scale) * var(--font-scale));
-  /* Notes paragraph size, shared by database panels and tables so they read at body text size. */
+  /* Notes paragraph size. */
   --paragraph-font-size: calc(1rem * var(--font-scale));
+  /* Collection tables and their panels read slightly smaller than paragraphs, keeping the proportion Notion uses for databases. */
+  --collection-font-size: calc(var(--paragraph-font-size) * 0.875);
+  /* Minimum height of collection table rows and headers; touch layouts raise it to a 44px target. */
+  --collection-table-row-height: 2.375rem;
   --radius: 0.5rem;
   --explorer-width: 17rem;
   --icon-stroke-width: 1.6;
@@ -300,8 +304,8 @@ svg.lucide[stroke-width="1.5"]:not(.app-title-bar *, .explorer-sidebar *) {
   --text-sm--line-height: calc(1.25rem * var(--type-scale));
   --text-base: calc(1rem * var(--type-scale));
   --text-base--line-height: calc(1.5rem * var(--type-scale));
-  --text-paragraph: var(--paragraph-font-size);
-  --text-paragraph--line-height: 1.5;
+  --text-collection: var(--collection-font-size);
+  --text-collection--line-height: 1.5;
   --text-identity: calc(0.875rem * var(--type-scale));
   --text-identity--line-height: calc(1.25rem * var(--type-scale));
   --text-lg: calc(1.125rem * var(--type-scale));
@@ -461,6 +465,7 @@ svg.lucide[stroke-width="1.5"]:not(.app-title-bar *, .explorer-sidebar *) {
   html[data-shell="mobile"] {
     --titlebar-h: var(--mobile-topbar-h);
     --cal-header-row-h: 56px;
+    --collection-table-row-height: 2.75rem;
   }
   .mobile-viewport-height {
     height: 100%;
@@ -468,6 +473,11 @@ svg.lucide[stroke-width="1.5"]:not(.app-title-bar *, .explorer-sidebar *) {
   @supports (height: 100dvh) {
     .mobile-viewport-height {
       height: 100dvh;
+    }
+  }
+  @media (any-pointer: coarse) and (any-hover: none) {
+    :root {
+      --collection-table-row-height: 2.75rem;
     }
   }
   html[data-shell="mobile"] :where(button, a, input, select, textarea) {

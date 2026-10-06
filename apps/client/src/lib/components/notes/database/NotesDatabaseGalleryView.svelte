@@ -328,7 +328,7 @@
       <div class="grid gap-3">
         <div class="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(8rem,1fr)] items-center gap-3">
           <span>{t("notes.databaseGalleryPreview")}</span>
-          <Select textSize="paragraph"
+          <Select textSize="collection"
             inline
             appearance="quiet"
             contentAlign="start"
@@ -346,7 +346,7 @@
         {#if configuration.cover_source === "files_property"}
           <div class="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(8rem,1fr)] items-center gap-3">
             <span>{t("notes.databaseGalleryCoverProperty")}</span>
-            <Select textSize="paragraph"
+            <Select textSize="collection"
               inline
               appearance="quiet"
               contentAlign="start"
@@ -363,7 +363,7 @@
         {/if}
         <div class="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(8rem,1fr)] items-center gap-3">
           <span>{t("notes.databaseGalleryCardSize")}</span>
-          <Select textSize="paragraph"
+          <Select textSize="collection"
             inline
             appearance="quiet"
             contentAlign="start"
@@ -390,7 +390,7 @@
         </label>
         <div class="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(8rem,1fr)] items-center gap-3">
           <span>{t("notes.databaseTableOpenMode")}</span>
-          <Select textSize="paragraph"
+          <Select textSize="collection"
             inline
             appearance="quiet"
             contentAlign="start"

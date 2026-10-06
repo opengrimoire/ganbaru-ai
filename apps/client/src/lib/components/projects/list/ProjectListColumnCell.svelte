@@ -488,7 +488,7 @@
     </div>
       {#if statusMenuOpen}
         <div
-          class="absolute left-0 top-full z-30 mt-1 w-44 rounded-lg border border-border bg-popover p-1 text-paragraph text-popover-foreground shadow-sm"
+          class="absolute left-0 top-full z-30 mt-1 w-44 rounded-lg border border-border bg-popover p-1 text-collection text-popover-foreground shadow-sm"
           role="menu"
         >
           {#each statuses as nextStatus (nextStatus.id)}
@@ -533,7 +533,7 @@
     </div>
       {#if priorityMenuOpen}
         <div
-          class="absolute left-0 top-full z-30 mt-1 w-44 rounded-lg border border-border bg-popover p-1 text-paragraph text-popover-foreground shadow-sm"
+          class="absolute left-0 top-full z-30 mt-1 w-44 rounded-lg border border-border bg-popover p-1 text-collection text-popover-foreground shadow-sm"
           role="menu"
         >
           {#each priorities as priority (priority.id)}
@@ -848,7 +848,7 @@
           </button>
           {#if customFieldPanelOpen}
             <div
-              class="fixed z-40 min-w-44 rounded-lg border border-border bg-popover p-1 text-paragraph text-popover-foreground shadow-sm"
+              class="fixed z-40 min-w-44 rounded-lg border border-border bg-popover p-1 text-collection text-popover-foreground shadow-sm"
               role="menu"
               aria-label={customField.name}
               use:positionCustomFieldPanel

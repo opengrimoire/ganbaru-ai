@@ -84,12 +84,12 @@
         <div class="grid gap-1.5" data-notes-filter-predicate>
           <div class={propertyId === null ? "grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-1" : "grid min-w-0 grid-cols-[minmax(0,1fr)_auto] gap-1"}>
             {#if propertyId === null}
-              <Select textSize="paragraph" inline appearance="quiet" contentAlign="start" class="w-full min-w-0"
+              <Select textSize="collection" inline appearance="quiet" contentAlign="start" class="w-full min-w-0"
                 ariaLabel={t("notes.databaseTableFilterProperty")} value={filter.property_id} disabled={pending}
                 options={available.map((candidate) => ({ value: candidate.id, label: candidate.name }))}
                 onChange={(property_id) => update(path, { property_id })} />
             {/if}
-            <Select textSize="paragraph" inline appearance="quiet" contentAlign="start" class="w-full min-w-0"
+            <Select textSize="collection" inline appearance="quiet" contentAlign="start" class="w-full min-w-0"
               ariaLabel={t("notes.databaseTableFilterConditionLabel")} value={filter.condition} disabled={pending || !property}
               options={property ? notesDatabaseFilterConditions(property).map((condition) => ({ value: condition, label: conditionLabel(condition) })) : []}
               onChange={(value) => {
@@ -116,7 +116,7 @@
     {:else if propertyId === null || notesDatabaseFilterCount(filter.filters, propertyId)}
       <div class="grid min-w-0 gap-2 rounded-sm border border-border/60 p-2" data-notes-filter-group={filter.type}>
         <div class="flex min-w-0 items-center gap-1">
-          <Select textSize="paragraph" inline appearance="quiet" class="min-w-0 flex-1" ariaLabel={t("notes.databaseTableFilterGroupOperator")}
+          <Select textSize="collection" inline appearance="quiet" class="min-w-0 flex-1" ariaLabel={t("notes.databaseTableFilterGroupOperator")}
             value={filter.type} disabled={pending} options={[{ value: "and", label: t("notes.databaseTableFilterMatchAll") }, { value: "or", label: t("notes.databaseTableFilterMatchAny") }]}
             onChange={(value) => { if (!pending && (value === "and" || value === "or")) onChange(notesDatabaseTransformFilter(filters, path, () => ({ type: value, filters: filter.filters }))); }} />
           <button type="button" class="inline-flex size-7 items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground"

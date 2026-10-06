@@ -54,7 +54,7 @@
   {#each taskListColumns as column (column)}
     {@render columnHeaderCell(taskListColumnLabel(column), column)}
   {/each}
-  <div class="grid min-h-11 min-w-0 place-items-center self-stretch text-muted-foreground">
+  <div class="grid min-h-(--collection-table-row-height) min-w-0 place-items-center self-stretch text-muted-foreground">
     {#if context}<ProjectListAddPropertyMenu query={context.query} anchor={taskListColumns.at(-1) ?? "name"} label={t("collections.property.add")} variant="button" />{/if}
   </div>
 </CollectionRow>

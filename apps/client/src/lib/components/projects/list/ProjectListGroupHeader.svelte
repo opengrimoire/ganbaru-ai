@@ -26,11 +26,11 @@
 </script>
 
 <div
-  class="project-list-divider project-list-sticky-row group/list-group-header grid min-h-11 items-center px-1"
+  class="project-list-divider project-list-sticky-row group/list-group-header grid min-h-(--collection-table-row-height) items-center px-1"
   style={`grid-template-columns: ${gridTemplate}; min-width: ${gridMinWidth};`}
 >
   <div
-    class="project-list-leading-row grid min-h-11 items-center"
+    class="project-list-leading-row grid min-h-(--collection-table-row-height) items-center"
     style={`grid-column: 1 / span 3; grid-template-columns: ${leadingGridTemplate};`}
   >
     <ProjectListSelectionButton

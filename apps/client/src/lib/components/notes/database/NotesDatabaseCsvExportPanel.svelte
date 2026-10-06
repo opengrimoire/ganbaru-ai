@@ -98,7 +98,7 @@
     <div class="flex min-w-0 flex-wrap items-center gap-2">
       <div class="min-w-0 text-muted-foreground">
         <span class="mb-1 block">{t("notes.databaseCsvExportScope")}</span>
-        <Select textSize="paragraph"
+        <Select textSize="collection"
           inline
           appearance="quiet"
           contentAlign="start"

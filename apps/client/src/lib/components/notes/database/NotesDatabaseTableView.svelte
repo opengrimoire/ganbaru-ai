@@ -1002,12 +1002,12 @@
               <CollectionMenu label={t("notes.databaseLayout")} summary={t("notes.databaseViewTable")} fullWidth>
                 <div class="grid gap-2">
                   <span>{t("notes.databaseTableOpenMode")}</span>
-                  <Select textSize="paragraph" inline appearance="quiet" contentAlign="start" class="w-full min-w-0" ariaLabel={t("notes.databaseTableOpenMode")} value={String(rowOpenMode ?? "")} disabled={loading || mutating || !table} options={[{ value: "full_page", label: String(rowOpenModeLabel("full_page")) }, { value: "side_panel", label: String(rowOpenModeLabel("side_panel")) }]} onChange={(nextValue) => updateRowOpenMode(nextValue as NotesDatabaseTableRowOpenMode)} triggerProps={{ "onkeydown": (event) => event.stopPropagation() }} />
+                  <Select textSize="collection" inline appearance="quiet" contentAlign="start" class="w-full min-w-0" ariaLabel={t("notes.databaseTableOpenMode")} value={String(rowOpenMode ?? "")} disabled={loading || mutating || !table} options={[{ value: "full_page", label: String(rowOpenModeLabel("full_page")) }, { value: "side_panel", label: String(rowOpenModeLabel("side_panel")) }]} onChange={(nextValue) => updateRowOpenMode(nextValue as NotesDatabaseTableRowOpenMode)} triggerProps={{ "onkeydown": (event) => event.stopPropagation() }} />
                 </div>
               </CollectionMenu>
               <CollectionMenu label={t("notes.databaseTablePresentation.groupBy")} kind="group" summary={columns.find((column) => column.id === tableConfiguration?.group_property_id)?.name ?? t("notes.databaseTablePresentation.noGroup")} fullWidth>
                 <div class="grid gap-2">
-                  <Select textSize="paragraph" inline appearance="quiet" contentAlign="start" class="w-full min-w-0" ariaLabel={t("notes.databaseTablePresentation.groupBy")} value={tableConfiguration?.group_property_id ?? ""} disabled={mutating}
+                  <Select textSize="collection" inline appearance="quiet" contentAlign="start" class="w-full min-w-0" ariaLabel={t("notes.databaseTablePresentation.groupBy")} value={tableConfiguration?.group_property_id ?? ""} disabled={mutating}
                     options={[{ value: "", label: t("notes.databaseTablePresentation.noGroup") }, ...notesTableGroupableColumns(columns).map((column) => ({ value: column.id, label: column.name }))]}
                     onChange={(id) => updateGrouping(id || null)} />
                   <label class="flex min-h-8 items-center gap-2"><input type="checkbox" checked={tableConfiguration?.hide_empty_groups ?? false} disabled={mutating} onchange={(event) => { void persistTable(columns, rowOpenMode, filters, sorts, { ...tableConfiguration, hide_empty_groups: event.currentTarget.checked }); }} />{t("notes.databaseTablePresentation.hideEmptyGroups")}</label>
@@ -1062,12 +1062,12 @@
             {#each tableConfiguration?.presentation?.color_rules ?? [] as rule (rule.id)}
               <div class="grid gap-2 rounded border border-border p-2">
                 <div class="flex items-center gap-2">
-                  <Select textSize="paragraph" inline appearance="quiet" class="min-w-0 flex-1" ariaLabel={t("notes.databaseTablePresentation.target")} value={rule.property_id ?? ""} disabled={mutating}
+                  <Select textSize="collection" inline appearance="quiet" class="min-w-0 flex-1" ariaLabel={t("notes.databaseTablePresentation.target")} value={rule.property_id ?? ""} disabled={mutating}
                     options={[{ value: "", label: t("notes.databaseTablePresentation.rowColor") }, ...columns.map((column) => ({ value: column.id, label: column.name }))]}
                     onChange={(value) => updateColorRule(rule.id, { property_id: value || null })} />
                   <button type="button" class="flex size-7 items-center justify-center rounded text-muted-foreground hover:bg-accent" aria-label={t("notes.databaseTablePresentation.removeColorRule")} disabled={mutating} onclick={() => saveColorRules((tableConfiguration?.presentation?.color_rules ?? []).filter((candidate) => candidate.id !== rule.id))}><Trash2 class="size-3.5" /></button>
                 </div>
-                <Select textSize="paragraph" inline appearance="quiet" class="w-full" ariaLabel={t("notes.databaseTablePresentation.color")} value={rule.color} disabled={mutating}
+                <Select textSize="collection" inline appearance="quiet" class="w-full" ariaLabel={t("notes.databaseTablePresentation.color")} value={rule.color} disabled={mutating}
                   options={NOTES_TEXT_COLORS.filter((color) => color !== "default").map((color) => ({ value: color, label: t(`notes.blockColor.${color}`) }))}
                   onChange={(value) => updateColorRule(rule.id, { color: value as NotesDatabaseTableColorRule["color"] })} />
                 <NotesDatabaseFilterControls properties={columns} filters={rule.filters} pending={mutating} onChange={(next) => { if (next.length) updateColorRule(rule.id, { filters: next }); }} />
@@ -1081,7 +1081,7 @@
           <div class="mt-2 grid min-w-0 gap-2 @lg:grid-cols-[minmax(8rem,1fr)_minmax(8rem,1fr)_auto]">
             <div class="min-w-0 text-muted-foreground">
               <span class="mb-1 block">{t("notes.databaseTemplatesUse")}</span>
-              <Select textSize="paragraph"
+              <Select textSize="collection"
                 inline
                 appearance="quiet"
                 contentAlign="start"
@@ -1112,7 +1112,7 @@
             </label>
             <div class="min-w-0 text-muted-foreground">
               <span class="mb-1 block">{t("notes.databaseTemplatesSourceRow")}</span>
-              <Select textSize="paragraph"
+              <Select textSize="collection"
                 inline
                 appearance="quiet"
                 contentAlign="start"
@@ -1285,7 +1285,7 @@
                 {/snippet}
               </CollectionColumnHeader>
             {/each}
-            <div role="columnheader" class="grid min-h-11 min-w-0 items-center justify-items-start self-stretch font-normal text-muted-foreground">
+            <div role="columnheader" class="grid min-h-(--collection-table-row-height) min-w-0 items-center justify-items-start self-stretch font-normal text-muted-foreground">
               <CollectionMenu label={t("collections.property.add")} kind="new" iconOnly showHeader={false} dismissOnAction disabled={mutating || editingLocked}
                 triggerClass="size-9 justify-center px-0" triggerAttributes={{ "data-collection-hover-target": "" }}>
                 <CollectionPropertyCreator types={propertyTypeOptions} bind:name={newPropertyName} pending={mutating} maxLength={NOTES_DATA_SOURCE_PROPERTY_NAME_MAX_CHARACTERS}
@@ -1295,7 +1295,7 @@
           </CollectionRow>
             {#each tableItems as item (item.id)}
               {#if item.type === "group"}
-                <div role="row" data-table-group-id={item.group.id} class="flex min-h-10 items-center gap-2 border-t border-(--cal-gridline) px-2 text-[0.8rem]">
+                <div role="row" data-table-group-id={item.group.id} class="flex min-h-(--collection-table-row-height) items-center gap-2 border-t border-(--cal-gridline) px-2 text-[0.8rem]">
                   <button type="button" class="flex min-h-8 min-w-0 items-center gap-2 rounded px-1 text-left hover:bg-accent" disabled={mutating || editingLocked} aria-expanded={!item.group.collapsed} onclick={() => toggleGroup(item.group.id)}><ChevronRight class={`size-3.5 shrink-0 ${item.group.collapsed ? "" : "rotate-90"}`} /><span>{groupName(item.group)}</span><span class="text-muted-foreground">{formatNumber(localization.locale, item.group.count)}</span></button>
                   {#if ["select", "multi_select", "status", "checkbox", "date"].includes(columns.find((column) => column.id === tableConfiguration?.group_property_id)?.type ?? "")}
                     <button type="button" class="ml-auto flex size-7 items-center justify-center rounded text-muted-foreground hover:bg-accent" aria-label={t("notes.databaseNewPage")} disabled={mutating || loading} onclick={() => createRow(item.group.id)}><Plus class="size-3.5" /></button>
@@ -1394,7 +1394,7 @@
                         />
                       </label>
                     {:else if column.type === "select" || column.type === "status"}
-                      <Select textSize="paragraph"
+                      <Select textSize="collection"
                         inline
                         appearance="quiet"
                         contentAlign="start"

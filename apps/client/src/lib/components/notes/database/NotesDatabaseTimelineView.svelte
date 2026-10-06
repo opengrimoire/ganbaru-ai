@@ -428,7 +428,7 @@
       <div class="grid gap-3">
         <div class="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(8rem,1fr)] items-center gap-3">
           <span>{t("notes.databaseTimelineDateProperty")}</span>
-          <Select textSize="paragraph"
+          <Select textSize="collection"
             inline
             appearance="quiet"
             contentAlign="start"
@@ -444,7 +444,7 @@
         </div>
         <div class="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(8rem,1fr)] items-center gap-3">
           <span>{t("notes.databaseTableOpenMode")}</span>
-          <Select textSize="paragraph"
+          <Select textSize="collection"
             inline
             appearance="quiet"
             contentAlign="start"
@@ -463,7 +463,7 @@
     <CollectionMenu fullWidth disabled={editingLocked} label={t("notes.databaseGroup")} kind="group" summary={groupColumn?.name ?? t("common.none")}>
         <div class="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(8rem,1fr)] items-center gap-3">
           <span>{t("notes.databaseTimelineGroupBy")}</span>
-          <Select textSize="paragraph"
+          <Select textSize="collection"
             inline
             appearance="quiet"
             contentAlign="start"

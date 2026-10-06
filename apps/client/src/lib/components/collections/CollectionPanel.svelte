@@ -9,13 +9,13 @@
   } = $props();
 </script>
 
-<div {...attributes} bind:this={element} role="dialog" aria-label={label} tabindex="-1" data-floating-root data-app-floating-surface data-app-shortcuts="ignore" class={cn("collection-panel flex min-h-0 flex-col overflow-hidden rounded-md border border-border bg-popover text-paragraph text-popover-foreground shadow-sm", className)}>
+<div {...attributes} bind:this={element} role="dialog" aria-label={label} tabindex="-1" data-floating-root data-app-floating-surface data-app-shortcuts="ignore" class={cn("collection-panel flex min-h-0 flex-col overflow-hidden rounded-md border border-border bg-popover text-collection text-popover-foreground shadow-sm", className)}>
   {@render children()}
 </div>
 
 <style>
   .collection-panel {
-    --collection-row-height: calc(var(--paragraph-font-size) * 1.5 + 0.5rem);
+    --collection-row-height: calc(var(--collection-font-size) * 1.5 + 0.5rem);
   }
   .collection-panel :global(:disabled) { opacity: 1; }
   .collection-panel :global([data-collection-menu-body] .grid) {
@@ -29,7 +29,7 @@
     flex-shrink: 0;
     padding: 0.25rem 0.5rem;
     gap: 0.375rem;
-    font-size: var(--paragraph-font-size);
+    font-size: var(--collection-font-size);
     line-height: 1.5;
     white-space: nowrap;
   }
@@ -55,7 +55,7 @@
     flex-shrink: 0;
   }
   .collection-panel :global(:is(input, select, textarea)) {
-    font-size: var(--paragraph-font-size);
+    font-size: var(--collection-font-size);
   }
   .collection-panel :global([role="listbox"][data-app-floating-surface]) {
     padding-inline: 0.375rem;

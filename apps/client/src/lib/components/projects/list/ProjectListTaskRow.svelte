@@ -208,7 +208,7 @@
     <button
       type="button"
       data-list-row-drag-source="true" data-collection-cell-primary
-      class="flex min-h-9 w-full min-w-0 cursor-pointer flex-col justify-center rounded-sm text-left outline-none focus-visible:bg-accent/40"
+      class="flex min-h-7 w-full min-w-0 cursor-pointer flex-col justify-center rounded-sm text-left outline-none focus-visible:bg-accent/40"
       aria-label={t("projects.actions.openTaskDetails", task.title)}
       onclick={() => onOpenTask(task)}
     >
@@ -287,7 +287,7 @@
         onClearDueTime={onClearDueTime}
       />
     {/each}
-    <div class="min-h-11 self-stretch" aria-hidden="true"></div>
+    <div class="min-h-(--collection-table-row-height) self-stretch" aria-hidden="true"></div>
   </CollectionRow>
   <ProjectListSubtaskRows
     {subtasks}

@@ -85,12 +85,12 @@
     contentAlign?: "start" | "end";
     /** Native trigger metadata and focus/navigation handlers for labels and editable grids. */
     triggerProps?: Omit<HTMLButtonAttributes, "children" | "onclick" | "class" | "disabled">;
-    /** Text size of the trigger and menu: compact for settings controls, paragraph for collection cells that read at body size. */
-    textSize?: "compact" | "paragraph";
+    /** Text size of the trigger and menu: compact for settings controls, collection to match collection tables and panels. */
+    textSize?: "compact" | "collection";
   } = $props();
 
   const { t } = getLocalization();
-  const textClass = $derived(textSize === "paragraph" ? "text-paragraph" : "text-[0.8rem]");
+  const textClass = $derived(textSize === "collection" ? "text-collection" : "text-[0.8rem]");
 
   const ESTIMATED_DROPDOWN_HEIGHT = 240;
   const DEFAULT_POPOVER_GEOMETRY: SelectPopoverGeometry = {

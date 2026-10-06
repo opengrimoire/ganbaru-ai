@@ -324,7 +324,7 @@
       <div class="grid gap-3">
         <div class="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(8rem,1fr)] items-center gap-3">
           <span>{t("notes.databaseTableOpenMode")}</span>
-          <Select textSize="paragraph"
+          <Select textSize="collection"
             inline
             appearance="quiet"
             contentAlign="start"
@@ -344,7 +344,7 @@
       <div class="grid gap-2">
         <div class="grid min-w-0 grid-cols-[minmax(0,1fr)_minmax(8rem,1fr)] items-center gap-3">
           <span>{t("notes.databaseListGroupBy")}</span>
-          <Select textSize="paragraph"
+          <Select textSize="collection"
             inline
             appearance="quiet"
             contentAlign="start"

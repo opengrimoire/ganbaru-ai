@@ -46,7 +46,7 @@
   {#each query.listPresentation.colorRules as rule, index (rule.id)}
     <div class="mb-2 grid min-w-0 gap-1 rounded border border-border p-2">
       <div class="flex gap-1">
-        <Select textSize="paragraph" inline appearance="quiet" ariaLabel={t("projects.columns.colorProperty")} value={rule.property} disabled={query.presentationSaving}
+        <Select textSize="collection" inline appearance="quiet" ariaLabel={t("projects.columns.colorProperty")} value={rule.property} disabled={query.presentationSaving}
           options={[{value: "status", label: t("projects.columns.status")}, {value: "priority", label: t("projects.columns.priority")}]}
           onChange={(value) => {
             if (value === "status" || value === "priority") {
@@ -57,7 +57,7 @@
         <button class="flex size-8 shrink-0 items-center justify-center rounded hover:bg-accent" disabled={query.presentationSaving || index === 0} aria-label={t("projects.columns.moveRuleUp")} onclick={() => moveUp(index)}><ArrowUp class="size-3.5" /></button>
         <button class="flex size-8 shrink-0 items-center justify-center rounded hover:bg-accent" disabled={query.presentationSaving} aria-label={t("projects.columns.removeRule")} onclick={() => saveRules(query.listPresentation.colorRules.filter((entry) => entry.id !== rule.id))}><Trash2 class="size-3.5" /></button>
       </div>
-      <Select textSize="paragraph" inline appearance="quiet" ariaLabel={t("projects.columns.colorValue")} value={rule.value} disabled={query.presentationSaving}
+      <Select textSize="collection" inline appearance="quiet" ariaLabel={t("projects.columns.colorValue")} value={rule.value} disabled={query.presentationSaving}
         options={(rule.property === "status" ? query.statuses : query.priorities).map((entry) => ({ value: entry.id, label: entry.name }))}
         onChange={(value) => updateRule(rule, { value })} />
       <CollectionMenu label={t("projects.columns.rowColor")} kind="layout" fullWidth disabled={query.presentationSaving}>

@@ -23,7 +23,7 @@
 </script>
 
 <div class="grid gap-2">
-  <Select textSize="paragraph" inline appearance="quiet" class="w-full" ariaLabel={t("notes.databaseSubitemParent")}
+  <Select textSize="collection" inline appearance="quiet" class="w-full" ariaLabel={t("notes.databaseSubitemParent")}
     value={parentId} disabled={pending}
     options={[{ value: "", label: t("notes.databaseSubitemRoot") }, ...(unloadedParentId ? [{ value: unloadedParentId, label: t("notes.databaseSubitemUnloadedParent") }] : []), ...candidates.map((row) => ({ value: row.id, label: titleFor(row) }))]}
     onChange={(value) => { parentId = value; }} />

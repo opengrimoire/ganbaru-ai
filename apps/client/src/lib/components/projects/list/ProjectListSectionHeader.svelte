@@ -78,7 +78,7 @@
 
 <div
   class={cn(
-    "project-list-divider project-list-sticky-row group/section-header grid min-h-11 items-center px-1",
+    "project-list-divider project-list-sticky-row group/section-header grid min-h-(--collection-table-row-height) items-center px-1",
     canDrag && "cursor-grab active:cursor-grabbing",
   )}
   style={`grid-template-columns: ${gridTemplate}; min-width: ${gridMinWidth};`}
@@ -92,7 +92,7 @@
   ondragend={onDragEnd}
 >
   <div
-    class="project-list-leading-row grid min-h-11 items-center"
+    class="project-list-leading-row grid min-h-(--collection-table-row-height) items-center"
     style={`grid-column: 1 / span 3; grid-template-columns: ${leadingGridTemplate};`}
   >
     <ProjectListSelectionButton
