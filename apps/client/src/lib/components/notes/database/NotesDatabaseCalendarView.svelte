@@ -452,7 +452,8 @@
       </div>
     {:else}
       <div class="grid gap-2 @container">
-        <div use:rememberDatabaseScroll={databaseResource("calendar", dataSourceId, viewScope()).key} class="min-w-0 overflow-x-auto">
+        <!-- The bottom padding keeps the grid border inside the scroll clip when zoom gives rows fractional heights. -->
+        <div use:rememberDatabaseScroll={databaseResource("calendar", dataSourceId, viewScope()).key} class="min-w-0 overflow-x-auto pb-px">
         <div class="grid min-w-2xl grid-cols-7 gap-px overflow-hidden rounded-md border border-border bg-border text-[0.8rem]">
           {#each weekdayLabels() as weekday}
             <div class="bg-muted px-2 py-1 text-center font-medium text-muted-foreground">{weekday}</div>

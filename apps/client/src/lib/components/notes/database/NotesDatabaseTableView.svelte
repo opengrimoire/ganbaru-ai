@@ -1116,7 +1116,8 @@
         <button class="min-h-8 rounded-md border border-border px-2 text-[0.8rem] hover:bg-accent" type="button" onclick={retryCsvPanel}>{t("common.retry")}</button>
       {/if}
 
-      <div bind:this={tableRoot} use:rememberDatabaseScroll={databaseResource("table", dataSourceId, viewScope()).key} class="min-w-0 overflow-x-auto overflow-y-hidden">
+      <!-- The bottom padding keeps the last row border inside the scroll clip when zoom gives rows fractional heights. -->
+      <div bind:this={tableRoot} use:rememberDatabaseScroll={databaseResource("table", dataSourceId, viewScope()).key} class="min-w-0 overflow-x-auto overflow-y-hidden pb-px">
         <div role="table" aria-label={t("notes.databaseViewTable")} class="min-w-max">
           <CollectionRow template={gridTemplate} header role="row" class="border-t border-(--cal-gridline)">
             <div role="columnheader"><span class="sr-only">{t("notes.databaseTableRowActions")}</span></div>
