@@ -31,7 +31,7 @@
 </script>
 
 <div
-  class="project-list-sticky-row grid cursor-text items-center px-1 py-1.5"
+  class="project-list-sticky-row grid min-h-(--collection-table-row-height) cursor-text items-center px-1 text-collection"
   data-add-section-row="true"
   style={`grid-template-columns: ${gridTemplate}; min-width: max(100%, ${gridMinWidth});`}
   use:projectListAddRowInputFocus={{
@@ -59,7 +59,7 @@
             <span class="flex h-5 w-5 shrink-0 items-center justify-center">
               <Plus size={15} strokeWidth={1.75} />
             </span>
-            <span class="text-[0.866667rem]">{label}</span>
+            <span>{label}</span>
           </div>
         {/if}
         <input
@@ -69,7 +69,7 @@
           onfocus={() => onActiveChange(true)}
           onblur={() => onActiveChange(false)}
           oninput={(event) => onDraftChange(event.currentTarget.value)}
-          class="min-h-8 w-full min-w-0 bg-transparent text-[0.866667rem] text-foreground"
+          class="min-h-8 w-full min-w-0 bg-transparent text-foreground"
         />
         {#if active && !draft.trim()}
           <span
