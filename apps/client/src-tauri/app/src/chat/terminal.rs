@@ -819,10 +819,7 @@ mod tests {
     fn terminal_identity_rejects_empty_and_control_character_values() {
         assert_eq!(normalized_identity("vic\ntor"), None);
         assert_eq!(normalized_identity("   "), None);
-        assert_eq!(
-            normalized_identity(" alice \n"),
-            Some("alice".to_string())
-        );
+        assert_eq!(normalized_identity(" alice \n"), Some("alice".to_string()));
     }
 
     #[cfg(unix)]
