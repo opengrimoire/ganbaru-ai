@@ -1,16 +1,21 @@
 <script lang="ts">
   import { cn } from "$lib/utils";
 
+  /** `compact` fits a floating panel row; `default` fits Settings rows. */
+  type SwitchSize = "default" | "compact";
+
   let {
     checked,
     onChange,
     ariaLabel,
     disabled = false,
+    size = "default",
   }: {
     checked: boolean;
     onChange: (checked: boolean) => void;
     ariaLabel: string;
     disabled?: boolean;
+    size?: SwitchSize;
   } = $props();
 </script>
 
@@ -25,16 +30,19 @@
     if (!disabled) onChange(!checked);
   }}
   class={cn(
-    "inline-flex h-6 w-10 shrink-0 items-center rounded-full border p-0.5 transition-colors disabled:cursor-not-allowed",
+    "inline-flex shrink-0 items-center rounded-full border p-0.5 transition-colors disabled:cursor-not-allowed",
+    size === "compact" ? "h-5 w-8" : "h-6 w-10",
     checked
       ? "border-primary bg-primary"
       : "border-border bg-secondary",
   )}
 >
+  <!-- The thumb travels the track's inner width: track width minus border, padding, and thumb. -->
   <span
     class={cn(
-      "block h-4.5 w-4.5 rounded-full bg-background transition-transform",
-      checked ? "translate-x-4.5" : "translate-x-0",
+      "block rounded-full bg-background transition-transform",
+      size === "compact" ? "size-3.5" : "size-4.5",
+      checked ? (size === "compact" ? "translate-x-3" : "translate-x-4") : "translate-x-0",
     )}
   ></span>
 </button>

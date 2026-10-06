@@ -100,6 +100,7 @@
       <div class="mt-1 flex min-h-8 items-center justify-between gap-2 px-1.5 text-foreground">
         <span class="min-w-0">{t("projects.iconPicker.askEveryTime")}</span>
         <Switch
+          size="compact"
           checked={askEveryTime}
           onChange={onAskEveryTimeChange}
           ariaLabel={t("projects.iconPicker.askEveryTime")}

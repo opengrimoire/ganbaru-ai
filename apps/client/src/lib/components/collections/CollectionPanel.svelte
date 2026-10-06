@@ -19,7 +19,7 @@
     align-content: start;
     grid-auto-rows: max-content;
   }
-  .collection-panel :global(:is([data-collection-menu-body] button, [data-collection-menu-body] label.flex, [data-collection-settings-page] button, [data-collection-settings-page] label.flex, .collection-menu-trigger, [role="option"])) {
+  .collection-panel :global(:is([data-collection-menu-body] button:not([role="switch"]), [data-collection-menu-body] label.flex, [data-collection-settings-page] button:not([role="switch"]), [data-collection-settings-page] label.flex, .collection-menu-trigger, [role="option"])) {
     box-sizing: border-box;
     height: var(--panel-row-height);
     min-height: var(--panel-row-height);

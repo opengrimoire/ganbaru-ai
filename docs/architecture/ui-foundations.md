@@ -40,7 +40,7 @@ Panels were restyled one at a time, so radii, shadows, text sizes, input styles,
 - `field` styles a text input, textarea, or a wrapper that holds a borderless `field-bare` input with icons. Fields are transparent with a thin border; `aria-invalid="true"` on the input marks an error border that stays while focused.
 - Text entry never shows a focus contour, ring, border change, or fill; the caret is enough. The global keyboard focus outline excludes text entry for the same reason. Buttons, checkboxes, and switches keep the keyboard focus outline.
 - Checkboxes use `ui/Checkbox`, a native input drawn with theme tokens. Use `indeterminate` for partly selected parents, and wrap it in a `<label>` with visible text when the label is visible.
-- On and off settings use `ui/Switch` or `ui/SwitchField`. Choices from a list use `ui/Select`, never a native `<select>`, so menus match the rest of the app.
+- On and off settings use `ui/Switch` or `ui/SwitchField`. Inside floating panels the switch uses its `compact` size so it sits within the panel row. A switch that saves quickly stays enabled while saving and ignores repeated presses instead, so the cursor and colors do not flash. Choices from a list use `ui/Select`, never a native `<select>`, so menus match the rest of the app.
 
 ## Widths
 

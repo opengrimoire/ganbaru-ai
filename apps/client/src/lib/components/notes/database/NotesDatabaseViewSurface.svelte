@@ -58,7 +58,6 @@
   import CollectionMenuItem from "$lib/components/collections/CollectionMenuItem.svelte";
   import CollectionMenuSeparator from "$lib/components/collections/CollectionMenuSeparator.svelte";
   import Switch from "$lib/components/ui/Switch.svelte";
-  import { cn } from "$lib/utils";
   import {
     loadNotesDatabaseView,
     retryNotesDatabaseView,
@@ -529,10 +528,10 @@
     {#if otherSources.length === 0 && !sourcesLoading}<p class="px-2 py-1 text-muted-foreground">{t("notes.databaseSourceNoOtherSources")}</p>{/if}
     <p class="px-2 py-1 text-muted-foreground">{t("notes.databaseSourceSharedDescription")}</p>
   </CollectionMenu>
-  <label class={cn("flex min-h-(--panel-row-height) w-full min-w-0 items-center gap-2 px-2", selectionDisabled ? "cursor-not-allowed text-muted-foreground/60" : "cursor-pointer")} use:settingsRowSwitch>
+  <label class="flex min-h-(--panel-row-height) w-full min-w-0 cursor-pointer items-center gap-2 px-2" aria-busy={selectionDisabled} use:settingsRowSwitch>
     {#if editingLocked}<Lock class="size-3.5 shrink-0 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />{:else}<LockOpen class="size-3.5 shrink-0 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />{/if}
     <span class="min-w-0 flex-1 truncate">{t("notes.databaseLockLayout")}</span>
-    <Switch checked={editingLocked} ariaLabel={t("notes.databaseEditingLock")} disabled={selectionDisabled} onChange={() => { void toggleEditingLock(); }} />
+    <Switch size="compact" checked={editingLocked} ariaLabel={t("notes.databaseEditingLock")} onChange={() => { void toggleEditingLock(); }} />
   </label>
   {#if editingLocked}<p class="px-2 py-1 text-muted-foreground">{t("notes.databaseEditingLockDescription")}</p>{/if}
   <CollectionMenuSeparator />
