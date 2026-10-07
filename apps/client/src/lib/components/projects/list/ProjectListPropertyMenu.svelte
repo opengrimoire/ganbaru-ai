@@ -21,6 +21,7 @@
   import CollectionPropertyNameField from "$lib/components/collections/CollectionPropertyNameField.svelte";
   import { COLLECTION_PROPERTY_ICONS } from "$lib/components/collections/property-icons";
   import { getLocalization } from "$lib/i18n/translator.svelte";
+  import { getPreferences } from "$lib/stores/preferences.svelte";
   import { getProjects } from "$lib/stores/projects.svelte";
   import { projectCustomFieldUsesOptions, uniqueProjectCustomFieldName } from "$lib/projects/custom-fields";
   import { customFieldIdFromTaskListColumn } from "$lib/projects/tasks/list-columns";
@@ -36,6 +37,7 @@
   const context = getProjectListTableContext();
   const query = context?.query;
   const projects = getProjects();
+  const preferences = getPreferences();
   const localization = getLocalization();
   const { t } = localization;
   const field = $derived(column === "name" ? undefined : query?.customFields.find((candidate) => candidate.id === customFieldIdFromTaskListColumn(column)));
@@ -114,7 +116,7 @@
 {#if query}
   <CollectionMenu {label} kind="property" fullWidth showHeader={false} dismissOnAction disabled={pending}
     triggerClass="h-auto justify-start rounded-none px-2 font-normal" triggerAttributes={{ "data-collection-cell-primary": "" }}>
-    {#snippet leading()}<KindIcon class="size-3.5 shrink-0 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />{/snippet}
+    {#snippet leading()}{#if preferences.projectsShowPropertyIcons}<KindIcon class="size-3.5 shrink-0 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />{/if}{/snippet}
     <div class="grid gap-0">
       <CollectionPropertyNameField propertyId={column} name={field?.name ?? label} {kind} editable={Boolean(field)} onRename={rename} />
       {#if field && projectCustomFieldUsesOptions(field.fieldType)}

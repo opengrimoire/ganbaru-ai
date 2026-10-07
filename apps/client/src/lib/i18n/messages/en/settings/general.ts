@@ -59,10 +59,17 @@ export const general = {
     invalidFullName: "Full name cannot contain control characters.",
     syncFailed: "Could not update the notes author name.",
   },
+  projectsGeneral: {
+    heading: "General",
+    showPropertyIcons: "Show property icons",
+    showPropertyIconsDescription: "Show each property's type icon beside its column name in List",
+  },
   notesGeneral: {
     heading: "General",
     defaultOpenMode: "Default open mode",
     defaultOpenModeDescription: "Used when opening a note while none is open",
+    showPropertyIcons: "Show property icons",
+    showPropertyIconsDescription: "Show each property's type icon beside its column name in database tables",
     historyRetention: "Default history retention",
     historyRetentionDescription: "How long restorable note versions are kept",
     historyRetentionOff: "Off",

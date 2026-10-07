@@ -62,10 +62,17 @@ export const general = {
     invalidFullName: "El nombre completo no puede contener caracteres de control.",
     syncFailed: "No se pudo actualizar el nombre del autor de las notas.",
   },
+  projectsGeneral: {
+    heading: "General",
+    showPropertyIcons: "Mostrar iconos de propiedades",
+    showPropertyIconsDescription: "Muestra el icono del tipo de cada propiedad junto al nombre de su columna en Lista",
+  },
   notesGeneral: {
     heading: "General",
     defaultOpenMode: "Modo de apertura predeterminado",
     defaultOpenModeDescription: "Se usa al abrir una nota cuando no hay otra abierta",
+    showPropertyIcons: "Mostrar iconos de propiedades",
+    showPropertyIconsDescription: "Muestra el icono del tipo de cada propiedad junto al nombre de su columna en las tablas de bases de datos",
     historyRetention: "Retención predeterminada del historial",
     historyRetentionDescription: "Cuánto tiempo se conservan las versiones restaurables de las notas",
     historyRetentionOff: "Desactivado",

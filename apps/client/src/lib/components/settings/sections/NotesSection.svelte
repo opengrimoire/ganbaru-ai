@@ -190,6 +190,12 @@
       {#if retentionError}
         <div class="px-1 text-[0.8rem] text-destructive">{retentionError}</div>
       {/if}
+      <SwitchField
+        label={t("settings.notesGeneral.showPropertyIcons")}
+        description={t("settings.notesGeneral.showPropertyIconsDescription")}
+        checked={preferences.notesShowPropertyIcons}
+        onChange={preferences.setNotesShowPropertyIcons}
+      />
     </div>
   </section>
 

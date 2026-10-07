@@ -21,6 +21,8 @@ import {
   DEFAULT_NOTES_REMINDER_NOTIFICATIONS_ENABLED,
   DEFAULT_NOTES_TASK_MENTION_NOTIFICATIONS_ENABLED,
   DEFAULT_NOTES_USER_MENTION_NOTIFICATIONS_ENABLED,
+  DEFAULT_NOTES_SHOW_PROPERTY_ICONS,
+  DEFAULT_PROJECTS_SHOW_PROPERTY_ICONS,
   DEFAULT_TITLE_BAR_VISIBILITY,
   DEFAULT_CALENDAR_VIEW_MODE,
   LANGUAGE_PREFERENCES,
@@ -90,6 +92,8 @@ const NOTES_TASK_MENTION_NOTIFICATIONS_ENABLED_CONFIG_KEY =
   "preferences.notesTaskMentionNotificationsEnabled";
 const NOTES_NOTIFICATION_INCLUDE_CONTENT_CONFIG_KEY =
   "preferences.notesNotificationIncludeContent";
+const NOTES_SHOW_PROPERTY_ICONS_CONFIG_KEY = "preferences.notesShowPropertyIcons";
+const PROJECTS_SHOW_PROPERTY_ICONS_CONFIG_KEY = "preferences.projectsShowPropertyIcons";
 const TITLE_BAR_VISIBILITY_CONFIG_KEY = "preferences.titleBarVisibility";
 
 export type EventTimezoneDisplay = "device" | "homeZone";
@@ -281,6 +285,12 @@ let notesNotificationIncludeContent = $state<boolean>(
     DEFAULT_NOTES_NOTIFICATION_INCLUDE_CONTENT,
   ),
 );
+let notesShowPropertyIcons = $state<boolean>(
+  loadSavedBooleanPreference(NOTES_SHOW_PROPERTY_ICONS_CONFIG_KEY, DEFAULT_NOTES_SHOW_PROPERTY_ICONS),
+);
+let projectsShowPropertyIcons = $state<boolean>(
+  loadSavedBooleanPreference(PROJECTS_SHOW_PROPERTY_ICONS_CONFIG_KEY, DEFAULT_PROJECTS_SHOW_PROPERTY_ICONS),
+);
 let titleBarVisibility = $state<TitleBarVisibility>(loadSavedTitleBarVisibility());
 const localization = getLocalization();
 
@@ -455,6 +465,16 @@ function setNotesNotificationIncludeContent(value: boolean): void {
   setConfigKey(NOTES_NOTIFICATION_INCLUDE_CONTENT_CONFIG_KEY, value);
 }
 
+function setNotesShowPropertyIcons(value: boolean): void {
+  notesShowPropertyIcons = value;
+  setConfigKey(NOTES_SHOW_PROPERTY_ICONS_CONFIG_KEY, value);
+}
+
+function setProjectsShowPropertyIcons(value: boolean): void {
+  projectsShowPropertyIcons = value;
+  setConfigKey(PROJECTS_SHOW_PROPERTY_ICONS_CONFIG_KEY, value);
+}
+
 function setTitleBarControlVisible(id: TitleBarControlId, visible: boolean): void {
   if (!isTitleBarControlId(id)) return;
   titleBarVisibility = { ...titleBarVisibility, [id]: visible };
@@ -555,6 +575,14 @@ export function getPreferences() {
     get notesNotificationIncludeContent(): boolean {
       return notesNotificationIncludeContent;
     },
+    /** Whether Notes database column headers show their property type icon. */
+    get notesShowPropertyIcons(): boolean {
+      return notesShowPropertyIcons;
+    },
+    /** Whether Projects List column headers show their property type icon. */
+    get projectsShowPropertyIcons(): boolean {
+      return projectsShowPropertyIcons;
+    },
     get titleBarVisibility(): TitleBarVisibility {
       return titleBarVisibility;
     },
@@ -582,6 +610,8 @@ export function getPreferences() {
     setNotesUserMentionNotificationsEnabled,
     setNotesTaskMentionNotificationsEnabled,
     setNotesNotificationIncludeContent,
+    setNotesShowPropertyIcons,
+    setProjectsShowPropertyIcons,
     setTitleBarControlVisible,
     toggleTitleBarControl,
     resetFontFamily() {
@@ -645,6 +675,12 @@ export function getPreferences() {
     },
     resetNotesNotificationIncludeContent() {
       setNotesNotificationIncludeContent(DEFAULT_NOTES_NOTIFICATION_INCLUDE_CONTENT);
+    },
+    resetNotesShowPropertyIcons() {
+      setNotesShowPropertyIcons(DEFAULT_NOTES_SHOW_PROPERTY_ICONS);
+    },
+    resetProjectsShowPropertyIcons() {
+      setProjectsShowPropertyIcons(DEFAULT_PROJECTS_SHOW_PROPERTY_ICONS);
     },
     resetTitleBarVisibility,
   };

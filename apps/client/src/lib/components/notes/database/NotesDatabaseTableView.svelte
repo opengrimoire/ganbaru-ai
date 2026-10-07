@@ -52,6 +52,7 @@
     updateNotesDataSourceTableView,
   } from "$lib/api/notes";
   import { getLocalization } from "$lib/i18n/translator.svelte";
+  import { getPreferences } from "$lib/stores/preferences.svelte";
   import { formatList, formatNumber } from "$lib/i18n/formatters";
   import { BUILD_PLATFORM_PROFILE, platformHasCapability } from "$lib/platform";
   import {
@@ -162,6 +163,7 @@
   } = $props();
 
   const localization = getLocalization();
+  const preferences = getPreferences();
   const { t } = localization;
   const fileExportAvailable = platformHasCapability(
     BUILD_PLATFORM_PROFILE,
@@ -1138,7 +1140,7 @@
                   {@const KindIcon = COLLECTION_PROPERTY_ICONS[kind]}
                   <CollectionMenu label={column.name} kind="property" fullWidth showHeader={false} dismissOnAction
                     triggerClass="h-auto justify-start rounded-none px-2 font-normal" triggerAttributes={{ "data-collection-cell-primary": "" }} disabled={mutating || editingLocked}>
-                    {#snippet leading()}<KindIcon class="size-3.5 shrink-0 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />{/snippet}
+                    {#snippet leading()}{#if preferences.notesShowPropertyIcons}<KindIcon class="size-3.5 shrink-0 text-muted-foreground" strokeWidth={1.75} aria-hidden="true" />{/if}{/snippet}
                     <div class="grid gap-0 font-normal">
                       <CollectionPropertyNameField propertyId={column.id} name={column.name} {kind} editable={!editingLocked && Boolean(onPropertyAction)}
                         maxLength={NOTES_DATA_SOURCE_PROPERTY_NAME_MAX_CHARACTERS} onRename={(name) => renameProperty(column.id, name)} />
