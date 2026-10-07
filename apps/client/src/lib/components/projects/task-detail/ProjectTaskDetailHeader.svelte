@@ -12,7 +12,7 @@
     onTitleChange,
     onClose,
   }: {
-    task: ProjectTask;
+    task: ProjectTask | null;
     projectName: string;
     title: string;
     onTitleChange: (value: string) => void;
@@ -29,10 +29,11 @@
       <input
         value={title}
         aria-label={t("projects.detail.titleLabel")}
+        placeholder={t("projects.detail.titlePlaceholder")}
         class="min-h-10 min-w-0 flex-1 rounded-md bg-transparent px-1 text-xl font-semibold tracking-tight text-foreground"
         oninput={(event) => onTitleChange(event.currentTarget.value)}
       />
-      {#if task.archivedAt}
+      {#if task?.archivedAt}
         <span class={cn("shrink-0 rounded border px-1.5 py-0.5 text-[0.666667rem]", projectTaskArchivedBadgeClass(task))}>
           {t("projects.taskLifecycle.archived")}
         </span>

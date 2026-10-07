@@ -20,6 +20,7 @@
     ProjectTask,
     ProjectTaskType,
   } from "$lib/projects/types";
+  import type { ProjectTaskUpdatePatch } from "$lib/projects/snapshot/update-payloads";
   import { getCalendar } from "$lib/stores/calendar.svelte";
   import { getProjects } from "$lib/stores/projects.svelte";
   import { getMobileBackStack } from "$lib/stores/mobile-back-stack.svelte";
@@ -39,6 +40,9 @@
     projectTaskDetailDraftDirty,
     projectTaskDetailDraftFromTask,
     projectTaskDetailDraftPatch,
+    projectTaskDetailDraftsEqual,
+    projectTaskNewDetailDraft,
+    projectTaskNewDetailDraftHasExtras,
     tagCandidateTags as buildTagCandidateTags,
     type ProjectTaskDetailDraft,
     type ProjectTaskDetailCustomFieldDrafts,
@@ -65,14 +69,21 @@
     onClose,
     onOpenTask,
     onShowArchivedTasks,
+    draftProjectId = null,
+    onCreated,
   }: {
-    taskId: string;
+    /** Existing task to edit, or null while composing a new task draft. */
+    taskId: string | null;
     layout?: ProjectTaskModalLayout;
     showArchivedTasks: boolean;
     showInactiveSections: boolean;
     onClose: () => void;
     onOpenTask: (taskId: string) => void;
     onShowArchivedTasks: () => void;
+    /** Project that receives the new task when no task ID is given. */
+    draftProjectId?: string | null;
+    /** Called after a draft is created so the parent can show the persisted task. */
+    onCreated?: (task: ProjectTask) => void;
   } = $props();
 
   const projects = getProjects();
@@ -125,8 +136,11 @@
 
   type DetailDateTarget = "start" | "due" | "target";
 
-  const selectedTask = $derived(projects.taskById(taskId));
-  const selectedProjectId = $derived(selectedTask?.projectId ?? null);
+  let newTaskInitialDraft = $state<ProjectTaskDetailDraft | null>(null);
+
+  const selectedTask = $derived(taskId ? projects.taskById(taskId) : undefined);
+  const draftMode = $derived(!taskId && draftProjectId !== null);
+  const selectedProjectId = $derived(selectedTask?.projectId ?? (draftMode ? draftProjectId : null));
   const allProjectSections = $derived(projects.sectionsForProjectIncludingInactive(selectedProjectId));
   const sections = $derived.by(() =>
     showInactiveSections ? allProjectSections : projects.sectionsForProject(selectedProjectId)
@@ -150,10 +164,16 @@
       .sort((a, b) => a.start.localeCompare(b.start));
   });
   const detailDirty = $derived.by(() => {
+    if (draftMode) {
+      return newTaskInitialDraft !== null
+        && !projectTaskDetailDraftsEqual(newTaskInitialDraft, currentDetailDraft());
+    }
     if (!selectedTask) return false;
     return projectTaskDetailDraftDirty(selectedTask, currentDetailDraft());
   });
+  const detailCanSubmit = $derived(draftMode ? detailTitle.trim().length > 0 : detailDirty);
   const detailHasUnsavedEdits = $derived.by(() => {
+    if (draftMode) return detailDirty;
     if (!selectedTask) return false;
     return detailDirty
       || projectCustomFields.some((field) => customFieldValueDirty(selectedTask, field))
@@ -171,6 +191,14 @@
     ) {
       loadTaskDetailDraft(selectedTask);
     }
+  });
+
+  $effect(() => {
+    if (!draftMode || !draftProjectId || newTaskInitialDraft) return;
+    const sectionId = projects.defaultSection(draftProjectId)?.id;
+    const statusId = projects.defaultStatus(draftProjectId)?.id;
+    if (!sectionId || !statusId) return;
+    loadNewTaskDraft(projectTaskNewDetailDraft({ sectionId, statusId }));
   });
 
   function statusForTask(task: ProjectTask): ProjectStatus | undefined {
@@ -276,10 +304,7 @@
       : projects.subtasksForTask(parent.id);
   }
 
-  function loadTaskDetailDraft(task: ProjectTask): void {
-    detailDraftTaskId = task.id;
-    detailDraftUpdatedAt = task.updatedAt;
-    const detailDraft = projectTaskDetailDraftFromTask(task);
+  function applyDetailDraft(detailDraft: ProjectTaskDetailDraft): void {
     detailTitle = detailDraft.title;
     detailDescription = detailDraft.description;
     detailSectionId = detailDraft.sectionId;
@@ -294,6 +319,18 @@
     detailChangeReason = detailDraft.changeReason;
     detailMilestone = detailDraft.milestone;
     detailError = null;
+    datePickerTarget = null;
+  }
+
+  function loadNewTaskDraft(detailDraft: ProjectTaskDetailDraft): void {
+    newTaskInitialDraft = detailDraft;
+    applyDetailDraft(detailDraft);
+  }
+
+  function loadTaskDetailDraft(task: ProjectTask): void {
+    detailDraftTaskId = task.id;
+    detailDraftUpdatedAt = task.updatedAt;
+    applyDetailDraft(projectTaskDetailDraftFromTask(task));
     subtaskDraft = "";
     checklistDraft = "";
     tagDraft = "";
@@ -319,6 +356,7 @@
 
   function closeTaskDetailImmediately(): void {
     if (selectedTask) loadTaskDetailDraft(selectedTask);
+    newTaskInitialDraft = null;
     onClose();
   }
 
@@ -357,7 +395,7 @@
   });
 
   $effect(() => {
-    if (!selectedTask || !detailDialog || discardCloseConfirmOpen) return;
+    if ((!selectedTask && !draftMode) || !detailDialog || discardCloseConfirmOpen) return;
     return activateModalFocus(detailDialog);
   });
 
@@ -370,6 +408,7 @@
       onOpenTask(nextTaskId);
       return;
     }
+    newTaskInitialDraft = null;
     onClose();
   }
 
@@ -714,8 +753,47 @@
     }
   }
 
+  function detailSaveErrorMessage(error: unknown): string {
+    const message = error instanceof Error ? error.message : String(error);
+    return message === t("projects.detail.invalidEstimate")
+      || message === t("projects.detail.invalidDate")
+      ? message
+      : t("projects.detail.saveFailed", message);
+  }
+
+  async function createTaskFromDraft(
+    projectId: string,
+    initialDraft: ProjectTaskDetailDraft,
+    patch: ProjectTaskUpdatePatch,
+  ): Promise<void> {
+    const draft = currentDetailDraft();
+    let created: ProjectTask | undefined;
+    detailSaving = true;
+    detailError = null;
+    try {
+      created = await projects.addTask(projectId, draft.title, draft.sectionId, draft.statusId);
+      if (!created) return;
+      if (projectTaskNewDetailDraftHasExtras(initialDraft, draft)) {
+        await projects.updateTask(created, patch);
+      }
+    } catch (error) {
+      if (!created) {
+        detailError = t("projects.tasks.createFailed", error instanceof Error ? error.message : String(error));
+        return;
+      }
+      // The task exists, so keep the unsaved fields on it for a retry with Save changes.
+      detailDraftTaskId = created.id;
+      detailDraftUpdatedAt = created.updatedAt;
+      detailError = detailSaveErrorMessage(error);
+    } finally {
+      detailSaving = false;
+    }
+    if (!created) return;
+    newTaskInitialDraft = null;
+    onCreated?.(created);
+  }
+
   async function saveTaskDetail(): Promise<void> {
-    if (!selectedTask) return;
     const patch = projectTaskDetailDraftPatch(currentDetailDraft());
     if (!patch.ok) {
       if (patch.reason === "title-required") {
@@ -727,6 +805,13 @@
       }
       return;
     }
+    if (draftMode) {
+      if (draftProjectId && newTaskInitialDraft) {
+        await createTaskFromDraft(draftProjectId, newTaskInitialDraft, patch.patch);
+      }
+      return;
+    }
+    if (!selectedTask) return;
     detailSaving = true;
     detailError = null;
     try {
@@ -734,11 +819,7 @@
       detailChangeReason = "";
       detailDraftUpdatedAt = selectedTask.updatedAt;
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      detailError = message === t("projects.detail.invalidEstimate")
-        || message === t("projects.detail.invalidDate")
-        ? message
-        : t("projects.detail.saveFailed", message);
+      detailError = detailSaveErrorMessage(error);
     } finally {
       detailSaving = false;
     }
@@ -747,17 +828,7 @@
 
 <svelte:window onkeydown={handleTaskDetailKeydown} />
 
-{#if selectedTask}
-    {@const selectedTaskHistory = projects.taskChangeEventsForTask(selectedTask.id).slice(0, 8)}
-    {@const selectedTaskChecklist = projects.checklistItemsForTask(selectedTask.id)}
-    {@const selectedTaskTags = tagsForTask(selectedTask)}
-    {@const selectedTaskTagCandidates = tagCandidateTags(selectedTask)}
-    {@const selectedTaskSubtasks = subtasksForTask(selectedTask)}
-    {@const selectedTaskBlockedBy = blockedByDependencies(selectedTask)}
-    {@const selectedTaskBlocks = blocksDependencies(selectedTask)}
-    {@const selectedTaskParent = selectedTask.parentTaskId ? taskById(selectedTask.parentTaskId) : undefined}
-    {@const selectedTaskDependencyCandidates = dependencyCandidateTasks(selectedTask)}
-    {@const selectedTaskEventIds = projects.eventLinksForTask(selectedTask.id).map((link) => link.eventId)}
+{#if selectedTask || draftMode}
     <!-- svelte-ignore a11y_click_events_have_key_events -->
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div
@@ -781,13 +852,13 @@
       role="dialog"
       data-mobile={androidSystemBackAvailable || undefined}
       aria-modal="true"
-      aria-label={t("projects.detail.title")}
+      aria-label={draftMode ? t("projects.detail.newTitle") : t("projects.detail.title")}
       tabindex="-1"
       onclick={(event) => event.stopPropagation()}
     >
       <ProjectTaskDetailHeader
-        task={selectedTask}
-        projectName={projects.projectById(selectedTask.projectId)?.name ?? ""}
+        task={selectedTask ?? null}
+        projectName={selectedProjectId ? projects.projectById(selectedProjectId)?.name ?? "" : ""}
         title={detailTitle}
         onTitleChange={(value) => { detailTitle = value; }}
         onClose={requestTaskDetailClose}
@@ -796,7 +867,7 @@
       <form class="flex min-h-0 flex-1 flex-col" onsubmit={(event) => { event.preventDefault(); void saveTaskDetail(); }}>
         <div class="relative min-h-0 flex-1">
           <div bind:this={detailScrollContainer} use:scrollEdgeFadeAction class="task-detail-scroll hide-scrollbar h-full overflow-y-auto overscroll-contain">
-            {#key selectedTask.id}
+            {#key selectedTask?.id ?? "draft"}
               <div class="task-detail-workspace">
                 <div class="task-detail-content">
                   <ProjectTaskDetailDescriptionSection
@@ -804,6 +875,14 @@
                     onChange={(value) => { detailDescription = value; }}
                   />
 
+                  {#if selectedTask}
+                  {@const selectedTaskHistory = projects.taskChangeEventsForTask(selectedTask.id).slice(0, 8)}
+                  {@const selectedTaskChecklist = projects.checklistItemsForTask(selectedTask.id)}
+                  {@const selectedTaskSubtasks = subtasksForTask(selectedTask)}
+                  {@const selectedTaskBlockedBy = blockedByDependencies(selectedTask)}
+                  {@const selectedTaskBlocks = blocksDependencies(selectedTask)}
+                  {@const selectedTaskDependencyCandidates = dependencyCandidateTasks(selectedTask)}
+                  {@const selectedTaskEventIds = projects.eventLinksForTask(selectedTask.id).map((link) => link.eventId)}
                   <ProjectTaskDetailChecklistSection
                     task={selectedTask}
                     items={selectedTaskChecklist}
@@ -860,6 +939,7 @@
                   />
 
                   <ProjectTaskDetailHistorySection events={selectedTaskHistory} />
+                  {/if}
 
                 </div>
                 <aside class="task-detail-properties" aria-label={t("projects.detail.properties")}>
@@ -905,6 +985,10 @@
                     onCancelDatePicker={() => { datePickerTarget = null; }}
                   />
 
+                  {#if selectedTask}
+                  {@const selectedTaskTags = tagsForTask(selectedTask)}
+                  {@const selectedTaskTagCandidates = tagCandidateTags(selectedTask)}
+                  {@const selectedTaskParent = selectedTask.parentTaskId ? taskById(selectedTask.parentTaskId) : undefined}
                   <ProjectTaskDetailParentSection
                     task={selectedTask}
                     parentTask={selectedTaskParent}
@@ -978,6 +1062,7 @@
                       onCancelDatePicker={() => { customFieldDatePickerTarget = null; }}
                     />
                   {/if}
+                  {/if}
                 </aside>
               </div>
             {/key}
@@ -997,9 +1082,9 @@
         {/if}
 
         <ProjectTaskDetailFooter
-          task={selectedTask}
+          task={selectedTask ?? null}
           saving={detailSaving}
-          dirty={detailDirty}
+          dirty={detailCanSubmit}
           onArchive={archiveTaskFromDetail}
           onRestore={restoreTaskFromDetail}
         />
@@ -1008,8 +1093,8 @@
     </div>
     {#if discardCloseConfirmOpen}
       <ConfirmDialog
-        title={t("calendar.view.discardUnsavedTitle")}
-        message={t("calendar.view.changesLost")}
+        title={draftMode ? t("projects.detail.discardDraftTitle") : t("calendar.view.discardUnsavedTitle")}
+        message={draftMode ? t("projects.detail.discardDraftMessage") : t("calendar.view.changesLost")}
         confirmLabel={t("calendar.view.discard")}
         cancelLabel={t("common.cancel")}
         onConfirm={confirmDiscardTaskDetail}

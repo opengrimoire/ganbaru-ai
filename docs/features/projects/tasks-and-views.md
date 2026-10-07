@@ -6,6 +6,8 @@ A task has stable identity, project, section, optional parent task, title, descr
 
 Subtasks are normal tasks with a parent. Checklist items are lighter completion records owned by one task. A parent and its descendants keep explicit states; completing a parent does not silently erase open child work.
 
+The project header's add button opens task detail on an empty draft in the default section and status from any view. Nothing is persisted until the draft is submitted with a title; closing a changed draft asks before discarding it.
+
 ## Sections and ordering
 
 Sections provide project-local organization. They can be created, renamed, reordered, collapsed, hidden, archived, and restored. Archiving a section never deletes its tasks.

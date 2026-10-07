@@ -13,7 +13,7 @@
     onArchive,
     onRestore,
   }: {
-    task: ProjectTask;
+    task: ProjectTask | null;
     saving: boolean;
     dirty: boolean;
     onArchive: (task: ProjectTask) => MaybePromise;
@@ -24,7 +24,7 @@
 </script>
 
 <footer class="flex shrink-0 items-center justify-end gap-2 border-t border-border bg-card px-5 py-3">
-  {#if task.archivedAt}
+  {#if task?.archivedAt}
     <button
       type="button"
       class="mr-auto flex min-h-8 items-center gap-1.5 rounded-md border border-border bg-card px-2 text-[0.8rem] hover:bg-accent disabled:cursor-not-allowed"
@@ -34,7 +34,7 @@
       <ArchiveRestore size={14} strokeWidth={1.75} />
       <span>{t("projects.detail.restore")}</span>
     </button>
-  {:else}
+  {:else if task}
     <button
       type="button"
       class="mr-auto flex min-h-8 items-center gap-1.5 rounded-md px-2 text-[0.8rem] text-muted-foreground hover:bg-accent hover:text-foreground disabled:cursor-not-allowed"
@@ -53,6 +53,6 @@
     )}
     disabled={saving || !dirty}
   >
-    <span>{t("projects.detail.save")}</span>
+    <span>{task ? t("projects.detail.save") : t("projects.detail.create")}</span>
   </button>
 </footer>

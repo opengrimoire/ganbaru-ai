@@ -8,7 +8,10 @@ import {
   projectTaskDetailDraftDirty,
   projectTaskDetailDraftFromTask,
   projectTaskDetailDraftPatch,
+  projectTaskDetailDraftsEqual,
   projectTaskDetailEventLinkDateRange,
+  projectTaskNewDetailDraft,
+  projectTaskNewDetailDraftHasExtras,
 } from "./detail";
 import type {
   ProjectCustomField,
@@ -80,6 +83,39 @@ describe("project task detail helpers", () => {
     });
     expect(projectTaskDetailDraftDirty(sourceTask, draft)).toBe(false);
     expect(projectTaskDetailDraftDirty(sourceTask, { ...draft, title: "Updated" })).toBe(true);
+  });
+
+  it("starts a new task draft empty in the given placement", () => {
+    const draft = projectTaskNewDetailDraft({ sectionId: "section-a", statusId: "status-a" });
+
+    expect(draft).toMatchObject({
+      title: "",
+      description: "",
+      sectionId: "section-a",
+      statusId: "status-a",
+      priority: "normal",
+      taskType: "task",
+      milestone: false,
+    });
+    expect(projectTaskDetailDraftPatch(draft)).toEqual({ ok: false, reason: "title-required" });
+  });
+
+  it("compares detail drafts field by field", () => {
+    const draft = projectTaskNewDetailDraft({ sectionId: "section-a", statusId: "status-a" });
+
+    expect(projectTaskDetailDraftsEqual(draft, { ...draft })).toBe(true);
+    expect(projectTaskDetailDraftsEqual(draft, { ...draft, description: "Notes" })).toBe(false);
+    expect(projectTaskDetailDraftsEqual(draft, { ...draft, milestone: true })).toBe(false);
+  });
+
+  it("requires a follow-up update only for fields task creation does not accept", () => {
+    const initial = projectTaskNewDetailDraft({ sectionId: "section-a", statusId: "status-a" });
+    const placed = { ...initial, title: "Plan", sectionId: "section-b", statusId: "status-b" };
+
+    expect(projectTaskNewDetailDraftHasExtras(initial, placed)).toBe(false);
+    expect(projectTaskNewDetailDraftHasExtras(initial, { ...placed, priority: "high" })).toBe(true);
+    expect(projectTaskNewDetailDraftHasExtras(initial, { ...placed, dueDate: "2026-10-08" })).toBe(true);
+    expect(projectTaskNewDetailDraftHasExtras(initial, { ...placed, changeReason: "Scope" })).toBe(true);
   });
 
   it("builds validated base task update patches", () => {

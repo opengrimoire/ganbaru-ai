@@ -78,6 +78,7 @@
     );
   });
   const taskDetailDataReady = $derived.by(() => {
+    if (routeUi.taskDraftProjectId) return true;
     return Boolean(
       routeUi.selectedTaskId
       && projects.taskById(routeUi.selectedTaskId)?.detailLoaded,
@@ -146,10 +147,11 @@
   );
 
   $effect(() => {
-    if (!mobileLayout || routeUi.selectedTaskId === null || taskDetailComponentReady) return;
+    if (!mobileLayout || taskDetailComponentReady) return;
+    if (routeUi.selectedTaskId === null && routeUi.taskDraftProjectId === null) return;
     return mobileBackStack.activate({
       handle: () => {
-        routeUi.selectedTaskId = null;
+        routeUi.closeTaskDetail();
         routeLoad.invalidateTaskDetailData();
       },
     });
@@ -224,6 +226,16 @@
   $effect(() => {
     if (!mobileLayout && (routeUi.taskFinderOpen || taskQuery.search.trim())) {
       routeLoad.requestOptional("task-finder");
+    }
+  });
+
+  $effect(() => {
+    if (routeUi.taskDraftProjectId) routeLoad.requestOptional("task-detail");
+  });
+
+  $effect(() => {
+    if (routeUi.taskDraftProjectId && routeUi.taskDraftProjectId !== selectedProjectId) {
+      routeUi.taskDraftProjectId = null;
     }
   });
 
@@ -319,10 +331,11 @@
             showInactiveProjects = value;
           }}
           onProjectSelected={() => {
-            routeUi.selectedTaskId = null;
+            routeUi.closeTaskDetail();
             routeUi.closeToolbarImmediately();
           }}
           onToggleToolbarPanel={(panel) => routeUi.toggleToolbarPanel(panel)}
+          onCreateTask={() => { if (selectedProjectId) routeUi.openTaskDraft(selectedProjectId); }}
         />
         {#if routeUi.toolbarPanel}
           {#if toolbarDataReady && toolbarLoadState?.status === "ready" && toolbarLoadState.component.kind === "toolbar"}
@@ -567,7 +580,7 @@
           bind:showInactiveProjects
           {mobileLayout}
           onProjectSelected={() => {
-            routeUi.selectedTaskId = null;
+            routeUi.closeTaskDetail();
             routeUi.closeToolbarImmediately();
           }}
         />
@@ -605,16 +618,18 @@
     {/if}
   {/if}
 
-  {#if routeUi.selectedTaskId}
+  {#if routeUi.selectedTaskId || routeUi.taskDraftProjectId}
     {#if taskDetailDataReady && taskDetailLoadState?.status === "ready" && taskDetailLoadState.component.kind === "task-detail"}
       {@const ProjectTaskDetailPanel = taskDetailLoadState.component.component}
       <ProjectTaskDetailPanel
         taskId={routeUi.selectedTaskId}
+        draftProjectId={routeUi.taskDraftProjectId}
+        onCreated={(task) => routeUi.completeTaskDraft(task)}
         layout={taskDetailModalLayout}
         showArchivedTasks={taskQuery.showArchivedTasks}
         showInactiveSections={taskQuery.showInactiveSections}
         onClose={() => {
-          routeUi.selectedTaskId = null;
+          routeUi.closeTaskDetail();
           routeLoad.invalidateTaskDetailData();
         }}
         onOpenTask={(taskId) => {
@@ -644,7 +659,7 @@
               type="button"
               class="min-h-9 rounded-md px-3 font-medium text-foreground hover:bg-accent"
               onclick={() => {
-                routeUi.selectedTaskId = null;
+                routeUi.closeTaskDetail();
                 routeLoad.invalidateTaskDetailData();
               }}
             >

@@ -52,6 +52,7 @@
     onShowInactiveProjectsChange,
     onProjectSelected,
     onToggleToolbarPanel,
+    onCreateTask,
     mobileLayout = false,
     projectChat = null,
   }: {
@@ -66,6 +67,7 @@
     onShowInactiveProjectsChange: (value: boolean) => void;
     onProjectSelected: () => void;
     onToggleToolbarPanel: (panel: ProjectToolbarPanel) => void;
+    onCreateTask: () => void;
     mobileLayout?: boolean;
     projectChat?: ProjectChatIntegration | null;
   } = $props();
@@ -321,7 +323,7 @@
         {/if}
         <span class="min-w-0 truncate text-foreground">{selectedGroup.name}</span>
       </button>
-      <span class="shrink-0 px-0.5 text-muted-foreground">/</span>
+      <span class="shrink-0 px-0.5 font-semibold text-muted-foreground">/</span>
       <button
         bind:this={projectTriggerElement}
         type="button"
@@ -347,12 +349,22 @@
           />
         {/if}
         <span class="min-w-0 truncate text-foreground">{selectedProject.name}</span>
-        <WorkspaceBreadcrumbTerminalIcon kind="chevron" class="shrink-0 text-muted-foreground" />
         {#if selectedProject.status !== "active"}
           <span class={cn("shrink-0 rounded border px-1.5 py-0.5 text-[0.666667rem]", projectLifecycleBadgeClass(selectedProject.status))}>
             {projectLifecycleLabel(selectedProject.status, t)}
           </span>
         {/if}
+        <WorkspaceBreadcrumbTerminalIcon kind="chevron" class="shrink-0 text-muted-foreground" />
+      </button>
+      <button
+        type="button"
+        class={toolbarIconButtonClass(false)}
+        aria-label={t("projects.header.addTask")}
+        title={t("projects.header.addTask")}
+        data-project-new-task-button
+        onclick={onCreateTask}
+      >
+        <WorkspaceBreadcrumbTerminalIcon kind="plus" />
       </button>
     </div>
     {#if projectNavigatorOpen}

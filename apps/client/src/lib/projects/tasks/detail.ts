@@ -92,6 +92,51 @@ export function projectTaskDetailDraftFromTask(task: ProjectTask): ProjectTaskDe
   };
 }
 
+/** Builds the empty draft shown before a new task exists. */
+export function projectTaskNewDetailDraft(placement: {
+  sectionId: string;
+  statusId: string;
+}): ProjectTaskDetailDraft {
+  return {
+    title: "",
+    description: "",
+    sectionId: placement.sectionId,
+    statusId: placement.statusId,
+    priority: "normal",
+    taskType: "task",
+    estimateMinutes: "",
+    startDate: "",
+    dueDate: "",
+    targetEndDate: "",
+    blockerReason: "",
+    changeReason: "",
+    milestone: false,
+  };
+}
+
+/** Reports whether two detail drafts hold the same field values. */
+export function projectTaskDetailDraftsEqual(
+  left: ProjectTaskDetailDraft,
+  right: ProjectTaskDetailDraft,
+): boolean {
+  return (Object.keys(left) as (keyof ProjectTaskDetailDraft)[])
+    .every((key) => left[key] === right[key]);
+}
+
+/**
+ * Reports whether a new-task draft sets fields beyond the title and placement
+ * that task creation accepts, so creation must follow up with an update.
+ */
+export function projectTaskNewDetailDraftHasExtras(
+  initial: ProjectTaskDetailDraft,
+  draft: ProjectTaskDetailDraft,
+): boolean {
+  return !projectTaskDetailDraftsEqual(
+    { ...draft, title: initial.title, sectionId: initial.sectionId, statusId: initial.statusId },
+    initial,
+  );
+}
+
 export function projectTaskDetailDraftDirty(task: ProjectTask, draft: ProjectTaskDetailDraft): boolean {
   return draft.title !== task.title
     || draft.description !== task.description

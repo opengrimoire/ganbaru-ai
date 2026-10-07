@@ -16,6 +16,8 @@ export class ProjectRouteUiController {
   taskFinderOpen = $state(false);
   taskFinderFocusRequestId = $state(0);
   selectedTaskId = $state<string | null>(null);
+  /** Project that receives the task draft open in task detail, if any. */
+  taskDraftProjectId = $state<string | null>(null);
   selectedTaskIds = $state<string[]>([]);
   toolbarPanel = $state<ProjectToolbarPanel | null>(null);
   settingsDirty = $state(false);
@@ -89,8 +91,29 @@ export class ProjectRouteUiController {
   openTask(task: ProjectTask): void {
     this.runAfterSettingsClose(() => {
       this.setToolbarPanel(null);
+      this.taskDraftProjectId = null;
       this.selectedTaskId = task.id;
     });
+  }
+
+  /** Opens task detail on an unsaved draft that becomes a task only when submitted. */
+  openTaskDraft(projectId: string): void {
+    this.runAfterSettingsClose(() => {
+      this.setToolbarPanel(null);
+      this.selectedTaskId = null;
+      this.taskDraftProjectId = projectId;
+    });
+  }
+
+  /** Replaces the open draft with the task created from it. */
+  completeTaskDraft(task: ProjectTask): void {
+    this.taskDraftProjectId = null;
+    this.selectedTaskId = task.id;
+  }
+
+  closeTaskDetail(): void {
+    this.taskDraftProjectId = null;
+    this.selectedTaskId = null;
   }
 
   toggleTaskSelection(task: ProjectTask): void {
@@ -104,7 +127,7 @@ export class ProjectRouteUiController {
   }
 
   handleWindowKeydown(event: KeyboardEvent): void {
-    if (event.defaultPrevented || this.selectedTaskId) return;
+    if (event.defaultPrevented || this.selectedTaskId || this.taskDraftProjectId) return;
     if (this.handleViewShortcut(event)) return;
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "f") {
       event.preventDefault();

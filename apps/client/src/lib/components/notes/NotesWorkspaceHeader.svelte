@@ -176,7 +176,7 @@
   function inlineNewPageButtonClass(): string {
     return cn(
       "flex shrink-0 items-center justify-center rounded-md text-foreground transition-colors",
-      mobileLayout ? "h-12 w-12" : "h-7 w-5",
+      mobileLayout ? "h-12 w-12" : "h-7 w-7",
       "hover:bg-accent",
     );
   }
@@ -426,7 +426,7 @@
 </script>
 
 {#snippet databaseBreadcrumb()}
-  <span class="shrink-0 px-0.5 text-muted-foreground">/</span>
+  <span class="shrink-0 px-0.5 font-semibold text-muted-foreground">/</span>
   <button
     type="button"
     class={cn("flex min-w-0 shrink-0 items-center gap-1.5 rounded-md px-1.5 text-left hover:bg-accent", mobileLayout ? "h-12" : "h-7",
@@ -498,15 +498,14 @@
           {/if}
           <span class="min-w-0 truncate text-foreground">{selectedGroup.name}</span>
         </button>
-        <span class="shrink-0 px-0.5 text-muted-foreground">/</span>
+        <span class="shrink-0 px-0.5 font-semibold text-muted-foreground">/</span>
         <button
           bind:this={projectTriggerElement}
           type="button"
           class={cn(
-            "flex min-w-0 items-center gap-1.5 rounded-md pl-1.5 text-left hover:bg-accent",
+            "flex min-w-0 items-center gap-1.5 rounded-md px-1.5 text-left hover:bg-accent",
             databaseSelected && "shrink-0",
             mobileLayout ? "h-12" : "h-7",
-            selectedPageTitle ? "pr-1.5" : "pr-0.5",
             navigatorOpen && navigatorMode === "projects" && "bg-accent",
           )}
           aria-label={selectedPageTitle ? t("notes.showProjectHome") : t("projects.navigator.open")}
@@ -554,7 +553,7 @@
               : node.page.id === selectedPageId && selectedPageTitle
                 ? selectedPageTitle
                 : notesPageTitle(node.page, t("notes.untitled"))}
-            <span class="shrink-0 px-0.5 text-muted-foreground">/</span>
+            <span class="shrink-0 px-0.5 font-semibold text-muted-foreground">/</span>
             <button
               type="button"
               class={cn(
@@ -616,7 +615,7 @@
           bind:this={noteTriggerElement}
           type="button"
           class={cn(
-            "flex min-w-0 items-center gap-1.5 rounded-md pl-1.5 pr-0.5 text-left hover:bg-accent",
+            "flex min-w-0 items-center gap-1.5 rounded-md px-1.5 text-left hover:bg-accent",
             mobileLayout ? "h-12" : "h-7",
             navigatorOpen && navigatorMode === "notes" && "bg-accent",
           )}

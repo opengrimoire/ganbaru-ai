@@ -20,6 +20,41 @@ describe("Project route UI controller", () => {
     expect(controller.settingsDirty).toBe(false);
   });
 
+  it("opens a task draft without a task and swaps it for the created task", () => {
+    const setActiveView = vi.fn();
+    const controller = new ProjectRouteUiController({ setActiveView });
+    controller.selectedTaskId = "previous";
+    controller.toolbarPanel = "filters";
+
+    controller.openTaskDraft("project-1");
+    expect(controller.selectedTaskId).toBeNull();
+    expect(controller.taskDraftProjectId).toBe("project-1");
+    expect(controller.toolbarPanel).toBeNull();
+
+    const shortcut = new KeyboardEvent("keydown", { key: "2", cancelable: true });
+    controller.handleWindowKeydown(shortcut);
+    expect(setActiveView).not.toHaveBeenCalled();
+
+    controller.completeTaskDraft({ id: "created" } as Parameters<typeof controller.completeTaskDraft>[0]);
+    expect(controller.taskDraftProjectId).toBeNull();
+    expect(controller.selectedTaskId).toBe("created");
+
+    controller.closeTaskDetail();
+    expect(controller.selectedTaskId).toBeNull();
+  });
+
+  it("waits for dirty settings to be discarded before opening a task draft", () => {
+    const controller = new ProjectRouteUiController({ setActiveView: vi.fn() });
+    controller.toolbarPanel = "settings";
+    controller.settingsDirty = true;
+
+    controller.openTaskDraft("project-1");
+    expect(controller.taskDraftProjectId).toBeNull();
+
+    controller.confirmDiscard();
+    expect(controller.taskDraftProjectId).toBe("project-1");
+  });
+
   it("suppresses route shortcuts while a document selection surface is open", () => {
     const setActiveView = vi.fn();
     const controller = new ProjectRouteUiController({
