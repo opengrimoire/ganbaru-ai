@@ -69,7 +69,7 @@ Prefer container-aware layout, visible touch targets, bounded sheets and popover
 
 ## Loading and performance
 
-Primary navigation renders useful chrome before deferred data resolves. Expensive editors, diagnostics, transfer workflows, syntax grammars, and large catalogs stay lazy unless measurement shows that residency improves a common interaction at acceptable cost.
+Primary navigation renders useful chrome before deferred data resolves. Expensive editors, diagnostics, transfer workflows, syntax grammars, and large catalogs stay lazy unless measurement shows that residency improves a common interaction at acceptable cost. Project task detail is resident in the Projects route because opening a task or a new task draft is a primary interaction and must not wait on a code load; its per-task data still loads on open.
 
 Visible-window queries, pagination, virtual lists, bounded caches, and latest-wins request handling keep total stored history from defining render cost. Expensive derived data, such as Notes mention candidates, is computed only while a surface needs it. See [Performance](../performance/README.md).
 

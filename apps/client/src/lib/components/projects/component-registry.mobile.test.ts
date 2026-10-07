@@ -14,7 +14,6 @@ vi.mock("@tauri-apps/api/window", async (importOriginal) => {
 
 vi.mock("./ProjectToolbarPanels.svelte", () => ({ default: vi.fn() }));
 vi.mock("./ProjectBulkActionController.svelte", () => ({ default: vi.fn() }));
-vi.mock("$lib/components/projects/task-detail/ProjectTaskDetailPanel.svelte", () => ({ default: vi.fn() }));
 
 describe("mobile Project component registry", () => {
   it("loads shared list support surfaces as cached mobile components", async () => {
@@ -25,10 +24,8 @@ describe("mobile Project component registry", () => {
     await expect(firstToolbar).resolves.toMatchObject({ kind: "toolbar" });
     await expect(loadProjectOptionalComponent("bulk-actions"))
       .resolves.toMatchObject({ kind: "bulk-actions" });
-    await expect(loadProjectOptionalComponent("task-detail"))
-      .resolves.toMatchObject({ kind: "task-detail" });
     expect(projectOptionalComponentHasLoaded("toolbar")).toBe(true);
-    expect(projectOptionalComponentHasLoaded("task-detail")).toBe(true);
+    expect(projectOptionalComponentHasLoaded("bulk-actions")).toBe(true);
   });
 
   it("keeps the keyboard-oriented task finder out of the mobile composition", async () => {

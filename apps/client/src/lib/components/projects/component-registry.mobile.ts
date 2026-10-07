@@ -14,7 +14,7 @@ export type {
 
 type LoadedMobileOptionalComponent = Extract<
   LoadedProjectOptionalComponent,
-  { kind: "toolbar" | "bulk-actions" | "task-detail" }
+  { kind: "toolbar" | "bulk-actions" }
 >;
 
 const MOBILE_OPTIONAL_IMPORTERS = {
@@ -24,22 +24,18 @@ const MOBILE_OPTIONAL_IMPORTERS = {
     .then((module) => ({
       default: { kind: "bulk-actions" as const, component: module.default },
     })),
-  "task-detail": () => import("$lib/components/projects/task-detail/ProjectTaskDetailPanel.svelte")
-    .then((module) => ({
-      default: { kind: "task-detail" as const, component: module.default },
-    })),
 } satisfies Readonly<Record<
-  "toolbar" | "bulk-actions" | "task-detail",
+  "toolbar" | "bulk-actions",
   LazyComponentImporter<LoadedMobileOptionalComponent>
 >>;
 
 const mobileOptionalLoader = createLazyComponentLoader<
-  "toolbar" | "bulk-actions" | "task-detail",
+  "toolbar" | "bulk-actions",
   LoadedMobileOptionalComponent
 >(MOBILE_OPTIONAL_IMPORTERS);
 
 function unsupportedMobileComponent(
-  kind: Exclude<ProjectOptionalComponentKind, "toolbar" | "bulk-actions" | "task-detail">,
+  kind: Exclude<ProjectOptionalComponentKind, "toolbar" | "bulk-actions">,
 ): Promise<LoadedProjectOptionalComponent> {
   return Promise.reject(new Error(`Project ${kind} is unavailable in the mobile composition`));
 }
@@ -48,7 +44,7 @@ function unsupportedMobileComponent(
 export function loadProjectOptionalComponent(
   kind: ProjectOptionalComponentKind,
 ): Promise<LoadedProjectOptionalComponent> {
-  if (kind === "toolbar" || kind === "bulk-actions" || kind === "task-detail") return mobileOptionalLoader.load(kind);
+  if (kind === "toolbar" || kind === "bulk-actions") return mobileOptionalLoader.load(kind);
   return unsupportedMobileComponent(kind);
 }
 
@@ -56,11 +52,11 @@ export function loadProjectOptionalComponent(
 export function retryProjectOptionalComponent(
   kind: ProjectOptionalComponentKind,
 ): Promise<LoadedProjectOptionalComponent> {
-  if (kind === "toolbar" || kind === "bulk-actions" || kind === "task-detail") return mobileOptionalLoader.retry(kind);
+  if (kind === "toolbar" || kind === "bulk-actions") return mobileOptionalLoader.retry(kind);
   return unsupportedMobileComponent(kind);
 }
 
 /** Report whether a supported mobile Project constructor is cached. */
 export function projectOptionalComponentHasLoaded(kind: ProjectOptionalComponentKind): boolean {
-  return (kind === "toolbar" || kind === "bulk-actions" || kind === "task-detail") && mobileOptionalLoader.hasLoaded(kind);
+  return (kind === "toolbar" || kind === "bulk-actions") && mobileOptionalLoader.hasLoaded(kind);
 }

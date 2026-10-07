@@ -24,6 +24,7 @@
   } from "$lib/projects/toolbar";
   import ProjectEmptyState from "./ProjectEmptyState.svelte";
   import ProjectWorkspaceHeader from "./ProjectWorkspaceHeader.svelte";
+  import ProjectTaskDetailPanel from "./task-detail/ProjectTaskDetailPanel.svelte";
   import type { ProjectViewComponents } from "./view-components";
   import { ProjectTaskQueryController } from "./task-query-controller.svelte";
   import { ProjectRouteLoadController } from "./route-load-controller.svelte";
@@ -64,7 +65,6 @@
   const toolbarLoadState = $derived(routeLoad.optionalState("toolbar"));
   const bulkActionsLoadState = $derived(routeLoad.optionalState("bulk-actions"));
   const taskFinderLoadState = $derived(routeLoad.optionalState("task-finder"));
-  const taskDetailLoadState = $derived(routeLoad.optionalState("task-detail"));
 
   const selectedProject = $derived(projects.selectedProject);
   const selectedGroup = $derived(projects.selectedGroup);
@@ -140,14 +140,8 @@
     viewportHeight: viewport.height,
   }));
 
-  const taskDetailComponentReady = $derived(
-    taskDetailDataReady
-      && taskDetailLoadState?.status === "ready"
-      && taskDetailLoadState.component.kind === "task-detail",
-  );
-
   $effect(() => {
-    if (!mobileLayout || taskDetailComponentReady) return;
+    if (!mobileLayout || taskDetailDataReady) return;
     if (routeUi.selectedTaskId === null && routeUi.taskDraftProjectId === null) return;
     return mobileBackStack.activate({
       handle: () => {
@@ -230,10 +224,6 @@
   });
 
   $effect(() => {
-    if (routeUi.taskDraftProjectId) routeLoad.requestOptional("task-detail");
-  });
-
-  $effect(() => {
     if (routeUi.taskDraftProjectId && routeUi.taskDraftProjectId !== selectedProjectId) {
       routeUi.taskDraftProjectId = null;
     }
@@ -241,7 +231,6 @@
 
   $effect(() => {
     if (!routeUi.selectedTaskId) return;
-    routeLoad.requestOptional("task-detail");
     void routeLoad.requestTaskDetailData(selectedProjectId, routeUi.selectedTaskId);
   });
 
@@ -619,8 +608,7 @@
   {/if}
 
   {#if routeUi.selectedTaskId || routeUi.taskDraftProjectId}
-    {#if taskDetailDataReady && taskDetailLoadState?.status === "ready" && taskDetailLoadState.component.kind === "task-detail"}
-      {@const ProjectTaskDetailPanel = taskDetailLoadState.component.component}
+    {#if taskDetailDataReady}
       <ProjectTaskDetailPanel
         taskId={routeUi.selectedTaskId}
         draftProjectId={routeUi.taskDraftProjectId}
@@ -639,7 +627,7 @@
           taskQuery.showArchivedTasks = true;
         }}
       />
-    {:else if routeLoad.taskDetailDataError || taskDetailLoadState?.status === "failed"}
+    {:else if routeLoad.taskDetailDataError}
       <div class="absolute inset-0 z-80 surface-backdrop flex items-center justify-center p-4" role="alert">
         <div class="flex min-h-32 w-full max-w-sm flex-col items-center justify-center gap-3 surface-dialog p-4 text-center text-sm text-muted-foreground">
           <p>{t("common.viewLoadFailed", t("projects.detail.title"))}</p>
@@ -647,11 +635,7 @@
             <button
               type="button"
               class="min-h-9 rounded-md border border-border bg-background px-3 font-medium text-foreground hover:bg-accent"
-              onclick={() => {
-                if (routeLoad.taskDetailDataError) {
-                  void routeLoad.requestTaskDetailData(selectedProjectId, routeUi.selectedTaskId);
-                } else routeLoad.requestOptional("task-detail", true);
-              }}
+              onclick={() => { void routeLoad.requestTaskDetailData(selectedProjectId, routeUi.selectedTaskId); }}
             >
               {t("common.retry")}
             </button>

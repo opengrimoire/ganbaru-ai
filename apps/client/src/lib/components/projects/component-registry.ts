@@ -24,10 +24,6 @@ const OPTIONAL_IMPORTERS = {
     .then((module) => ({
       default: { kind: "task-finder" as const, component: module.default },
     })),
-  "task-detail": () => import("$lib/components/projects/task-detail/ProjectTaskDetailPanel.svelte")
-    .then((module) => ({
-      default: { kind: "task-detail" as const, component: module.default },
-    })),
 } satisfies Readonly<Record<
   ProjectOptionalComponentKind,
   LazyComponentImporter<LoadedProjectOptionalComponent>

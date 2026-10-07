@@ -182,14 +182,14 @@
       "src/lib/components/projects/views/ProjectGanttView.svelte",
       "src/lib/components/projects/views/ProjectDashboardView.svelte",
       "src/lib/components/projects/ProjectNavigator.svelte",
-      "src/lib/components/projects/pickers/ProjectPickerPanels.svelte"
+      "src/lib/components/projects/pickers/ProjectPickerPanels.svelte",
+      "src/lib/components/projects/task-detail/ProjectTaskDetailPanel.svelte"
     ],
     "forbiddenModules": [
       "src/lib/components/projects/ProjectToolbarPanels.svelte",
       "src/lib/components/projects/settings/ProjectSettingsPanel.svelte",
       "src/lib/components/projects/pickers/ProjectTaskFinder.svelte",
-      "src/lib/components/projects/ProjectBulkActionController.svelte",
-      "src/lib/components/projects/task-detail/ProjectTaskDetailPanel.svelte"
+      "src/lib/components/projects/ProjectBulkActionController.svelte"
     ]
   },
   "projectsToolbar": {
