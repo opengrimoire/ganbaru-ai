@@ -24,6 +24,9 @@ export type SectionId = (typeof SETTINGS_SECTION_IDS)[number];
 export type DistractionsSettingsTab = "limits" | "browser" | "mobile" | "desktop";
 export type ChatSettingsSubsection = "teammates" | "providers" | "permissions" | "behavior";
 
+/** Unsaved Settings edit that must be confirmed before leaving its section or closing Settings. */
+export type SettingsDraftKind = "teammate" | "profile";
+
 export type DistractionsLimitEditorTarget =
   | { mode: "create" }
   | { mode: "edit"; limitId: string };

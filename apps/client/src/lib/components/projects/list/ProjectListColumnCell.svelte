@@ -567,7 +567,7 @@
   {:else if column === "assignee" || column === "reviewer"}
     {@const personName = preferences.profileDisplayName || t("projects.people.you")}
     <span title={personName}>
-      <ProfileAvatar displayName={personName} imagePath={preferences.profileImagePath} size={24} />
+      <ProfileAvatar displayName={personName} imagePath={preferences.profileAvatarImagePath} crop={preferences.profileImageCrop} color={preferences.profileColor} size={24} />
     </span>
   {:else if column === "start" || column === "due"}
     {@const dateValue = column === "start" ? task.startDate : task.dueDate}

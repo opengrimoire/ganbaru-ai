@@ -35,7 +35,7 @@
 
 <article class="scheduled-preview">
   <div class="avatar-cell">
-    <ProfileAvatar displayName={userDisplayName} imagePath={preferences.profileImagePath} size={32} />
+    <ProfileAvatar displayName={userDisplayName} imagePath={preferences.profileAvatarImagePath} crop={preferences.profileImageCrop} color={preferences.profileColor} size={32} />
   </div>
   <div class="message-body">
     <header>

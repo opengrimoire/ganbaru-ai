@@ -32,7 +32,7 @@
     onOpenChatProviderSetup,
     onChatSubsectionChange,
     onRequestNavigation,
-    onTeammateDraftStateChange,
+    onDraftStateChange,
   }: SettingsSectionRendererProps = $props();
 
   const { t } = getLocalization();
@@ -50,7 +50,6 @@
 
   const BASIC_SECTION_COMPONENTS: Partial<Record<SectionId, Component>> = {
     appearance: AppearanceSection,
-    profile: ProfileSection,
     calendars: CalendarsSection,
     projects: ProjectsSection,
     focus: FocusSection,
@@ -63,7 +62,9 @@
   const activeBasicSection = $derived(BASIC_SECTION_COMPONENTS[activeSection]);
 </script>
 
-{#if activeSection === "notes"}
+{#if activeSection === "profile"}
+  <ProfileSection {onDraftStateChange} />
+{:else if activeSection === "notes"}
   <NotesSection onOpenTransferPanel={onOpenNotesTransferPanel} />
 {:else if activeSection === "distractions"}
   <DistractionsSection
@@ -79,7 +80,7 @@
     onOpenProviderSetup={onOpenChatProviderSetup}
     onSubsectionChange={onChatSubsectionChange}
     {onRequestNavigation}
-    {onTeammateDraftStateChange}
+    onTeammateDraftStateChange={(open: boolean) => onDraftStateChange(open ? "teammate" : null)}
   />
 {:else if activeSection === "data"}
   {#if DataSection}

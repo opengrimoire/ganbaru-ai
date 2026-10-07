@@ -19,6 +19,7 @@
   } = $props();
 </script>
 
+<!-- The off track tints its host surface, so it reads the same in Settings and on lighter popovers. -->
 <button
   type="button"
   role="switch"
@@ -34,7 +35,7 @@
     size === "compact" ? "h-5 w-8" : "h-6 w-10",
     checked
       ? "border-primary bg-primary"
-      : "border-border bg-secondary",
+      : "border-border bg-foreground/10",
   )}
 >
   <!-- The thumb travels the track's inner width: track width minus border, padding, and thumb. -->

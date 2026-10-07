@@ -5,6 +5,7 @@ import type {
   DistractionsSettingsTab,
   NotesTransferOperation,
   SectionId,
+  SettingsDraftKind,
 } from "$lib/settings/types";
 
 /** Props shared by the compile-time desktop and mobile settings renderers. */
@@ -20,5 +21,5 @@ export interface SettingsSectionRendererProps {
   readonly onOpenChatProviderSetup: (target: ChatProviderSetupTarget) => void;
   readonly onChatSubsectionChange: (subsection: ChatSettingsSubsection) => void;
   readonly onRequestNavigation: (navigate: () => void) => void;
-  readonly onTeammateDraftStateChange: (open: boolean) => void;
+  readonly onDraftStateChange: (draft: SettingsDraftKind | null) => void;
 }

@@ -1,8 +1,10 @@
 import {
   CALENDAR_VIEW_MODES,
   DEFAULT_CALENDAR_VIEW_MODE,
+  PALETTE_SIZE,
   isCalendarViewMode,
   type CalendarViewMode,
+  type EventColor,
 } from "$lib/calendar/types";
 import {
   DEFAULT_LANGUAGE_PREFERENCE,
@@ -101,6 +103,7 @@ export const DEFAULT_MUSIC_PAUSE_ON_POMODORO_PAUSE = true;
 export const DEFAULT_PROFILE_DISPLAY_NAME = "";
 export const DEFAULT_PROFILE_FULL_NAME = "";
 export const DEFAULT_PROFILE_IMAGE_PATH: string | null = null;
+export const DEFAULT_PROFILE_USE_IMAGE = true;
 export const PROFILE_DISPLAY_NAME_FALLBACK = "You";
 export const PROFILE_DISPLAY_NAME_MAX_CHARS = 25;
 export const PROFILE_FULL_NAME_MAX_CHARS = 50;
@@ -208,6 +211,16 @@ export type ProfileFullNameValidation =
 /** Returns true when a profile image points to one managed raster asset. */
 export function isProfileImagePath(value: unknown): value is string {
   return typeof value === "string" && PROFILE_IMAGE_PATH_PATTERN.test(value.trim());
+}
+
+/** Returns true when a profile color names one slot of the theme event palette. */
+export function isProfileColor(value: unknown): value is EventColor {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0 && value < PALETTE_SIZE;
+}
+
+/** Picks the first profile color uniformly from the theme event palette. */
+export function randomProfileColor(random: () => number = Math.random): EventColor {
+  return Math.min(PALETTE_SIZE - 1, Math.max(0, Math.floor(random() * PALETTE_SIZE)));
 }
 
 function normalizeProfileTextField(

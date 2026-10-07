@@ -14,6 +14,7 @@
     activeSection,
     initialDistractionsTab,
     onOpenDistractionsLimitEditor,
+    onDraftStateChange,
   }: SettingsSectionRendererProps = $props();
 
 </script>
@@ -21,7 +22,7 @@
 {#if activeSection === "appearance"}
   <AppearanceSection />
 {:else if activeSection === "profile"}
-  <ProfileSection />
+  <ProfileSection {onDraftStateChange} />
 {:else if activeSection === "calendars"}
   <CalendarsSection fileTransfersAvailable={__GANBARU_AI_BUILD_PLATFORM__ === "android"} />
 {:else if activeSection === "projects"}

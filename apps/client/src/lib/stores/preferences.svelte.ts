@@ -7,6 +7,7 @@ import {
   DEFAULT_PROFILE_DISPLAY_NAME,
   DEFAULT_PROFILE_FULL_NAME,
   DEFAULT_PROFILE_IMAGE_PATH,
+  DEFAULT_PROFILE_USE_IMAGE,
   DEFAULT_MUSIC_PAUSE_ON_POMODORO_PAUSE,
   DEFAULT_CALENDAR_TIME_FORMAT,
   DEFAULT_FOCUS_IDLE_PAUSE_ON_EVENT_CREATE,
@@ -40,6 +41,8 @@ import {
   getFontFamilyById,
   isCalendarTimeFormat,
   isCalendarViewMode,
+  isProfileColor,
+  randomProfileColor,
   isProfileImagePath,
   isTitleBarControlId,
   parseFocusBreakEndEscPresses,
@@ -52,6 +55,13 @@ import {
   resolveFontFamilyStack,
 } from "./preference-options";
 import { getConfigKey, setConfigKey } from "../vault/config";
+import type { EventColor } from "$lib/calendar/types";
+import {
+  isDefaultProfileImageCrop,
+  isProfileImageCrop,
+  PROFILE_IMAGE_DEFAULT_CROP,
+  type ProfileImageCrop,
+} from "$lib/profile/identity";
 import { getLocalization } from "$lib/i18n/translator.svelte";
 import {
   DEFAULT_NOTES_PAGE_OPEN_MODE,
@@ -62,6 +72,9 @@ import {
 const PROFILE_DISPLAY_NAME_CONFIG_KEY = "profile.displayName";
 const PROFILE_FULL_NAME_CONFIG_KEY = "profile.fullName";
 const PROFILE_IMAGE_PATH_CONFIG_KEY = "profile.imagePath";
+const PROFILE_USE_IMAGE_CONFIG_KEY = "profile.useImage";
+const PROFILE_COLOR_CONFIG_KEY = "profile.color";
+const PROFILE_IMAGE_CROP_CONFIG_KEY = "profile.imageCrop";
 const FONT_FAMILY_CONFIG_KEY = "preferences.fontFamilyId";
 const FONT_SCALE_CONFIG_KEY = "preferences.fontScale";
 const EVENT_TIMEZONE_DISPLAY_CONFIG_KEY = "preferences.eventTimezoneDisplay";
@@ -134,6 +147,25 @@ function loadSavedProfileFullName(): string {
 function loadSavedProfileImagePath(): string | null {
   const saved = getConfigKey<unknown>(PROFILE_IMAGE_PATH_CONFIG_KEY, undefined);
   return isProfileImagePath(saved) ? saved.trim() : DEFAULT_PROFILE_IMAGE_PATH;
+}
+
+function loadSavedProfileUseImage(): boolean {
+  const saved = getConfigKey<unknown>(PROFILE_USE_IMAGE_CONFIG_KEY, undefined);
+  return typeof saved === "boolean" ? saved : DEFAULT_PROFILE_USE_IMAGE;
+}
+
+/** Loads the profile color, choosing and saving a random palette slot the first time. */
+function loadSavedProfileColor(): EventColor {
+  const saved = getConfigKey<unknown>(PROFILE_COLOR_CONFIG_KEY, undefined);
+  if (isProfileColor(saved)) return saved;
+  const color = randomProfileColor();
+  setConfigKey(PROFILE_COLOR_CONFIG_KEY, color);
+  return color;
+}
+
+function loadSavedProfileImageCrop(): ProfileImageCrop {
+  const saved = getConfigKey<unknown>(PROFILE_IMAGE_CROP_CONFIG_KEY, undefined);
+  return isProfileImageCrop(saved) ? { x: saved.x, y: saved.y, zoom: saved.zoom } : { ...PROFILE_IMAGE_DEFAULT_CROP };
 }
 
 function loadSavedCalendarTimeFormat(): CalendarTimeFormat {
@@ -233,6 +265,9 @@ let eventTimezoneDisplay = $state<EventTimezoneDisplay>(loadSavedEventTimezoneDi
 let profileDisplayName = $state<string>(loadSavedProfileDisplayName());
 let profileFullName = $state<string>(loadSavedProfileFullName());
 let profileImagePath = $state<string | null>(loadSavedProfileImagePath());
+let profileUseImage = $state<boolean>(loadSavedProfileUseImage());
+let profileColor = $state<EventColor>(loadSavedProfileColor());
+let profileImageCrop = $state<ProfileImageCrop>(loadSavedProfileImageCrop());
 let calendarTimeFormat = $state<CalendarTimeFormat>(loadSavedCalendarTimeFormat());
 let calendarViewMode = $state<CalendarViewMode>(loadSavedCalendarViewMode());
 let calendarDimPastEvents = $state<boolean>(loadSavedCalendarDimPastEvents());
@@ -348,10 +383,35 @@ function setProfileFullName(value: string): boolean {
   return true;
 }
 
-function setProfileImagePath(value: string | null): boolean {
+/** Set the managed picture and its crop together; removing the picture resets the crop. */
+function setProfileImagePath(
+  value: string | null,
+  crop: ProfileImageCrop = PROFILE_IMAGE_DEFAULT_CROP,
+): boolean {
   if (value !== null && !isProfileImagePath(value)) return false;
+  if (!isProfileImageCrop(crop)) return false;
   profileImagePath = value?.trim() ?? null;
   setConfigKey(PROFILE_IMAGE_PATH_CONFIG_KEY, profileImagePath ?? undefined);
+  return setProfileImageCrop(profileImagePath === null ? PROFILE_IMAGE_DEFAULT_CROP : crop);
+}
+
+function setProfileImageCrop(value: ProfileImageCrop): boolean {
+  if (!isProfileImageCrop(value)) return false;
+  const crop = { x: value.x, y: value.y, zoom: value.zoom };
+  profileImageCrop = crop;
+  setConfigKey(PROFILE_IMAGE_CROP_CONFIG_KEY, isDefaultProfileImageCrop(crop) ? undefined : { ...crop });
+  return true;
+}
+
+function setProfileUseImage(value: boolean): void {
+  profileUseImage = value;
+  setConfigKey(PROFILE_USE_IMAGE_CONFIG_KEY, value === DEFAULT_PROFILE_USE_IMAGE ? undefined : value);
+}
+
+function setProfileColor(value: EventColor): boolean {
+  if (!isProfileColor(value)) return false;
+  profileColor = value;
+  setConfigKey(PROFILE_COLOR_CONFIG_KEY, value);
   return true;
 }
 
@@ -518,6 +578,21 @@ export function getPreferences() {
     get profileImagePath(): string | null {
       return profileImagePath;
     },
+    get profileUseImage(): boolean {
+      return profileUseImage;
+    },
+    /** Picture the avatar shows, or null when there is none or the color is preferred. */
+    get profileAvatarImagePath(): string | null {
+      return profileUseImage ? profileImagePath : null;
+    },
+    /** Theme palette slot behind the avatar initials. */
+    get profileColor(): EventColor {
+      return profileColor;
+    },
+    /** Square crop applied to the profile picture wherever the avatar renders. */
+    get profileImageCrop(): ProfileImageCrop {
+      return profileImageCrop;
+    },
     get languagePreference(): LanguagePreference {
       return localization.languagePreference;
     },
@@ -591,6 +666,9 @@ export function getPreferences() {
     setProfileDisplayName,
     setProfileFullName,
     setProfileImagePath,
+    setProfileUseImage,
+    setProfileColor,
+    setProfileImageCrop,
     setLanguagePreference: localization.setLanguagePreference,
     setEventTimezoneDisplay,
     setCalendarTimeFormat,

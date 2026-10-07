@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { PALETTE_SIZE } from "$lib/calendar/types";
 import {
   FONT_FAMILIES,
   DEFAULT_FONT_FAMILY_ID,
@@ -11,7 +12,10 @@ import {
   DEFAULT_PROFILE_DISPLAY_NAME,
   DEFAULT_PROFILE_IMAGE_PATH,
   DEFAULT_PROFILE_FULL_NAME,
+  DEFAULT_PROFILE_USE_IMAGE,
   PROFILE_DISPLAY_NAME_MAX_CHARS,
+  isProfileColor,
+  randomProfileColor,
   isProfileImagePath,
   PROFILE_FULL_NAME_MAX_CHARS,
   DEFAULT_CALENDAR_TIME_FORMAT,
@@ -232,6 +236,28 @@ describe("profile preferences", () => {
     expect(isProfileImagePath(`profile/nested/${"a".repeat(64)}.webp`)).toBe(false);
     expect(isProfileImagePath(`project-icons/${"a".repeat(64)}.png`)).toBe(false);
     expect(isProfileImagePath(`profile/${"a".repeat(64)}.svg`)).toBe(false);
+  });
+
+  it("accepts only theme palette slots as profile colors", () => {
+    expect(DEFAULT_PROFILE_USE_IMAGE).toBe(true);
+    expect(isProfileColor(0)).toBe(true);
+    expect(isProfileColor(PALETTE_SIZE - 1)).toBe(true);
+    expect(isProfileColor(PALETTE_SIZE)).toBe(false);
+    expect(isProfileColor(-1)).toBe(false);
+    expect(isProfileColor(1.5)).toBe(false);
+    expect(isProfileColor("3")).toBe(false);
+    expect(isProfileColor(null)).toBe(false);
+  });
+
+  it("picks a random profile color that is always a palette slot", () => {
+    expect(randomProfileColor(() => 0)).toBe(0);
+    expect(randomProfileColor(() => 0.5)).toBe(PALETTE_SIZE / 2);
+    expect(randomProfileColor(() => 0.999999)).toBe(PALETTE_SIZE - 1);
+    expect(randomProfileColor(() => 1)).toBe(PALETTE_SIZE - 1);
+    expect(randomProfileColor(() => -0.2)).toBe(0);
+    for (let sample = 0; sample < 50; sample += 1) {
+      expect(isProfileColor(randomProfileColor())).toBe(true);
+    }
   });
 
   it("trims profile full names while allowing an empty value", () => {

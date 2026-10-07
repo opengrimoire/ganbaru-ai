@@ -1,16 +1,27 @@
 <script lang="ts">
+  import { onDestroy } from "svelte";
   import Save from "@lucide/svelte/icons/save";
-  import ImagePlus from "@lucide/svelte/icons/image-plus";
-  import Trash2 from "@lucide/svelte/icons/trash-2";
+  import LoaderCircle from "@lucide/svelte/icons/loader-circle";
+  import Pencil from "@lucide/svelte/icons/pencil";
   import { deleteProfileImageFile } from "$lib/api/profile-image";
   import { pickProfileImageFile } from "$lib/api/profile-image-picker";
   import ProfileAvatar from "$lib/components/profile/ProfileAvatar.svelte";
+  import ProfileAvatarPanel from "$lib/components/profile/ProfileAvatarPanel.svelte";
+  import ProfileImageCropDialog from "$lib/components/profile/ProfileImageCropDialog.svelte";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import type { NotesLocalUser } from "$lib/notes/types";
+  import type { EventColor } from "$lib/calendar/types";
+  import {
+    PROFILE_IMAGE_DEFAULT_CROP,
+    profileImageCropsEqual,
+    type ProfileImageCrop,
+  } from "$lib/profile/identity";
+  import type { SettingsDraftKind } from "$lib/settings/types";
   import {
     PROFILE_DISPLAY_NAME_FALLBACK,
     PROFILE_DISPLAY_NAME_MAX_CHARS,
     PROFILE_FULL_NAME_MAX_CHARS,
+    isProfileImagePath,
     normalizeProfileDisplayName,
     normalizeProfileFullName,
   } from "$lib/stores/preference-options";
@@ -19,12 +30,36 @@
   import { cn } from "$lib/utils";
   import { moveTextInputCaretToPointer } from "$lib/utils/text-input-caret";
 
+  let {
+    onDraftStateChange = () => {},
+  }: {
+    /** Reports whether the section holds unsaved identity or picture changes. */
+    onDraftStateChange?: (draft: SettingsDraftKind | null) => void;
+  } = $props();
+
   const notes = getNotes();
   const preferences = getPreferences();
   const { t } = getLocalization();
+  const PROFILE_AVATAR_SIZE = 40;
+
+  let avatarTrigger = $state<HTMLButtonElement | undefined>();
+  let avatarPanelOpen = $state(false);
+  /** Open crop editor; `ownsFile` marks a newly picked file that Cancel must delete. */
+  let cropEditor = $state<{
+    path: string;
+    crop: ProfileImageCrop;
+    fromUpload: boolean;
+    ownsFile: boolean;
+  } | null>(null);
 
   let draftDisplayName = $state(preferences.profileDisplayName);
   let draftFullName = $state(preferences.profileFullName);
+  let draftImagePath = $state(preferences.profileImagePath);
+  let draftImageCrop = $state<ProfileImageCrop>({ ...preferences.profileImageCrop });
+  let draftUseImage = $state(preferences.profileUseImage);
+  let draftColor = $state<EventColor>(preferences.profileColor);
+  /** Picked copy in `assets/profile/` that no saved preference references yet; discarding the draft deletes it. */
+  let pendingImagePath: string | null = null;
   let initializedDisplayName = $state<string | null>(null);
   let initializedFullName = $state<string | null>(null);
   let saving = $state(false);
@@ -45,16 +80,34 @@
     if (!normalizedFullName.ok) return t("settings.profileIdentity.invalidFullName");
     return null;
   });
-  const unchanged = $derived(
-    normalizedDisplayName.ok
-      && normalizedFullName.ok
-      && normalizedDisplayName.value === preferences.profileDisplayName
-      && normalizedFullName.value === preferences.profileFullName,
+  const namesValid = $derived(normalizedDisplayName.ok && normalizedFullName.ok);
+  const namesChanged = $derived(
+    !normalizedDisplayName.ok
+      || !normalizedFullName.ok
+      || normalizedDisplayName.value !== preferences.profileDisplayName
+      || normalizedFullName.value !== preferences.profileFullName,
   );
-  const hasSaveableChange = $derived(
-    normalizedDisplayName.ok && normalizedFullName.ok && !unchanged,
+  const pictureChanged = $derived(
+    draftImagePath !== preferences.profileImagePath
+      || draftUseImage !== preferences.profileUseImage
+      || draftColor !== preferences.profileColor
+      || !profileImageCropsEqual(draftImageCrop, preferences.profileImageCrop),
   );
+  const hasSaveableChange = $derived(namesValid && (namesChanged || pictureChanged));
   const canSave = $derived(hasSaveableChange && !saving);
+
+  $effect(() => {
+    onDraftStateChange(namesChanged || pictureChanged ? "profile" : null);
+    return () => onDraftStateChange(null);
+  });
+
+  onDestroy(() => {
+    const pending = pendingImagePath;
+    if (!pending) return;
+    void deleteProfileImageFile(pending).catch((error: unknown) => {
+      console.error("Failed to delete a discarded profile picture", error);
+    });
+  });
 
   $effect(() => {
     const current = preferences.profileDisplayName;
@@ -109,6 +162,7 @@
       }
       draftDisplayName = displayName.value;
       draftFullName = fullName.value;
+      if (pictureChanged) await savePicture();
       saved = true;
     } catch (error) {
       saveError = error instanceof Error ? error.message : String(error);
@@ -117,44 +171,112 @@
     }
   }
 
-  async function chooseProfileImage(): Promise<void> {
+  /** Store the picture draft, then delete the saved file it replaced. */
+  async function savePicture(): Promise<void> {
+    const previous = preferences.profileImagePath;
+    const imageSaved = draftImagePath === previous
+      ? preferences.setProfileImageCrop(draftImageCrop)
+      : preferences.setProfileImagePath(draftImagePath, draftImageCrop);
+    if (!imageSaved || !preferences.setProfileColor(draftColor)) {
+      throw new Error(t("settings.profileIdentity.invalidPicture"));
+    }
+    preferences.setProfileUseImage(draftUseImage);
+    draftImageCrop = { ...preferences.profileImageCrop };
+    pendingImagePath = null;
+    if (previous && previous !== draftImagePath) await deleteProfileImageFile(previous);
+  }
+
+  function reportImageError(error: unknown): void {
+    const message = error instanceof Error ? error.message : String(error);
+    saveError = t("settings.profileIdentity.pictureUpdateFailed", message);
+  }
+
+  /** Delete a picked copy that the draft no longer references. */
+  async function discardImageFile(path: string): Promise<void> {
+    try {
+      await deleteProfileImageFile(path);
+    } catch (error) {
+      reportImageError(error);
+    }
+  }
+
+  function markPictureEdited(): void {
     saveError = null;
     saved = false;
+  }
+
+  /** Pick a picture, then crop it before it enters the draft. */
+  async function chooseProfileImage(): Promise<void> {
+    if (savingImage || saving) return;
+    markPictureEdited();
     savingImage = true;
     try {
       const selected = await pickProfileImageFile(t("settings.profileIdentity.picturePickerTitle"));
-      if (!selected || selected.relativePath === preferences.profileImagePath) return;
-      const previous = preferences.profileImagePath;
-      if (!preferences.setProfileImagePath(selected.relativePath)) {
-        await deleteProfileImageFile(selected.relativePath);
+      if (!selected) return;
+      const path = selected.relativePath;
+      const ownsFile = path !== preferences.profileImagePath && path !== pendingImagePath;
+      if (!isProfileImagePath(path)) {
+        if (ownsFile) await deleteProfileImageFile(path);
         throw new Error(t("settings.profileIdentity.invalidPicture"));
       }
-      if (previous) await deleteProfileImageFile(previous);
+      avatarPanelOpen = false;
+      cropEditor = {
+        path,
+        crop: path === draftImagePath ? { ...draftImageCrop } : { ...PROFILE_IMAGE_DEFAULT_CROP },
+        fromUpload: true,
+        ownsFile,
+      };
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      saveError = t("settings.profileIdentity.pictureUpdateFailed", message);
+      reportImageError(error);
     } finally {
       savingImage = false;
     }
   }
 
-  async function removeProfileImage(): Promise<void> {
-    const previous = preferences.profileImagePath;
-    if (!previous || savingImage) return;
-    saveError = null;
-    saved = false;
-    savingImage = true;
-    try {
-      if (!preferences.setProfileImagePath(null)) {
-        throw new Error(t("settings.profileIdentity.invalidPicture"));
-      }
-      await deleteProfileImageFile(previous);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      saveError = t("settings.profileIdentity.pictureUpdateFailed", message);
-    } finally {
-      savingImage = false;
-    }
+  function adjustProfileImage(): void {
+    const path = draftImagePath;
+    avatarPanelOpen = false;
+    if (!path) return;
+    cropEditor = { path, crop: { ...draftImageCrop }, fromUpload: false, ownsFile: false };
+  }
+
+  function closeCropEditor(): void {
+    cropEditor = null;
+    avatarTrigger?.focus({ preventScroll: true });
+  }
+
+  /** Put the cropped picture in the draft; a previously picked copy it replaces is deleted. */
+  function applyProfileImageCrop(crop: ProfileImageCrop): void {
+    const editor = cropEditor;
+    if (!editor) return;
+    closeCropEditor();
+    markPictureEdited();
+    const replacedPending = pendingImagePath !== null && pendingImagePath !== editor.path
+      ? pendingImagePath
+      : null;
+    draftImagePath = editor.path;
+    draftImageCrop = { ...crop };
+    if (editor.fromUpload) draftUseImage = true;
+    pendingImagePath = editor.path === preferences.profileImagePath ? null : editor.path;
+    if (replacedPending) void discardImageFile(replacedPending);
+  }
+
+  /** Close the crop editor; a newly picked copy that never entered the draft is deleted. */
+  function cancelProfileImageCrop(): void {
+    const editor = cropEditor;
+    if (!editor) return;
+    closeCropEditor();
+    if (editor.ownsFile) void discardImageFile(editor.path);
+  }
+
+  function removeProfileImage(): void {
+    if (!draftImagePath || savingImage) return;
+    markPictureEdited();
+    const pending = pendingImagePath;
+    draftImagePath = null;
+    draftImageCrop = { ...PROFILE_IMAGE_DEFAULT_CROP };
+    pendingImagePath = null;
+    if (pending) void discardImageFile(pending);
   }
 
   function handleIdentityKeydown(event: KeyboardEvent): void {
@@ -178,57 +300,19 @@
     <h2 class="px-1 text-[0.866667rem] font-semibold text-foreground">{t("settings.profileIdentity.heading")}</h2>
 
     <div class="flex flex-col gap-3">
-      <div class="flex items-center justify-between gap-4 px-1 py-1 max-[520px]:flex-col max-[520px]:items-stretch max-[520px]:gap-3">
-        <div class="flex min-w-0 flex-1 items-center gap-3">
-          <ProfileAvatar
-            displayName={draftDisplayName || PROFILE_DISPLAY_NAME_FALLBACK}
-            imagePath={preferences.profileImagePath}
-            size={56}
-          />
-          <div class="min-w-0">
-            <div class="text-[0.866667rem] text-foreground">{t("settings.profileIdentity.picture")}</div>
-            <div class="mt-0.5 text-[0.8rem] leading-5 text-muted-foreground">
-              {t("settings.profileIdentity.pictureDescription")}
-            </div>
-          </div>
-        </div>
-        <div class="flex shrink-0 items-center gap-2 max-[520px]:pl-17">
-          <button
-            type="button"
-            class="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-card px-2.5 text-[0.8rem] font-medium text-foreground transition-colors hover:bg-accent disabled:opacity-55 dark:bg-transparent"
-            disabled={savingImage}
-            onclick={() => void chooseProfileImage()}
-          >
-            <ImagePlus size={13} />
-            {t("settings.profileIdentity.uploadPicture")}
-          </button>
-          {#if preferences.profileImagePath}
-            <button
-              type="button"
-              class="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-destructive disabled:opacity-55"
-              disabled={savingImage}
-              aria-label={t("settings.profileIdentity.removePicture")}
-              title={t("settings.profileIdentity.removePicture")}
-              onclick={() => void removeProfileImage()}
-            >
-              <Trash2 size={14} />
-            </button>
-          {/if}
-        </div>
-      </div>
-      <div class="flex items-center justify-between gap-4 px-1 py-1 max-[520px]:flex-col max-[520px]:items-stretch max-[520px]:gap-2">
+      <div class="flex items-center justify-between gap-4 px-1 py-1 max-[480px]:flex-col max-[480px]:items-stretch max-[480px]:gap-2">
         <div class="min-w-0 flex-1">
           <label for="profile-display-name" class="text-[0.866667rem] text-foreground">
             {t("settings.profileIdentity.displayName")}
           </label>
-          <div class="mt-0.5 text-[0.8rem] leading-5 text-muted-foreground">
+          <div class="mt-0.5 text-[0.8rem] text-muted-foreground">
             {t("settings.profileIdentity.description")}
           </div>
         </div>
 
         <input
           id="profile-display-name"
-          class="field w-44 min-w-0 px-2.5 text-left text-[0.8rem] font-medium text-foreground max-[520px]:w-full"
+          class="field w-44 min-w-0 px-2.5 text-left text-[0.8rem] font-medium text-foreground max-[480px]:w-full"
           value={draftDisplayName}
           maxlength={PROFILE_DISPLAY_NAME_MAX_CHARS}
           disabled={saving}
@@ -241,19 +325,19 @@
           }}
         />
       </div>
-      <div class="flex items-center justify-between gap-4 px-1 py-1 max-[520px]:flex-col max-[520px]:items-stretch max-[520px]:gap-2">
+      <div class="flex items-center justify-between gap-4 px-1 py-1 max-[480px]:flex-col max-[480px]:items-stretch max-[480px]:gap-2">
         <div class="min-w-0 flex-1">
           <label for="profile-full-name" class="text-[0.866667rem] text-foreground">
             {t("settings.profileIdentity.fullName")}
           </label>
-          <div class="mt-0.5 text-[0.8rem] leading-5 text-muted-foreground">
+          <div class="mt-0.5 text-[0.8rem] text-muted-foreground">
             {t("settings.profileIdentity.fullNameDescription")}
           </div>
         </div>
 
         <input
           id="profile-full-name"
-          class="field w-44 min-w-0 px-2.5 text-left text-[0.8rem] font-medium text-foreground max-[520px]:w-full"
+          class="field w-44 min-w-0 px-2.5 text-left text-[0.8rem] font-medium text-foreground max-[480px]:w-full"
           value={draftFullName}
           maxlength={PROFILE_FULL_NAME_MAX_CHARS}
           disabled={saving}
@@ -266,6 +350,76 @@
           }}
         />
       </div>
+      <div class="flex items-center justify-between gap-4 px-1 py-1">
+        <div class="min-w-0 flex-1">
+          <div class="text-[0.866667rem] text-foreground">{t("settings.profileIdentity.picture")}</div>
+          <div class="mt-0.5 text-[0.8rem] text-muted-foreground">
+            {t("settings.profileIdentity.pictureDescription")}
+          </div>
+        </div>
+        <button
+          bind:this={avatarTrigger}
+          type="button"
+          class="group relative flex shrink-0 rounded-lg focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+          aria-label={t("settings.profileIdentity.editPicture")}
+          aria-haspopup="dialog"
+          aria-expanded={avatarPanelOpen}
+          data-app-tooltip-disabled="true"
+          onclick={() => (avatarPanelOpen = !avatarPanelOpen)}
+        >
+          <ProfileAvatar
+            displayName={draftDisplayName || PROFILE_DISPLAY_NAME_FALLBACK}
+            imagePath={draftUseImage ? draftImagePath : null}
+            crop={draftImageCrop}
+            color={draftColor}
+            size={PROFILE_AVATAR_SIZE}
+          />
+          <span
+            class={cn(
+              "absolute -right-1 -bottom-1 flex size-5 items-center justify-center rounded-full border border-border bg-card text-foreground transition-colors group-hover:bg-accent group-active:bg-accent",
+              avatarPanelOpen && "bg-accent",
+            )}
+            aria-hidden="true"
+          >
+            {#if savingImage}
+              <LoaderCircle size={11} strokeWidth={2} class="animate-spin motion-reduce:animate-none" />
+            {:else}
+              <Pencil size={10} strokeWidth={2} />
+            {/if}
+          </span>
+        </button>
+      </div>
+      {#if avatarPanelOpen && avatarTrigger}
+        <ProfileAvatarPanel
+          anchor={avatarTrigger}
+          hasImage={draftImagePath !== null}
+          useImage={draftUseImage}
+          color={draftColor}
+          busy={savingImage || saving}
+          onUpload={() => void chooseProfileImage()}
+          onAdjust={adjustProfileImage}
+          onRemove={removeProfileImage}
+          onUseImageChange={(useImage) => {
+            draftUseImage = useImage;
+            markPictureEdited();
+          }}
+          onColorChange={(color) => {
+            draftColor = color;
+            markPictureEdited();
+          }}
+          onClose={() => (avatarPanelOpen = false)}
+        />
+      {/if}
+      {#if cropEditor}
+        {#key cropEditor.path}
+          <ProfileImageCropDialog
+            imagePath={cropEditor.path}
+            initialCrop={cropEditor.crop}
+            onApply={applyProfileImageCrop}
+            onCancel={cancelProfileImageCrop}
+          />
+        {/key}
+      {/if}
     </div>
   </section>
 

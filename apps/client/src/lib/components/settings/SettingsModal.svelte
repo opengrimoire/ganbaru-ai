@@ -37,6 +37,7 @@
     ChatSettingsSubsection,
     SectionId,
     SettingsDetailKind,
+    SettingsDraftKind,
   } from "$lib/settings/types";
   import { settingsSectionsForShell } from "./section-catalog";
   import SettingsSectionRenderer from "$lib/components/settings/SettingsSectionRenderer.svelte";
@@ -90,7 +91,7 @@
   let activeSection = $state<SectionId>(initialActiveSection);
   let mobileSectionOpen = $state(initialMobileSectionOpen);
   let activeChatSubsection = $state<ChatSettingsSubsection>(initialActiveChatSubsection);
-  let teammateDraftOpen = $state(false);
+  let openDraft = $state<SettingsDraftKind | null>(null);
   let pendingDraftNavigation = $state<(() => void) | null>(null);
   let detailView = $state<SettingsDetailView | null>(null);
   let detailLoadState = $state<LazyComponentLoadState<
@@ -120,7 +121,7 @@
   $effect(() => {
     if (!mobilePresentation || !mobileSectionOpen) return;
     return mobileBackStack.activate({
-      handle: detailView ? closeDetailView : closeMobileSection,
+      handle: detailView ? closeDetailView : requestMobileSectionClose,
     });
   });
 
@@ -160,7 +161,7 @@
   }
 
   function requestSettingsNavigation(navigate: () => void): void {
-    if (!teammateDraftOpen) {
+    if (!openDraft) {
       navigate();
       return;
     }
@@ -178,13 +179,13 @@
   function discardDraftAndContinue(): void {
     const navigate = pendingDraftNavigation;
     pendingDraftNavigation = null;
-    teammateDraftOpen = false;
+    openDraft = null;
     navigate?.();
   }
 
-  function updateTeammateDraftState(open: boolean): void {
-    teammateDraftOpen = open;
-    if (!open) pendingDraftNavigation = null;
+  function updateDraftState(draft: SettingsDraftKind | null): void {
+    openDraft = draft;
+    if (!draft) pendingDraftNavigation = null;
   }
 
   function requestSettingsDetail(kind: SettingsDetailKind, retry = false): void {
@@ -280,6 +281,10 @@
     });
   }
 
+  function requestMobileSectionClose(): void {
+    requestSettingsNavigation(closeMobileSection);
+  }
+
   function closeMobileSection(): void {
     detailView = null;
     detailLoadState = null;
@@ -364,7 +369,7 @@
           return;
         }
         if (mobilePresentation && mobileSectionOpen) {
-          closeMobileSection();
+          requestMobileSectionClose();
           return;
         }
         requestSettingsClose();
@@ -399,7 +404,7 @@
       <header class="flex min-h-14 shrink-0 items-center gap-1 border-b border-border px-1">
         <button
           type="button"
-          onclick={detailView ? closeDetailView : closeMobileSection}
+          onclick={detailView ? closeDetailView : requestMobileSectionClose}
           aria-label={detailView
             ? t("mobile.settings.backToSection")
             : t("mobile.settings.backToCategories")}
@@ -481,7 +486,7 @@
                 scrollSettingsToTop();
               }}
               onRequestNavigation={requestSettingsNavigation}
-              onTeammateDraftStateChange={updateTeammateDraftState}
+              onDraftStateChange={updateDraftState}
             />
           </div>
         {/if}
@@ -740,7 +745,7 @@
               scrollSettingsToTop();
             }}
             onRequestNavigation={requestSettingsNavigation}
-            onTeammateDraftStateChange={updateTeammateDraftState}
+            onDraftStateChange={updateDraftState}
           />
         {/if}
       </section>
@@ -764,14 +769,25 @@
 </div>
 
 {#if pendingDraftNavigation}
-  <ConfirmDialog
-    title={t("settings.chat.teammates.discardDraftTitle")}
-    message={t("settings.chat.teammates.discardDraftMessage")}
-    confirmLabel={t("settings.chat.teammates.discardDraft")}
-    cancelLabel={t("settings.chat.teammates.keepEditing")}
-    onConfirm={discardDraftAndContinue}
-    onCancel={cancelDraftNavigation}
-  />
+  {#if openDraft === "profile"}
+    <ConfirmDialog
+      title={t("settings.profileIdentity.discardChangesTitle")}
+      message={t("settings.profileIdentity.discardChangesMessage")}
+      confirmLabel={t("settings.profileIdentity.discardChanges")}
+      cancelLabel={t("settings.profileIdentity.keepEditing")}
+      onConfirm={discardDraftAndContinue}
+      onCancel={cancelDraftNavigation}
+    />
+  {:else}
+    <ConfirmDialog
+      title={t("settings.chat.teammates.discardDraftTitle")}
+      message={t("settings.chat.teammates.discardDraftMessage")}
+      confirmLabel={t("settings.chat.teammates.discardDraft")}
+      cancelLabel={t("settings.chat.teammates.keepEditing")}
+      onConfirm={discardDraftAndContinue}
+      onCancel={cancelDraftNavigation}
+    />
+  {/if}
 {/if}
 
 {/if}

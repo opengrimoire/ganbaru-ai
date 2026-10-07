@@ -44,7 +44,7 @@
   aria-hidden="true"
 >
   {#if participant.kind === "local_user"}
-    <ProfileAvatar {displayName} imagePath={preferences.profileImagePath} {size} />
+    <ProfileAvatar {displayName} imagePath={preferences.profileAvatarImagePath} crop={preferences.profileImageCrop} color={preferences.profileColor} {size} />
   {:else if participant.kind === "ai_teammate"}
     {#if teammateIdentity}
       <ChatModelAvatar
