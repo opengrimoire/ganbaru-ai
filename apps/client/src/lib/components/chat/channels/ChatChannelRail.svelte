@@ -405,8 +405,7 @@
     const menu = channelContextMenu;
     if (!menu) return;
     closeChannelContextMenu();
-    setupChannel = menu.channel;
-    setupSectionId = sections.find((section) => section.channelIds.includes(menu.channel.id))?.id ?? null;
+    openEdit(menu.channel);
   }
 
   function moveChannelFromContextMenu(sectionId: string | null): void {
@@ -451,6 +450,23 @@
     onExpand();
     setupChannel = null;
     setupSectionId = sectionId;
+  }
+
+  function openEdit(channel: ChatChannelRead): void {
+    setupChannel = channel;
+    setupSectionId = sections.find((section) => section.channelIds.includes(channel.id))?.id ?? null;
+  }
+
+  function editChannelFromEvent(event: Event): void {
+    const channelId = event instanceof CustomEvent
+      && typeof event.detail === "object"
+      && event.detail !== null
+      && "channelId" in event.detail
+      && typeof event.detail.channelId === "string"
+      ? event.detail.channelId
+      : null;
+    const channel = chat.activeChannels.find((entry) => entry.id === channelId);
+    if (channel) openEdit(channel);
   }
 
   async function selectChannel(channelId: string): Promise<void> {
@@ -499,6 +515,7 @@
       }
     };
     window.addEventListener("ganbaru-ai:chat-new-channel", createChannel);
+    window.addEventListener("ganbaru-ai:chat-edit-channel", editChannelFromEvent);
     window.addEventListener("ganbaru-ai:chat-focus-search", focusSearch);
     document.addEventListener("pointerdown", closeOpenMenus);
     const unsubscribeVault = onActiveVaultIdentityChange(() => {
@@ -509,6 +526,7 @@
     });
     return () => {
       window.removeEventListener("ganbaru-ai:chat-new-channel", createChannel);
+      window.removeEventListener("ganbaru-ai:chat-edit-channel", editChannelFromEvent);
       window.removeEventListener("ganbaru-ai:chat-focus-search", focusSearch);
       document.removeEventListener("pointerdown", closeOpenMenus);
       unsubscribeVault();

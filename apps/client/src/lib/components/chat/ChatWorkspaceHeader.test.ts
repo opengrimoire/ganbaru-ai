@@ -246,19 +246,20 @@ describe("ChatWorkspaceHeader", () => {
     expect(collapsed.querySelector("[data-chat-new-channel-button]")).not.toBeNull();
   });
 
-  it("uses one members icon and portals the roster outside the Chat header", async () => {
+  it("opens the selected channel's dialog from one members icon", () => {
     const target = setup(true);
-    const rosterTrigger = target.querySelector<HTMLButtonElement>("[data-chat-roster-trigger]");
+    const membersTrigger = target.querySelector<HTMLButtonElement>("[data-chat-members-trigger]");
+    const editRequests: unknown[] = [];
+    const captureEdit = (event: Event) => { editRequests.push(event instanceof CustomEvent ? event.detail : null); };
+    window.addEventListener("ganbaru-ai:chat-edit-channel", captureEdit);
 
-    expect(rosterTrigger?.querySelectorAll("svg")).toHaveLength(1);
-    expect(rosterTrigger?.textContent?.trim()).toBe("");
+    expect(membersTrigger?.querySelectorAll("svg")).toHaveLength(1);
+    expect(membersTrigger?.textContent?.trim()).toBe("");
 
-    rosterTrigger?.click();
-    await tick();
+    membersTrigger?.click();
+    window.removeEventListener("ganbaru-ai:chat-edit-channel", captureEdit);
 
-    const roster = document.querySelector("#chat-channel-roster");
-    expect(roster?.parentElement).toBe(document.body);
-    expect(roster?.classList.contains("roster-popover")).toBe(true);
+    expect(editRequests).toEqual([{ channelId: "channel-general" }]);
   });
 
   it("opens the current project's complete channel navigator from the channel segment", async () => {

@@ -4,6 +4,7 @@
   import Hash from "@lucide/svelte/icons/hash";
   import Menu from "@lucide/svelte/icons/menu";
   import MessageSquare from "@lucide/svelte/icons/message-square";
+import Users from "@lucide/svelte/icons/users";
   import {
     COMPACT_IDENTITY_EMOJI_SCALE,
     COMPACT_IDENTITY_ICON_SIZE,
@@ -20,8 +21,7 @@
   import ProjectPickerMobileDialog from "$lib/components/projects/pickers/ProjectPickerMobileDialog.svelte";
   import WorkspaceBreadcrumbTerminalIcon from "$lib/components/ui/WorkspaceBreadcrumbTerminalIcon.svelte";
   import ChatChannelPickerPanel from "$lib/components/chat/channels/ChatChannelPickerPanel.svelte";
-  import ChatChannelRoster from "$lib/components/chat/channels/ChatChannelRoster.svelte";
-  import ChatProjectNavigator from "$lib/components/chat/channels/ChatProjectNavigator.svelte";
+    import ChatProjectNavigator from "$lib/components/chat/channels/ChatProjectNavigator.svelte";
   import ChatTitleEditor from "./ChatTitleEditor.svelte";
 
   type ChatNavigatorMode = ProjectNavigatorPanelMode | "channels";
@@ -132,6 +132,11 @@
   function createChannel(): void {
     navigatorOpen = false;
     window.dispatchEvent(new Event("ganbaru-ai:chat-new-channel"));
+  }
+
+  function openChannelMembers(): void {
+    if (!selectedChannel) return;
+    window.dispatchEvent(new CustomEvent("ganbaru-ai:chat-edit-channel", { detail: { channelId: selectedChannel.id } }));
   }
 
   async function commitTitle(title: string): Promise<void> {
@@ -253,9 +258,7 @@
   {#if actionError}<p role="alert" class="max-w-40 truncate text-[0.666667rem] text-destructive">{actionError}</p>{/if}
   <div class="flex shrink-0 items-center gap-1">
     {#if selectedFolder?.bindingStatus === "available"}<button type="button" class="chat-toolbar-icon-button" title={t("chat.openFolder")} aria-label={t("chat.openFolder")} onclick={() => run(() => chat.openWorkingFolder(selectedFolder.workingFolder.id))}><FolderOpen size={14} /></button>{/if}
-    {#if selectedChannel}
-      <ChatChannelRoster />
-    {/if}
+    {#if selectedChannel}<button type="button" class="chat-toolbar-icon-button" aria-label={t("chat.organization.members")} data-chat-members-trigger onclick={openChannelMembers}><Users size={14} /></button>{/if}
     {#if selectedFolder?.currentBranch}<span class="chat-branch" title={t("chat.header.branch", selectedFolder.currentBranch)}><GitBranch size={13} /><span>{selectedFolder.currentBranch}</span></span>{/if}
   </div>
 </div>

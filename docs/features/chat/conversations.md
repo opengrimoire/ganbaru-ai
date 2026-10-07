@@ -16,6 +16,8 @@ Provider thread IDs and model names are never conversation or participant identi
 
 The sidebar shows project channels, personal sections, and search, following the [shared Notes and Chat sidebar design](../notes/pages-and-navigation.md#shared-notes-and-chat-sidebar-design). Channel ordering and membership are durable vault data. Personal sections and the last selected channel are device-local presentation state. Navigation entries for direct messages stay hidden until that feature has a working destination.
 
+One channel dialog, opened from the sidebar or from the members button in the channel header, edits the name, topic, personal section, and members together. Human members are listed and AI teammates can be added or removed there; changes apply on save. Adding a teammate from the channel grants the conversation-only default, and its detailed access is edited in Settings > Chat > Teammates. Removing a teammate that has active work asks for confirmation with the impact. A channel never shows an in-feed prompt to add teammates.
+
 Archive hides a conversation from normal navigation without destroying its messages, links, drafts, or review history. Restore returns it to its project. Permanent deletion is explicit and includes a cleanup plan for owned execution resources.
 
 Search uses bounded, paginated reads over active or archived conversations according to the selected filter. Opening a result restores the conversation and position without loading its complete history.
