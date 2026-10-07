@@ -47,6 +47,22 @@
     type ProjectTaskDetailDraft,
     type ProjectTaskDetailCustomFieldDrafts,
   } from "$lib/projects/tasks/detail";
+  import {
+    applyProjectTaskDraftRelations,
+    emptyProjectTaskDraftRelations,
+    moveProjectTaskDraftEntry,
+    projectTaskDraftChecklistItems,
+    projectTaskDraftDependencies,
+    projectTaskDraftHasTagName,
+    projectTaskDraftPreview,
+    projectTaskDraftRelationsChanged,
+    projectTaskDraftSubtaskTasks,
+    projectTaskDraftTags,
+    removeProjectTaskDraftTag,
+    type ProjectTaskDraftCustomFieldValue,
+    type ProjectTaskDraftRelations,
+    type ProjectTaskDraftRelationWriter,
+  } from "$lib/projects/tasks/draft-relations";
   import ProjectTaskDetailChecklistSection from "./ProjectTaskDetailChecklistSection.svelte";
   import ProjectTaskDetailCustomFieldsSection from "./ProjectTaskDetailCustomFieldsSection.svelte";
   import ProjectTaskDetailDescriptionSection from "./ProjectTaskDetailDescriptionSection.svelte";
@@ -137,9 +153,27 @@
   type DetailDateTarget = "start" | "due" | "target";
 
   let newTaskInitialDraft = $state<ProjectTaskDetailDraft | null>(null);
+  let draftRelations = $state<ProjectTaskDraftRelations>(emptyProjectTaskDraftRelations());
+  let draftTaskId = $state(crypto.randomUUID());
+  let draftStartedAt = $state(Temporal.Now.instant().toString());
+  /** Error to show once the task created from a draft is loaded for editing. */
+  let createdTaskError = $state<{ taskId: string; message: string } | null>(null);
 
   const selectedTask = $derived(taskId ? projects.taskById(taskId) : undefined);
   const draftMode = $derived(!taskId && draftProjectId !== null);
+  const draftTask = $derived(
+    draftMode && draftProjectId
+      ? projectTaskDraftPreview({
+          id: draftTaskId,
+          projectId: draftProjectId,
+          draft: currentDetailDraft(),
+          parentTaskId: draftRelations.parentTaskId,
+          timestamp: draftStartedAt,
+        })
+      : undefined,
+  );
+  /** Persisted task, or the stand-in for an unsaved draft, shown by the detail sections. */
+  const sectionTask = $derived(selectedTask ?? draftTask);
   const selectedProjectId = $derived(selectedTask?.projectId ?? (draftMode ? draftProjectId : null));
   const allProjectSections = $derived(projects.sectionsForProjectIncludingInactive(selectedProjectId));
   const sections = $derived.by(() =>
@@ -173,7 +207,11 @@
   });
   const detailCanSubmit = $derived(draftMode ? detailTitle.trim().length > 0 : detailDirty);
   const detailHasUnsavedEdits = $derived.by(() => {
-    if (draftMode) return detailDirty;
+    if (draftMode) {
+      return detailDirty
+        || projectTaskDraftRelationsChanged(draftRelations)
+        || draftCustomFieldsChanged();
+    }
     if (!selectedTask) return false;
     return detailDirty
       || projectCustomFields.some((field) => customFieldValueDirty(selectedTask, field))
@@ -198,7 +236,7 @@
     const sectionId = projects.defaultSection(draftProjectId)?.id;
     const statusId = projects.defaultStatus(draftProjectId)?.id;
     if (!sectionId || !statusId) return;
-    loadNewTaskDraft(projectTaskNewDetailDraft({ sectionId, statusId }));
+    loadNewTaskDraft(draftProjectId, projectTaskNewDetailDraft({ sectionId, statusId }));
   });
 
   function statusForTask(task: ProjectTask): ProjectStatus | undefined {
@@ -210,11 +248,41 @@
   }
 
   function blockedByDependencies(task: ProjectTask) {
+    if (draftMode) return projectTaskDraftDependencies(draftRelations, task.id, draftStartedAt);
     return projects.dependenciesBlockingTask(task.id);
   }
 
   function blocksDependencies(task: ProjectTask) {
+    if (draftMode) return [];
     return projects.dependenciesBlockedByTask(task.id);
+  }
+
+  function checklistItemsForTask(task: ProjectTask): ProjectChecklistItem[] {
+    if (draftMode) return projectTaskDraftChecklistItems(draftRelations, task.id, draftStartedAt);
+    return projects.checklistItemsForTask(task.id);
+  }
+
+  function eventIdsForTask(task: ProjectTask): string[] {
+    if (draftMode) return draftRelations.eventIds;
+    return projects.eventLinksForTask(task.id).map((link) => link.eventId);
+  }
+
+  function historyForTask(task: ProjectTask) {
+    if (draftMode) return [];
+    return projects.taskChangeEventsForTask(task.id).slice(0, 8);
+  }
+
+  function searchLinkableEvents(
+    projectId: string,
+    taskId: string,
+    query: string,
+    startDate?: string,
+    endDate?: string,
+    limit?: number,
+  ): Promise<ProjectLinkableEvent[]> {
+    // A draft has no persisted identity yet, so search as an unlinked task.
+    const searchTaskId = draftMode ? "" : taskId;
+    return projects.searchLinkableEvents(projectId, searchTaskId, query, startDate, endDate, limit);
   }
 
   function dependencyCandidateTasks(task: ProjectTask): ProjectTask[] {
@@ -227,6 +295,7 @@
   }
 
   function taskHasAnySubtasks(task: ProjectTask): boolean {
+    if (draftMode) return draftRelations.subtasks.length > 0;
     return projects.subtasksForTaskIncludingArchived(task.id).length > 0;
   }
 
@@ -239,21 +308,28 @@
   }
 
   function tagsForTask(task: ProjectTask): ProjectTag[] {
+    if (draftMode) {
+      return projectTaskDraftTags({
+        relations: draftRelations,
+        projectTags: projects.tagsForProject(task.projectId),
+        projectId: task.projectId,
+        timestamp: draftStartedAt,
+      });
+    }
     return projects.tagsForTask(task.id);
   }
 
   function tagCandidateTags(task: ProjectTask): ProjectTag[] {
-    return buildTagCandidateTags({
-      tags: projects.unlinkedTagsForTask(task),
-      tagDraft,
-    });
+    const tags = draftMode
+      ? projects.tagsForProject(task.projectId).filter((tag) => !draftRelations.tagIds.includes(tag.id))
+      : projects.unlinkedTagsForTask(task);
+    return buildTagCandidateTags({ tags, tagDraft });
   }
 
   function canCreateTag(task: ProjectTask): boolean {
-    return canCreateTaskTag({
-      projectTags: projects.tagsForProject(task.projectId),
-      tagDraft,
-    });
+    const projectTags = projects.tagsForProject(task.projectId);
+    return canCreateTaskTag({ projectTags, tagDraft })
+      && (!draftMode || !projectTaskDraftHasTagName(draftRelations, projectTags, tagDraft));
   }
 
   function customFieldOptions(field: ProjectCustomField): ProjectCustomFieldOption[] {
@@ -290,6 +366,8 @@
   }
 
   function customFieldValueDirty(task: ProjectTask, field: ProjectCustomField): boolean {
+    // Draft values are written on creation, so they never offer a separate save.
+    if (draftMode) return false;
     return projectTaskDetailCustomFieldDirty({
       field,
       drafts: currentCustomFieldDrafts(),
@@ -298,7 +376,44 @@
     });
   }
 
+  function draftCustomFieldDirty(field: ProjectCustomField): boolean {
+    return projectTaskDetailCustomFieldDirty({
+      field,
+      drafts: currentCustomFieldDrafts(),
+      value: undefined,
+      optionValues: [],
+    });
+  }
+
+  function draftCustomFieldsChanged(): boolean {
+    return projectCustomFields.some(draftCustomFieldDirty);
+  }
+
+  /**
+   * Parses the custom field values set on a draft. Returns the first invalid
+   * reason instead when a value cannot be saved.
+   */
+  function draftCustomFieldValues():
+    | { ok: true; values: ProjectTaskDraftCustomFieldValue[] }
+    | { ok: false; message: string } {
+    const values: ProjectTaskDraftCustomFieldValue[] = [];
+    for (const field of projectCustomFields.filter(draftCustomFieldDirty)) {
+      const draft = projectTaskDetailCustomFieldSaveDraft({ field, drafts: currentCustomFieldDrafts() });
+      if (!draft.ok) {
+        return {
+          ok: false,
+          message: draft.reason === "invalid-number"
+            ? t("projects.customFields.invalidNumber")
+            : t("projects.detail.invalidDate"),
+        };
+      }
+      values.push({ fieldId: field.id, ...draft.value });
+    }
+    return { ok: true, values };
+  }
+
   function subtasksForTask(parent: ProjectTask): ProjectTask[] {
+    if (draftMode) return projectTaskDraftSubtaskTasks(draftRelations, parent);
     return showArchivedTasks
       ? projects.subtasksForTaskIncludingArchived(parent.id)
       : projects.subtasksForTask(parent.id);
@@ -322,26 +437,43 @@
     datePickerTarget = null;
   }
 
-  function loadNewTaskDraft(detailDraft: ProjectTaskDetailDraft): void {
+  function loadNewTaskDraft(projectId: string, detailDraft: ProjectTaskDetailDraft): void {
     newTaskInitialDraft = detailDraft;
+    draftRelations = emptyProjectTaskDraftRelations();
+    draftTaskId = crypto.randomUUID();
+    draftStartedAt = Temporal.Now.instant().toString();
     applyDetailDraft(detailDraft);
+    loadRelationDrafts({}, projectTaskDetailCustomFieldDrafts({
+      fields: projects.customFieldsForProject(projectId),
+      valueForField: () => undefined,
+      optionValuesForField: () => [],
+    }));
   }
 
   function loadTaskDetailDraft(task: ProjectTask): void {
     detailDraftTaskId = task.id;
     detailDraftUpdatedAt = task.updatedAt;
     applyDetailDraft(projectTaskDetailDraftFromTask(task));
+    if (createdTaskError?.taskId === task.id) detailError = createdTaskError.message;
+    createdTaskError = null;
+    loadRelationDrafts(
+      Object.fromEntries(projects.checklistItemsForTask(task.id).map((item) => [item.id, item.title])),
+      projectTaskDetailCustomFieldDrafts({
+        fields: projects.customFieldsForProject(task.projectId),
+        valueForField: (field) => projects.customFieldValueForTask(task.id, field.id),
+        optionValuesForField: (field) => projects.customFieldOptionValuesForTask(task.id, field.id),
+      }),
+    );
+  }
+
+  function loadRelationDrafts(
+    checklistTitles: Record<string, string>,
+    customFieldDrafts: ProjectTaskDetailCustomFieldDrafts,
+  ): void {
     subtaskDraft = "";
     checklistDraft = "";
     tagDraft = "";
-    checklistTitleDrafts = Object.fromEntries(
-      projects.checklistItemsForTask(task.id).map((item) => [item.id, item.title]),
-    );
-    const customFieldDrafts = projectTaskDetailCustomFieldDrafts({
-      fields: projects.customFieldsForProject(task.projectId),
-      valueForField: (field) => projects.customFieldValueForTask(task.id, field.id),
-      optionValuesForField: (field) => projects.customFieldOptionValuesForTask(task.id, field.id),
-    });
+    checklistTitleDrafts = checklistTitles;
     customFieldTextDrafts = customFieldDrafts.textDrafts;
     customFieldNumberDrafts = customFieldDrafts.numberDrafts;
     customFieldDateDrafts = customFieldDrafts.dateDrafts;
@@ -515,6 +647,7 @@
   }
 
   async function saveTaskCustomField(task: ProjectTask, field: ProjectCustomField): Promise<void> {
+    if (draftMode) return;
     detailError = null;
     const requestKey = `${task.id}:${field.id}`;
     const requestGeneration = (customFieldSaveGenerations.get(requestKey) ?? 0) + 1;
@@ -579,13 +712,70 @@
 
   async function submitSubtask(parent: ProjectTask): Promise<void> {
     const statusId = projects.defaultStatus(parent.projectId)?.id ?? parent.statusId;
+    if (draftMode) {
+      const title = subtaskDraft.trim();
+      if (!title) return;
+      draftRelations = {
+        ...draftRelations,
+        subtasks: [...draftRelations.subtasks, { id: crypto.randomUUID(), title, statusId }],
+      };
+      subtaskDraft = "";
+      return;
+    }
     await projects.addTask(parent.projectId, subtaskDraft, parent.sectionId, statusId, parent.id);
     subtaskDraft = "";
   }
 
+  async function toggleSubtaskComplete(subtask: ProjectTask): Promise<void> {
+    if (!draftMode) {
+      await projects.toggleTaskDone(subtask);
+      return;
+    }
+    const target = statusForTask(subtask)?.terminal
+      ? projects.reopenStatus(subtask.projectId)
+      : projects.doneStatus(subtask.projectId);
+    if (!target) return;
+    draftRelations = {
+      ...draftRelations,
+      subtasks: draftRelations.subtasks.map((entry) =>
+        entry.id === subtask.id ? { ...entry, statusId: target.id } : entry),
+    };
+  }
+
+  function removeDraftSubtask(subtask: ProjectTask): void {
+    draftRelations = {
+      ...draftRelations,
+      subtasks: draftRelations.subtasks.filter((entry) => entry.id !== subtask.id),
+    };
+  }
+
   async function submitChecklistItem(task: ProjectTask): Promise<void> {
+    if (draftMode) {
+      const title = checklistDraft.trim();
+      if (!title) return;
+      const id = crypto.randomUUID();
+      draftRelations = {
+        ...draftRelations,
+        checklist: [...draftRelations.checklist, { id, title, completed: false }],
+      };
+      checklistTitleDrafts = { ...checklistTitleDrafts, [id]: title };
+      checklistDraft = "";
+      return;
+    }
     await projects.addChecklistItem(task.id, checklistDraft);
     checklistDraft = "";
+  }
+
+  async function setChecklistItemCompleted(item: ProjectChecklistItem, completed: boolean): Promise<void> {
+    if (!draftMode) {
+      await projects.setChecklistItemCompleted(item, completed);
+      return;
+    }
+    draftRelations = {
+      ...draftRelations,
+      checklist: draftRelations.checklist.map((entry) =>
+        entry.id === item.id ? { ...entry, completed } : entry),
+    };
   }
 
   async function saveChecklistItem(item: ProjectChecklistItem): Promise<void> {
@@ -595,12 +785,36 @@
       return;
     }
     detailError = null;
-    await projects.updateChecklistItem(item, { title });
+    if (draftMode) {
+      draftRelations = {
+        ...draftRelations,
+        checklist: draftRelations.checklist.map((entry) =>
+          entry.id === item.id ? { ...entry, title } : entry),
+      };
+    } else {
+      await projects.updateChecklistItem(item, { title });
+    }
     checklistTitleDrafts = { ...checklistTitleDrafts, [item.id]: title };
+  }
+
+  async function deleteChecklistItem(item: ProjectChecklistItem): Promise<void> {
+    if (!draftMode) {
+      await projects.removeChecklistItem(item.id);
+      return;
+    }
+    draftRelations = {
+      ...draftRelations,
+      checklist: draftRelations.checklist.filter((entry) => entry.id !== item.id),
+    };
   }
 
   async function attachExistingTag(task: ProjectTask, tag: ProjectTag): Promise<void> {
     detailError = null;
+    if (draftMode) {
+      draftRelations = { ...draftRelations, tagIds: [...draftRelations.tagIds, tag.id] };
+      tagDraft = "";
+      return;
+    }
     try {
       await projects.linkTaskTag(task.id, tag.id);
       tagDraft = "";
@@ -619,6 +833,19 @@
       return;
     }
     detailError = null;
+    if (draftMode) {
+      const existing = projects.tagsForProject(task.projectId)
+        .find((tag) => tag.name.trim().toLowerCase() === name.toLowerCase());
+      if (existing) {
+        if (!draftRelations.tagIds.includes(existing.id)) {
+          draftRelations = { ...draftRelations, tagIds: [...draftRelations.tagIds, existing.id] };
+        }
+      } else if (!projectTaskDraftHasTagName(draftRelations, [], name)) {
+        draftRelations = { ...draftRelations, newTagNames: [...draftRelations.newTagNames, name] };
+      }
+      tagDraft = "";
+      return;
+    }
     try {
       await projects.addAndLinkTaskTag(task, name);
       tagDraft = "";
@@ -632,6 +859,10 @@
 
   async function detachTaskTag(task: ProjectTask, tag: ProjectTag): Promise<void> {
     detailError = null;
+    if (draftMode) {
+      draftRelations = removeProjectTaskDraftTag(draftRelations, tag.id);
+      return;
+    }
     try {
       await projects.unlinkTaskTag(task.id, tag.id);
     } catch (error) {
@@ -644,16 +875,34 @@
 
   async function moveChecklistItemInDetail(item: ProjectChecklistItem, direction: -1 | 1): Promise<void> {
     detailError = null;
+    if (draftMode) {
+      draftRelations = {
+        ...draftRelations,
+        checklist: moveProjectTaskDraftEntry(draftRelations.checklist, item.id, direction),
+      };
+      return;
+    }
     await projects.moveChecklistItem(item, direction);
   }
 
   async function moveSubtaskInDetail(task: ProjectTask, direction: -1 | 1): Promise<void> {
     detailError = null;
+    if (draftMode) {
+      draftRelations = {
+        ...draftRelations,
+        subtasks: moveProjectTaskDraftEntry(draftRelations.subtasks, task.id, direction),
+      };
+      return;
+    }
     await projects.moveSubtask(task, direction);
   }
 
   async function promoteSubtaskFromDetail(task: ProjectTask): Promise<void> {
     detailError = null;
+    if (draftMode) {
+      draftRelations = { ...draftRelations, parentTaskId: null };
+      return;
+    }
     try {
       await projects.promoteSubtask(task);
     } catch (error) {
@@ -666,6 +915,13 @@
 
   async function demoteTaskFromDetail(task: ProjectTask, parentTask: ProjectTask): Promise<void> {
     detailError = null;
+    if (draftMode) {
+      // Subtasks live in their parent's section.
+      draftRelations = { ...draftRelations, parentTaskId: parentTask.id };
+      detailSectionId = parentTask.sectionId;
+      parentTaskSearch = "";
+      return;
+    }
     try {
       await projects.demoteTaskToSubtask(task, parentTask);
       parentTaskSearch = "";
@@ -679,6 +935,16 @@
 
   async function addBlockingDependency(blockingTask: ProjectTask, blockedTask: ProjectTask): Promise<void> {
     detailError = null;
+    if (draftMode) {
+      if (!draftRelations.blockedByTaskIds.includes(blockingTask.id)) {
+        draftRelations = {
+          ...draftRelations,
+          blockedByTaskIds: [...draftRelations.blockedByTaskIds, blockingTask.id],
+        };
+      }
+      dependencySearch = "";
+      return;
+    }
     try {
       await projects.addTaskDependency(blockingTask.id, blockedTask.id);
       dependencySearch = "";
@@ -692,6 +958,14 @@
 
   async function removeDependency(dependencyId: string): Promise<void> {
     detailError = null;
+    if (draftMode) {
+      // Draft dependencies are identified by their blocking task.
+      draftRelations = {
+        ...draftRelations,
+        blockedByTaskIds: draftRelations.blockedByTaskIds.filter((id) => id !== dependencyId),
+      };
+      return;
+    }
     try {
       await projects.removeTaskDependency(dependencyId);
     } catch (error) {
@@ -704,6 +978,12 @@
 
   async function linkExistingEvent(task: ProjectTask, event: ProjectLinkableEvent): Promise<boolean> {
     detailError = null;
+    if (draftMode) {
+      if (!draftRelations.eventIds.includes(event.id)) {
+        draftRelations = { ...draftRelations, eventIds: [...draftRelations.eventIds, event.id] };
+      }
+      return true;
+    }
     try {
       await projects.linkTaskEvent(task.id, event.id, "scheduled");
       return true;
@@ -718,6 +998,13 @@
 
   async function unlinkExistingEvent(task: ProjectTask, event: ProjectLinkableEvent): Promise<void> {
     detailError = null;
+    if (draftMode) {
+      draftRelations = {
+        ...draftRelations,
+        eventIds: draftRelations.eventIds.filter((id) => id !== event.id),
+      };
+      return;
+    }
     try {
       await projects.unlinkTaskEvent(task.id, event.id);
     } catch (error) {
@@ -766,12 +1053,25 @@
     initialDraft: ProjectTaskDetailDraft,
     patch: ProjectTaskUpdatePatch,
   ): Promise<void> {
+    const customFieldValues = draftCustomFieldValues();
+    if (!customFieldValues.ok) {
+      detailError = customFieldValues.message;
+      return;
+    }
     const draft = currentDetailDraft();
+    const relations = draftRelationsWithTitleDrafts();
     let created: ProjectTask | undefined;
+    const errors: string[] = [];
     detailSaving = true;
     detailError = null;
     try {
-      created = await projects.addTask(projectId, draft.title, draft.sectionId, draft.statusId);
+      created = await projects.addTask(
+        projectId,
+        draft.title,
+        draft.sectionId,
+        draft.statusId,
+        relations.parentTaskId ?? undefined,
+      );
       if (!created) return;
       if (projectTaskNewDetailDraftHasExtras(initialDraft, draft)) {
         await projects.updateTask(created, patch);
@@ -779,18 +1079,65 @@
     } catch (error) {
       if (!created) {
         detailError = t("projects.tasks.createFailed", error instanceof Error ? error.message : String(error));
+        detailSaving = false;
         return;
       }
       // The task exists, so keep the unsaved fields on it for a retry with Save changes.
       detailDraftTaskId = created.id;
       detailDraftUpdatedAt = created.updatedAt;
-      detailError = detailSaveErrorMessage(error);
-    } finally {
-      detailSaving = false;
+      errors.push(detailSaveErrorMessage(error));
     }
-    if (!created) return;
+    if (!created) {
+      detailSaving = false;
+      return;
+    }
+    const relationFailures = await applyProjectTaskDraftRelations({
+      task: created,
+      relations,
+      customFieldValues: customFieldValues.values,
+      writer: draftRelationWriter(),
+    });
+    detailSaving = false;
+    if (relationFailures.length > 0) {
+      errors.push(t("projects.detail.draftRelationsFailed", relationFailures.join("; ")));
+    }
+    if (errors.length > 0) {
+      const message = errors.join(" ");
+      detailError = message;
+      // Loading the created task resets the form unless its unsaved fields were kept above.
+      if (detailDraftTaskId !== created.id) createdTaskError = { taskId: created.id, message };
+    }
     newTaskInitialDraft = null;
     onCreated?.(created);
+  }
+
+  /** Applies checklist titles edited in place but not yet confirmed. */
+  function draftRelationsWithTitleDrafts(): ProjectTaskDraftRelations {
+    return {
+      ...draftRelations,
+      checklist: draftRelations.checklist.map((item) => ({
+        ...item,
+        title: checklistTitleDrafts[item.id]?.trim() || item.title,
+      })),
+    };
+  }
+
+  function draftRelationWriter(): ProjectTaskDraftRelationWriter {
+    return {
+      addChecklistItem: async (taskId, title, completed) => {
+        const item = await projects.addChecklistItem(taskId, title);
+        if (item && completed) await projects.setChecklistItemCompleted(item, true);
+      },
+      addSubtask: async (parent, title, statusId) => {
+        await projects.addTask(parent.projectId, title, parent.sectionId, statusId, parent.id);
+      },
+      linkTag: (taskId, tagId) => projects.linkTaskTag(taskId, tagId),
+      addAndLinkTag: (task, name) => projects.addAndLinkTaskTag(task, name),
+      addDependency: (blockingTaskId, blockedTaskId) =>
+        projects.addTaskDependency(blockingTaskId, blockedTaskId),
+      linkEvent: (taskId, eventId) => projects.linkTaskEvent(taskId, eventId, "scheduled"),
+      saveCustomFieldValue: (value) => projects.saveCustomFieldValue(value),
+    };
   }
 
   async function saveTaskDetail(): Promise<void> {
@@ -875,16 +1222,16 @@
                     onChange={(value) => { detailDescription = value; }}
                   />
 
-                  {#if selectedTask}
-                  {@const selectedTaskHistory = projects.taskChangeEventsForTask(selectedTask.id).slice(0, 8)}
-                  {@const selectedTaskChecklist = projects.checklistItemsForTask(selectedTask.id)}
-                  {@const selectedTaskSubtasks = subtasksForTask(selectedTask)}
-                  {@const selectedTaskBlockedBy = blockedByDependencies(selectedTask)}
-                  {@const selectedTaskBlocks = blocksDependencies(selectedTask)}
-                  {@const selectedTaskDependencyCandidates = dependencyCandidateTasks(selectedTask)}
-                  {@const selectedTaskEventIds = projects.eventLinksForTask(selectedTask.id).map((link) => link.eventId)}
+                  {#if sectionTask}
+                  {@const selectedTaskHistory = historyForTask(sectionTask)}
+                  {@const selectedTaskChecklist = checklistItemsForTask(sectionTask)}
+                  {@const selectedTaskSubtasks = subtasksForTask(sectionTask)}
+                  {@const selectedTaskBlockedBy = blockedByDependencies(sectionTask)}
+                  {@const selectedTaskBlocks = blocksDependencies(sectionTask)}
+                  {@const selectedTaskDependencyCandidates = dependencyCandidateTasks(sectionTask)}
+                  {@const selectedTaskEventIds = eventIdsForTask(sectionTask)}
                   <ProjectTaskDetailChecklistSection
-                    task={selectedTask}
+                    task={sectionTask}
                     items={selectedTaskChecklist}
                     titleDrafts={checklistTitleDrafts}
                     draft={checklistDraft}
@@ -895,29 +1242,30 @@
                       };
                     }}
                     onDraftChange={(value) => { checklistDraft = value; }}
-                    onToggleCompleted={(item, completed) => projects.setChecklistItemCompleted(item, completed)}
+                    onToggleCompleted={setChecklistItemCompleted}
                     onSaveItem={saveChecklistItem}
                     onMoveItem={moveChecklistItemInDetail}
-                    onDeleteItem={(item) => projects.removeChecklistItem(item.id)}
+                    onDeleteItem={deleteChecklistItem}
                     onSubmitItem={submitChecklistItem}
                   />
 
                   <ProjectTaskDetailSubtasksSection
-                    task={selectedTask}
+                    task={sectionTask}
                     subtasks={selectedTaskSubtasks}
                     theme={theme.current}
                     draft={subtaskDraft}
                     {statusForTask}
                     onDraftChange={(value) => { subtaskDraft = value; }}
                     onSubmitSubtask={submitSubtask}
-                    onToggleComplete={(subtask) => projects.toggleTaskDone(subtask)}
+                    onToggleComplete={toggleSubtaskComplete}
                     onOpenTask={openTaskDetail}
                     onPromoteSubtask={promoteSubtaskFromDetail}
                     onMoveSubtask={moveSubtaskInDetail}
+                    onRemoveSubtask={draftMode ? removeDraftSubtask : undefined}
                   />
 
                   <ProjectTaskDetailDependenciesSection
-                    task={selectedTask}
+                    task={sectionTask}
                     blockedByDependencies={selectedTaskBlockedBy}
                     blocksDependencies={selectedTaskBlocks}
                     dependencyCandidates={selectedTaskDependencyCandidates}
@@ -929,11 +1277,11 @@
                   />
 
                   <ProjectTaskDetailScheduledBlocksController
-                    task={selectedTask}
+                    task={sectionTask}
                     taskEventIds={selectedTaskEventIds}
                     {allProjectEvents}
                     {todayDate}
-                    searchLinkableEvents={projects.searchLinkableEvents}
+                    {searchLinkableEvents}
                     onLinkEvent={linkExistingEvent}
                     onUnlinkEvent={unlinkExistingEvent}
                   />
@@ -985,27 +1333,27 @@
                     onCancelDatePicker={() => { datePickerTarget = null; }}
                   />
 
-                  {#if selectedTask}
-                  {@const selectedTaskTags = tagsForTask(selectedTask)}
-                  {@const selectedTaskTagCandidates = tagCandidateTags(selectedTask)}
-                  {@const selectedTaskParent = selectedTask.parentTaskId ? taskById(selectedTask.parentTaskId) : undefined}
+                  {#if sectionTask}
+                  {@const selectedTaskTags = tagsForTask(sectionTask)}
+                  {@const selectedTaskTagCandidates = tagCandidateTags(sectionTask)}
+                  {@const selectedTaskParent = sectionTask.parentTaskId ? taskById(sectionTask.parentTaskId) : undefined}
                   <ProjectTaskDetailParentSection
-                    task={selectedTask}
+                    task={sectionTask}
                     parentTask={selectedTaskParent}
-                    parentCandidates={parentTaskCandidateTasks(selectedTask)}
+                    parentCandidates={parentTaskCandidateTasks(sectionTask)}
                     parentSearch={parentTaskSearch}
-                    hasSubtasks={taskHasAnySubtasks(selectedTask)}
+                    hasSubtasks={taskHasAnySubtasks(sectionTask)}
                     onParentSearchChange={(value) => { parentTaskSearch = value; }}
                     onPromoteSubtask={promoteSubtaskFromDetail}
                     onDemoteTask={demoteTaskFromDetail}
                   />
 
                   <ProjectTaskDetailTagsSection
-                    task={selectedTask}
+                    task={sectionTask}
                     tags={selectedTaskTags}
                     candidates={selectedTaskTagCandidates}
                     draft={tagDraft}
-                    canCreate={canCreateTag(selectedTask)}
+                    canCreate={canCreateTag(sectionTask)}
                     theme={theme.current}
                     onDraftChange={(value) => { tagDraft = value; }}
                     onAttachTag={attachExistingTag}
@@ -1015,7 +1363,7 @@
 
                   {#if projectCustomFields.length > 0}
                     <ProjectTaskDetailCustomFieldsSection
-                      task={selectedTask}
+                      task={sectionTask}
                       fields={projectCustomFields}
                       textDrafts={customFieldTextDrafts}
                       numberDrafts={customFieldNumberDrafts}

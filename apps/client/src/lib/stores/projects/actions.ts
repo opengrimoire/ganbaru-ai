@@ -561,16 +561,17 @@ export function createProjectStoreActions(context: ProjectStoreActionContext) {
     return changedById(mutation.changed.tasks, taskId, "created task");
   }
 
-  async function addChecklistItem(taskId: string, title: string): Promise<void> {
+  async function addChecklistItem(taskId: string, title: string): Promise<ProjectChecklistItem | undefined> {
     const displayTitle = normalizeProjectName(title);
-    if (!displayTitle) return;
+    if (!displayTitle) return undefined;
     const id = crypto.randomUUID();
-    await commitMutation(`checklist:${id}`, () => createProjectChecklistItem({
+    const mutation = await commitMutation(`checklist:${id}`, () => createProjectChecklistItem({
       id,
       taskId,
       title: displayTitle,
       sortOrder: selectors.nextChecklistSortOrder(taskId),
     }));
+    return changedById(mutation.changed.checklistItems, id, "created checklist item");
   }
 
   async function setChecklistItemCompleted(

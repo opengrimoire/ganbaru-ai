@@ -3,6 +3,7 @@
   import ArrowLeft from "@lucide/svelte/icons/arrow-left";
   import ArrowUp from "@lucide/svelte/icons/arrow-up";
   import Plus from "@lucide/svelte/icons/plus";
+  import X from "@lucide/svelte/icons/x";
   import Checkbox from "$lib/components/ui/Checkbox.svelte";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import type { MoveDirection, ProjectStatus, ProjectTask } from "$lib/projects/types";
@@ -24,6 +25,7 @@
     onOpenTask,
     onPromoteSubtask,
     onMoveSubtask,
+    onRemoveSubtask,
   }: {
     task: ProjectTask;
     subtasks: ProjectTask[];
@@ -36,6 +38,11 @@
     onOpenTask: (task: ProjectTask) => void;
     onPromoteSubtask: (task: ProjectTask) => MaybePromise;
     onMoveSubtask: (task: ProjectTask, direction: MoveDirection) => MaybePromise;
+    /**
+     * Removes an unsaved subtask. When given, rows are not openable and offer
+     * removal instead of promotion, as in a task draft.
+     */
+    onRemoveSubtask?: (task: ProjectTask) => void;
   } = $props();
 
   const { t } = getLocalization();
@@ -60,30 +67,46 @@
           label={t("projects.actions.toggleComplete")}
           onChange={() => { void onToggleComplete(subtask); }}
         />
-        <button
-          type="button"
-          class="min-w-0 text-left"
-          aria-label={t("projects.actions.openTaskDetails", subtask.title)}
-          onclick={() => onOpenTask(subtask)}
-        >
-          <span class="block truncate text-[0.8rem]">{subtask.title}</span>
-        </button>
+        {#if onRemoveSubtask}
+          <span class="block min-w-0 truncate text-[0.8rem]">{subtask.title}</span>
+        {:else}
+          <button
+            type="button"
+            class="min-w-0 text-left"
+            aria-label={t("projects.actions.openTaskDetails", subtask.title)}
+            onclick={() => onOpenTask(subtask)}
+          >
+            <span class="block truncate text-[0.8rem]">{subtask.title}</span>
+          </button>
+        {/if}
         <ProjectStatusBadge
           status={subtaskStatus}
           {theme}
           label={subtaskStatus?.name ?? t("projects.list.status")}
           class="text-[0.733333rem]"
         />
-        <button
-          type="button"
-          class="flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
-          disabled={Boolean(subtask.archivedAt)}
-          aria-label={t("projects.actions.promoteSubtask", subtask.title)}
-          title={t("projects.actions.promoteSubtask", subtask.title)}
-          onclick={() => { void onPromoteSubtask(subtask); }}
-        >
-          <ArrowLeft size={13} strokeWidth={1.75} />
-        </button>
+        {#if onRemoveSubtask}
+          <button
+            type="button"
+            class="flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground"
+            aria-label={t("projects.actions.removeSubtask", subtask.title)}
+            title={t("projects.actions.removeSubtask", subtask.title)}
+            onclick={() => onRemoveSubtask(subtask)}
+          >
+            <X size={13} strokeWidth={1.75} />
+          </button>
+        {:else}
+          <button
+            type="button"
+            class="flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
+            disabled={Boolean(subtask.archivedAt)}
+            aria-label={t("projects.actions.promoteSubtask", subtask.title)}
+            title={t("projects.actions.promoteSubtask", subtask.title)}
+            onclick={() => { void onPromoteSubtask(subtask); }}
+          >
+            <ArrowLeft size={13} strokeWidth={1.75} />
+          </button>
+        {/if}
         <button
           type="button"
           class="flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
