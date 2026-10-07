@@ -11,7 +11,18 @@
   import { calendarDisplayName, calendarImportDate } from "$lib/calendar/display";
   import ActionToast from "$lib/components/ui/ActionToast.svelte";
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
+  import Select from "$lib/components/ui/Select.svelte";
+  import SwitchField from "$lib/components/ui/SwitchField.svelte";
   import { getLocalization } from "$lib/i18n/translator.svelte";
+  import { getPreferences } from "$lib/stores/preferences.svelte";
+  import {
+    CALENDAR_ZOOM_PERCENT_LEVELS,
+    calendarZoomGridMinutesForPercent,
+    getCalendarZoom,
+  } from "$lib/stores/calendar-zoom.svelte";
+  import { DEFAULT_CALENDAR_TIME_FORMAT, isCalendarTimeFormat } from "$lib/stores/preference-options";
+  import { BUILD_PLATFORM_PROFILE } from "$lib/platform";
+  import { cn } from "$lib/utils";
 
   let {
     fileTransfersAvailable = true,
@@ -21,9 +32,23 @@
 
   const calendarsStore = getCalendars();
   const calendarStore = getCalendar();
+  const preferences = getPreferences();
+  const calendarZoom = getCalendarZoom();
   const localization = getLocalization();
   const { t } = localization;
   const locale = $derived(localization.locale);
+  const mobileShell = BUILD_PLATFORM_PROFILE.shell === "mobile";
+  const timeFormatOptions = $derived([
+    { value: "24h", label: t("settings.appearance.timeFormat24h") },
+    { value: "12h", label: t("settings.appearance.timeFormat12h") },
+  ]);
+  const calendarZoomOptions = $derived(CALENDAR_ZOOM_PERCENT_LEVELS.map((percent) => ({
+    value: String(percent),
+    label: t("settings.appearance.calendarZoomOption", percent, calendarZoomGridMinutesForPercent(percent)),
+  })));
+  const iconButtonClass = $derived(mobileShell
+    ? "flex size-8 items-center justify-center rounded-lg border border-border bg-card text-foreground transition-colors active:bg-accent disabled:cursor-not-allowed disabled:opacity-40 disabled:active:bg-transparent dark:bg-transparent"
+    : "flex h-7 w-7 items-center justify-center rounded-md border border-border bg-card text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-card dark:bg-transparent dark:disabled:hover:bg-transparent");
   const MAX_VISIBLE_IMPORT_WARNINGS = 8;
   const TOAST_TIMEOUT_MS = 5_000;
 
@@ -266,105 +291,155 @@
   function cancelDelete() {
     pendingDelete = undefined;
   }
+
+  function handleCalendarZoomChange(value: string): void {
+    const percent = Number(value);
+    if (Number.isFinite(percent)) calendarZoom.setZoomPercent(percent);
+  }
+
+  function handleTimeFormatChange(value: string): void {
+    if (isCalendarTimeFormat(value)) preferences.setCalendarTimeFormat(value);
+  }
 </script>
 
-<div class="flex flex-col gap-4">
-  <header class="flex items-start justify-between gap-3 px-1 max-[520px]:flex-col">
-    <div class="min-w-0 flex-1">
-      <h2 class="text-[0.866667rem] font-semibold text-foreground">{t("settings.calendars.heading")}</h2>
+<div class="flex flex-col gap-6">
+  <section class="flex flex-col gap-4">
+    <h2 class="px-1 text-[0.866667rem] font-semibold text-foreground">{t("settings.calendars.generalHeading")}</h2>
+    <div class="flex flex-col gap-3">
+      <Select
+        label={t("settings.appearance.calendarZoom")}
+        descriptionShortcuts={mobileShell ? [] : ["Shift + +", "Shift + -", "Shift + 0"]}
+        value={String(calendarZoom.zoomPercent)}
+        options={calendarZoomOptions}
+        onChange={handleCalendarZoomChange}
+        canReset={!calendarZoom.isDefault}
+        onReset={() => calendarZoom.reset()}
+      />
+      <Select
+        label={t("settings.appearance.timeFormat")}
+        description={t("settings.appearance.timeFormatDescription")}
+        value={preferences.calendarTimeFormat}
+        options={timeFormatOptions}
+        onChange={handleTimeFormatChange}
+        canReset={preferences.calendarTimeFormat !== DEFAULT_CALENDAR_TIME_FORMAT}
+        onReset={() => preferences.resetCalendarTimeFormat()}
+      />
+      <SwitchField
+        label={t("settings.appearance.dimPastEventColors")}
+        description={t("settings.appearance.dimPastEventColorsDescription")}
+        checked={preferences.calendarDimPastEvents}
+        onChange={(checked) => preferences.setCalendarDimPastEvents(checked)}
+      />
     </div>
-  </header>
+  </section>
 
-  {#if importWarnings.length > 0}
-    <section
-      class="mx-1 rounded-md border border-border bg-muted/20 px-3 py-2 text-[0.766667rem] text-foreground"
-    >
-      <h3 class="font-medium">{t("settings.calendars.importWarnings")}</h3>
-      <ul class="mt-1 list-disc space-y-1 pl-4 text-muted-foreground">
-        {#each importWarnings as warning}
-          <li>{warning}</li>
-        {/each}
-      </ul>
-    </section>
-  {/if}
+  <div class="h-px shrink-0 scale-y-50 bg-border" aria-hidden="true"></div>
 
-  <div class="flex flex-col gap-3">
-    {#each calendarsStore.list as calendar (calendar.id)}
-      {@const displayName = calendarDisplayName(calendar)}
-      {@const importDate = calendarImportDate(calendar, locale)}
-      <div class="flex items-center gap-3 px-1 py-1 max-[520px]:flex-col max-[520px]:items-stretch">
-        <div class="min-w-0 flex-1">
-          <div class="flex items-center gap-2">
-            <span class="truncate text-[0.866667rem] font-medium text-foreground">
-              {displayName}
-            </span>
-            <span
-              class="shrink-0 text-[0.733333rem] font-medium uppercase tracking-wide text-muted-foreground"
-            >
-              {calendar.source}
-            </span>
+  <section class="flex flex-col gap-4">
+    <h2 class="px-1 text-[0.866667rem] font-semibold text-foreground">{t("settings.calendars.heading")}</h2>
+
+    {#if importWarnings.length > 0}
+      <section
+        class="mx-1 rounded-md border border-border bg-muted/20 px-3 py-2 text-[0.766667rem] text-foreground"
+      >
+        <h3 class="font-medium">{t("settings.calendars.importWarnings")}</h3>
+        <ul class="mt-1 list-disc space-y-1 pl-4 text-muted-foreground">
+          {#each importWarnings as warning}
+            <li>{warning}</li>
+          {/each}
+        </ul>
+      </section>
+    {/if}
+
+    <div class="flex flex-col">
+      {#each calendarsStore.list as calendar (calendar.id)}
+        {@const displayName = calendarDisplayName(calendar)}
+        {@const importDate = calendarImportDate(calendar, locale)}
+        <div
+          class={cn(
+            "flex items-center justify-between gap-1 rounded-md px-1 py-1 max-[520px]:flex-col max-[520px]:items-stretch",
+            mobileShell && "min-h-14 gap-2 rounded-xl py-2",
+          )}
+        >
+          <div class="min-w-0 flex-1">
+            <div class="flex items-center gap-2">
+              <span class="truncate text-[0.866667rem] text-foreground">{displayName}</span>
+              <span
+                class="shrink-0 text-[0.733333rem] font-medium uppercase tracking-wide text-muted-foreground"
+              >
+                {calendar.source}
+              </span>
+            </div>
+            <div class="mt-0.5 flex items-center gap-2 text-[0.733333rem] text-muted-foreground">
+              <span>{t("settings.calendars.eventCount", counts[calendar.id] ?? 0)}</span>
+              {#if importDate}
+                <span>{t("settings.calendars.importedOn", importDate)}</span>
+              {/if}
+            </div>
           </div>
-          <div class="mt-0.5 flex items-center gap-2 text-[0.733333rem] text-muted-foreground">
-            <span>{t("settings.calendars.eventCount", counts[calendar.id] ?? 0)}</span>
-            {#if importDate}
-              <span>{t("settings.calendars.importedOn", importDate)}</span>
+          <div class="flex shrink-0 items-center justify-end gap-1">
+            {#if fileTransfersAvailable}
+              <button
+                type="button"
+                onclick={() => handleExport(calendar)}
+                disabled={(counts[calendar.id] ?? 0) === 0}
+                aria-label={t("settings.calendars.exportCalendar", displayName)}
+                data-app-tooltip-disabled="true"
+                class={iconButtonClass}
+              >
+                <Download size={13} strokeWidth={2} />
+              </button>
+            {/if}
+            {#if calendar.id === "local"}
+              <button
+                type="button"
+                disabled
+                aria-label={t("settings.calendars.localCannotDelete")}
+                data-app-tooltip-disabled="true"
+                class={iconButtonClass}
+              >
+                <Trash2 size={13} strokeWidth={2} />
+              </button>
+            {:else}
+              <button
+                type="button"
+                onclick={() => handleDelete(calendar)}
+                aria-label={t("settings.calendars.deleteCalendar", displayName)}
+                data-app-tooltip-disabled="true"
+                class={iconButtonClass}
+              >
+                <Trash2 size={13} strokeWidth={2} />
+              </button>
             {/if}
           </div>
         </div>
-        <div class="flex shrink-0 items-center justify-end gap-1.5">
-          {#if fileTransfersAvailable}
-            <button
-              type="button"
-              onclick={() => handleExport(calendar)}
-              disabled={(counts[calendar.id] ?? 0) === 0}
-              class="flex h-7 items-center gap-1.5 rounded-md border border-border bg-card px-2.5 text-[0.8rem] font-medium text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50 dark:bg-transparent"
-            >
-              <Download size={12} strokeWidth={2.25} />
-              <span>{t("settings.calendars.export")}</span>
-            </button>
-          {/if}
-          {#if calendar.id === "local"}
-            <button
-              type="button"
-              disabled
-              aria-label={t("settings.calendars.localCannotDelete")}
-              data-app-tooltip-disabled="true"
-              class="flex h-7 w-7 cursor-not-allowed items-center justify-center rounded-md border border-border/60 bg-muted/30 text-muted-foreground/35"
-            >
-              <Trash2 size={12} strokeWidth={2.25} />
-            </button>
-          {:else}
-            <button
-              type="button"
-              onclick={() => handleDelete(calendar)}
-              aria-label={t("settings.calendars.deleteCalendar", displayName)}
-              data-app-tooltip-disabled="true"
-              class="flex h-7 w-7 items-center justify-center rounded-md border border-border bg-card text-destructive transition-colors hover:bg-destructive/10 dark:bg-transparent"
-            >
-              <Trash2 size={12} strokeWidth={2.25} />
-            </button>
-          {/if}
-        </div>
-      </div>
-    {/each}
-    {#if fileTransfersAvailable}
-      <div class="px-1 py-1">
+      {/each}
+      {#if fileTransfersAvailable}
         <button
           type="button"
           onclick={handleImport}
           disabled={isImporting}
-          class="flex h-7 min-w-0 max-w-full items-center gap-2 rounded-md px-1 text-[0.8rem] font-medium text-foreground transition-colors hover:text-primary focus:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+          class={cn(
+            mobileShell
+              ? "flex min-h-12 w-full min-w-0 items-center gap-2 rounded-xl px-3 text-sm text-foreground active:bg-accent/40 focus:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              : "flex w-full min-w-0 items-center gap-2 rounded-md px-1 py-1 text-[0.866667rem] text-foreground transition-colors hover:bg-accent/25 focus:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+            "disabled:cursor-not-allowed disabled:opacity-60",
+          )}
         >
           {#if isImporting}
-            <LoaderCircle size={13} strokeWidth={2.25} class="shrink-0 animate-spin" />
+            <LoaderCircle
+              size={13}
+              strokeWidth={1.75}
+              class="shrink-0 animate-spin text-muted-foreground motion-reduce:animate-none"
+            />
           {:else}
-            <Upload size={13} strokeWidth={2.25} class="shrink-0" />
+            <Upload size={13} strokeWidth={1.75} class="shrink-0 text-muted-foreground" />
           {/if}
           <span class="truncate">{importButtonLabel()}</span>
         </button>
-      </div>
-    {/if}
-  </div>
+      {/if}
+    </div>
+  </section>
 
   {#if toast}
     <ActionToast message={toast} onDismiss={dismissToast} />

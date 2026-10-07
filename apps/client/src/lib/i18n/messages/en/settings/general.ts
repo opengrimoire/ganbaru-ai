@@ -26,7 +26,6 @@ export const general = {
     textSize: "Text size",
     textSizeDescription: "Multiplies the base text size across the app",
     languageHeading: "Language",
-    calendarHeading: "Calendar",
     calendarZoom: "Calendar zoom (5min / 10min / 15min / 30min)",
     timeFormat: "Time format",
     timeFormatDescription: "Show times as 12h or 24h",
@@ -117,6 +116,7 @@ export const general = {
   },
   calendars: {
     heading: "Calendars",
+    generalHeading: "General",
     importWarnings: "Import warnings",
     moreWarnings: (count: number) =>
       `${count} more ${count === 1 ? "warning" : "warnings"} not shown.`,
@@ -142,7 +142,7 @@ export const general = {
     deleteFailed: "Delete failed.",
     eventCount: (count: number) => `${count} ${count === 1 ? "event" : "events"}`,
     importedOn: (date: string) => `imported on ${date}`,
-    export: "Export",
+    exportCalendar: (name: string) => `Export ${name} as .ics`,
     localCannotDelete: "Local calendar can't be deleted",
     deleteCalendar: (name: string) => `Delete ${name}`,
     deleteTitle: "Delete calendar",

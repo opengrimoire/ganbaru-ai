@@ -2,12 +2,6 @@
   import { getPreferences } from "$lib/stores/preferences.svelte";
   import { APP_ZOOM_LEVELS, getZoom } from "$lib/stores/zoom.svelte";
   import {
-    CALENDAR_ZOOM_PERCENT_LEVELS,
-    calendarZoomGridMinutesForPercent,
-    getCalendarZoom,
-  } from "$lib/stores/calendar-zoom.svelte";
-  import {
-    DEFAULT_CALENDAR_TIME_FORMAT,
     DEFAULT_FONT_SCALE,
     DEFAULT_FONT_FAMILY_ID,
     FONT_SCALE_LEVELS,
@@ -15,13 +9,11 @@
   } from "$lib/stores/preference-options";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import Select from "$lib/components/ui/Select.svelte";
-  import SwitchField from "$lib/components/ui/SwitchField.svelte";
   import ThemeList from "$lib/components/themes/ThemeList.svelte";
   import { BUILD_PLATFORM_PROFILE } from "$lib/platform";
 
   const preferences = getPreferences();
   const zoom = getZoom();
-  const calendarZoom = getCalendarZoom();
   const { t } = getLocalization();
   const mobileShell = BUILD_PLATFORM_PROFILE.shell === "mobile";
 
@@ -35,12 +27,6 @@
     const percent = Number(value);
     if (!Number.isFinite(percent)) return;
     zoom.setLevel(percent / 100);
-  }
-
-  function handleCalendarZoomChange(value: string) {
-    const percent = Number(value);
-    if (!Number.isFinite(percent)) return;
-    calendarZoom.setZoomPercent(percent);
   }
 
   function handleFontScaleChange(value: string) {
@@ -65,22 +51,6 @@
       return { value: language, label: t("language.spanishOption") };
     }),
   );
-
-  const timeFormatOptions = $derived<SelectOption[]>([
-    { value: "24h", label: t("settings.appearance.timeFormat24h") },
-    { value: "12h", label: t("settings.appearance.timeFormat12h") },
-  ]);
-
-  const calendarZoomOptions = $derived<SelectOption[]>(CALENDAR_ZOOM_PERCENT_LEVELS.map(
-    (percent) => ({
-      value: percentString(percent),
-      label: t(
-        "settings.appearance.calendarZoomOption",
-        percent,
-        calendarZoomGridMinutesForPercent(percent),
-      ),
-    }),
-  ));
 
   const baseFontScaleOptions: readonly SelectOption[] = FONT_SCALE_LEVELS.map((level) => {
     const percent = Math.round(level * 100);
@@ -171,40 +141,6 @@
         }}
         canReset={preferences.languagePreference !== "system"}
         onReset={() => void preferences.setLanguagePreference("system")}
-      />
-    </div>
-  </section>
-
-  <div class="h-px shrink-0 scale-y-50 bg-border" aria-hidden="true"></div>
-
-  <section class="flex flex-col gap-4">
-    <h2 class="px-1 text-[0.866667rem] font-semibold text-foreground">{t("settings.appearance.calendarHeading")}</h2>
-    <div class="flex flex-col gap-3">
-      <Select
-        label={t("settings.appearance.calendarZoom")}
-        descriptionShortcuts={mobileShell ? [] : ["Shift + +", "Shift + -", "Shift + 0"]}
-        value={percentString(calendarZoom.zoomPercent)}
-        options={calendarZoomOptions}
-        onChange={handleCalendarZoomChange}
-        canReset={!calendarZoom.isDefault}
-        onReset={() => calendarZoom.reset()}
-      />
-      <Select
-        label={t("settings.appearance.timeFormat")}
-        description={t("settings.appearance.timeFormatDescription")}
-        value={preferences.calendarTimeFormat}
-        options={timeFormatOptions}
-        onChange={(value) => {
-          if (value === "24h" || value === "12h") preferences.setCalendarTimeFormat(value);
-        }}
-        canReset={preferences.calendarTimeFormat !== DEFAULT_CALENDAR_TIME_FORMAT}
-        onReset={() => preferences.resetCalendarTimeFormat()}
-      />
-      <SwitchField
-        label={t("settings.appearance.dimPastEventColors")}
-        description={t("settings.appearance.dimPastEventColorsDescription")}
-        checked={preferences.calendarDimPastEvents}
-        onChange={(checked) => preferences.setCalendarDimPastEvents(checked)}
       />
     </div>
   </section>
