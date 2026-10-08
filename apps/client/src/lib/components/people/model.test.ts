@@ -1,13 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   CONTACT_CARD_MATRIX_SIZE,
-  CONTACT_CODE_PREFIX,
   PEOPLE_CAPABILITIES,
   capabilitiesForRole,
-  contactCardCode,
-  contactCardMatrix,
   contactCardPlaceholderCode,
-  verificationCode,
+  placeholderCardMatrix,
 } from "./model";
 
 describe("capabilitiesForRole", () => {
@@ -39,37 +36,18 @@ describe("capabilitiesForRole", () => {
   });
 });
 
-describe("contactCardCode", () => {
-  it("formats a prefixed, grouped, unambiguous code", () => {
-    expect(contactCardCode("vault:1")).toMatch(/^GANB(-[0-9A-HJKMNP-TV-Z]{4}){4}$/);
-  });
-
-  it("is stable for one seed and differs between seeds", () => {
-    expect(contactCardCode("vault:1")).toBe(contactCardCode("vault:1"));
-    expect(contactCardCode("vault:1")).not.toBe(contactCardCode("vault:2"));
-  });
-});
-
 describe("contactCardPlaceholderCode", () => {
-  it("matches the real code's shape without the real prefix", () => {
+  it("is a stable grouped code without the real card prefix", () => {
     const placeholder = contactCardPlaceholderCode();
     expect(placeholder).toMatch(/^[0-9A-HJKMNP-TV-Z]{4}(-[0-9A-HJKMNP-TV-Z]{4}){4}$/);
-    expect(placeholder.startsWith(`${CONTACT_CODE_PREFIX}-`)).toBe(false);
+    expect(placeholder.startsWith("GANB-")).toBe(false);
     expect(placeholder).toBe(contactCardPlaceholderCode());
   });
 });
 
-describe("verificationCode", () => {
-  it("formats three digit groups that ignore surrounding whitespace and letter case", () => {
-    expect(verificationCode("ganb-abcd")).toMatch(/^\d{4} \d{4} \d{4}$/);
-    expect(verificationCode("  ganb-abcd ")).toBe(verificationCode("GANB-ABCD"));
-    expect(verificationCode("GANB-ABCD")).not.toBe(verificationCode("GANB-ABCE"));
-  });
-});
-
-describe("contactCardMatrix", () => {
+describe("placeholderCardMatrix", () => {
   it("fills a square grid with finder patterns in three corners", () => {
-    const { modules, width } = contactCardMatrix("vault:1");
+    const { modules, width } = placeholderCardMatrix();
     const at = (row: number, column: number) => modules[row * width + column];
 
     expect(width).toBe(CONTACT_CARD_MATRIX_SIZE);
@@ -83,11 +61,9 @@ describe("contactCardMatrix", () => {
     expect(at(7, 7)).toBe(false);
   });
 
-  it("derives the data area from the seed", () => {
-    const first = contactCardMatrix("vault:1").modules;
-    const second = contactCardMatrix("vault:2").modules;
-    expect(first).toEqual(contactCardMatrix("vault:1").modules);
-    expect(first).not.toEqual(second);
+  it("is stable and mixes dark and light modules in the data area", () => {
+    const first = placeholderCardMatrix().modules;
+    expect(first).toEqual(placeholderCardMatrix().modules);
     expect(first.some(Boolean)).toBe(true);
     expect(first.some((module) => !module)).toBe(true);
   });

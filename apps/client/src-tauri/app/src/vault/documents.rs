@@ -120,7 +120,7 @@ fn pick_open_path(
 }
 
 #[cfg(desktop)]
-fn pick_save_path(
+pub(crate) fn pick_save_path(
     app: &tauri::AppHandle,
     title: &str,
     default_name: &str,
@@ -141,7 +141,7 @@ fn pick_save_path(
 }
 
 #[cfg(desktop)]
-fn existing_downloads_directory(app: &tauri::AppHandle) -> Option<PathBuf> {
+pub(crate) fn existing_downloads_directory(app: &tauri::AppHandle) -> Option<PathBuf> {
     app.path().download_dir().ok().filter(|path| path.is_dir())
 }
 

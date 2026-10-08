@@ -169,10 +169,7 @@ pub(super) fn persist_state(path: &Path, state: &PairingStateFile) -> Result<(),
     write_private_file_atomically(path, &bytes)
 }
 
-pub(in crate::vault::handoff) fn write_private_file_atomically(
-    path: &Path,
-    bytes: &[u8],
-) -> Result<(), String> {
+pub(crate) fn write_private_file_atomically(path: &Path, bytes: &[u8]) -> Result<(), String> {
     let parent = path
         .parent()
         .ok_or_else(|| "private state path has no parent".to_string())?;

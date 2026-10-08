@@ -5,7 +5,6 @@ use super::{
     write_text_file_atomically,
 };
 use std::fs;
-#[cfg(desktop)]
 use std::io::Read;
 use tauri::Runtime;
 
@@ -40,9 +39,8 @@ pub fn vault_read_config(app: tauri::AppHandle) -> Result<String, String> {
 }
 
 /// Read native runtime preferences with a limit that also covers concurrent growth.
-#[cfg(desktop)]
-pub(crate) fn read_active_config_bounded(
-    app: &tauri::AppHandle,
+pub(crate) fn read_active_config_bounded<R: Runtime>(
+    app: &tauri::AppHandle<R>,
     max_bytes: usize,
 ) -> Result<String, String> {
     let _guard = CONFIG_LOCK

@@ -16,6 +16,7 @@ mod first_use_contracts;
 mod music;
 mod notes;
 mod notifications;
+mod people;
 mod pomodoro;
 mod profile_images;
 mod projects;

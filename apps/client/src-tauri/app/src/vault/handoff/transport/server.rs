@@ -142,6 +142,57 @@ async fn handle_connection(
             ))
             .await
         }
+        ControlMessage::ContactRequest {
+            recipient_card_nonce,
+            requester_card,
+            request_id,
+            signature,
+            ..
+        } => {
+            send_coordinator_response(
+                &mut stream,
+                coordinator.as_ref(),
+                coordinator::CoordinatorOperation::ContactRequest {
+                    recipient_card_nonce,
+                    requester_card,
+                    request_id,
+                    signature,
+                },
+            )
+            .await
+        }
+        ControlMessage::ContactRequestStatus {
+            request_id,
+            requester_public_key,
+            issued_at_ms,
+            signature,
+            ..
+        } => {
+            send_coordinator_response(
+                &mut stream,
+                coordinator.as_ref(),
+                coordinator::CoordinatorOperation::ContactRequestStatus {
+                    request_id,
+                    requester_public_key,
+                    issued_at_ms,
+                    signature,
+                },
+            )
+            .await
+        }
+        ControlMessage::PersonKeyRequest {
+            vault_id,
+            device_id,
+            ..
+        } => {
+            manager.verify_authenticated_peer(&device_id, peer_certificate.as_ref(), &vault_id)?;
+            send_coordinator_response(
+                &mut stream,
+                coordinator.as_ref(),
+                coordinator::CoordinatorOperation::ReleasePersonKey,
+            )
+            .await
+        }
         ControlMessage::DownloadBundle { metadata } => {
             manager.verify_authenticated_peer(
                 &metadata.device_id,
@@ -430,6 +481,28 @@ async fn send_coordinator_response_value(
             peer_samples,
             combined_samples,
         },
+        coordinator::CoordinatorResponse::ContactRequestReceived { request_id } => {
+            ControlMessage::ContactRequestReceived { request_id }
+        }
+        coordinator::CoordinatorResponse::ContactRequestState {
+            state,
+            recipient_card,
+        } => ControlMessage::ContactRequestState {
+            state,
+            recipient_card,
+        },
+        coordinator::CoordinatorResponse::PersonKeyReleased {
+            public_key,
+            private_key_pkcs8,
+        } => ControlMessage::PersonKeyRelease {
+            public_key,
+            private_key_pkcs8,
+        },
+        coordinator::CoordinatorResponse::Rejected {
+            code,
+            message,
+            retryable,
+        } => return send_error(stream, &code, &message, retryable).await,
     };
     timeout_control(write_control(stream, &message)).await
 }

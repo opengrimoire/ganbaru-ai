@@ -827,6 +827,21 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             quick_notes::quick_notes_empty_trash,
             quick_notes::quick_notes_list_tags,
             quick_notes::quick_notes_create_tag,
+            people::people_list,
+            people::people_local_card,
+            people::people_regenerate_card,
+            people::people_parse_card,
+            people::people_decode_card_qr,
+            people::people_send_request,
+            people::people_accept_request,
+            people::people_decline_request,
+            people::people_cancel_request,
+            people::people_block,
+            people::people_unblock,
+            people::people_remove_contact,
+            people::people_update_trust,
+            people::people_sync_requests,
+            people::people_save_card_image,
             profile_images::profile_image_pick_file,
             profile_images::profile_image_save_data_url,
             profile_images::profile_image_asset_data_url,
@@ -868,6 +883,7 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             }
             tray::setup_tray(app.handle())?;
             pomodoro::setup(app.handle());
+            people::requests::start_request_polling(app.handle().clone());
             Ok(())
         })
         .build(context)

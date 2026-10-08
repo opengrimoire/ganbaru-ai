@@ -64,7 +64,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function parseQrMatrix(value: unknown): PairingQrMatrix {
+/** Validates a native QR module grid; pairing invitations and contact cards share the shape. */
+export function parseQrMatrix(value: unknown): PairingQrMatrix {
   if (!isRecord(value) || !Number.isSafeInteger(value.width) || !Array.isArray(value.modules)) {
     throw new Error("Invalid pairing QR matrix response");
   }

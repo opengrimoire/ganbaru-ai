@@ -13,6 +13,7 @@ Current code uses the network only for these feature-owned purposes:
 - User-initiated Notion API import and remote project-icon import from a user-supplied HTTPS URL.
 - Chat browser previews and URLs explicitly opened by the user.
 - Local LAN device linking and whole-vault handoff, restricted to a private LAN address with pinned certificates and mutual TLS (see [Synchronization](../sync.md)).
+- Contact requests and status polls on the same LAN listener, which are the only inbound messages accepted without a client certificate (see [People and contact requests](../sync.md#people-and-contact-requests)). The surface is bounded: a card is at most 512 bytes and must carry a valid signature before anything is written, the recipient card nonce is compared in constant time, status polls are signed and rejected outside a five-minute window, pending received requests are capped at 64 with the oldest expired first, and a blocked requester receives the same response as an accepted one. Outbound, the requester connects only to the endpoint and certificate fingerprint named in the card it was handed.
 - The Chrome extension's native-messaging connection, which is local and not a remote service.
 
 Each adapter owns its allowed schemes, origins, redirects, response bounds, timeouts, and credential handling. There is no generic command that fetches an arbitrary URL with application credentials.

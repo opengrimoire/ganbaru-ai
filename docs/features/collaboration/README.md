@@ -1,6 +1,6 @@
 # People and invitations
 
-Status: Planned. The experience below is designed and present in the app so it can be judged as a whole; identity exchange, delivery, authorization, and sync logic are not implemented. Today the only human participant is the local person, and AI agents are the only other participants. Controls whose behavior is not implemented keep their final appearance and are inert, as described in [Unavailable controls](#unavailable-controls).
+Status: Partial. Implemented: the person identity, the signed contact card, contact requests delivered over the local LAN link, contacts with trust scopes, and blocking. Not implemented: invitations, spaces, direct conversations, contact pictures, relay delivery, consumption of once permissions, and the People group in pickers. Today AI agents are still the only participants in any space. Controls whose behavior is not implemented keep their final appearance and are inert, as described in [Unavailable controls](#unavailable-controls).
 
 This document owns the shared model for human collaboration: identity, contacts, invitations, roles, and the surfaces where people and AI agents appear. Feature documents link here instead of repeating it. Authorization rules are owned by [access control](../../data/access-control.md); delivery, encryption, and conflict handling are owned by [device linking and synchronization](../../data/sync.md).
 
@@ -24,20 +24,22 @@ Ganbaru AI already coordinates work between a person and configured AI agents th
 
 A person is a key pair generated on their own device, in the same way device linking already gives each device an identity. There is no Ganbaru account, no hosted directory, no username search, and no discovery by email or phone number. The contact card is the only entry point, and a person hands it out deliberately.
 
-The card carries the display name and avatar from Profile, never the full name or anything else in the vault. It is shown in Settings as a QR code for phones and a copyable code for desktops, the same two forms device linking uses. Regenerating the card invalidates the previous one for new contact requests; existing contacts are unaffected.
+The card carries the display name and avatar color from Profile, never the full name or anything else in the vault, and is signed by the person key so a tampered card is rejected. It also carries a delivery hint: today the private LAN address and certificate fingerprint of the vault's coordinator, later a self-hosted relay address, without changing the card format. It is shown in Settings as a QR code for phones and a copyable code for desktops, the same two forms device linking uses; the card needs a complete display name before it exists. Regenerating the card invalidates the previous one for new contact requests; existing contacts are unaffected.
+
+The person key is generated on the first device that can write the vault and follows the person to linked devices through [device linking](../../data/sync.md#people-and-contact-requests). The card is unavailable on a linked device until its key copy arrives.
 
 What a contact sees of a person is limited to the display identity and to content inside spaces they share. Identity visibility follows the same boundaries as content, so a contact never learns which other spaces, contacts, or devices a person has.
 
 ## Contacts and trust
 
-A contact request is the only unsolicited message in the system, and it can only reach a person through a card that person handed out. The recipient sees the sender's display identity and a verification code, and accepts, declines, or blocks. Acceptance is mutual: both people become contacts of each other.
+A contact request is the only unsolicited message in the system, and it can only reach a person through a card that person handed out. The recipient sees the sender's display identity and a verification code, and accepts, declines, or blocks. Acceptance is mutual: both people become contacts of each other. A sent request stays pending for seven days while the sender's device polls the recipient's delivery hint; both sides see their pending requests in Settings, and the sender can cancel. The sender chooses the trust scope for the future contact when sending, from the defaults in Settings, and the recipient chooses theirs when accepting.
 
 Each side then decides what the other may do without asking. The trust scope has two independent permissions:
 
 - **Can invite me:** the contact may send invitations to shared spaces.
 - **Can message me directly:** the contact may start or continue a direct conversation.
 
-Each permission has a duration: until revoked, for a fixed period, or once. A once permission is consumed by its first use, and an expired permission silently stops delivery until renewed. Durations exist so a person can accept an invitation from someone without granting them a standing line of communication.
+Each permission has a duration: until revoked, for a fixed period, or once. A once permission is consumed by its first use, and an expired permission silently stops delivery until renewed. Durations exist so a person can accept an invitation from someone without granting them a standing line of communication. Timed grants are stored with their expiry and shown as remaining days; editing a contact's trust restarts a timed grant from the moment it is saved.
 
 Blocking a person removes them as a contact, rejects everything they send, and hides them from pickers. A blocked person receives no signal that they were blocked. Unblocking restores nothing automatically; a new contact request is required.
 

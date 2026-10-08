@@ -389,6 +389,9 @@ async fn refresh_after_reconnect(app: &tauri::AppHandle) -> bool {
     )
     .await;
     let reachable = poll.is_ok();
+    if reachable {
+        crate::people::identity::try_release(app).await;
+    }
     let was_connected = lifecycle.connected.swap(reachable, Ordering::AcqRel);
     if let Ok(Some(purpose)) = poll {
         if status.can_write {
@@ -506,6 +509,6 @@ mod tests {
         assert_eq!(ReceiveMode::Ownership.purpose(), BundlePurpose::Ownership);
         assert_eq!(ReceiveMode::Refresh.purpose(), BundlePurpose::Refresh);
         assert_eq!(ReceiveMode::Bootstrap.purpose(), BundlePurpose::Refresh);
-        assert_eq!(super::super::protocol::PROTOCOL_VERSION, 3);
+        assert_eq!(super::super::protocol::PROTOCOL_VERSION, 4);
     }
 }

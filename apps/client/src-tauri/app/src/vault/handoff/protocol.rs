@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::path::Path;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
-pub(crate) const PROTOCOL_VERSION: u16 = 3;
+pub(crate) const PROTOCOL_VERSION: u16 = 4;
 pub(crate) const MAX_CONTROL_BYTES: usize = 1024 * 1024;
 pub(crate) const MAX_ARCHIVE_BYTES: u64 = 100 * 1024 * 1024 * 1024;
 pub(crate) const MAX_IDENTIFIER_BYTES: usize = 160;
@@ -13,6 +13,26 @@ const MAX_APP_VERSION_BYTES: usize = 64;
 pub(crate) const MAX_DISTRACTIONS_SAMPLES: usize = 1_024;
 pub(crate) const TRANSFER_CHUNK_BYTES: usize = 64 * 1024;
 const PAIRING_QR_MAGIC: &[u8; 4] = b"GBQ\x01";
+/// Base64url text of a 64-byte Ed25519 signature.
+const SIGNATURE_TEXT_LENGTH: usize = 86;
+/// Base64url text of a 16-byte card nonce.
+const CARD_NONCE_TEXT_LENGTH: usize = 22;
+/// Upper bound on the pasteable text form of a contact card.
+const MAX_CARD_TEXT_BYTES: usize =
+    ganbaru_people::CARD_TEXT_PREFIX.len() + ganbaru_people::MAX_CARD_BYTES.div_ceil(3) * 4;
+/// Upper bound on a base64url PKCS#8 person key.
+const MAX_PERSON_KEY_TEXT_BYTES: usize = 256;
+/// Tolerated clock skew for signed status requests.
+const STATUS_REPLAY_WINDOW_MS: i64 = 5 * 60 * 1000;
+
+/// Outcome of a contact request as reported by its recipient.
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum ContactRequestOutcome {
+    Pending,
+    Accepted,
+    Declined,
+}
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -256,6 +276,39 @@ pub(crate) enum ControlMessage {
         peer_samples: Vec<DistractionsSampleMessage>,
         combined_samples: Vec<DistractionsSampleMessage>,
     },
+    /// Unauthenticated: a person asks the recipient (whose card they hold) to become a contact.
+    ContactRequest {
+        protocol_version: u16,
+        recipient_card_nonce: String,
+        requester_card: String,
+        request_id: String,
+        signature: String,
+    },
+    ContactRequestReceived {
+        request_id: String,
+    },
+    /// Unauthenticated: the requester asks whether a request was accepted.
+    ContactRequestStatus {
+        protocol_version: u16,
+        request_id: String,
+        requester_public_key: String,
+        issued_at_ms: i64,
+        signature: String,
+    },
+    ContactRequestState {
+        state: ContactRequestOutcome,
+        recipient_card: Option<String>,
+    },
+    /// Authenticated: a linked device asks the coordinator for the person's signing key.
+    PersonKeyRequest {
+        protocol_version: u16,
+        vault_id: String,
+        device_id: String,
+    },
+    PersonKeyRelease {
+        public_key: String,
+        private_key_pkcs8: String,
+    },
     Error {
         code: String,
         message: String,
@@ -442,6 +495,93 @@ impl ControlMessage {
                     return Err("Distractions response exceeds the sample limit".to_string());
                 }
             }
+            Self::ContactRequest {
+                protocol_version,
+                recipient_card_nonce,
+                requester_card,
+                request_id,
+                signature,
+            } => {
+                validate_protocol(*protocol_version)?;
+                validate_base64url_text(
+                    "recipient card nonce",
+                    recipient_card_nonce,
+                    CARD_NONCE_TEXT_LENGTH,
+                )?;
+                validate_card_text("requester card", requester_card)?;
+                validate_identifier("contact request id", request_id)?;
+                validate_base64url_text(
+                    "contact request signature",
+                    signature,
+                    SIGNATURE_TEXT_LENGTH,
+                )?;
+            }
+            Self::ContactRequestReceived { request_id } => {
+                validate_identifier("contact request id", request_id)?;
+            }
+            Self::ContactRequestStatus {
+                protocol_version,
+                request_id,
+                requester_public_key,
+                issued_at_ms,
+                signature,
+            } => {
+                validate_protocol(*protocol_version)?;
+                validate_identifier("contact request id", request_id)?;
+                validate_base64url_text(
+                    "requester public key",
+                    requester_public_key,
+                    ganbaru_people::PUBLIC_KEY_TEXT_LENGTH,
+                )?;
+                if (unix_time_ms() - *issued_at_ms).abs() > STATUS_REPLAY_WINDOW_MS {
+                    return Err("contact request status is outside the replay window".to_string());
+                }
+                validate_base64url_text(
+                    "contact status signature",
+                    signature,
+                    SIGNATURE_TEXT_LENGTH,
+                )?;
+            }
+            Self::ContactRequestState {
+                state,
+                recipient_card,
+            } => match (state, recipient_card) {
+                (ContactRequestOutcome::Accepted, Some(card)) => {
+                    validate_card_text("recipient card", card)?;
+                }
+                (ContactRequestOutcome::Accepted, None) => {
+                    return Err("accepted contact request is missing the card".to_string());
+                }
+                (_, Some(_)) => {
+                    return Err("contact request state carries an unexpected card".to_string());
+                }
+                (_, None) => {}
+            },
+            Self::PersonKeyRequest {
+                protocol_version,
+                vault_id,
+                device_id,
+            } => {
+                validate_protocol(*protocol_version)?;
+                validate_identifier("vault id", vault_id)?;
+                validate_identifier("device id", device_id)?;
+            }
+            Self::PersonKeyRelease {
+                public_key,
+                private_key_pkcs8,
+            } => {
+                validate_base64url_text(
+                    "person public key",
+                    public_key,
+                    ganbaru_people::PUBLIC_KEY_TEXT_LENGTH,
+                )?;
+                if private_key_pkcs8.is_empty()
+                    || private_key_pkcs8.len() > MAX_PERSON_KEY_TEXT_BYTES
+                    || !is_base64url(private_key_pkcs8)
+                {
+                    return Err("person private key is invalid".to_string());
+                }
+            }
             Self::Error { code, message, .. } => {
                 validate_identifier("error code", code)?;
                 if message.is_empty() || message.len() > 1024 {
@@ -451,6 +591,29 @@ impl ControlMessage {
         }
         Ok(())
     }
+}
+
+fn is_base64url(value: &str) -> bool {
+    value
+        .bytes()
+        .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
+}
+
+fn validate_base64url_text(label: &str, value: &str, length: usize) -> Result<(), String> {
+    if value.len() != length || !is_base64url(value) {
+        return Err(format!("{label} is invalid"));
+    }
+    Ok(())
+}
+
+fn validate_card_text(label: &str, value: &str) -> Result<(), String> {
+    let Some(encoded) = value.strip_prefix(ganbaru_people::CARD_TEXT_PREFIX) else {
+        return Err(format!("{label} is invalid"));
+    };
+    if encoded.is_empty() || value.len() > MAX_CARD_TEXT_BYTES || !is_base64url(encoded) {
+        return Err(format!("{label} is invalid"));
+    }
+    Ok(())
 }
 
 fn validate_distractions_sample_ids(sample_ids: &[String]) -> Result<(), String> {
@@ -572,7 +735,6 @@ pub(crate) fn decode_invitation(encoded: &str, now_ms: i64) -> Result<PairingInv
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-#[cfg(desktop)]
 pub(crate) struct QrMatrix {
     pub width: usize,
     pub modules: Vec<bool>,
@@ -581,8 +743,13 @@ pub(crate) struct QrMatrix {
 #[cfg(desktop)]
 pub(crate) fn invitation_qr_matrix(invitation: &PairingInvitation) -> Result<QrMatrix, String> {
     let payload = encode_pairing_qr_payload(invitation)?;
-    let code = qrcode::QrCode::with_error_correction_level(&payload, qrcode::EcLevel::M)
-        .map_err(|error| format!("create pairing QR code: {error}"))?;
+    qr_matrix_for_bytes(&payload)
+}
+
+/// Renders an opaque binary payload as a QR module matrix.
+pub(crate) fn qr_matrix_for_bytes(payload: &[u8]) -> Result<QrMatrix, String> {
+    let code = qrcode::QrCode::with_error_correction_level(payload, qrcode::EcLevel::M)
+        .map_err(|error| format!("create QR code: {error}"))?;
     let width = code.width();
     let modules = (0..width)
         .flat_map(|y| {
@@ -593,7 +760,13 @@ pub(crate) fn invitation_qr_matrix(invitation: &PairingInvitation) -> Result<QrM
     Ok(QrMatrix { width, modules })
 }
 
-fn decode_qr_luma(width: usize, height: usize, luma: &[u8]) -> Result<Vec<u8>, String> {
+/// Finds the first QR code in a grayscale frame whose payload starts with `expected_magic`.
+pub(crate) fn decode_qr_bytes_luma(
+    width: usize,
+    height: usize,
+    luma: &[u8],
+    expected_magic: &[u8],
+) -> Result<Vec<u8>, String> {
     const MAX_QR_FRAME_PIXELS: usize = 1920 * 1080;
     let pixels = width
         .checked_mul(height)
@@ -604,11 +777,13 @@ fn decode_qr_luma(width: usize, height: usize, luma: &[u8]) -> Result<Vec<u8>, S
     let mut scanner = quircs::Quirc::default();
     for identified in scanner.identify(width, height, luma) {
         let identified = identified.map_err(|error| format!("identify QR code: {error}"))?;
-        if let Ok(decoded) = identified.decode() {
+        if let Ok(decoded) = identified.decode()
+            && decoded.payload.starts_with(expected_magic)
+        {
             return Ok(decoded.payload);
         }
     }
-    Err("no readable pairing QR code was found".to_string())
+    Err("no readable QR code was found".to_string())
 }
 
 pub(crate) fn decode_pairing_qr_luma(
@@ -617,7 +792,7 @@ pub(crate) fn decode_pairing_qr_luma(
     luma: &[u8],
     now_ms: i64,
 ) -> Result<PairingInvitation, String> {
-    let payload = decode_qr_luma(width, height, luma)?;
+    let payload = decode_qr_bytes_luma(width, height, luma, PAIRING_QR_MAGIC)?;
     decode_pairing_qr_payload(&payload, now_ms)
 }
 

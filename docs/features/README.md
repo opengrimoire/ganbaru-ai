@@ -20,10 +20,10 @@ Source paths, schema inventories, cache tuning, device test matrices, and delive
 | Localization | Partial | [Localization](localization.md) |
 | Quick notes | Implemented | [Quick notes](quick-notes.md) |
 | Profile | Implemented | [Profile](profile.md) |
+| People and invitations | Partial | [People and invitations](collaboration/README.md) |
 
 ## Planned product surfaces
 
-- [People and invitations](collaboration/README.md)
 - [Diary](diary.md)
 - [Edge panel](edge-panel.md)
 - [Sleep alarm](sleep-alarm.md)

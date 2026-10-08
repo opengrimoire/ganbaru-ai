@@ -1,6 +1,6 @@
 /**
- * Shared vocabulary for the People experience: roles, capabilities, trust scopes, invitation states, and the
- * deterministic contact card preview. docs/features/collaboration/README.md owns the product rules.
+ * Shared vocabulary for the People experience: roles, capabilities, invitation states, sharing options, and the
+ * placeholder shown behind the blurred contact card. docs/features/collaboration/README.md owns the product rules.
  */
 
 export const PEOPLE_ROLES = ["owner", "administrator", "member", "guest", "custom"] as const;
@@ -46,9 +46,6 @@ export function capabilitiesForRole(role: PeopleRole): ReadonlySet<PeopleCapabil
 export const PEOPLE_HISTORY_BOUNDARIES = ["entire", "fromAcceptance"] as const;
 export type PeopleHistoryBoundary = (typeof PEOPLE_HISTORY_BOUNDARIES)[number];
 
-export const PEOPLE_TRUST_DURATIONS = ["notAllowed", "once", "sevenDays", "thirtyDays", "untilRevoked"] as const;
-export type PeopleTrustDuration = (typeof PEOPLE_TRUST_DURATIONS)[number];
-
 export const PEOPLE_INVITATION_STATES = ["pending", "accepted", "declined", "revoked", "expired"] as const;
 export type PeopleInvitationState = (typeof PEOPLE_INVITATION_STATES)[number];
 
@@ -71,16 +68,12 @@ export type NotesShareScope = (typeof NOTES_SHARE_SCOPES)[number];
 export const NOTES_LINK_ACCESS = ["off", "view", "comment"] as const;
 export type NotesLinkAccess = (typeof NOTES_LINK_ACCESS)[number];
 
-/** Prefix of every contact code; it distinguishes a Ganbaru AI card from an arbitrary pasted string. */
-export const CONTACT_CODE_PREFIX = "GANB";
-const CONTACT_CODE_GROUPS = 4;
-const CONTACT_CODE_GROUP_LENGTH = 4;
+const PLACEHOLDER_CODE_GROUPS = 5;
+const PLACEHOLDER_CODE_GROUP_LENGTH = 4;
 /** Crockford base32 leaves out I, L, O, and U so a code read aloud or typed is unambiguous. */
-const CONTACT_CODE_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
-const VERIFICATION_GROUPS = 3;
-const VERIFICATION_GROUP_LENGTH = 4;
+const PLACEHOLDER_CODE_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 /** Seed behind the blurred card, so the hidden QR and code never derive from the real identity. */
-export const CONTACT_CARD_PLACEHOLDER_SEED = "ganbaru-ai:contact-card-placeholder";
+const CONTACT_CARD_PLACEHOLDER_SEED = "ganbaru-ai:contact-card-placeholder";
 export const CONTACT_CARD_MATRIX_SIZE = 25;
 const FINDER_SIZE = 7;
 
@@ -110,46 +103,22 @@ function hashBytes(seed: string, count: number): Uint8Array {
   return bytes;
 }
 
-/** Hyphen-joined groups of unambiguous characters derived from a seed. */
-function contactCodeGroups(seed: string, groupCount: number): string {
-  const bytes = hashBytes(`code:${seed}`, groupCount * CONTACT_CODE_GROUP_LENGTH);
+/**
+ * Code shown blurred in place of the real one. It is grouped like a readable code but carries no card prefix, so
+ * nothing legible through the blur matches the actual card.
+ */
+export function contactCardPlaceholderCode(): string {
+  const bytes = hashBytes(`code:${CONTACT_CARD_PLACEHOLDER_SEED}`, PLACEHOLDER_CODE_GROUPS * PLACEHOLDER_CODE_GROUP_LENGTH);
   const groups: string[] = [];
-  for (let group = 0; group < groupCount; group += 1) {
+  for (let group = 0; group < PLACEHOLDER_CODE_GROUPS; group += 1) {
     let text = "";
-    for (let position = 0; position < CONTACT_CODE_GROUP_LENGTH; position += 1) {
-      const byte = bytes[group * CONTACT_CODE_GROUP_LENGTH + position] ?? 0;
-      text += CONTACT_CODE_ALPHABET[byte % CONTACT_CODE_ALPHABET.length];
+    for (let position = 0; position < PLACEHOLDER_CODE_GROUP_LENGTH; position += 1) {
+      const byte = bytes[group * PLACEHOLDER_CODE_GROUP_LENGTH + position] ?? 0;
+      text += PLACEHOLDER_CODE_ALPHABET[byte % PLACEHOLDER_CODE_ALPHABET.length];
     }
     groups.push(text);
   }
   return groups.join("-");
-}
-
-/** Pasteable contact code such as `GANB-K7Q2-X9MA-4TZ1-8R0C`, derived from the local identity seed. */
-export function contactCardCode(seed: string): string {
-  return [CONTACT_CODE_PREFIX, contactCodeGroups(seed, CONTACT_CODE_GROUPS)].join("-");
-}
-
-/**
- * Code shown blurred in place of the real one. It has the real code's shape but no fixed prefix, so nothing
- * legible through the blur matches the actual card.
- */
-export function contactCardPlaceholderCode(): string {
-  return contactCodeGroups(CONTACT_CARD_PLACEHOLDER_SEED, CONTACT_CODE_GROUPS + 1);
-}
-
-/** Digit groups two people compare out of band before accepting each other, derived from the same material. */
-export function verificationCode(text: string): string {
-  const bytes = hashBytes(`verify:${text.trim().toUpperCase()}`, VERIFICATION_GROUPS * VERIFICATION_GROUP_LENGTH);
-  const groups: string[] = [];
-  for (let group = 0; group < VERIFICATION_GROUPS; group += 1) {
-    let digits = "";
-    for (let position = 0; position < VERIFICATION_GROUP_LENGTH; position += 1) {
-      digits += String((bytes[group * VERIFICATION_GROUP_LENGTH + position] ?? 0) % 10);
-    }
-    groups.push(digits);
-  }
-  return groups.join(" ");
 }
 
 /** Whether a module belongs to one of the three finder patterns or their separators. */
@@ -166,9 +135,9 @@ function finderModule(row: number, column: number, size: number): boolean | null
   return null;
 }
 
-/** QR-styled module grid for the contact card preview. The finder patterns are real; the data area is derived. */
-export function contactCardMatrix(seed: string, size = CONTACT_CARD_MATRIX_SIZE): { modules: boolean[]; width: number } {
-  const bytes = hashBytes(`matrix:${seed}`, Math.ceil((size * size) / 8));
+/** QR-styled module grid shown blurred until the real card is revealed. The finder patterns are real; the data area is noise. */
+export function placeholderCardMatrix(size = CONTACT_CARD_MATRIX_SIZE): { modules: boolean[]; width: number } {
+  const bytes = hashBytes(`matrix:${CONTACT_CARD_PLACEHOLDER_SEED}`, Math.ceil((size * size) / 8));
   const modules: boolean[] = [];
   for (let row = 0; row < size; row += 1) {
     for (let column = 0; column < size; column += 1) {
