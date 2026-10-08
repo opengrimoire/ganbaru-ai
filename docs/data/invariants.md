@@ -130,7 +130,7 @@ These conditions must remain true across UI actions, imports, migrations, recove
 
 ### 13. A mention never expands authority
 
-**Rule.** Mentioning an AI teammate or resource does not add membership, history, folder, scratch, or runtime access. The mention resolves only within existing authority.
+**Rule.** Mentioning an AI agent or resource does not add membership, history, folder, scratch, or runtime access. The mention resolves only within existing authority.
 
 **Why.** User-authored text is not an authorization channel.
 

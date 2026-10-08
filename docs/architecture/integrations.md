@@ -6,7 +6,7 @@ Ganbaru AI integrates with local tools and operating-system services while remai
 
 Desktop Chat supports Rust-owned native transports for Codex, Claude Code, Cursor, Grok, and OpenCode. Ganbaru preserves provider-native interaction concepts while normalizing durable events and organizational history.
 
-Provider sessions do not own channels, teammate identity, project commitments, or access policy. Each organizational run resolves one execution target and one immutable authorization revision before dispatch. Provider-specific safety is enforced only where the adapter can verify it.
+Provider sessions do not own channels, agent identity, project commitments, or access policy. Each organizational run resolves one execution target and one immutable authorization revision before dispatch. Provider-specific safety is enforced only where the adapter can verify it.
 
 See [AI integration](../features/ai/README.md), [Chat](../features/chat/README.md), and [Chat access control](../data/access-control.md).
 

@@ -1,12 +1,12 @@
 # People and invitations
 
-Status: Planned. The experience below is designed and present in the app so it can be judged as a whole; identity exchange, delivery, authorization, and sync logic are not implemented. Today the only human participant is the local person, and AI teammates are the only other participants. Controls whose behavior is not implemented keep their final appearance and are inert, as described in [Unavailable controls](#unavailable-controls).
+Status: Planned. The experience below is designed and present in the app so it can be judged as a whole; identity exchange, delivery, authorization, and sync logic are not implemented. Today the only human participant is the local person, and AI agents are the only other participants. Controls whose behavior is not implemented keep their final appearance and are inert, as described in [Unavailable controls](#unavailable-controls).
 
-This document owns the shared model for human collaboration: identity, contacts, invitations, roles, and the surfaces where people and AI teammates appear. Feature documents link here instead of repeating it. Authorization rules are owned by [access control](../../data/access-control.md); delivery, encryption, and conflict handling are owned by [device linking and synchronization](../../data/sync.md).
+This document owns the shared model for human collaboration: identity, contacts, invitations, roles, and the surfaces where people and AI agents appear. Feature documents link here instead of repeating it. Authorization rules are owned by [access control](../../data/access-control.md); delivery, encryption, and conflict handling are owned by [device linking and synchronization](../../data/sync.md).
 
 ## Why
 
-Ganbaru AI already coordinates work between a person and configured AI teammates through explicit memberships and access profiles. Human collaboration adds other people to the same model instead of a second one. One picker, one access step, and one member list serve people and teammates alike, so the only visible difference between adding a colleague and adding an AI teammate is that the teammate also has a configurable brain and execution limits. Users who know chat and planning apps should recognize the flow immediately: pick from contacts, choose a role, done.
+Ganbaru AI already coordinates work between a person and configured AI agents through explicit memberships and access profiles. Human collaboration adds other people to the same model instead of a second one. One picker, one access step, and one member list serve people and agents alike, so the only visible difference between adding a colleague and adding an AI agent is that the agent also has a configurable brain and execution limits. Users who know chat and planning apps should recognize the flow immediately: pick from contacts, choose a role, done.
 
 ## Vocabulary
 
@@ -17,8 +17,8 @@ Ganbaru AI already coordinates work between a person and configured AI teammates
 - **Space:** anything a person can be invited to: a group, a project, a channel, a Calendar event, a Notes page or subtree, or a direct conversation.
 - **Invitation:** a request to join one space with one role and one history boundary.
 - **Role:** a named preset of capabilities for one space, or a custom set.
-- **Participant:** a person or AI teammate acting in a space through a membership.
-- **Teammate:** an AI participant owned by exactly one person. See [Teammates and coordination](../chat/teammates-and-coordination.md).
+- **Participant:** a person or AI agent acting in a space through a membership.
+- **Agent:** an AI participant owned by exactly one person. See [Agents and coordination](../chat/agents-and-coordination.md).
 
 ## Identity and contact cards
 
@@ -65,10 +65,10 @@ A role is a preset over one capability set. The capabilities are grouped so a pe
 
 | Group | Capabilities |
 | --- | --- |
-| Conversation | Read history, participate, assign work to teammates |
+| Conversation | Read history, participate, assign work to agents |
 | Content | Create and edit Notes, create and edit tasks, edit Calendar events, share pages |
-| Management | Manage channels, manage members, manage teammates, edit space settings |
-| Execution (teammates only) | Working-folder ceiling and approval policy, as defined by [access profiles](../chat/teammates-and-coordination.md) |
+| Management | Manage channels, manage members, manage agents, edit space settings |
+| Execution (agents only) | Working-folder ceiling and approval policy, as defined by [access profiles](../chat/agents-and-coordination.md) |
 
 The built-in roles are:
 
@@ -83,25 +83,25 @@ Roles inherit downward and can only narrow:
 
 - A group role is the default role in every project of the group. A project can restrict a person's inherited role but not widen it.
 - A project role is the default for its channels. A channel membership can further restrict history or participation.
-- A teammate acts within the intersection of its owner's role and its own access profile, and never holds management capabilities.
+- An agent acts within the intersection of its owner's role and its own access profile, and never holds management capabilities.
 
-This mirrors the rule in access control that no layer may widen another. Access profiles for teammates remain what they are today; the role presets for people reuse the same capability vocabulary so one access step can present both.
+This mirrors the rule in access control that no layer may widen another. Access profiles for agents remain what they are today; the role presets for people reuse the same capability vocabulary so one access step can present both.
 
-## Teammates and people as one model
+## Agents and people as one model
 
-A person has an identity and access. A teammate has an identity, access, a brain (provider, model, instructions, effort), and execution limits (working folders and approval policy). Everything else is shared:
+A person has an identity and access. An agent has an identity, access, a brain (provider, model, instructions, effort), and execution limits (working folders and approval policy). Everything else is shared:
 
-- The same picker lists people and teammates and offers to invite a person or create a teammate at the end of the list.
+- The same picker lists people and agents and offers to invite a person or create an agent at the end of the list.
 - The same access step presents a role preset, a summary line, a history boundary, and a Custom expansion.
-- The same member rows, grouped as People and Teammates, with the local person pinned first.
+- The same member rows, grouped as People and Agents, with the local person pinned first.
 
-A teammate executes only on devices of the person who owns it. Other members of a space can mention it and assign it work only when the owner enabled assignment from others; a mention from someone else never widens what the teammate may do.
+An agent executes only on devices of the person who owns it. Other members of a space can mention it and assign it work only when the owner enabled assignment from others; a mention from someone else never widens what the agent may do.
 
 ## Where people appear
 
 - **Chat channels:** the channel dialog edits name, topic, section, and members together, and the header opens a details panel with the topic and members. Both use the shared picker and access step. See [Conversations](../chat/conversations.md).
-- **Chat sidebar:** a Direct messages section whose more-options menu opens Contacts and Invitations in Settings > People.
-- **Settings > People:** the person's contact card (until pressed, the QR and code show a blurred placeholder that is not derived from the real identity, so a shared screen leaks nothing), contacts with their trust scopes and expiry, pending received and sent invitations, and blocked people. AI teammates stay under Settings > Chat while they are only usable in Chat.
+- **Chat sidebar:** a Direct messages section whose more-options menu opens Contacts and Invitations in Settings > Contacts.
+- **Settings > Contacts:** the person's contact card (until pressed, the QR and code show a blurred placeholder that is not derived from the real identity, so a shared screen leaks nothing), contacts with their trust scopes and expiry, pending received and sent invitations, and blocked people. AI agents stay under Settings > Chat while they are only usable in Chat.
 - **Projects:** a Members list in project settings with roles, and the shared picker for task assignees and reviewers, limited to project members. Groups have the same Members list. See [Projects](../projects/README.md).
 - **Calendar:** attendees chosen with the shared picker, each with a response chip, next to imported attendees that stay read-only. See [Event editing](../calendar/event-editing.md#meeting-metadata).
 - **Notes:** a Share action on a page and on a database page that uses the shared picker with page or subtree scope and the Notes role names Can view, Can comment, Can edit, and Full access, which map onto the capability set above. See [Links and collaboration](../notes/links-and-collaboration.md#access).
@@ -110,8 +110,8 @@ A teammate executes only on devices of the person who owns it. Other members of 
 
 - Nothing is discoverable. Without a handed-out card there is no way to reach a person.
 - Removal and revocation stop future reads, context assembly, notifications, and exports immediately, and never rewrite legitimate shared history. They cannot erase copies another person already holds, and the app says so where it matters.
-- Mentions, links, and references identify context and never transfer access, for people exactly as for teammates.
-- Anti-burnout defaults apply to people as to teammates: no read receipts, typing indicators, or online presence are required for the model, and none are planned as defaults.
+- Mentions, links, and references identify context and never transfer access, for people exactly as for agents.
+- Anti-burnout defaults apply to people as to agents: no read receipts, typing indicators, or online presence are required for the model, and none are planned as defaults.
 
 ## Unavailable controls
 
@@ -119,6 +119,6 @@ Collaboration controls ship before their logic so the complete experience can be
 
 ## Open decisions
 
-- Whether AI teammates move from Settings > Chat to Settings > People once a teammate can act outside Chat.
+- Whether AI agents move from Settings > Chat to Settings > Contacts once an agent can act outside Chat.
 - Whether a space owner can delegate ownership transfer to administrators.
 - Group direct conversations beyond a small fixed size.

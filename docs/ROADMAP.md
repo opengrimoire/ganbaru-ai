@@ -54,7 +54,7 @@ See [Projects](features/projects/README.md) and [Notes](features/notes/README.md
 
 ### Chat and local agent execution
 
-- Finish the user-facing teammate, mention, reply-thread, scheduling, and access-review flows.
+- Finish the user-facing agent, mention, reply-thread, scheduling, and access-review flows.
 - Harden provider recovery, workspace observation, scratch cleanup, checkpoints, and review across supported providers.
 
 See [Chat](features/chat/README.md), [AI integration](features/ai/README.md), and [Chat access control](data/access-control.md).
@@ -81,7 +81,7 @@ Saved desktop environments that prepare applications, browser resources, Music, 
 
 ### Structured project delegation
 
-Reviewable planning proposals, task-linked agent runs, assignment and review workflows, budgets, and sustainable work-in-progress limits on top of Projects and Chat. A person approves commitments before Projects or Calendar change. See [Guided planning and review](features/projects/guided-planning.md) and [Teammates and coordination](features/chat/teammates-and-coordination.md).
+Reviewable planning proposals, task-linked agent runs, assignment and review workflows, budgets, and sustainable work-in-progress limits on top of Projects and Chat. A person approves commitments before Projects or Calendar change. See [Guided planning and review](features/projects/guided-planning.md) and [Agents and coordination](features/chat/agents-and-coordination.md).
 
 ## Later outcomes
 
@@ -91,7 +91,7 @@ Multi-person collaboration with resource-scoped authorization, invitations, revo
 
 ### General BYOK assistants and external access
 
-Hosted and local BYOK assistants through the same teammate, permission, and provenance model, plus a separately authorized external MCP service. Native coding-provider trust is never reused as general Ganbaru authority. See [AI integration](features/ai/README.md).
+Hosted and local BYOK assistants through the same agent, permission, and provenance model, plus a separately authorized external MCP service. Native coding-provider trust is never reused as general Ganbaru authority. See [AI integration](features/ai/README.md).
 
 ### Additional platforms and interoperability
 

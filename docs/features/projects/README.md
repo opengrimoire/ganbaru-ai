@@ -61,6 +61,6 @@ Projects, tasks, schemas, views, links, and history are SQLite-canonical. Workin
 - [Settings and scheduling](settings-and-scheduling.md)
 - [Guided planning and review](guided-planning.md)
 - [Shared collection views](../collections.md)
-- [Chat teammates and coordination](../chat/teammates-and-coordination.md)
+- [Chat agents and coordination](../chat/agents-and-coordination.md)
 - [Calendar](../calendar/README.md)
 - [Notes](../notes/README.md)

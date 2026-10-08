@@ -12,7 +12,7 @@ Chat is Ganbaru AI's project communication and coding-work surface. It combines 
 | Messages, reply threads, mentions, drafts, attachments, scheduled sends, and combined timeline | Implemented |
 | Codex, Claude, Cursor, Grok, and OpenCode execution | Implemented |
 | Interactive requests, cancellation, inspector, file browser and editor, review, terminals, browser previews, and Git checkpoints | Implemented |
-| AI teammates with per-channel access profiles, folder grants, and frozen context packages | Implemented |
+| AI agents with per-channel access profiles, folder grants, and frozen context packages | Implemented |
 | Private scratch execution with explicit promotion and cleanup | Implemented |
 | Structured delegation, budgets, quiet periods, and task-linked assignments | Planned |
 | Direct messages and task discussions | Planned; the schema reserves these conversation kinds |
@@ -26,7 +26,7 @@ Provider runtimes own execution details: provider sessions and continuation, too
 
 A channel can link many sequential or parallel provider runs and never depends on one provider's continuation model. Rationale: providers differ and change; the organizational record must outlive any of them.
 
-See [Conversations](conversations.md), [Teammates and coordination](teammates-and-coordination.md), and [Execution and workspace](execution-and-workspace.md).
+See [Conversations](conversations.md), [Agents and coordination](agents-and-coordination.md), and [Execution and workspace](execution-and-workspace.md).
 
 ## First use
 

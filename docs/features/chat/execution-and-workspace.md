@@ -42,6 +42,6 @@ Filesystem observation keeps Files, Review, and source-control views fresh. Even
 
 ## Internal host tools
 
-Runs receive an ephemeral loopback MCP endpoint for narrowly scoped application-owned tools, such as bounded channel reads and workspace operations. It exists only for the authorized run, re-checks authorization on every call, records invocations, and is never a permanent service, participant, or teammate. See [Chat access control](../../data/access-control.md#internal-host-tools).
+Runs receive an ephemeral loopback MCP endpoint for narrowly scoped application-owned tools, such as bounded channel reads and workspace operations. It exists only for the authorized run, re-checks authorization on every call, records invocations, and is never a permanent service, participant, or agent. See [Chat access control](../../data/access-control.md#internal-host-tools).
 
 See [AI provider runtimes](../ai/provider-runtimes.md).

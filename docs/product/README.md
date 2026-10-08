@@ -24,7 +24,7 @@ The first useful path should stay simple. Advanced recurrence, custom focus rhyt
 
 ### Explicit authority
 
-Installing a provider, joining a channel, mentioning an AI teammate, or possessing a record identifier never grants broader access by implication. Sensitive reads, filesystem access, shell execution, external services, and cross-channel disclosure require explicit authority.
+Installing a provider, joining a channel, mentioning an AI agent, or possessing a record identifier never grants broader access by implication. Sensitive reads, filesystem access, shell execution, external services, and cross-channel disclosure require explicit authority.
 
 ### Self-hosted and donation-funded
 

@@ -12,11 +12,11 @@ Ganbaru AI is fully usable without AI. Every AI path is opt-in, has an explicit 
 | BYOK general assistant | Planned | A small general-purpose assistant backed by a user-selected hosted or local model. |
 | External MCP and CLI access | Planned | Separately authorized, bounded data access and derivative exports for external clients and scripts. |
 
-The local coding-agent path is not a general vault assistant. It is the execution layer beneath [Chat](../chat/README.md): Chat owns channels, participants, messages, assignments, and review, while providers own bounded reasoning and execution sessions. A provider or model is never the canonical identity of a teammate, channel, task, or decision.
+The local coding-agent path is not a general vault assistant. It is the execution layer beneath [Chat](../chat/README.md): Chat owns channels, participants, messages, assignments, and review, while providers own bounded reasoning and execution sessions. A provider or model is never the canonical identity of an agent, channel, task, or decision.
 
 ## Authority model
 
-Rust resolves the effective project, conversation, participant, execution target, context package, provider, model, interaction mode, and authorization before work starts (see [Chat teammates and coordination](../chat/teammates-and-coordination.md#resolution-before-work-starts)). Provider-native trust or approval cannot widen Ganbaru AI authority.
+Rust resolves the effective project, conversation, participant, execution target, context package, provider, model, interaction mode, and authorization before work starts (see [Chat agents and coordination](../chat/agents-and-coordination.md#resolution-before-work-starts)). Provider-native trust or approval cannot widen Ganbaru AI authority.
 
 Svelte renders validated canonical events and read models; it never receives a generic shell or arbitrary filesystem capability. Credentials stay behind operating-system credential references, and provider processes receive only the environment their configured runtime needs. Authorization details live in [Chat access control](../../data/access-control.md).
 
