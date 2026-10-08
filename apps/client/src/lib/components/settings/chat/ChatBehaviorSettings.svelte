@@ -128,7 +128,6 @@
 <section class="flex flex-col gap-4">
   <div class="px-1">
     <h2 class="text-[0.866667rem] font-semibold text-foreground">{t("settings.chat.behavior.heading")}</h2>
-    <p class="mt-1 text-[0.8rem] text-muted-foreground">{t("settings.chat.behavior.description")}</p>
   </div>
   {#if error}<p role="alert" class="text-sm text-destructive">{error}</p>{/if}
   {#if status}<p role="status" class="text-sm text-action-confirm">{status}</p>{/if}

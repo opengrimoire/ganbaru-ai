@@ -129,7 +129,6 @@
 <section class="flex min-h-0 flex-col gap-4">
   <div class="px-1">
     <h2 class="text-[0.866667rem] font-semibold text-foreground">{t("settings.chat.permissions.heading")}</h2>
-    <p class="mt-1 text-[0.8rem] text-muted-foreground">{t("settings.chat.permissions.description")}</p>
   </div>
 
   {#if providers.length === 0}

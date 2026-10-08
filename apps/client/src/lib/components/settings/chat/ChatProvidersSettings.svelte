@@ -395,7 +395,6 @@
   <header class="directory-header">
     <div>
       <h2>{t("settings.chat.providers.heading")}</h2>
-      <p>{t("settings.chat.providers.description")}</p>
     </div>
     <button type="button" class="settings-button" disabled={refreshingAll} onclick={() => void refreshAll()}>
       <RefreshCw size={13} class={refreshingAll ? "animate-spin" : undefined} />
@@ -719,7 +718,6 @@
   .provider-settings { display:grid; height:100%; min-height:0; grid-template-rows:auto minmax(0,1fr); gap:0.8rem; }
   .directory-header { display:flex; flex-wrap:wrap; align-items:start; justify-content:space-between; gap:0.75rem; padding-inline:0.25rem; }
   .directory-header h2 { font-size:calc(0.866667rem * var(--type-scale)); font-weight:600; }
-  .directory-header p { margin-top:0.25rem; color:var(--muted-foreground); font-size:calc(0.8rem * var(--type-scale)); }
   .settings-button,.compact-action { display:inline-flex; min-height:1.9rem; align-items:center; justify-content:center; gap:0.35rem; border:1px solid var(--border); border-radius:0.42rem; background:var(--background); padding:0.3rem 0.65rem; color:var(--foreground); font-size:calc(0.733333rem * var(--type-scale)); font-weight:600; line-height:1; white-space:nowrap; }
   .settings-button:hover:not(:disabled),.compact-action:hover:not(:disabled) { background:var(--accent); }
   .empty-copy { padding:0.7rem 0.25rem; color:var(--muted-foreground); font-size:calc(0.72rem * var(--type-scale)); }

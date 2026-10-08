@@ -708,7 +708,7 @@
 
 <section class="teammate-settings" data-chat-settings-subsection="teammates">
   <header class="directory-header">
-    <div><h2>{t("settings.chat.teammates.heading")}</h2><p>{t("settings.chat.teammates.description")}</p></div>
+    <div><h2>{t("settings.chat.teammates.heading")}</h2></div>
     <div class="header-actions">
       <button type="button" class="settings-button" disabled={editor.creating || editor.dirty} onclick={() => editor.beginCreate(null)}><Plus size={13} />{t("settings.chat.teammates.add")}</button>
       {#if editor.archivedTeammates.length > 0}
@@ -1050,7 +1050,6 @@
   .teammate-settings { display:grid; height:100%; min-height:0; grid-template-rows:auto minmax(0,1fr); gap:0.8rem; }
   .directory-header { display:flex; flex-wrap:wrap; align-items:start; justify-content:space-between; gap:0.75rem; padding-inline:0.25rem; }
   .directory-header h2 { font-size:calc(0.866667rem * var(--type-scale)); font-weight:600; }
-  .directory-header p { margin-top:0.25rem; color:var(--muted-foreground); font-size:calc(0.8rem * var(--type-scale)); }
   .header-actions { display:flex; align-items:center; gap:0.35rem; }
   .tools-menu-anchor { position:relative; }
   .tools-menu { position:absolute; z-index:20; top:calc(100% + 0.25rem); right:0; display:grid; min-width:10rem; }
