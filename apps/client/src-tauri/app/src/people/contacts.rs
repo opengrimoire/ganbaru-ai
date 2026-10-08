@@ -87,7 +87,7 @@ impl RequestState {
 }
 
 pub(crate) fn now() -> DateTime<Utc> {
-    Utc::now()
+    std::time::SystemTime::now().into()
 }
 
 pub(crate) fn format_time(time: DateTime<Utc>) -> String {
@@ -643,6 +643,7 @@ where
     Ok(result.rows_affected() == 1)
 }
 
+#[cfg(any(desktop, test))]
 pub(crate) async fn pending_received_count<'e, E>(executor: E) -> Result<i64, String>
 where
     E: Executor<'e, Database = Sqlite>,
@@ -657,6 +658,7 @@ where
 }
 
 /// Expires the oldest pending received requests until at most `keep` remain.
+#[cfg(any(desktop, test))]
 pub(crate) async fn expire_oldest_pending_received<'e, E>(
     executor: E,
     keep: i64,
