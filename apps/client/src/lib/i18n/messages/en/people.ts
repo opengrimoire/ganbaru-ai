@@ -15,6 +15,7 @@ export const people = {
     codeLabel: "Contact code",
     copyCode: "Copy code",
     copied: "Copied",
+    imageSaved: "Image saved",
     saveImage: "Save as image",
     codeDescription: "Share it so others can add you",
     regenerateAction: "Regenerate",

@@ -68,13 +68,20 @@ export type NotesShareScope = (typeof NOTES_SHARE_SCOPES)[number];
 export const NOTES_LINK_ACCESS = ["off", "view", "comment"] as const;
 export type NotesLinkAccess = (typeof NOTES_LINK_ACCESS)[number];
 
-const PLACEHOLDER_CODE_GROUPS = 5;
-const PLACEHOLDER_CODE_GROUP_LENGTH = 4;
-/** Crockford base32 leaves out I, L, O, and U so a code read aloud or typed is unambiguous. */
-const PLACEHOLDER_CODE_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+/**
+ * About two thirds of a real code carrying a short display name and a LAN address (roughly 250 characters), so the
+ * placeholder reads as the same kind of text without passing for the real code showing through the blur.
+ */
+export const CONTACT_CARD_PLACEHOLDER_LENGTH = 168;
+/** The base64url alphabet real codes use, so the placeholder has the same texture. */
+const PLACEHOLDER_CODE_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
 /** Seed behind the blurred card, so the hidden QR and code never derive from the real identity. */
 const CONTACT_CARD_PLACEHOLDER_SEED = "ganbaru-ai:contact-card-placeholder";
-export const CONTACT_CARD_MATRIX_SIZE = 25;
+/**
+ * Width of a version 6 QR code. A typical real code reaches version 10 (57 modules), so the placeholder is visibly
+ * coarser and never looks like the real QR code under the blur.
+ */
+export const CONTACT_CARD_MATRIX_SIZE = 41;
 const FINDER_SIZE = 7;
 
 /** FNV-1a over UTF-16 code units, folded into a 32-bit unsigned integer. */
@@ -104,21 +111,14 @@ function hashBytes(seed: string, count: number): Uint8Array {
 }
 
 /**
- * Code shown blurred in place of the real one. It is grouped like a readable code but carries no card prefix, so
- * nothing legible through the blur matches the actual card.
+ * Code shown blurred in place of the real one: the same alphabet as a real code, shorter, and without the real
+ * prefix, so it looks like a code without matching the actual one.
  */
 export function contactCardPlaceholderCode(): string {
-  const bytes = hashBytes(`code:${CONTACT_CARD_PLACEHOLDER_SEED}`, PLACEHOLDER_CODE_GROUPS * PLACEHOLDER_CODE_GROUP_LENGTH);
-  const groups: string[] = [];
-  for (let group = 0; group < PLACEHOLDER_CODE_GROUPS; group += 1) {
-    let text = "";
-    for (let position = 0; position < PLACEHOLDER_CODE_GROUP_LENGTH; position += 1) {
-      const byte = bytes[group * PLACEHOLDER_CODE_GROUP_LENGTH + position] ?? 0;
-      text += PLACEHOLDER_CODE_ALPHABET[byte % PLACEHOLDER_CODE_ALPHABET.length];
-    }
-    groups.push(text);
-  }
-  return groups.join("-");
+  const bytes = hashBytes(`code:${CONTACT_CARD_PLACEHOLDER_SEED}`, CONTACT_CARD_PLACEHOLDER_LENGTH);
+  let text = "";
+  for (const byte of bytes) text += PLACEHOLDER_CODE_ALPHABET[byte % PLACEHOLDER_CODE_ALPHABET.length];
+  return text;
 }
 
 /** Whether a module belongs to one of the three finder patterns or their separators. */

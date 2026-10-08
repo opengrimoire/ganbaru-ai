@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   CONTACT_CARD_MATRIX_SIZE,
+  CONTACT_CARD_PLACEHOLDER_LENGTH,
   PEOPLE_CAPABILITIES,
   capabilitiesForRole,
   contactCardPlaceholderCode,
@@ -37,11 +38,19 @@ describe("capabilitiesForRole", () => {
 });
 
 describe("contactCardPlaceholderCode", () => {
-  it("is a stable grouped code without the real card prefix", () => {
+  it("is stable base64url text without the real code prefix", () => {
     const placeholder = contactCardPlaceholderCode();
-    expect(placeholder).toMatch(/^[0-9A-HJKMNP-TV-Z]{4}(-[0-9A-HJKMNP-TV-Z]{4}){4}$/);
+    expect(placeholder).toMatch(/^[A-Za-z0-9_-]+$/);
+    expect(placeholder).toHaveLength(CONTACT_CARD_PLACEHOLDER_LENGTH);
     expect(placeholder.startsWith("GANB-")).toBe(false);
     expect(placeholder).toBe(contactCardPlaceholderCode());
+  });
+
+  it("mixes letter cases and digits like a real code", () => {
+    const placeholder = contactCardPlaceholderCode();
+    expect(placeholder).toMatch(/[A-Z]/);
+    expect(placeholder).toMatch(/[a-z]/);
+    expect(placeholder).toMatch(/[0-9]/);
   });
 });
 

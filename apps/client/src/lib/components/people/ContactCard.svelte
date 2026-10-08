@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import Check from "@lucide/svelte/icons/check";
   import CircleAlert from "@lucide/svelte/icons/circle-alert";
   import Copy from "@lucide/svelte/icons/copy";
   import Eye from "@lucide/svelte/icons/eye";
@@ -26,8 +27,9 @@
   const ACTION_ICON_SIZE = 13;
   const IMAGE_MODULE_PIXELS = 8;
   const IMAGE_QUIET_ZONE_MODULES = 4;
-  const IMAGE_FILE_NAME = "contact-card.png";
+  const IMAGE_FILE_NAME = "ganbaru-contact-card.png";
   const STATUS_TIMEOUT_MS = 3_000;
+  const CONFIRMED_FEEDBACK_MS = 2_000;
   const { t } = getLocalization();
   const preferences = getPreferences();
   const people = getPeople();
@@ -40,6 +42,11 @@
   let busy = $state(false);
   let status = $state<{ message: string; error: boolean } | null>(null);
   let statusTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Action whose button shows a check mark after it succeeded. */
+  let confirmed = $state<"copy" | "save" | null>(null);
+  let confirmedTimer: ReturnType<typeof setTimeout> | null = null;
+  /** Bumped after a regeneration so the icon replays one turn. */
+  let regenerateSpin = $state(0);
 
   const card = $derived(people.card);
   const ready = $derived(revealed && card !== null);
@@ -103,10 +110,19 @@
     if (!card) return;
     try {
       await writeTextToClipboard(card.text);
-      showStatus(t("people.card.copied"));
+      confirm("copy");
     } catch {
       showStatus(t("people.card.copyFailed"), true);
     }
+  }
+
+  function confirm(action: "copy" | "save"): void {
+    if (confirmedTimer) clearTimeout(confirmedTimer);
+    confirmed = action;
+    confirmedTimer = setTimeout(() => {
+      confirmed = null;
+      confirmedTimer = null;
+    }, CONFIRMED_FEEDBACK_MS);
   }
 
   /** Paints the QR modules on a canvas and hands the PNG bytes to the native save dialog. */
@@ -115,7 +131,7 @@
     busy = true;
     try {
       const pngBase64 = renderQrPng(card.qr);
-      await saveCardImage(t("people.card.saveImageTitle"), IMAGE_FILE_NAME, pngBase64);
+      if (await saveCardImage(t("people.card.saveImageTitle"), IMAGE_FILE_NAME, pngBase64)) confirm("save");
     } catch {
       showStatus(t("people.card.saveFailed"), true);
     } finally {
@@ -150,6 +166,7 @@
     busy = true;
     try {
       await people.regenerateCard();
+      regenerateSpin += 1;
       showStatus(t("people.card.regenerated"));
     } catch {
       // The card error line explains the failure.
@@ -162,6 +179,7 @@
     void people.loadCard().catch(() => undefined);
     return () => {
       if (statusTimer) clearTimeout(statusTimer);
+      if (confirmedTimer) clearTimeout(confirmedTimer);
     };
   });
 </script>
@@ -184,9 +202,16 @@
       <div class="mt-0.5 text-[0.8rem] text-muted-foreground">{t("people.card.codeDescription")}</div>
     </div>
     <div class="relative">
-      <code class={cn("block rounded-md border border-border px-3 py-2 font-mono text-[0.8rem] break-all text-foreground", ready ? "select-all" : "select-none")} aria-hidden={!ready}>
-        <span class={cn("inline-block", !ready && "blur-[2px]")}>{code}</span>
-      </code>
+      <button
+        type="button"
+        class={cn("block w-full rounded-md border border-border px-3 py-2 text-left font-mono text-[0.8rem] break-all text-foreground select-none", ready && "cursor-pointer")}
+        tabindex={ready ? undefined : -1}
+        aria-hidden={!ready}
+        aria-label={ready ? t("people.card.copyCode") : undefined}
+        onclick={() => { if (ready && actionsAvailable) void copyCode(); }}
+      >
+        <code class={cn("inline-block", !ready && "blur-[2px]")}>{code}</code>
+      </button>
       {@render revealOverlay()}
     </div>
     {#if detail?.blocking}
@@ -197,16 +222,17 @@
       <p class="text-[0.8rem] text-muted-foreground">{detail.message}</p>
     {/if}
     <div class="flex flex-wrap items-center gap-1.5">
-      <button type="button" class={cn("people-card-action", actionsBlocked && "people-card-action-blocked")} aria-disabled={!actionsAvailable || undefined} onclick={() => { if (actionsAvailable) void copyCode(); }}><Copy size={ACTION_ICON_SIZE} />{t("people.card.copyCode")}</button>
-      <button type="button" class={cn("people-card-action", actionsBlocked && "people-card-action-blocked", !canSaveImage && "control-unavailable")} aria-disabled={!actionsAvailable || !canSaveImage || undefined} onclick={() => { if (actionsAvailable && canSaveImage) void saveImage(); }}><ImageDown size={ACTION_ICON_SIZE} />{t("people.card.saveImage")}</button>
-      <button type="button" class={cn("people-card-action", actionsBlocked && "people-card-action-blocked")} aria-disabled={!actionsAvailable || undefined} onclick={() => { if (actionsAvailable) void regenerate(); }}><RefreshCw size={ACTION_ICON_SIZE} />{t("people.card.regenerateAction")}</button>
+      <button type="button" class={cn("people-card-action", actionsBlocked && "people-card-action-blocked")} aria-disabled={!actionsAvailable || undefined} onclick={() => { if (actionsAvailable) void copyCode(); }}>{#if confirmed === "copy"}<Check size={ACTION_ICON_SIZE} />{:else}<Copy size={ACTION_ICON_SIZE} />{/if}{t("people.card.copyCode")}</button>
+      <button type="button" class={cn("people-card-action", actionsBlocked && "people-card-action-blocked", !canSaveImage && "control-unavailable")} aria-disabled={!actionsAvailable || !canSaveImage || undefined} onclick={() => { if (actionsAvailable && canSaveImage) void saveImage(); }}>{#if confirmed === "save"}<Check size={ACTION_ICON_SIZE} />{:else}<ImageDown size={ACTION_ICON_SIZE} />{/if}{t("people.card.saveImage")}</button>
+      <button type="button" class={cn("people-card-action", actionsBlocked && "people-card-action-blocked")} aria-disabled={!actionsAvailable || undefined} onclick={() => { if (actionsAvailable) void regenerate(); }}>{#key regenerateSpin}<span class={cn("inline-flex", regenerateSpin > 0 && "people-card-spin")}><RefreshCw size={ACTION_ICON_SIZE} /></span>{/key}{t("people.card.regenerateAction")}</button>
+      <span class="sr-only" aria-live="polite">{confirmed === "copy" ? t("people.card.copied") : confirmed === "save" ? t("people.card.imageSaved") : ""}</span>
       <span class={cn("text-[0.8rem]", status?.error ? "text-destructive" : "text-muted-foreground")} aria-live="polite">{status?.message ?? ""}</span>
     </div>
   </div>
   <div class="relative shrink-0 overflow-hidden rounded-md max-[480px]:self-center">
     <svg
       {viewBox}
-      class={cn("aspect-square w-40 bg-white max-[480px]:w-full max-[480px]:max-w-56", !ready && "blur-xs")}
+      class={cn("aspect-square w-52 bg-white max-[480px]:w-full max-[480px]:max-w-64", !ready && "blur-xs")}
       role="img"
       aria-label={t("people.card.qrLabel", displayName)}
       aria-hidden={!ready}
@@ -234,8 +260,13 @@
     0%, 50%, 100% { opacity: 0; }
     25%, 75% { opacity: 1; }
   }
+  .people-card-spin { animation: people-card-spin 480ms ease-in-out; }
+  @keyframes people-card-spin {
+    to { transform: rotate(360deg); }
+  }
   @media (prefers-reduced-motion: reduce) {
     .people-card-blocker-flash::before { animation-duration: 1ms; }
+    .people-card-spin { animation: none; }
   }
   .people-card-toggle { display: grid; width: 1.25rem; height: 1.25rem; flex: 0 0 auto; place-items: center; border-radius: var(--floating-item-radius); color: var(--muted-foreground); }
   .people-card-toggle:hover { background: var(--accent); color: var(--foreground); }

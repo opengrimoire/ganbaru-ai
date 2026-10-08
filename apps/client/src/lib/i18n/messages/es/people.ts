@@ -18,6 +18,7 @@ export const people = {
     codeLabel: "Código de contacto",
     copyCode: "Copiar código",
     copied: "Copiado",
+    imageSaved: "Imagen guardada",
     saveImage: "Guardar como imagen",
     codeDescription: "Compártelo para que otros te agreguen",
     regenerateAction: "Regenerar",
