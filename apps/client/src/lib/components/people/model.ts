@@ -79,6 +79,8 @@ const CONTACT_CODE_GROUP_LENGTH = 4;
 const CONTACT_CODE_ALPHABET = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 const VERIFICATION_GROUPS = 3;
 const VERIFICATION_GROUP_LENGTH = 4;
+/** Seed behind the blurred card, so the hidden QR and code never derive from the real identity. */
+export const CONTACT_CARD_PLACEHOLDER_SEED = "ganbaru-ai:contact-card-placeholder";
 export const CONTACT_CARD_MATRIX_SIZE = 25;
 const FINDER_SIZE = 7;
 
@@ -108,11 +110,11 @@ function hashBytes(seed: string, count: number): Uint8Array {
   return bytes;
 }
 
-/** Pasteable contact code such as `GANB-K7Q2-X9MA-4TZ1-8R0C`, derived from the local identity seed. */
-export function contactCardCode(seed: string): string {
-  const bytes = hashBytes(`code:${seed}`, CONTACT_CODE_GROUPS * CONTACT_CODE_GROUP_LENGTH);
-  const groups: string[] = [CONTACT_CODE_PREFIX];
-  for (let group = 0; group < CONTACT_CODE_GROUPS; group += 1) {
+/** Hyphen-joined groups of unambiguous characters derived from a seed. */
+function contactCodeGroups(seed: string, groupCount: number): string {
+  const bytes = hashBytes(`code:${seed}`, groupCount * CONTACT_CODE_GROUP_LENGTH);
+  const groups: string[] = [];
+  for (let group = 0; group < groupCount; group += 1) {
     let text = "";
     for (let position = 0; position < CONTACT_CODE_GROUP_LENGTH; position += 1) {
       const byte = bytes[group * CONTACT_CODE_GROUP_LENGTH + position] ?? 0;
@@ -121,6 +123,19 @@ export function contactCardCode(seed: string): string {
     groups.push(text);
   }
   return groups.join("-");
+}
+
+/** Pasteable contact code such as `GANB-K7Q2-X9MA-4TZ1-8R0C`, derived from the local identity seed. */
+export function contactCardCode(seed: string): string {
+  return [CONTACT_CODE_PREFIX, contactCodeGroups(seed, CONTACT_CODE_GROUPS)].join("-");
+}
+
+/**
+ * Code shown blurred in place of the real one. It has the real code's shape but no fixed prefix, so nothing
+ * legible through the blur matches the actual card.
+ */
+export function contactCardPlaceholderCode(): string {
+  return contactCodeGroups(CONTACT_CARD_PLACEHOLDER_SEED, CONTACT_CODE_GROUPS + 1);
 }
 
 /** Digit groups two people compare out of band before accepting each other, derived from the same material. */

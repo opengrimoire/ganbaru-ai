@@ -11,14 +11,15 @@ export const people = {
     blocked: "Bloqueados",
   },
   card: {
-    heading: "Tu tarjeta de contacto",
+    heading: "Tarjeta de contacto",
+    reveal: "Mostrar tarjeta de contacto",
+    hide: "Ocultar tarjeta de contacto",
     qrLabel: (name: string) => `Código QR de la tarjeta de contacto de ${name}`,
     codeLabel: "Código de contacto",
     copyCode: "Copiar código",
     copied: "Copiado",
     saveImage: "Guardar como imagen",
-    regenerate: "Regenerar tarjeta",
-    regenerateDescription: "Las tarjetas compartidas dejan de funcionar",
+    codeDescription: "Compártelo para que otros te agreguen",
     regenerateAction: "Regenerar",
   },
   trust: {

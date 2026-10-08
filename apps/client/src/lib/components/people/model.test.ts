@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   CONTACT_CARD_MATRIX_SIZE,
+  CONTACT_CODE_PREFIX,
   PEOPLE_CAPABILITIES,
   capabilitiesForRole,
   contactCardCode,
   contactCardMatrix,
+  contactCardPlaceholderCode,
   verificationCode,
 } from "./model";
 
@@ -45,6 +47,15 @@ describe("contactCardCode", () => {
   it("is stable for one seed and differs between seeds", () => {
     expect(contactCardCode("vault:1")).toBe(contactCardCode("vault:1"));
     expect(contactCardCode("vault:1")).not.toBe(contactCardCode("vault:2"));
+  });
+});
+
+describe("contactCardPlaceholderCode", () => {
+  it("matches the real code's shape without the real prefix", () => {
+    const placeholder = contactCardPlaceholderCode();
+    expect(placeholder).toMatch(/^[0-9A-HJKMNP-TV-Z]{4}(-[0-9A-HJKMNP-TV-Z]{4}){4}$/);
+    expect(placeholder.startsWith(`${CONTACT_CODE_PREFIX}-`)).toBe(false);
+    expect(placeholder).toBe(contactCardPlaceholderCode());
   });
 });
 

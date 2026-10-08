@@ -8,14 +8,15 @@ export const people = {
     blocked: "Blocked",
   },
   card: {
-    heading: "Your contact card",
+    heading: "Contact card",
+    reveal: "Show contact card",
+    hide: "Hide contact card",
     qrLabel: (name: string) => `Contact card QR code for ${name}`,
     codeLabel: "Contact code",
     copyCode: "Copy code",
     copied: "Copied",
     saveImage: "Save as image",
-    regenerate: "Regenerate card",
-    regenerateDescription: "Shared cards stop working",
+    codeDescription: "Share it so others can add you",
     regenerateAction: "Regenerate",
   },
   trust: {
