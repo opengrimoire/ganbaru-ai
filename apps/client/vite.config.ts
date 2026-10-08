@@ -305,6 +305,8 @@ function skipSvelteStyleVirtuals(plugins: Plugin[]): Plugin[] {
 }
 
 export default defineConfig({
+  // Desktop and mobile dev servers resolve different modules, so a shared cache makes each run invalidate the other.
+  cacheDir: `node_modules/.vite/${buildPlatform}`,
   plugins: [
     tauriDevReady(),
     firstUseBundleMetadata(),
