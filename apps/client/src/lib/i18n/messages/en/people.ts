@@ -28,6 +28,7 @@ export const people = {
     profileIncomplete: "Add a display name in Profile to create your contact code",
     readOnly: "Your contact code is created on the device that owns the vault",
     loadFailed: "Your contact code could not be loaded",
+    verificationLabel: "Verification code",
   },
   trust: {
     heading: "Trust defaults",
@@ -91,7 +92,7 @@ export const people = {
     stopScan: "Stop scanning",
     scanFailed: "The camera could not be started",
     verificationLabel: "Verification code",
-    verificationDescription: "Compare this code with the other person before accepting",
+    verificationDescription: "Before sending, check that the other person sees this same code under their contact code",
     confirm: "Send request",
     invalid: "This is not a valid contact code",
     self: "This is your own contact code",

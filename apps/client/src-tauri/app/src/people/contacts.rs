@@ -2,7 +2,7 @@
 
 use super::{ContactRequestView, ContactView};
 use chrono::{DateTime, Utc};
-use ganbaru_people::{PersonPublicKey, TrustKind, verification_code};
+use ganbaru_people::{PersonPublicKey, TrustKind};
 use serde::{Deserialize, Serialize};
 use sqlx::{Executor, FromRow, Sqlite};
 
@@ -186,7 +186,6 @@ pub(crate) struct RequestRow {
     pub public_key: String,
     pub display_name: String,
     pub color: i64,
-    pub card_digest: String,
     pub endpoint_hint: String,
     pub coordinator_fingerprint: String,
     pub invite_trust: String,
@@ -206,19 +205,16 @@ impl RequestRow {
             .ok_or_else(|| format!("unknown request direction {:?}", self.direction))?;
         let state = RequestState::parse(&self.state)
             .ok_or_else(|| format!("unknown request state {:?}", self.state))?;
-        let digest = decode_hex_digest(&self.card_digest)
-            .ok_or_else(|| "stored card digest is malformed".to_string())?;
-        let contact_id = PersonPublicKey::from_text(&self.public_key)
-            .map_err(|error| format!("stored public key is malformed: {error}"))?
-            .contact_id();
+        let public_key = PersonPublicKey::from_text(&self.public_key)
+            .map_err(|error| format!("stored public key is malformed: {error}"))?;
         Ok(ContactRequestView {
             id: self.id.clone(),
             direction,
             public_key: self.public_key.clone(),
-            contact_id,
+            contact_id: public_key.contact_id(),
             display_name: self.display_name.clone(),
             color: color_from_row(self.color),
-            verification_code: verification_code(&digest),
+            verification_code: public_key.verification_code(),
             invite_trust: parse_trust(&self.invite_trust)?,
             message_trust: parse_trust(&self.message_trust)?,
             state,
@@ -236,8 +232,8 @@ const CONTACT_COLUMNS: &str = "id, public_key, display_name, color, state, invit
     invite_trust_expires_at, message_trust, message_trust_expires_at, accepted_at, blocked_at, \
     revision, created_at, updated_at";
 
-const REQUEST_COLUMNS: &str = "id, direction, public_key, display_name, color, card_digest, \
-    endpoint_hint, coordinator_fingerprint, invite_trust, message_trust, state, expires_at, \
+const REQUEST_COLUMNS: &str = "id, direction, public_key, display_name, color, endpoint_hint, \
+    coordinator_fingerprint, invite_trust, message_trust, state, expires_at, \
     last_attempt_at, last_error_code, revision, created_at, updated_at";
 
 fn db_error(context: &str, error: sqlx::Error) -> String {

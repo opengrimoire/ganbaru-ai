@@ -31,6 +31,7 @@ export const people = {
     profileIncomplete: "Agrega un nombre visible en Perfil para crear tu código de contacto",
     readOnly: "Tu código de contacto se crea en el dispositivo que posee la bóveda",
     loadFailed: "No se pudo cargar tu código de contacto",
+    verificationLabel: "Código de verificación",
   },
   trust: {
     heading: "Confianza predeterminada",
@@ -94,7 +95,7 @@ export const people = {
     stopScan: "Dejar de escanear",
     scanFailed: "No se pudo iniciar la cámara",
     verificationLabel: "Código de verificación",
-    verificationDescription: "Compara este código con la otra persona antes de aceptar",
+    verificationDescription: "Antes de enviar, comprueba que la otra persona ve este mismo código bajo su código de contacto",
     confirm: "Enviar solicitud",
     invalid: "Este no es un código de contacto válido",
     self: "Este es tu propio código de contacto",

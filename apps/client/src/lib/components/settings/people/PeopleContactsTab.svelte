@@ -60,7 +60,8 @@
 
   function requestDetail(request: PeopleContactRequest): string {
     const expiry = t("people.contacts.expiresIn", formatRelativeDays(t, daysUntil(request.expiresAt, now)));
-    return request.lastErrorCode ? `${expiry}. ${t("people.contacts.deliveryRetrying")}` : expiry;
+    const status = request.lastErrorCode ? `${expiry}. ${t("people.contacts.deliveryRetrying")}` : expiry;
+    return `${request.verificationCode} · ${status}`;
   }
 
   function toggleMenu(contactId: string): void {

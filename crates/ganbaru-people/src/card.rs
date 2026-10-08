@@ -84,7 +84,7 @@ pub struct SignedCard {
     pub card: ContactCard,
     /// Full binary encoding including the signature.
     pub bytes: Vec<u8>,
-    /// SHA-256 of the binary encoding; the verification code derives from it.
+    /// SHA-256 of the binary encoding.
     pub digest: [u8; 32],
 }
 
@@ -94,9 +94,9 @@ impl SignedCard {
         encode_card_text(&self.bytes)
     }
 
-    /// Short code both parties compare out of band.
+    /// Short code both parties compare out of band; see [`PersonPublicKey::verification_code`].
     pub fn verification_code(&self) -> String {
-        verification_code(&self.digest)
+        self.card.public_key.verification_code()
     }
 }
 
@@ -259,7 +259,7 @@ pub fn decode_card_text(text: &str) -> Result<SignedCard, CardError> {
     decode_card(&bytes)
 }
 
-/// Crockford base32 verification code derived from the card digest.
+/// Crockford base32 verification code from the leading bits of a digest.
 pub fn verification_code(digest: &[u8; 32]) -> String {
     let mut code =
         String::with_capacity(VERIFICATION_CODE_GROUPS * (VERIFICATION_CODE_GROUP_LENGTH + 1));

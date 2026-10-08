@@ -81,6 +81,12 @@ impl PersonPublicKey {
         let encoded = URL_SAFE_NO_PAD.encode(digest);
         format!("{CONTACT_ID_PREFIX}{}", &encoded[..CONTACT_ID_DIGEST_CHARS])
     }
+
+    /// Short code both parties compare out of band. It derives from the key alone, so every card this person
+    /// signs, including regenerated ones, shows the same code.
+    pub fn verification_code(&self) -> String {
+        crate::card::verification_code(&Sha256::digest(self.0).into())
+    }
 }
 
 impl fmt::Debug for PersonPublicKey {

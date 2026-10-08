@@ -61,6 +61,36 @@ fn signed_card_roundtrips_through_bytes_and_text() {
 }
 
 #[test]
+fn verification_code_follows_the_person_key_across_card_changes() {
+    let (_, key) = PersonKeyPair::generate().unwrap();
+    let card = sample_card(&key);
+    let signed = sign_card(&card, &key).unwrap();
+    let resigned = sign_card(
+        &ContactCard {
+            nonce: [7u8; 16],
+            endpoint_hint: String::new(),
+            coordinator_fingerprint: None,
+            issued_at_ms: card.issued_at_ms + 60_000,
+            ..card.clone()
+        },
+        &key,
+    )
+    .unwrap();
+    assert_ne!(resigned.digest, signed.digest);
+    assert_eq!(resigned.verification_code(), signed.verification_code());
+    assert_eq!(
+        signed.verification_code(),
+        key.public_key().verification_code()
+    );
+
+    let (_, other) = PersonKeyPair::generate().unwrap();
+    assert_ne!(
+        other.public_key().verification_code(),
+        signed.verification_code()
+    );
+}
+
+#[test]
 fn card_without_hint_or_fingerprint_roundtrips() {
     let (_, key) = PersonKeyPair::generate().unwrap();
     let card = ContactCard {
