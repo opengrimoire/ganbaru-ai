@@ -19,6 +19,7 @@
   import Eye from "@lucide/svelte/icons/eye";
   import { formatList } from "$lib/i18n/formatters";
   import { getLocalization } from "$lib/i18n/translator.svelte";
+  import ParticipantPicker from "$lib/components/people/ParticipantPicker.svelte";
 
   let {
     enabled,
@@ -32,6 +33,7 @@
     guestCanSeeOtherGuests = $bindable(true),
     organizer,
     selfEmail,
+    eventTitle = "",
     description,
     readOnly = false,
     allowReadOnlyExpand = false,
@@ -53,6 +55,8 @@
     guestCanSeeOtherGuests: boolean;
     organizer?: EventOrganizer;
     selfEmail?: string;
+    /** Names the event when guests are picked from contacts or invited. */
+    eventTitle?: string;
     description: string;
     readOnly?: boolean;
     allowReadOnlyExpand?: boolean;
@@ -93,6 +97,9 @@
   const showLocalSelfRow = $derived(enabled && !organizer && !selfAttendee);
   const effectiveLocalSelfStatus = $derived(localParticipationStatus ?? "accepted");
   const canEditGuests = $derived(!readOnly && !organizer);
+  let attendeePickerButton = $state<HTMLButtonElement | null>(null);
+  let attendeePickerOpen = $state(false);
+  const attendeePickerSpace = $derived({ kind: "event" as const, name: eventTitle.trim() || t("calendar.event.noTitle") });
   const surfaceStatus = $derived.by<EventSurfaceStatus | undefined>(() => {
     if (!enabled) return undefined;
     if (selfAttendee) return selfAttendee.status;
@@ -441,9 +448,29 @@
                 <Plus size={12} />
               </button>
             {/if}
+            <button bind:this={attendeePickerButton} type="button"
+              class="shrink-0 rounded p-0.5 text-muted-foreground hover:text-foreground"
+              aria-label={t("calendar.meeting.pickAttendees")}
+              data-app-tooltip={t("calendar.meeting.pickAttendees")}
+              aria-haspopup="dialog"
+              aria-expanded={attendeePickerOpen}
+              onclick={() => { attendeePickerOpen = true; }}>
+              <UserPlus size={13} />
+            </button>
           </div>
         {/if}
       </div>
     </div>
   {/if}
 </div>
+
+{#if attendeePickerOpen}
+  <ParticipantPicker
+    anchor={attendeePickerButton}
+    title={t("calendar.meeting.pickAttendees")}
+    includePeople
+    includeTeammates={false}
+    space={attendeePickerSpace}
+    onClose={() => { attendeePickerOpen = false; }}
+  />
+{/if}

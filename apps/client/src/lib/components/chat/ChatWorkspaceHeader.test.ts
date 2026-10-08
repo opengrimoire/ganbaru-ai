@@ -246,20 +246,32 @@ describe("ChatWorkspaceHeader", () => {
     expect(collapsed.querySelector("[data-chat-new-channel-button]")).not.toBeNull();
   });
 
-  it("opens the selected channel's dialog from one members icon", () => {
+  it("opens the selected channel's members panel from the avatar stack", async () => {
     const target = setup(true);
     const membersTrigger = target.querySelector<HTMLButtonElement>("[data-chat-members-trigger]");
-    const editRequests: unknown[] = [];
-    const captureEdit = (event: Event) => { editRequests.push(event instanceof CustomEvent ? event.detail : null); };
-    window.addEventListener("ganbaru-ai:chat-edit-channel", captureEdit);
 
-    expect(membersTrigger?.querySelectorAll("svg")).toHaveLength(1);
-    expect(membersTrigger?.textContent?.trim()).toBe("");
+    expect(membersTrigger?.querySelector(".chat-members-count")?.textContent).toBe("1");
+    expect(membersTrigger?.querySelector(".chat-members-stack")?.getAttribute("aria-hidden")).toBe("true");
+    expect(membersTrigger?.getAttribute("aria-expanded")).toBe("false");
+    expect(document.querySelector("[data-chat-members-panel]")).toBeNull();
 
     membersTrigger?.click();
-    window.removeEventListener("ganbaru-ai:chat-edit-channel", captureEdit);
+    await vi.waitFor(() => {
+      expect(document.querySelector("[data-chat-members-panel]")).not.toBeNull();
+    });
 
-    expect(editRequests).toEqual([{ channelId: "channel-general" }]);
+    const panel = document.querySelector("[data-chat-members-panel]");
+    expect(membersTrigger?.getAttribute("aria-expanded")).toBe("true");
+    expect(panel?.getAttribute("role")).toBe("dialog");
+    expect(panel?.textContent).toContain("#general");
+    expect(panel?.textContent).toContain("Project coordination");
+    expect(panel?.textContent).toContain("Owner");
+
+    membersTrigger?.click();
+    await tick();
+
+    expect(document.querySelector("[data-chat-members-panel]")).toBeNull();
+    expect(membersTrigger?.getAttribute("aria-expanded")).toBe("false");
   });
 
   it("opens the current project's complete channel navigator from the channel segment", async () => {

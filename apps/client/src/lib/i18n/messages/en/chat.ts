@@ -91,6 +91,8 @@ export const chat = {
     changeFolderDraftWarning: "Changing the working folder removes this draft's attachments and file mentions. Continue?",
     welcomeTitle: (name: string) => `Welcome to #${name}`,
     welcomeDescription: "This is the start of the channel.",
+    directMessagesHint: "Start a conversation with a contact who allows direct messages.",
+    startDirectMessage: "Start conversation",
   },
   organization: {
     teammate: "teammate",
@@ -237,6 +239,15 @@ export const chat = {
       ? "No active work will be interrupted. New assignments stop immediately, and history remains preserved."
       : `This stops ${assignments} active ${assignments === 1 ? "assignment" : "assignments"} and revokes ${authorizations} active ${authorizations === 1 ? "authorization scope" : "authorization scopes"}. History remains preserved.`,
     removeTeammateConfirm: "Remove access",
+    membersPanel: (count: number) => count === 1 ? "1 member" : `${count} members`,
+    membersPanelTitle: "Members",
+    people: "People",
+    teammates: "Teammates",
+    addMembers: "Add members",
+    inviteSomeone: "Invite someone",
+    editChannel: "Edit channel",
+    closeMembers: "Close members",
+    removePerson: (name: string) => `Remove ${name} from this channel`,
   },
   firstUse: {
     noProviderTitle: "Set up a coding agent",

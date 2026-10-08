@@ -1,6 +1,7 @@
 <script lang="ts">
   import { untrack } from "svelte";
   import FileText from "@lucide/svelte/icons/file-text";
+  import Share2 from "@lucide/svelte/icons/share-2";
   import Trash2 from "@lucide/svelte/icons/trash-2";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import {
@@ -13,9 +14,13 @@
   import { portal } from "$lib/utils/portal";
   import {
     loadNotesAdvancedBlock,
+    loadNotesEditorPanel,
     readNotesAdvancedBlock,
+    readNotesEditorPanel,
     retryNotesAdvancedBlock,
+    retryNotesEditorPanel,
     type LoadedNotesAdvancedBlock,
+    type LoadedNotesEditorPanel,
   } from "$lib/components/notes/editor-component-registry";
   import NotesLoadingSkeleton from "$lib/components/notes/NotesLoadingSkeleton.svelte";
 
@@ -31,8 +36,17 @@
 
   const { t } = getLocalization();
   const block = $derived(editorStore.selectedDatabaseBlock);
+  const databaseTitle = $derived(block?.child_database.title || t("notes.untitled"));
   let actionError = $state<string | null>(null);
   let deleting = $state(false);
+  let shareButton = $state<HTMLButtonElement | null>(null);
+  let shareOpen = $state(false);
+  let sharePanelLoadState = $state<LazyComponentLoadState<"share", LoadedNotesEditorPanel> | null>(
+    untrack(() => {
+      const component = readNotesEditorPanel("share");
+      return component ? { key: "share", status: "ready", requestId: 0, component } : null;
+    }),
+  );
   let rendererLoadState = $state<LazyComponentLoadState<
     "child-database",
     LoadedNotesAdvancedBlock
@@ -55,6 +69,28 @@
       rendererLoadState = rejectLazyComponentLoad(rendererLoadState, "child-database", loading.requestId, error);
       console.error("Load Notes database page failed", error);
     });
+  }
+
+  /** Load the share popover only when the database page needs it. */
+  function requestSharePanel(retry = false): void {
+    if (!retry && sharePanelLoadState) return;
+    const loading = beginLazyComponentLoad(sharePanelLoadState, "share");
+    sharePanelLoadState = loading;
+    const request = retry ? retryNotesEditorPanel("share") : loadNotesEditorPanel("share");
+    void request.then((component) => {
+      if (!sharePanelLoadState) return;
+      sharePanelLoadState = resolveLazyComponentLoad(sharePanelLoadState, "share", loading.requestId, component);
+    }).catch((error: unknown) => {
+      if (!sharePanelLoadState) return;
+      sharePanelLoadState = rejectLazyComponentLoad(sharePanelLoadState, "share", loading.requestId, error);
+      console.error("Load Notes share panel failed", error);
+    });
+  }
+
+  /** Toggle the share popover, loading its surface only on first use. */
+  function toggleSharePanel(): void {
+    shareOpen = !shareOpen;
+    if (shareOpen) requestSharePanel();
   }
 
   /** Delete through the store's shared confirmation and mutation boundary. */
@@ -107,6 +143,28 @@
   >
     <FileText size={16} strokeWidth={1.75} />
   </button>
+  <button
+    bind:this={shareButton}
+    type="button"
+    class="flex items-center justify-center rounded-md px-2 hover:bg-accent {mobileLayout ? 'min-h-12 min-w-12' : 'h-7'} {shareOpen ? 'bg-accent' : ''}"
+    aria-label={t("notes.share")}
+    title={t("notes.share")}
+    aria-haspopup="dialog"
+    aria-expanded={shareOpen}
+    onpointerenter={() => requestSharePanel()}
+    onfocus={() => requestSharePanel()}
+    onclick={toggleSharePanel}
+  >
+    <Share2 size={16} strokeWidth={1.75} />
+  </button>
+  {#if shareOpen}
+    {#if sharePanelLoadState?.status === "ready" && sharePanelLoadState.component.kind === "share"}
+      {@const NotesSharePopover = sharePanelLoadState.component.component}
+      <NotesSharePopover anchor={shareButton} pageTitle={databaseTitle} {mobileLayout} onClose={() => { shareOpen = false; }} />
+    {:else if sharePanelLoadState?.status === "failed"}
+      <button class="surface-floating fixed inset-0 z-50 m-auto h-10 px-3" type="button" onclick={() => requestSharePanel(true)}>{t("common.retry")}</button>
+    {/if}
+  {/if}
   <button
     type="button"
     class="flex items-center justify-center rounded-md px-2 text-destructive hover:bg-accent {mobileLayout ? 'min-h-12 min-w-12' : 'h-7'}"

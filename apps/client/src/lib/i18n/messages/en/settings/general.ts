@@ -3,6 +3,7 @@ export const general = {
   close: "Close settings",
   section: {
     profile: "Profile",
+    people: "People",
     appearance: "Appearance",
     calendars: "Calendar",
     projects: "Projects",

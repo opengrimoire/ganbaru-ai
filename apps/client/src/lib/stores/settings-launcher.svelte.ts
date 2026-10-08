@@ -9,27 +9,33 @@
  * The store deliberately exposes a tiny API: callers say `open("calendars")`
  * and the title bar reacts. The `targetSection` is only consumed when the
  * modal mounts; clearing it on `close()` keeps re-opens (gear icon) free of
- * stale targeting.
+ * stale targeting. A caller that sends the user to Settings mid-task passes
+ * `onClosed` to restore its own surface once the modal is gone.
  */
 
-import type { ChatSettingsSubsection, DistractionsSettingsTab, SectionId } from "$lib/settings/types";
+import type { ChatSettingsSubsection, DistractionsSettingsTab, PeopleSettingsTab, SectionId } from "$lib/settings/types";
 
 interface SettingsLaunchOptions {
   distractionsTab?: DistractionsSettingsTab;
+  peopleTab?: PeopleSettingsTab;
   chatSubsection?: ChatSettingsSubsection;
   chatTeammateId?: string;
   chatChannelId?: string;
   chatCreateTeammate?: boolean;
+  /** Runs once after the modal closes, however it closes, so the opener can bring back what it had to hide. */
+  onClosed?: () => void;
 }
 
 class SettingsLauncherStore {
   isOpen = $state(false);
   targetSection = $state<SectionId | undefined>(undefined);
   targetDistractionsTab = $state<DistractionsSettingsTab | undefined>(undefined);
+  targetPeopleTab = $state<PeopleSettingsTab | undefined>(undefined);
   targetChatSubsection = $state<ChatSettingsSubsection | undefined>(undefined);
   targetChatTeammateId = $state<string | undefined>(undefined);
   targetChatChannelId = $state<string | undefined>(undefined);
   targetChatCreateTeammate = $state(false);
+  private onClosed: (() => void) | null = null;
 
   /**
    * Request that the Settings modal open. Pass `section` to land on a
@@ -41,21 +47,27 @@ class SettingsLauncherStore {
     this.targetDistractionsTab = section === "distractions"
       ? options.distractionsTab
       : undefined;
+    this.targetPeopleTab = section === "people" ? options.peopleTab : undefined;
     this.targetChatSubsection = section === "chat" ? options.chatSubsection : undefined;
     this.targetChatTeammateId = section === "chat" ? options.chatTeammateId : undefined;
     this.targetChatChannelId = section === "chat" ? options.chatChannelId : undefined;
     this.targetChatCreateTeammate = section === "chat" ? options.chatCreateTeammate ?? false : false;
+    this.onClosed = options.onClosed ?? null;
     this.isOpen = true;
   }
 
   close() {
+    const onClosed = this.onClosed;
+    this.onClosed = null;
     this.isOpen = false;
     this.targetSection = undefined;
     this.targetDistractionsTab = undefined;
+    this.targetPeopleTab = undefined;
     this.targetChatSubsection = undefined;
     this.targetChatTeammateId = undefined;
     this.targetChatChannelId = undefined;
     this.targetChatCreateTeammate = false;
+    onClosed?.();
   }
 }
 

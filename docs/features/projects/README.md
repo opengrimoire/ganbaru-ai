@@ -31,7 +31,8 @@ Groups organize projects. Projects own settings, statuses, priorities, tags, cus
 | Focus and break playlist defaults | Implemented |
 | Task dependencies, milestones, dependency date proposals, and history | Implemented |
 | Explicit task date locks and cascade protection overrides | Planned |
-| Task assignees, reviewers, and task-linked Chat work | Planned; the assignee and reviewer columns currently show the local profile |
+| Task assignees, reviewers, and task-linked Chat work | Planned; assignees and reviewers are chosen from project members with the shared people picker, and only the local person exists today |
+| Project and group members with roles | Planned; see [People and invitations](../collaboration/README.md) |
 | Guided planning and generated reports | Planned |
 | Work-environment and anti-distraction defaults | Planned |
 

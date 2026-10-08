@@ -6,6 +6,7 @@
   import type { HTMLButtonAttributes } from "svelte/elements";
   import { cn } from "$lib/utils";
   import { getLocalization } from "$lib/i18n/translator.svelte";
+  import { activateModalKeyboardLayer } from "$lib/modal-focus";
   import { portal } from "$lib/utils/portal";
   import { scrollEdgeFadeAction } from "$lib/utils/scroll-edge-fade";
   import ShortcutDescription from "./ShortcutDescription.svelte";
@@ -43,6 +44,7 @@
     popoverAlign = "start",
     popoverBoundaryElement = null,
     disabled = false,
+    unavailable = false,
     appearance = "default",
     class: className = "",
     triggerLabel,
@@ -71,6 +73,8 @@
     popoverAlign?: SelectPopoverHorizontalAlign;
     popoverBoundaryElement?: HTMLElement | null;
     disabled?: boolean;
+    /** Keeps the final look of a control whose behavior is not implemented yet; see `control-unavailable`. */
+    unavailable?: boolean;
     appearance?: "default" | "quiet";
     class?: string;
     /** Label for an action picker that does not retain a selected value. */
@@ -190,7 +194,7 @@
 
   /** Open the menu without moving the surrounding scroll position. */
   async function toggle(): Promise<void> {
-    if (disabled) return;
+    if (disabled || unavailable) return;
     if (open) {
       open = false;
       return;
@@ -221,10 +225,10 @@
     if (!open || !(e.target instanceof Node)) return;
     if (!popoverEl?.contains(e.target) && !triggerEl?.contains(e.target)) return;
     if (e.key === "Escape" || e.key === "Tab") {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        e.stopPropagation();
-      }
+      // Both keys only close the menu and return focus to the trigger, so neither the browser
+      // nor a surrounding modal trap moves focus while the layer still owns the keyboard.
+      e.preventDefault();
+      e.stopPropagation();
       flushSync(() => { open = false; });
       triggerEl?.focus({ preventScroll: true });
       return;
@@ -281,12 +285,13 @@
     function handleResize() {
       computePosition();
     }
-    window.addEventListener("keydown", handleKeydown, true);
+    // The open menu owns the keyboard as its own layer, so it keeps working inside modal dialogs.
+    const deactivateKeyboard = activateModalKeyboardLayer(handleKeydown);
     window.addEventListener("mousedown", handleClickOutside, true);
     window.addEventListener("scroll", handleScroll, true);
     window.addEventListener("resize", handleResize);
     return () => {
-      window.removeEventListener("keydown", handleKeydown, true);
+      deactivateKeyboard();
       window.removeEventListener("mousedown", handleClickOutside, true);
       window.removeEventListener("scroll", handleScroll, true);
       window.removeEventListener("resize", handleResize);
@@ -313,9 +318,11 @@
       aria-haspopup={searchPlaceholder ? "dialog" : "listbox"}
       aria-expanded={open}
       aria-controls={open ? menuId : undefined}
+      aria-disabled={unavailable ? "true" : undefined}
       aria-label={ariaLabel ?? label}
       class={cn(
         "flex h-7 w-full max-w-full items-center gap-2 rounded-md font-medium text-foreground transition-colors disabled:cursor-not-allowed max-[480px]:w-full",
+        unavailable && "control-unavailable",
         textClass,
         appearance === "quiet"
           ? "justify-end px-1.5 hover:bg-accent/60 disabled:opacity-45 disabled:hover:bg-transparent"

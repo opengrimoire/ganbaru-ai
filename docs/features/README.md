@@ -23,6 +23,7 @@ Source paths, schema inventories, cache tuning, device test matrices, and delive
 
 ## Planned product surfaces
 
+- [People and invitations](collaboration/README.md)
 - [Diary](diary.md)
 - [Edge panel](edge-panel.md)
 - [Sleep alarm](sleep-alarm.md)

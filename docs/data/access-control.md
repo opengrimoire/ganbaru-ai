@@ -17,9 +17,11 @@ This document is the normative authorization specification for organizational Ch
 
 ## Principals and scopes
 
-The portable vault owns stable identities for the local owner and configured AI teammates. Provider identities are not application principals.
+The portable vault owns stable identities for the local owner and configured AI teammates. Provider identities are not application principals. Planned human collaborators are principals with their own key-based identity, reachable only through accepted contacts, as specified in [People and invitations](../features/collaboration/README.md).
 
 Channel membership answers whether a participant may appear in, read, or contribute to one channel. It never implies access to another channel in the same project. Resource grants answer a separate question: what the participant or assigned run may do with a working folder, scratch generation, terminal, Git repository, attachment, preview, or internal application tool.
+
+Human roles (owner, administrator, member, guest, or custom) are presets over the same capability vocabulary as teammate access profiles, plus management capabilities that teammates never hold. A role granted on a group is the default for its projects, and a project role is the default for its channels; each lower level may narrow the inherited role and never widens it. A teammate owned by a collaborator acts within the intersection of that collaborator's role and the teammate's access profile.
 
 Every decision is scoped to the active vault. IDs copied from another vault authorize nothing.
 

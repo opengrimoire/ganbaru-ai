@@ -14,9 +14,11 @@ Provider thread IDs and model names are never conversation or participant identi
 
 ## Navigation and lifecycle
 
-The sidebar shows project channels, personal sections, and search, following the [shared Notes and Chat sidebar design](../notes/pages-and-navigation.md#shared-notes-and-chat-sidebar-design). Channel ordering and membership are durable vault data. Personal sections and the last selected channel are device-local presentation state. Navigation entries for direct messages stay hidden until that feature has a working destination.
+The sidebar shows project channels, personal sections, direct messages, pending invitations, and search, following the [shared Notes and Chat sidebar design](../notes/pages-and-navigation.md#shared-notes-and-chat-sidebar-design). Channel ordering and membership are durable vault data. Personal sections and the last selected channel are device-local presentation state. Direct messages and invitations follow [People and invitations](../collaboration/README.md).
 
-One channel dialog, opened from the sidebar or from the members button in the channel header, edits the name, topic, personal section, and members together. Human members are listed and AI teammates can be added or removed there; changes apply on save. Adding a teammate from the channel grants the conversation-only default, and its detailed access is edited in Settings > Chat > Teammates. Removing a teammate that has active work asks for confirmation with the impact. A channel never shows an in-feed prompt to add teammates.
+One channel dialog, opened from the sidebar, edits the name, topic, personal section, and members together. The local person is always the first member and cannot be removed there; leaving a channel is an action on the channel itself, and the last person cannot leave. Members are grouped as People and Teammates, added through the shared people picker, and changes apply on save. Adding a teammate from the channel grants the conversation-only default, and its detailed access is edited in Settings > Chat > Teammates. Removing a teammate that has active work asks for confirmation with the impact.
+
+The channel header shows the members as an avatar stack with a count. It opens a details panel with the topic and the member list, where members can be added or removed by someone who may manage members and the channel dialog can be opened. A channel never shows an in-feed prompt to add teammates.
 
 Archive hides a conversation from normal navigation without destroying its messages, links, drafts, or review history. Restore returns it to its project. Permanent deletion is explicit and includes a cleanup plan for owned execution resources.
 

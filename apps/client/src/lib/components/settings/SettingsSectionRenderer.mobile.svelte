@@ -1,6 +1,7 @@
 <script lang="ts">
   import AppearanceSection from "$lib/components/settings/sections/AppearanceSection.svelte";
   import ProfileSection from "$lib/components/settings/sections/ProfileSection.svelte";
+  import PeopleSection from "$lib/components/settings/sections/PeopleSection.svelte";
   import CalendarsSection from "$lib/components/settings/sections/CalendarsSection.svelte";
   import ProjectsSection from "$lib/components/settings/sections/ProjectsSection.svelte";
   import NotesSection from "$lib/components/settings/sections/NotesSection.svelte";
@@ -13,6 +14,7 @@
   let {
     activeSection,
     initialDistractionsTab,
+    initialPeopleTab,
     onOpenDistractionsLimitEditor,
     onDraftStateChange,
   }: SettingsSectionRendererProps = $props();
@@ -23,6 +25,8 @@
   <AppearanceSection />
 {:else if activeSection === "profile"}
   <ProfileSection {onDraftStateChange} />
+{:else if activeSection === "people"}
+  <PeopleSection initialTab={initialPeopleTab} />
 {:else if activeSection === "calendars"}
   <CalendarsSection fileTransfersAvailable={__GANBARU_AI_BUILD_PLATFORM__ === "android"} />
 {:else if activeSection === "projects"}

@@ -181,6 +181,7 @@ export const calendar = {
     markOptional: "Marcar opcional",
     removeAttendee: "Eliminar asistente",
     addEmail: "Agregar correo...",
+    pickAttendees: "Agregar desde contactos",
   },
   timezone: {
     title: "Zonas horarias",

@@ -2,25 +2,28 @@
   import { onMount, tick, untrack } from "svelte";
   import Hash from "@lucide/svelte/icons/hash";
   import LoaderCircle from "@lucide/svelte/icons/loader-circle";
-  import Plus from "@lucide/svelte/icons/plus";
   import Settings2 from "@lucide/svelte/icons/settings-2";
+  import UserRoundPlus from "@lucide/svelte/icons/user-round-plus";
   import X from "@lucide/svelte/icons/x";
   import * as chatApi from "$lib/api/chat";
   import type { ChatChannelRead, ChatChannelMembershipRemovalPreview } from "$lib/chat/contracts";
   import type { ChatSidebarSection } from "$lib/chat/channel-sections";
-  import {
-    channelAccessWithChannel,
-    channelAccessWithoutChannel,
-    conversationAccessProfile,
-    resolveChannelMemberChanges,
-  } from "$lib/chat/teammates/channel-membership";
+  import { applyChannelMemberChanges } from "$lib/chat/teammates/channel-member-changes";
+  import { summarizeChannelMembers } from "$lib/chat/teammates/channel-members";
   import ChatParticipantAvatar from "$lib/components/chat/identity/ChatParticipantAvatar.svelte";
+  import LocalPersonAvatar from "$lib/components/people/LocalPersonAvatar.svelte";
+  import ParticipantPicker from "$lib/components/people/ParticipantPicker.svelte";
+  import PeopleMemberRow from "$lib/components/people/PeopleMemberRow.svelte";
+  import PeopleRoleChip from "$lib/components/people/PeopleRoleChip.svelte";
+  import PeopleRoleSelect from "$lib/components/people/PeopleRoleSelect.svelte";
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
   import Select from "$lib/components/ui/Select.svelte";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import { activateModalFocus, activateModalKeyboardLayer, trapModalTabKey } from "$lib/modal-focus";
   import { getChat } from "$lib/stores/chat.svelte";
+  import { getPreferences } from "$lib/stores/preferences.svelte";
   import { getProjects } from "$lib/stores/projects.svelte";
+  import { getSettingsLauncher } from "$lib/stores/settings-launcher.svelte";
 
   let {
     channel = null,
@@ -36,11 +39,12 @@
     onCancel: () => void;
   } = $props();
 
-  const NEW_TEAMMATE_OPTION = "new-teammate";
   const MEMBER_AVATAR_SIZE = 26;
 
   const chat = getChat();
+  const preferences = getPreferences();
   const projects = getProjects();
+  const settingsLauncher = getSettingsLauncher();
   const { t } = getLocalization();
   const currentChannel = untrack(() => channel);
   const projectId = $derived(currentChannel?.projectId ?? projects.selectedProjectId ?? "");
@@ -48,49 +52,48 @@
     { value: "", label: t("chat.channels.defaultSection") },
     ...sections.map((section) => ({ value: section.id, label: section.name })),
   ]);
-  const humanMembers = (currentChannel?.memberships ?? [])
-    .filter((membership) => membership.removedAt === null && membership.participant.kind !== "ai_teammate");
-  const currentTeammateIds = new Set((currentChannel?.memberships ?? [])
-    .filter((membership) => membership.removedAt === null && membership.participant.kind === "ai_teammate")
-    .map((membership) => membership.participant.id));
+  const currentMembers = summarizeChannelMembers(currentChannel?.memberships ?? []);
+  const currentTeammateIds = currentMembers.teammateIds;
 
   let dialog = $state<HTMLDivElement | null>(null);
   let nameInput = $state<HTMLInputElement | null>(null);
+  let addMembersButton = $state<HTMLButtonElement | null>(null);
   let name = $state(currentChannel?.name ?? "");
   let topic = $state(currentChannel?.topic ?? "");
   let sectionId = $state(untrack(() => initialSectionId ?? ""));
-  let selectedTeammateIds = $state(new Set(currentTeammateIds));
+  let selectedTeammateIds = $state<ReadonlySet<string>>(new Set(currentTeammateIds));
+  let pickerOpen = $state(false);
   let saving = $state(false);
   let error = $state<string | null>(null);
   let removal = $state<{ teammateId: string; preview: ChatChannelMembershipRemovalPreview } | null>(null);
   let removalBusy = $state(false);
 
   const memberTeammates = $derived(chat.teammates.filter((teammate) => selectedTeammateIds.has(teammate.participant.id)));
-  const addOptions = $derived([
-    ...chat.teammates
-      .filter((teammate) => !selectedTeammateIds.has(teammate.participant.id))
-      .map((teammate) => ({ value: teammate.participant.id, label: teammate.participant.displayName, summary: teammate.role || undefined })),
-    { value: NEW_TEAMMATE_OPTION, label: t("chat.organization.newTeammate") },
-  ]);
+  const localName = $derived(preferences.profileDisplayName.trim() || t("people.you"));
+  const localDetail = $derived(preferences.profileDisplayName.trim() ? t("people.you") : null);
   const removalParticipant = $derived.by(() => {
     const pending = removal;
     if (!pending) return null;
     return chat.teammates.find((teammate) => teammate.participant.id === pending.teammateId)?.participant ?? null;
   });
 
-  function teammateFor(participantId: string) {
-    return chat.teammates.find((teammate) => teammate.participant.id === participantId) ?? null;
+  function addMembers(teammateIds: string[]): void {
+    selectedTeammateIds = new Set([...selectedTeammateIds, ...teammateIds]);
   }
 
-  function addMember(value: string): void {
-    if (value === NEW_TEAMMATE_OPTION) {
-      onCancel();
-      window.dispatchEvent(new CustomEvent("ganbaru-ai:chat-new-teammate", {
-        detail: currentChannel ? { channelId: currentChannel.id } : {},
-      }));
-      return;
-    }
-    selectedTeammateIds = new Set([...selectedTeammateIds, value]);
+  /** Settings covers the dialog, so it closes now and comes back for the same channel once Settings is gone. */
+  function createTeammate(): void {
+    const channelId = currentChannel?.id;
+    onCancel();
+    settingsLauncher.open("chat", {
+      chatSubsection: "teammates",
+      chatChannelId: channelId,
+      chatCreateTeammate: true,
+      onClosed: () => {
+        if (channelId) window.dispatchEvent(new CustomEvent("ganbaru-ai:chat-edit-channel", { detail: { channelId } }));
+        else window.dispatchEvent(new Event("ganbaru-ai:chat-new-channel"));
+      },
+    });
   }
 
   function dropMember(teammateId: string): void {
@@ -130,33 +133,6 @@
     }));
   }
 
-  async function applyMemberChanges(channelId: string): Promise<boolean> {
-    const changes = resolveChannelMemberChanges(currentTeammateIds, selectedTeammateIds);
-    if (changes.addedTeammateIds.length === 0 && changes.removedTeammateIds.length === 0) return false;
-    const profile = changes.addedTeammateIds.length > 0
-      ? conversationAccessProfile(await chatApi.listChatAccessProfiles())
-      : null;
-    for (const teammateId of changes.addedTeammateIds) {
-      const access = await chatApi.readChatTeammateAccess(teammateId);
-      await chatApi.replaceChatTeammateAccess({
-        teammateId,
-        expectedAccessRevision: access.accessRevision,
-        teammateDefaultRuntimeApproval: access.teammateDefaultRuntimeApproval,
-        channels: channelAccessWithChannel(access, channelId, profile),
-      });
-    }
-    for (const teammateId of changes.removedTeammateIds) {
-      const access = await chatApi.readChatTeammateAccess(teammateId);
-      await chatApi.replaceChatTeammateAccess({
-        teammateId,
-        expectedAccessRevision: access.accessRevision,
-        teammateDefaultRuntimeApproval: access.teammateDefaultRuntimeApproval,
-        channels: channelAccessWithoutChannel(access, channelId),
-      });
-    }
-    return true;
-  }
-
   async function save(): Promise<void> {
     if (!projectId || saving || !name.trim()) return;
     saving = true;
@@ -165,7 +141,7 @@
       let saved = currentChannel
         ? await chat.updateChannelDetails(currentChannel, name, topic)
         : await chat.createChannel({ id: `channel:${crypto.randomUUID()}`, projectId, name, topic });
-      if (await applyMemberChanges(saved.id)) {
+      if (await applyChannelMemberChanges(currentTeammateIds, selectedTeammateIds, saved.id)) {
         saved = await chatApi.readChatChannel(saved.id);
         chat.activeChannels = chat.activeChannels.map((entry) => entry.id === saved.id ? saved : entry);
         await chat.refreshTeammates();
@@ -240,36 +216,40 @@
       {/if}
 
       <div class="grid gap-1.5">
-        <span class="field-label">{t("chat.organization.members")}</span>
+        <div class="flex items-center justify-between gap-2">
+          <span class="field-label">{t("chat.organization.members")}</span>
+          <button bind:this={addMembersButton} type="button" class="member-add-button" aria-haspopup="dialog" aria-expanded={pickerOpen} onclick={() => { pickerOpen = true; }}><UserRoundPlus size={13} />{t("chat.organization.addMembers")}</button>
+        </div>
+        <span class="member-group-label">{t("chat.organization.people")}</span>
         <ul class="member-list">
-          {#each humanMembers as membership (membership.participant.id)}
-            <li class="member-row">
-              <ChatParticipantAvatar participant={membership.participant} size={MEMBER_AVATAR_SIZE} />
-              <span class="member-name">{membership.participant.displayName}</span>
-            </li>
-          {/each}
-          {#each memberTeammates as teammate (teammate.participant.id)}
-            <li class="member-row">
-              <ChatParticipantAvatar participant={teammate.participant} {teammate} size={MEMBER_AVATAR_SIZE} />
-              <span class="member-name">{teammate.participant.displayName}</span>
-              <span class="member-detail">{teammate.configurationState === "healthy" ? teammate.role || t("chat.organization.aiTeammate") : t("chat.organization.needsSetup")}</span>
-              {#if currentTeammateIds.has(teammate.participant.id)}
-                <button type="button" class="dialog-icon-button member-action" aria-label={t("chat.organization.accessSettings", teammate.participant.displayName)} onclick={() => configureMember(teammate.participant.id)}><Settings2 size={14} /></button>
-              {/if}
-              <button type="button" class="dialog-icon-button member-action" aria-label={t("chat.organization.removeTeammate", teammate.participant.displayName)} disabled={removalBusy} onclick={() => void removeMember(teammate.participant.id)}><X size={14} /></button>
-            </li>
+          <PeopleMemberRow name={localName} detail={localDetail}>
+            {#snippet avatar()}<LocalPersonAvatar size={MEMBER_AVATAR_SIZE} />{/snippet}
+            {#snippet trailing()}<PeopleRoleChip label={t("people.role.owner")} />{/snippet}
+          </PeopleMemberRow>
+          {#each currentMembers.people as membership (membership.participant.id)}
+            <PeopleMemberRow name={membership.participant.displayName}>
+              {#snippet avatar()}<ChatParticipantAvatar participant={membership.participant} size={MEMBER_AVATAR_SIZE} />{/snippet}
+              {#snippet trailing()}
+                <PeopleRoleSelect ariaLabel={t("people.role.label")} />
+                <button type="button" class="dialog-icon-button control-unavailable" aria-label={t("chat.organization.removePerson", membership.participant.displayName)} aria-disabled="true"><X size={14} /></button>
+              {/snippet}
+            </PeopleMemberRow>
           {/each}
         </ul>
-        <Select inline appearance="quiet" contentAlign="start" class="w-full" value="" triggerLabel={t("chat.organization.addTeammate")} ariaLabel={t("chat.organization.addTeammate")} options={addOptions} searchPlaceholder={addOptions.length > 1 ? t("chat.organization.searchTeammates") : undefined} showActiveCheck={false} onChange={addMember}>
-          {#snippet leading(value: string)}
-            {@const teammate = teammateFor(value)}
-            {#if teammate}
-              <ChatParticipantAvatar participant={teammate.participant} {teammate} size={20} />
-            {:else if value === NEW_TEAMMATE_OPTION}
-              <Plus size={14} class="shrink-0 text-muted-foreground" />
-            {/if}
-          {/snippet}
-        </Select>
+        <span class="member-group-label">{t("chat.organization.teammates")}</span>
+        <ul class="member-list">
+          {#each memberTeammates as teammate (teammate.participant.id)}
+            <PeopleMemberRow name={teammate.participant.displayName} detail={teammate.configurationState === "healthy" ? teammate.role || t("chat.organization.aiTeammate") : t("chat.organization.needsSetup")}>
+              {#snippet avatar()}<ChatParticipantAvatar participant={teammate.participant} {teammate} size={MEMBER_AVATAR_SIZE} />{/snippet}
+              {#snippet trailing()}
+                {#if currentTeammateIds.has(teammate.participant.id)}
+                  <button type="button" class="dialog-icon-button" aria-label={t("chat.organization.accessSettings", teammate.participant.displayName)} onclick={() => configureMember(teammate.participant.id)}><Settings2 size={14} /></button>
+                {/if}
+                <button type="button" class="dialog-icon-button" aria-label={t("chat.organization.removeTeammate", teammate.participant.displayName)} disabled={removalBusy} onclick={() => void removeMember(teammate.participant.id)}><X size={14} /></button>
+              {/snippet}
+            </PeopleMemberRow>
+          {/each}
+        </ul>
       </div>
 
       {#if error}<p class="text-panel-detail text-destructive" role="alert">{error}</p>{/if}
@@ -282,6 +262,20 @@
   </form>
   </div>
 </div>
+
+{#if pickerOpen}
+  <ParticipantPicker
+    anchor={addMembersButton}
+    title={t("people.picker.title")}
+    teammates={chat.teammates}
+    memberTeammateIds={selectedTeammateIds}
+    includeTeammates
+    space={{ kind: "channel", name: name.trim() }}
+    onConfirm={addMembers}
+    onClose={() => { pickerOpen = false; }}
+    onNewTeammate={createTeammate}
+  />
+{/if}
 
 {#if removal && removalParticipant}
   <ConfirmDialog
@@ -302,10 +296,9 @@
   .dialog-icon-button:disabled { opacity: 0.45; }
   .member-list { display: grid; }
   .member-list:empty { display: none; }
-  .member-row { display: flex; min-height: 2.25rem; align-items: center; gap: 0.6rem; padding-inline: 0.375rem; }
-  .member-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .member-detail { min-width: 0; flex: 1; overflow: hidden; color: var(--muted-foreground); font-size: var(--panel-detail-font-size); text-overflow: ellipsis; white-space: nowrap; }
-  .member-row:has(.member-action) .member-name { flex: 0 1 auto; }
-  .member-row:not(:has(.member-detail)) .member-name { flex: 1; }
-  @media (pointer: coarse) { .dialog-icon-button { width: 2.5rem; height: 2.5rem; } }
+  .member-group-label { padding-inline: 0.375rem; color: var(--muted-foreground); font-size: var(--panel-detail-font-size); font-weight: 500; line-height: 1.4; }
+  .member-list + .member-group-label { margin-top: 0.25rem; }
+  .member-add-button { display: inline-flex; min-height: 1.75rem; align-items: center; gap: 0.3rem; border-radius: 0.375rem; padding-inline: 0.5rem; color: var(--muted-foreground); font-size: var(--panel-detail-font-size); font-weight: 500; }
+  .member-add-button:hover { background: var(--accent); color: var(--foreground); }
+  @media (pointer: coarse) { .dialog-icon-button { width: 2.5rem; height: 2.5rem; } .member-add-button { min-height: 2.5rem; } }
 </style>

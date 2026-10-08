@@ -4,6 +4,7 @@ import type {
   DistractionsLimitEditorTarget,
   DistractionsSettingsTab,
   NotesTransferOperation,
+  PeopleSettingsTab,
   SectionId,
   SettingsDraftKind,
 } from "$lib/settings/types";
@@ -12,6 +13,7 @@ import type {
 export interface SettingsSectionRendererProps {
   readonly activeSection: SectionId;
   readonly initialDistractionsTab?: DistractionsSettingsTab;
+  readonly initialPeopleTab?: PeopleSettingsTab;
   readonly activeChatSubsection: ChatSettingsSubsection;
   readonly initialChatTeammateId?: string;
   readonly initialChatChannelId?: string;

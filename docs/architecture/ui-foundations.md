@@ -42,6 +42,10 @@ Panels were restyled one at a time, so radii, shadows, text sizes, input styles,
 - Checkboxes use `ui/Checkbox`, a native input drawn with theme tokens. Use `indeterminate` for partly selected parents, and wrap it in a `<label>` with visible text when the label is visible.
 - On and off settings use `ui/Switch` or `ui/SwitchField`. Inside floating panels the switch uses its `compact` size so it sits within the panel row. A switch that saves quickly stays enabled while saving and ignores repeated presses instead, so the cursor and colors do not flash. Choices from a list use `ui/Select`, never a native `<select>`, so menus match the rest of the app.
 
+## Unavailable controls
+
+- `control-unavailable` marks a control whose behavior is not implemented yet: it keeps its final appearance, shows the not-allowed cursor, carries `aria-disabled="true"`, and has no activation handler. It never dims, badges, or explains; [People and invitations](../features/collaboration/README.md) records why. Do not use `disabled` or muted colors for this purpose, so unavailable controls remain distinguishable from controls that are disabled by state. `menu-item`, `field`, and `Select` (through its `unavailable` prop) keep their normal colors and hover for such controls.
+
 ## Widths
 
 - Floating surfaces use `w-floating-sm` (compact action menus), `w-floating` (settings and option panels), or `w-floating-lg` (searchable lists, editors, and two-part rows), capped by the viewport. Content that genuinely needs another width, such as a calendar grid or an editor, may use its own.

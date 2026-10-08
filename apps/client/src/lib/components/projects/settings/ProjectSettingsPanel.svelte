@@ -60,6 +60,7 @@
   import ProjectSettingsDefaultsSection from "./ProjectSettingsDefaultsSection.svelte";
   import ProjectSettingsDeleteDialogs from "./ProjectSettingsDeleteDialogs.svelte";
   import ProjectSettingsIdentitySection from "./ProjectSettingsIdentitySection.svelte";
+  import ProjectSettingsMembersSection from "./ProjectSettingsMembersSection.svelte";
   import ProjectSettingsWorkingFoldersSection from "$lib/components/projects/settings/ProjectSettingsWorkingFoldersSection.svelte";
   import { projectHasLockedSystemIdentity } from "$lib/projects/system-defaults";
   import ProjectSettingsPanelShell from "./ProjectSettingsPanelShell.svelte";
@@ -881,6 +882,10 @@
             identityLocked={selectedProjectIdentityLocked}
             {setLifecycleStatus}
           />
+
+          <div class="h-px bg-border/70" aria-hidden="true"></div>
+
+          <ProjectSettingsMembersSection projectId={selectedProject.id} projectName={selectedProject.name} />
 
           <div class="h-px bg-border/70" aria-hidden="true"></div>
 

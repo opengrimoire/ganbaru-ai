@@ -67,4 +67,4 @@ Destructive, externally visible, credential-related, security-sensitive, or broa
 
 ## Human collaboration (planned)
 
-Collaboration roles may include owner, administrator, member, and restricted guest. Encryption, key distribution, revocation, historical visibility, offline copies, and conflict resolution belong to the [sync](../../data/sync.md) and permission design. Controls stay absent or clearly unavailable until the behavior is real.
+People join spaces through contacts, invitations, and the roles defined in [People and invitations](../collaboration/README.md), which also fixes how the people and teammate flows share one picker, one access step, and one member list. Encryption, key distribution, revocation, historical visibility, offline copies, and conflict resolution belong to the [sync](../../data/sync.md) and permission design.

@@ -9,6 +9,10 @@ export const configuration = {
     group: "Group",
     lifecycle: "Lifecycle",
     icon: "Icon",
+    members: {
+      heading: "Members",
+      invite: "Invite",
+    },
     workingFolders: {
       title: "Working folders",
       managed: "Managed",

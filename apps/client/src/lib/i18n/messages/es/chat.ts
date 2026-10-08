@@ -94,6 +94,8 @@ export const chat = {
     changeFolderDraftWarning: "Cambiar la carpeta de trabajo elimina los adjuntos y menciones de archivos de este borrador. ¿Continuar?",
     welcomeTitle: (name: string) => `Te damos la bienvenida a #${name}`,
     welcomeDescription: "Este es el inicio del canal.",
+    directMessagesHint: "Empieza una conversación con un contacto que permita mensajes directos.",
+    startDirectMessage: "Iniciar conversación",
   },
   organization: {
     teammate: "compañero",
@@ -240,6 +242,15 @@ export const chat = {
       ? "No se interrumpirá trabajo activo. Las asignaciones nuevas se detienen de inmediato y el historial se conserva."
       : `Esto detiene ${assignments} ${assignments === 1 ? "asignación activa" : "asignaciones activas"} y revoca ${authorizations} ${authorizations === 1 ? "alcance de autorización activo" : "alcances de autorización activos"}. El historial se conserva.`,
     removeTeammateConfirm: "Quitar acceso",
+    membersPanel: (count: number) => count === 1 ? "1 miembro" : `${count} miembros`,
+    membersPanelTitle: "Miembros",
+    people: "Personas",
+    teammates: "Compañeros",
+    addMembers: "Agregar miembros",
+    inviteSomeone: "Invitar a alguien",
+    editChannel: "Editar canal",
+    closeMembers: "Cerrar miembros",
+    removePerson: (name: string) => `Quitar a ${name} de este canal`,
   },
   firstUse: {
     noProviderTitle: "Configura un agente de programación",
