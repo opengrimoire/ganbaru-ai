@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "turbo dev",
     "build": "turbo build",
+    "clean:rust": "cargo clean",
     "build:native-host": "cargo build --bin ganbaru-ai-native-messaging",
     "setup:chromium-extension": "node apps/client/scripts/browser-extension/setup-dev-extension.mjs",
     "audit:deps": "pnpm audit --audit-level low",
