@@ -3,12 +3,11 @@
   import { onMount, tick, untrack } from "svelte";
   import Archive from "@lucide/svelte/icons/archive";
   import ArchiveRestore from "@lucide/svelte/icons/archive-restore";
-  import Bot from "@lucide/svelte/icons/bot";
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import Eye from "@lucide/svelte/icons/eye";
   import EyeOff from "@lucide/svelte/icons/eye-off";
   import Folder from "@lucide/svelte/icons/folder";
-  import Ellipsis from "@lucide/svelte/icons/ellipsis";
+  import ShieldCheck from "@lucide/svelte/icons/shield-check";
   import Plus from "@lucide/svelte/icons/plus";
   import Search from "@lucide/svelte/icons/search";
   import Trash2 from "@lucide/svelte/icons/trash-2";
@@ -119,11 +118,8 @@
   let recoveryNoticeElement = $state<HTMLElement>();
 
   let profileManagerOpen = $state(false);
-  let toolsMenuOpen = $state(false);
   let profileManagerLoading = $state(false);
   let ChatAccessProfilesManager = $state<ChatAccessProfilesManagerComponent | null>(null);
-  let toolsMenuElement = $state<HTMLDivElement>();
-  let toolsMenuTrigger = $state<HTMLButtonElement>();
   let profileManagerLoad: Promise<void> | null = null;
   let expandedAccessChannelId = $state<string | null>(null);
   let advancedChannelIds = $state<Set<string>>(new Set());
@@ -239,7 +235,7 @@
   ]);
 
   $effect(() => {
-    onDraftStateChange(editor.creating || editor.dirty);
+    onDraftStateChange(editor.dirty);
     return () => onDraftStateChange(false);
   });
 
@@ -270,17 +266,6 @@
     const teammate = editor.selected;
     if (!teammate || editor.creating) return;
     untrack(() => editor.initializeSelectedTeammate(teammate));
-  });
-
-  $effect(() => {
-    if (!toolsMenuOpen) return;
-    function closeOnOutsideClick(event: MouseEvent): void {
-      if (!(event.target instanceof Node)) return;
-      if (toolsMenuElement?.contains(event.target) || toolsMenuTrigger?.contains(event.target)) return;
-      toolsMenuOpen = false;
-    }
-    window.addEventListener("mousedown", closeOnOutsideClick, true);
-    return () => window.removeEventListener("mousedown", closeOnOutsideClick, true);
   });
 
   onMount(() => {
@@ -587,7 +572,6 @@
 
   async function openProfileManager(): Promise<void> {
     if (profileManagerLoading || profileManagerOpen) return;
-    toolsMenuOpen = false;
     profileManagerLoading = true;
     try {
       await loadProfileManager();
@@ -710,19 +694,12 @@
   <header class="directory-header">
     <div><h2>{t("settings.chat.teammates.heading")}</h2></div>
     <div class="header-actions">
-      <button type="button" class="settings-button" disabled={editor.creating || editor.dirty} onclick={() => editor.beginCreate(null)}><Plus size={13} />{t("settings.chat.teammates.add")}</button>
       {#if editor.archivedTeammates.length > 0}
         {@const archiveFilterLabel = editor.showArchived ? t("settings.chat.teammates.hideArchived") : t("settings.chat.teammates.includeArchived")}
         <button type="button" class="archive-filter" aria-label={archiveFilterLabel} aria-pressed={editor.showArchived} data-app-tooltip={archiveFilterLabel} disabled={editor.creating || editor.dirty || lifecycleBusy} onclick={() => { editor.showArchived = !editor.showArchived; }}><Archive size={14} /><span aria-hidden="true">{#if editor.showArchived}<Eye size={8} />{:else}<EyeOff size={8} />{/if}</span></button>
       {/if}
-      <div class="tools-menu-anchor">
-        <button bind:this={toolsMenuTrigger} type="button" class="archive-filter" aria-label={t("settings.chat.teammates.accessTools")} aria-haspopup="menu" aria-expanded={toolsMenuOpen} disabled={editor.dirty} onclick={() => { toolsMenuOpen = !toolsMenuOpen; }}><Ellipsis size={15} /></button>
-        {#if toolsMenuOpen}
-          <div bind:this={toolsMenuElement} role="menu" class="tools-menu surface-floating surface-floating-body" data-app-floating-surface>
-            <button type="button" role="menuitem" class="menu-item" disabled={profileManagerLoading} onclick={() => void openProfileManager()}>{profileManagerLoading ? t("common.loading") : t("settings.chat.teammates.profileManager.heading")}</button>
-          </div>
-        {/if}
-      </div>
+      <button type="button" class="settings-button" disabled={editor.creating || editor.dirty} onclick={() => editor.beginCreate(null)}><Plus size={13} />{t("settings.chat.teammates.add")}</button>
+      <button type="button" class="settings-button" disabled={editor.dirty || profileManagerLoading} onclick={() => void openProfileManager()}><ShieldCheck size={13} />{profileManagerLoading ? t("common.loading") : t("settings.chat.teammates.profileManager.manage")}</button>
     </div>
   </header>
 
@@ -913,7 +890,7 @@
           <footer class="editor-footer"><div>{#if editor.creating}<button type="button" class="secondary-button" onclick={editor.cancelCreate}><X size={14} />{t("common.cancel")}</button>{:else if editor.selected && editor.archivedMode}<button type="button" class="danger-button" disabled={editor.selected.hasDurableHistory} onclick={() => requestLifecycle("delete")}><Trash2 size={14} />{t("settings.chat.teammates.deletePermanently")}</button>{:else if editor.selected}<button type="button" class="secondary-button" disabled={editor.selected.activeAssignmentCount > 0} onclick={() => requestLifecycle("archive")}><Archive size={14} />{t("settings.chat.teammates.archive")}</button>{/if}{#if editor.lifecycleError}<span class="field-error" role="alert">{editor.lifecycleError}</span>{/if}</div><div class="save-area">{#if editor.error && editor.errorField !== "displayName" && editor.errorField !== "role"}<span class="field-error" role="alert">{editor.error}</span>{:else if editor.accessErrors.length > 0}<span class="field-error" role="alert">{t("settings.chat.teammates.accessValidationFailed")}</span>{:else if editor.providerResourceBlockers[0]}<span class="field-error" role="alert">{editor.providerResourceBlockers[0]}</span>{/if}{#if editor.archivedMode}<button type="button" class="primary-button" onclick={() => void restoreSelected()}><ArchiveRestore size={14} />{t("settings.chat.teammates.restore")}</button>{:else}<button bind:this={saveButtonElement} type="submit" class="primary-button" disabled={editor.saving || !editor.canSave}>{editor.saving ? t("settings.chat.teammates.saving") : editor.creating ? t("settings.chat.teammates.createInert") : t("settings.chat.teammates.save")}</button>{/if}</div></footer>
         </form>
       {:else}
-        <div class="empty-detail"><Bot size={24} /><p>{t("settings.chat.teammates.selectPrompt")}</p></div>
+        <div class="empty-detail"><p>{t("settings.chat.teammates.selectPrompt")}</p></div>
       {/if}
     </div>
   </div>
@@ -1051,8 +1028,6 @@
   .directory-header { display:flex; flex-wrap:wrap; align-items:start; justify-content:space-between; gap:0.75rem; padding-inline:0.25rem; }
   .directory-header h2 { font-size:calc(0.866667rem * var(--type-scale)); font-weight:600; }
   .header-actions { display:flex; align-items:center; gap:0.35rem; }
-  .tools-menu-anchor { position:relative; }
-  .tools-menu { position:absolute; z-index:20; top:calc(100% + 0.25rem); right:0; display:grid; min-width:10rem; }
   .settings-button { display:inline-flex; min-height:1.9rem; align-items:center; justify-content:center; gap:0.35rem; border-radius:0.42rem; padding:0.3rem 0.65rem; font-size:calc(0.733333rem * var(--type-scale)); font-weight:600; line-height:1; white-space:nowrap; }
   .settings-button { border:1px solid var(--border); background:var(--background); color:var(--foreground); }
   .archive-filter { position:relative; display:grid; width:1.9rem; height:1.9rem; place-items:center; border-radius:0.42rem; color:var(--muted-foreground); }

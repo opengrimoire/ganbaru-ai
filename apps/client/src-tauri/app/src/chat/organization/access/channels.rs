@@ -16,15 +16,13 @@ use crate::chat::organization::common::{
 use sqlx::{Row, SqlitePool};
 use std::collections::BTreeSet;
 
-pub(super) async fn read_teammate_access(
+pub(in crate::chat::organization) async fn read_teammate_access(
     pool: &SqlitePool,
     teammate_id: &ChatParticipantId,
 ) -> ChatResult<ChatTeammateAccessRead> {
     let state = sqlx::query(
-        "SELECT access.access_revision, access.runtime_approval_policy
-         FROM chat_teammate_access_state access
-         JOIN chat_participants participant ON participant.id = access.teammate_id
-         WHERE access.teammate_id = ? AND participant.archived_at IS NULL",
+        "SELECT access_revision, runtime_approval_policy
+         FROM chat_teammate_access_state WHERE teammate_id = ?",
     )
     .bind(teammate_id.as_str())
     .fetch_optional(pool)

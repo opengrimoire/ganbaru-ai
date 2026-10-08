@@ -6,7 +6,8 @@ mod retained_references;
 mod targets;
 
 // Preserve command paths and generated Tauri wrappers at the access facade.
-use channels::{proposed_access_read, read_teammate_access, resolve_channel_access};
+pub(super) use channels::read_teammate_access;
+use channels::{proposed_access_read, resolve_channel_access};
 pub use profiles::*;
 use retained_references::{retained_reference_issues, retained_reference_issues_in_transaction};
 pub use targets::*;

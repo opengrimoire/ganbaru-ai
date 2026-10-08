@@ -76,7 +76,6 @@ export const chatSettings = {
     removeGroupAccess: (group: string) => `Remove access to channels in ${group}`,
     removeProjectAccess: (project: string) => `Remove access to channels in ${project}`,
     channelAccessTitle: (channel: string) => `#${channel}`,
-    accessTools: "Access tools",
     advancedAccess: "Advanced access",
     hideAdvancedAccess: "Hide advanced access",
     channelPickerLabel: "Choose channel access",
@@ -149,7 +148,7 @@ export const chatSettings = {
       publishChanges: "Publish changes",
     },
     profileManager: {
-      manage: "Profiles",
+      manage: "Access profiles",
       heading: "Access profiles",
       description: "Create reusable ceilings and defaults. Memberships still grant access explicitly.",
       directoryLabel: "Access profile directory",

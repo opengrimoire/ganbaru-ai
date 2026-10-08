@@ -79,7 +79,6 @@ export const chatSettings = {
     removeGroupAccess: (group: string) => `Quitar el acceso a los canales de ${group}`,
     removeProjectAccess: (project: string) => `Quitar el acceso a los canales de ${project}`,
     channelAccessTitle: (channel: string) => `#${channel}`,
-    accessTools: "Herramientas de acceso",
     advancedAccess: "Acceso avanzado",
     hideAdvancedAccess: "Ocultar acceso avanzado",
     channelPickerLabel: "Elegir acceso a canales",
@@ -152,7 +151,7 @@ export const chatSettings = {
       publishChanges: "Publicar cambios",
     },
     profileManager: {
-      manage: "Perfiles",
+      manage: "Perfiles de acceso",
       heading: "Perfiles de acceso",
       description: "Crea límites y valores predeterminados reutilizables. Las membresías siguen otorgando acceso de forma explícita.",
       directoryLabel: "Directorio de perfiles de acceso",
