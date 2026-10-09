@@ -13,6 +13,7 @@ import { people } from "./people";
 import { projects } from "./projects";
 import { quickNotes } from "./quick-notes";
 import { settings } from "./settings";
+import { sync } from "./sync";
 import { theme } from "./theme";
 import { titleBar } from "./title-bar";
 import { updates } from "./updates";
@@ -42,6 +43,7 @@ export const en = {
   people,
   projects,
   quickNotes,
+  sync,
   music,
   mobile,
   titleBar,

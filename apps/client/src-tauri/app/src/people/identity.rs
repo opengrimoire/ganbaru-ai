@@ -89,6 +89,18 @@ pub(crate) fn identity_from_row(
     })
 }
 
+/// The device-local copy of the person key when it matches `public_key`. It reads no vault
+/// database, so it is usable while the vault is quiesced.
+pub(crate) async fn person_key_matching<R: Runtime>(
+    app: &AppHandle<R>,
+    public_key: &PersonPublicKey,
+) -> Result<Option<PersonKeyPair>, String> {
+    let key = load_key(app).await?;
+    Ok(key
+        .and_then(|bytes| PersonKeyPair::from_pkcs8(&bytes).ok())
+        .filter(|key| key.public_key() == *public_key))
+}
+
 /// Loads the identity with whichever key copy this device holds, without creating one.
 pub(crate) async fn load_identity<R: Runtime>(
     app: &AppHandle<R>,

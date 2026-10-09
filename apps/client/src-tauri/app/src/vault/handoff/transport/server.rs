@@ -4,6 +4,7 @@ use super::{
     CHUNK_TIMEOUT, MEMBERSHIP_REVOKED_CODE, TLS_HANDSHAKE_TIMEOUT, prepare_partial, stream_file,
     timeout_control,
 };
+use crate::sync::hub::SyncHub;
 use crate::vault::handoff::pairing::{Enrollment, PairingManager};
 use crate::vault::handoff::protocol::{
     BundleMetadata, BundlePurpose, ControlMessage, PROTOCOL_VERSION, TRANSFER_CHUNK_BYTES,
@@ -21,19 +22,11 @@ use tokio_rustls::TlsAcceptor;
 const UPLOAD_REQUEST_WAIT: Duration = Duration::from_secs(10);
 const UPLOAD_REQUEST_POLL_INTERVAL: Duration = Duration::from_millis(200);
 
-#[cfg(test)]
-pub(crate) async fn serve(
-    listener: TcpListener,
-    manager: PairingManager,
-    shutdown: tokio::sync::oneshot::Receiver<()>,
-) {
-    serve_with_coordinator(listener, manager, None, shutdown).await;
-}
-
 pub(crate) async fn serve_with_coordinator(
     listener: TcpListener,
     manager: PairingManager,
     coordinator: Option<coordinator::CoordinatorSender>,
+    hub: Option<SyncHub>,
     mut shutdown: tokio::sync::oneshot::Receiver<()>,
 ) {
     loop {
@@ -44,8 +37,9 @@ pub(crate) async fn serve_with_coordinator(
                     Ok((socket, _)) => {
                         let manager = manager.clone();
                         let coordinator = coordinator.clone();
+                        let hub = hub.clone();
                         tokio::spawn(async move {
-                            if let Err(error) = handle_connection(socket, manager, coordinator).await {
+                            if let Err(error) = handle_connection(socket, manager, coordinator, hub).await {
                                 eprintln!("vault handoff connection failed: {error}");
                             }
                         });
@@ -64,6 +58,7 @@ async fn handle_connection(
     socket: TcpStream,
     manager: PairingManager,
     coordinator: Option<coordinator::CoordinatorSender>,
+    hub: Option<SyncHub>,
 ) -> Result<(), String> {
     let config = server_config(&manager)?;
     let mut stream = tokio::time::timeout(
@@ -94,6 +89,21 @@ async fn handle_connection(
             false,
         )
         .await;
+    }
+
+    if let Some((vault_id, device_id)) = request.sync_peer() {
+        manager.verify_authenticated_peer(device_id, peer_certificate.as_ref(), vault_id)?;
+        let Some(hub) = hub.as_ref() else {
+            return send_error(
+                &mut stream,
+                "sync_unsupported",
+                "this coordinator does not serve sync",
+                false,
+            )
+            .await;
+        };
+        let response = hub.respond(request).await;
+        return timeout_control(write_control(&mut stream, &response)).await;
     }
 
     match request {

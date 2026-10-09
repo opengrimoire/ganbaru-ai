@@ -125,11 +125,13 @@ impl CoordinatorLifecycle {
             .map_err(|error| format!("read vault handoff endpoint: {error}"))?;
         let (shutdown, receiver) = tokio::sync::oneshot::channel();
         let (requests, request_receiver) = tokio::sync::mpsc::channel(8);
+        let hub = crate::sync::sync_hub(&app);
         tauri::async_runtime::spawn(coordinator::run(app, manager.clone(), request_receiver));
         tauri::async_runtime::spawn(transport::serve_with_coordinator(
             listener,
             manager,
             Some(requests.clone()),
+            Some(hub),
             receiver,
         ));
         let mut runtime = self
@@ -198,6 +200,11 @@ pub(crate) fn initialize<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<(), St
             )?;
     }
     restore_outgoing_ownership(app, &pairing)?;
+    let probe_pairing = pairing.inner().clone();
+    app.state::<super::ownership::VaultOwnershipManager>()
+        .set_link_probe(Some(std::sync::Arc::new(move |vault_id: &str| {
+            probe_pairing.is_linked_for(vault_id).unwrap_or(false)
+        })))?;
     Ok(())
 }
 

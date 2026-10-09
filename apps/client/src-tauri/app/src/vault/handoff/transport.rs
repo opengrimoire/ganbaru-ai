@@ -2,8 +2,6 @@
 
 #[cfg(desktop)]
 mod server;
-#[cfg(all(test, desktop))]
-use server::serve;
 #[cfg(desktop)]
 pub(crate) use server::serve_with_coordinator;
 
@@ -507,6 +505,24 @@ pub(crate) async fn request_person_key(manager: &PairingManager) -> Result<Contr
         },
     )
     .await
+}
+
+/// The vault and device ids a sync exchange presents, or `None` on a device that is not linked
+/// to a coordinator.
+pub(crate) fn sync_peer(manager: &PairingManager) -> Result<Option<(String, String)>, String> {
+    let Some(coordinator) = manager.coordinator_pin()? else {
+        return Ok(None);
+    };
+    let (device_id, _) = manager.identity()?;
+    Ok(Some((coordinator.vault_id, device_id)))
+}
+
+/// Sends one sync message to the coordinator over the linked-device identity.
+pub(crate) async fn sync_request(
+    manager: &PairingManager,
+    message: ControlMessage,
+) -> Result<ControlMessage, String> {
+    authenticated_exchange(manager, message).await
 }
 
 async fn authenticated_exchange(

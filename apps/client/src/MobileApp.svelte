@@ -52,6 +52,7 @@
   type LinkedDeviceControlComponent = typeof import("$lib/components/vault/handoff/LinkedDeviceControl.svelte").default;
   type ProjectViewComponents = import("$lib/components/projects/view-components").ProjectViewComponents;
   type NotesStore = ReturnType<typeof import("$lib/stores/notes.svelte").getNotes>;
+  type QuickNotesTrashPurgeRuntime = import("$lib/quick-notes/trash-purge-runtime").QuickNotesTrashPurgeRuntime;
   type DeferredSurface = Exclude<View, "calendar"> | "settings" | "quickNotes" | "music";
   interface CalendarNotificationScheduler {
     reconcile(): Promise<void>;
@@ -123,6 +124,8 @@
   let calendarNotificationSchedulerLoad: Promise<void> | null = null;
   let calendarNotificationSchedulerDisposed = false;
   let pomodoroScheduleScheduler = $state.raw<PomodoroScheduleScheduler | null>(null);
+  let quickNotesTrashPurge = $state.raw<QuickNotesTrashPurgeRuntime | null>(null);
+  let quickNotesTrashPurgeLoad: Promise<void> | null = null;
 
   const navigationPresentation = $derived(
     mobileNavigationPresentation(viewport.layoutWidth),
@@ -259,6 +262,21 @@
       calendarNotificationSchedulerLoad = null;
     });
     return calendarNotificationSchedulerLoad;
+  }
+
+  /** Loads the Quick notes trash purge job outside the shell bundle. */
+  function ensureQuickNotesTrashPurge(): void {
+    if (quickNotesTrashPurge || quickNotesTrashPurgeLoad || mobileAppDisposed) return;
+    quickNotesTrashPurgeLoad = import("$lib/quick-notes/trash-purge-runtime")
+      .then((module) => {
+        if (!mobileAppDisposed) quickNotesTrashPurge = module.startQuickNotesTrashPurge();
+      })
+      .catch((error: unknown) => {
+        console.error("Failed to start the Quick notes trash purge", error);
+      })
+      .finally(() => {
+        quickNotesTrashPurgeLoad = null;
+      });
   }
 
   function afterAnimationFrames(count: number): Promise<void> {
@@ -660,8 +678,10 @@
         }));
       }, 0);
     };
-    const resumePomodoroScheduler = (): void => {
-      if (document.visibilityState !== "visible" || !backendReady || schedulerResume) return;
+    const resumeLifecycleSchedulers = (): void => {
+      if (document.visibilityState !== "visible" || !backendReady) return;
+      quickNotesTrashPurge?.scheduler.resume();
+      if (schedulerResume) return;
       schedulerResume = (async () => {
         await pomodoro.recoverMobileRun();
         await Promise.all([
@@ -682,14 +702,14 @@
         pomodoro.prepareForMobileBackground();
         return;
       }
-      resumePomodoroScheduler();
+      resumeLifecycleSchedulers();
     };
     syncNestedRoute();
     window.addEventListener("hashchange", syncNestedRoute);
     window.addEventListener("popstate", syncNestedRoute);
     window.addEventListener("ganbaru-ai:inspect-music-assignment", handleMusicAssignmentInspection);
     document.addEventListener("visibilitychange", handleVisibilityChange);
-    window.addEventListener("focus", resumePomodoroScheduler);
+    window.addEventListener("focus", resumeLifecycleSchedulers);
 
     void initializeWorkspace();
 
@@ -699,7 +719,7 @@
       window.removeEventListener("popstate", syncNestedRoute);
       window.removeEventListener("ganbaru-ai:inspect-music-assignment", handleMusicAssignmentInspection);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
-      window.removeEventListener("focus", resumePomodoroScheduler);
+      window.removeEventListener("focus", resumeLifecycleSchedulers);
       removePomodoroBackLayer();
       removeSettingsBackLayer();
       removeQuickNotesBackLayer();
@@ -711,7 +731,19 @@
       calendarNotificationSchedulerDisposed = true;
       calendarNotificationScheduler = null;
       pomodoroScheduleScheduler = null;
+      quickNotesTrashPurge?.dispose();
+      quickNotesTrashPurge = null;
     };
+  });
+
+  $effect(() => {
+    const ready = backendReady;
+    const purge = quickNotesTrashPurge;
+    if (!purge) {
+      if (ready) ensureQuickNotesTrashPurge();
+      return;
+    }
+    purge.scheduler.setEnabled(ready);
   });
 
   $effect(() => {

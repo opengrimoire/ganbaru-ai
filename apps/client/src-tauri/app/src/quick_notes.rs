@@ -1,14 +1,26 @@
 use std::collections::HashMap;
 
+use ganbaru_sync::OPEN_CONFLICT_MASK_SQL;
+use ganbaru_sync::manifest::vault::quick_notes::{NOTES_TABLE, note_group};
+use ganbaru_sync_contracts::{Field, GroupId, OrderKey, Value};
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, QueryBuilder, Sqlite, SqlitePool, Transaction};
 use tauri::{AppHandle, Runtime};
 
 use crate::db::connect_sqlite;
 
+mod conflicts;
+mod order;
 mod tags;
 
-pub use tags::{QuickNoteTagRead, QuickNoteTagWrite};
+pub use conflicts::{
+    QuickNoteConflictError, QuickNoteConflictRead, QuickNoteConflictResolution,
+    QuickNoteConflictResolved,
+};
+#[cfg(test)]
+pub(crate) use conflicts::{conflict_from_pool, resolve_from_pool};
+use order::{OrderedRow, placement, take_key};
+pub use tags::{QuickNoteTagError, QuickNoteTagRead, QuickNoteTagWrite};
 
 const DEFAULT_PAGE_SIZE: i64 = 60;
 const MAX_PAGE_SIZE: i64 = 60;
@@ -17,6 +29,17 @@ const MAX_BODY_CHARS: usize = 65_536;
 const MAX_RUNS: usize = 4_096;
 const PREVIEW_CHARS: usize = 4_096;
 const TRASH_RETENTION_DAYS: i64 = 7;
+
+/// Column `has_conflict` of a note aliased `q`: whether replicated edits left a conflict that
+/// no local resolution settled.
+fn has_conflict_column() -> String {
+    format!(
+        "EXISTS (SELECT 1 FROM sync_rows r
+                 WHERE r.table_id = {} AND r.row_key = q.id AND {OPEN_CONFLICT_MASK_SQL} <> 0)
+         AS has_conflict",
+        NOTES_TABLE.0
+    )
+}
 
 /// Stable write outcomes for conflict recovery, independent of diagnostic wording.
 #[derive(Debug, Serialize)]
@@ -109,7 +132,7 @@ pub struct QuickNoteReorderRequest {
 #[derive(Debug, Deserialize, Serialize)]
 struct QuickNotesCursor {
     pinned: i64,
-    manual_order: f64,
+    order_key: String,
     sort_time: String,
     id: String,
 }
@@ -125,9 +148,10 @@ struct QuickNoteRow {
     archived: i64,
     trashed_at: Option<String>,
     revision: i64,
-    manual_order: f64,
+    order_key: String,
     created_at: String,
     updated_at: String,
+    has_conflict: bool,
 }
 
 #[derive(Clone, Debug, FromRow)]
@@ -155,6 +179,8 @@ pub struct QuickNoteRead {
     revision: i64,
     created_at: String,
     updated_at: String,
+    /// Whether replicated edits left a conflict on the title or body.
+    has_conflict: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -352,13 +378,31 @@ fn read_note(mut row: QuickNoteRow, runs: Vec<QuickNoteTextRun>, preview: bool) 
         revision: row.revision,
         created_at: row.created_at,
         updated_at: row.updated_at,
+        has_conflict: row.has_conflict,
     }
 }
 
-async fn load_note_from_pool(pool: &SqlitePool, id: &str) -> Result<QuickNoteRead, String> {
+/// SQLite modifier that moves the current time back by the trash retention period.
+fn trash_expiry_modifier() -> String {
+    format!("-{TRASH_RETENTION_DAYS} days")
+}
+
+pub(crate) async fn load_note_from_pool(
+    pool: &SqlitePool,
+    id: &str,
+) -> Result<QuickNoteRead, String> {
     validate_id(id)?;
-    let row = sqlx::query_as::<_, QuickNoteRow>("SELECT * FROM quick_notes WHERE id = ?")
+    // Trash past its retention is hidden until the purge job deletes it.
+    let sql = format!(
+        "SELECT q.*, {} FROM quick_notes q
+         WHERE q.id = ?
+           AND (q.trashed_at IS NULL
+                OR q.trashed_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now', ?))",
+        has_conflict_column()
+    );
+    let row = sqlx::query_as::<_, QuickNoteRow>(&sql)
         .bind(id)
+        .bind(trash_expiry_modifier())
         .fetch_optional(pool)
         .await
         .map_err(|error| format!("load quick note: {error}"))?
@@ -371,17 +415,38 @@ async fn load_note_from_pool(pool: &SqlitePool, id: &str) -> Result<QuickNoteRea
     ))
 }
 
-async fn cleanup_expired_trash(pool: &SqlitePool) -> Result<u64, String> {
-    let result = sqlx::query(
+/// Result of one trash purge pass.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QuickNotesTrashPurge {
+    purged: u64,
+    /// When the oldest remaining trashed note expires, if this device may purge it.
+    next_purge_at: Option<String>,
+}
+
+async fn purge_expired_trash(pool: &SqlitePool) -> Result<QuickNotesTrashPurge, String> {
+    let purged = sqlx::query(
         "DELETE FROM quick_notes
          WHERE trashed_at IS NOT NULL
            AND trashed_at <= strftime('%Y-%m-%dT%H:%M:%fZ', 'now', ?)",
     )
-    .bind(format!("-{TRASH_RETENTION_DAYS} days"))
+    .bind(trash_expiry_modifier())
     .execute(pool)
     .await
-    .map_err(|error| format!("clean expired quick notes trash: {error}"))?;
-    Ok(result.rows_affected())
+    .map_err(|error| format!("purge expired quick notes trash: {error}"))?
+    .rows_affected();
+    let next_purge_at = sqlx::query_scalar::<_, Option<String>>(
+        "SELECT strftime('%Y-%m-%dT%H:%M:%fZ', MIN(trashed_at), ?)
+         FROM quick_notes WHERE trashed_at IS NOT NULL",
+    )
+    .bind(format!("+{TRASH_RETENTION_DAYS} days"))
+    .fetch_one(pool)
+    .await
+    .map_err(|error| format!("load next quick notes trash expiry: {error}"))?;
+    Ok(QuickNotesTrashPurge {
+        purged,
+        next_purge_at,
+    })
 }
 
 fn fts_query(query: &str) -> String {
@@ -422,7 +487,6 @@ async fn list_window_from_pool(
     pool: &SqlitePool,
     request: QuickNotesListRequest,
 ) -> Result<QuickNotesWindow, String> {
-    cleanup_expired_trash(pool).await?;
     let page_size = request.page_size.unwrap_or(DEFAULT_PAGE_SIZE);
     if !(1..=MAX_PAGE_SIZE).contains(&page_size) {
         return Err(format!("page size must be between 1 and {MAX_PAGE_SIZE}"));
@@ -443,12 +507,19 @@ async fn list_window_from_pool(
         return Err("quick note tag filters are available only in All".to_string());
     }
 
-    let mut sql = QueryBuilder::<Sqlite>::new("SELECT q.* FROM quick_notes q");
+    let mut sql = QueryBuilder::<Sqlite>::new("SELECT q.*, ");
+    sql.push(has_conflict_column()).push(" FROM quick_notes q");
     if !search.is_empty() {
         sql.push(" JOIN quick_notes_search_fts ON quick_notes_search_fts.note_id = q.id");
     }
     sql.push(" WHERE ")
         .push(collection_predicate(request.collection));
+    if request.collection == QuickNotesCollection::Trash {
+        // Trash past its retention is hidden until the purge job deletes it.
+        sql.push(" AND q.trashed_at > strftime('%Y-%m-%dT%H:%M:%fZ', 'now', ")
+            .push_bind(trash_expiry_modifier())
+            .push(")");
+    }
     if let Some(tag_id) = &request.tag_id {
         sql.push(" AND q.tag_id = ").push_bind(tag_id);
     }
@@ -460,10 +531,10 @@ async fn list_window_from_pool(
         if request.collection == QuickNotesCollection::Active {
             sql.push(" AND (q.pinned < ").push_bind(cursor.pinned);
             sql.push(" OR (q.pinned = ").push_bind(cursor.pinned);
-            sql.push(" AND (q.manual_order > ")
-                .push_bind(cursor.manual_order);
-            sql.push(" OR (q.manual_order = ")
-                .push_bind(cursor.manual_order);
+            sql.push(" AND (q.order_key > ")
+                .push_bind(cursor.order_key.clone());
+            sql.push(" OR (q.order_key = ")
+                .push_bind(cursor.order_key.clone());
             sql.push(" AND q.id > ")
                 .push_bind(cursor.id.clone())
                 .push("))))");
@@ -487,7 +558,7 @@ async fn list_window_from_pool(
     }
     match request.collection {
         QuickNotesCollection::Active => {
-            sql.push(" ORDER BY q.pinned DESC, q.manual_order ASC, q.id ASC")
+            sql.push(" ORDER BY q.pinned DESC, q.order_key ASC, q.id ASC")
         }
         QuickNotesCollection::Archive => sql.push(" ORDER BY q.updated_at DESC, q.id ASC"),
         QuickNotesCollection::Trash => sql.push(" ORDER BY q.trashed_at DESC, q.id ASC"),
@@ -506,7 +577,7 @@ async fn list_window_from_pool(
         rows.last()
             .map(|row| QuickNotesCursor {
                 pinned: cursor_pinned(row, request.collection),
-                manual_order: row.manual_order,
+                order_key: row.order_key.clone(),
                 sort_time: cursor_sort_time(row, request.collection),
                 id: row.id.clone(),
             })
@@ -547,8 +618,187 @@ pub async fn quick_notes_load<R: Runtime>(
     id: String,
 ) -> Result<QuickNoteRead, String> {
     let pool = connect_sqlite(app, db_url).await?;
-    cleanup_expired_trash(&pool).await?;
     load_note_from_pool(&pool, &id).await
+}
+
+/// Deletes trash past its retention. Devices that cannot write Quick notes, neither as owner
+/// nor as a linked replica, skip the pass and report no deadline.
+#[tauri::command]
+pub async fn quick_notes_purge_expired_trash<R: Runtime>(
+    app: AppHandle<R>,
+    db_url: String,
+) -> Result<QuickNotesTrashPurge, String> {
+    let status = crate::vault::ownership::active_status(&app)?;
+    if !status.can_write && !status.replicated_writes {
+        return Ok(QuickNotesTrashPurge {
+            purged: 0,
+            next_purge_at: None,
+        });
+    }
+    let pool = connect_sqlite(app, db_url).await?;
+    purge_expired_trash(&pool).await
+}
+
+#[derive(Debug, FromRow)]
+struct QuickNoteOrderRow {
+    id: String,
+    tag_id: Option<String>,
+    order_key: String,
+}
+
+impl From<&QuickNoteOrderRow> for OrderedRow {
+    fn from(row: &QuickNoteOrderRow) -> Self {
+        Self {
+            id: row.id.clone(),
+            order_key: row.order_key.clone(),
+        }
+    }
+}
+
+/// Active notes in one pinned group, excluding `id`, in display order.
+async fn active_group(
+    tx: &mut Transaction<'_, Sqlite>,
+    pinned: bool,
+    excluding: &str,
+) -> Result<Vec<QuickNoteOrderRow>, String> {
+    sqlx::query_as::<_, QuickNoteOrderRow>(
+        "SELECT id, tag_id, order_key
+         FROM quick_notes
+         WHERE pinned = ? AND archived = 0 AND trashed_at IS NULL AND id <> ?
+         ORDER BY order_key ASC, id ASC",
+    )
+    .bind(i64::from(pinned))
+    .bind(excluding)
+    .fetch_all(&mut **tx)
+    .await
+    .map_err(|error| format!("load quick note order group: {error}"))
+}
+
+async fn write_order_keys(
+    tx: &mut Transaction<'_, Sqlite>,
+    updates: &[(String, OrderKey)],
+) -> Result<(), String> {
+    for (id, key) in updates {
+        sqlx::query("UPDATE quick_notes SET order_key = ? WHERE id = ?")
+            .bind(key.as_str())
+            .bind(id)
+            .execute(&mut **tx)
+            .await
+            .map_err(|error| format!("write quick note order: {error}"))?;
+    }
+    Ok(())
+}
+
+/// Places an existing note first in its active pinned group.
+async fn move_to_front(
+    tx: &mut Transaction<'_, Sqlite>,
+    id: &str,
+    pinned: bool,
+) -> Result<(), String> {
+    let group = active_group(tx, pinned, id).await?;
+    let rows = group.iter().map(OrderedRow::from).collect::<Vec<_>>();
+    write_order_keys(tx, &placement(&rows, 0, id)?).await
+}
+
+/// Creates a note first in its pinned group.
+async fn create_from_pool(
+    pool: &SqlitePool,
+    note: QuickNoteWrite,
+) -> Result<QuickNoteRead, String> {
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(|error| format!("begin quick note create: {error}"))?;
+    insert_note(&mut tx, &note).await?;
+    tx.commit()
+        .await
+        .map_err(|error| format!("commit quick note create: {error}"))?;
+    load_note_from_pool(pool, &note.id).await
+}
+
+/// Inserts a note first in its pinned group.
+async fn insert_note(
+    tx: &mut Transaction<'_, Sqlite>,
+    note: &QuickNoteWrite,
+) -> Result<(), String> {
+    let runs = validate_content(&note.id, &note.title, &note.runs, note.color)?;
+    validate_optional_tag_id(note.tag_id.as_deref())?;
+    let body = body_plain_text(&runs);
+    let group = active_group(tx, note.pinned, &note.id).await?;
+    let rows = group.iter().map(OrderedRow::from).collect::<Vec<_>>();
+    let (order_key, others) = take_key(placement(&rows, 0, &note.id)?, &note.id)?;
+    write_order_keys(tx, &others).await?;
+    // A tag deleted by another window or device leaves the note untagged.
+    sqlx::query(
+        "INSERT INTO quick_notes (
+             id, title, body_plain_text, color, tag_id, pinned, order_key
+         ) VALUES (?, ?, ?, ?, (SELECT id FROM quick_note_tags WHERE id = ?), ?, ?)",
+    )
+    .bind(&note.id)
+    .bind(note.title.trim())
+    .bind(body)
+    .bind(note.color)
+    .bind(note.tag_id.as_deref())
+    .bind(i64::from(note.pinned))
+    .bind(order_key.as_str())
+    .execute(&mut **tx)
+    .await
+    .map_err(|error| format!("create quick note: {error}"))?;
+    replace_runs(tx, &note.id, &runs).await
+}
+
+/// A random version 4 UUID for notes created by the backend, in the form the frontend uses.
+fn new_note_id() -> Result<String, String> {
+    let mut bytes = [0_u8; 16];
+    rustls::crypto::ring::default_provider()
+        .secure_random
+        .fill(&mut bytes)
+        .map_err(|_| "secure random generator is unavailable".to_string())?;
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    let hex: String = bytes.iter().map(|byte| format!("{byte:02x}")).collect();
+    Ok(format!(
+        "{}-{}-{}-{}-{}",
+        &hex[0..8],
+        &hex[8..12],
+        &hex[12..16],
+        &hex[16..20],
+        &hex[20..32]
+    ))
+}
+
+/// Creates an active, unpinned note from the retained values of a deleted note offered for
+/// recovery, first in its group. Returns the new note id.
+pub(crate) async fn restore_recovered(
+    pool: &SqlitePool,
+    values: &[(GroupId, Value)],
+) -> Result<String, String> {
+    let mut note = QuickNoteWrite {
+        id: new_note_id()?,
+        title: String::new(),
+        runs: Vec::new(),
+        color: 0,
+        tag_id: None,
+        pinned: false,
+    };
+    for (group, value) in values {
+        match (*group, value.fields()) {
+            (note_group::TITLE, [Field::Text(title)]) => note.title = title.clone(),
+            (note_group::BODY, _) => note.runs = conflicts::runs_from_value(value)?,
+            (note_group::COLOR, [Field::Integer(color)]) => note.color = *color,
+            (note_group::TAG, [Field::Text(tag_id)]) => note.tag_id = Some(tag_id.clone()),
+            _ => {}
+        }
+    }
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(|error| format!("begin quick note restore: {error}"))?;
+    insert_note(&mut tx, &note).await?;
+    tx.commit()
+        .await
+        .map_err(|error| format!("commit quick note restore: {error}"))?;
+    Ok(note.id)
 }
 
 #[tauri::command]
@@ -557,47 +807,12 @@ pub async fn quick_notes_create<R: Runtime>(
     db_url: String,
     note: QuickNoteWrite,
 ) -> Result<QuickNoteRead, String> {
-    let runs = validate_content(&note.id, &note.title, &note.runs, note.color)?;
-    validate_optional_tag_id(note.tag_id.as_deref())?;
-    let body = body_plain_text(&runs);
     let pool = connect_sqlite(app, db_url).await?;
-    let mut tx = pool
-        .begin()
-        .await
-        .map_err(|error| format!("begin quick note create: {error}"))?;
-    sqlx::query(
-        "INSERT INTO quick_notes (
-             id, title, body_plain_text, color, tag_id, pinned, manual_order
-         ) VALUES (
-             ?, ?, ?, ?, ?, ?,
-             COALESCE((
-                 SELECT MIN(manual_order) - 1024.0
-                 FROM quick_notes
-                 WHERE pinned = ? AND archived = 0 AND trashed_at IS NULL
-             ), 0.0)
-         )",
-    )
-    .bind(&note.id)
-    .bind(note.title.trim())
-    .bind(body)
-    .bind(note.color)
-    .bind(note.tag_id)
-    .bind(i64::from(note.pinned))
-    .bind(i64::from(note.pinned))
-    .execute(&mut *tx)
-    .await
-    .map_err(|error| format!("create quick note: {error}"))?;
-    replace_runs(&mut tx, &note.id, &runs).await?;
-    tx.commit()
-        .await
-        .map_err(|error| format!("commit quick note create: {error}"))?;
-    load_note_from_pool(&pool, &note.id).await
+    create_from_pool(&pool, note).await
 }
 
-#[tauri::command]
-pub async fn quick_notes_update<R: Runtime>(
-    app: AppHandle<R>,
-    db_url: String,
+async fn update_from_pool(
+    pool: &SqlitePool,
     note: QuickNoteUpdate,
 ) -> Result<QuickNoteRead, QuickNoteWriteError> {
     let runs = validate_content(&note.id, &note.title, &note.runs, note.color)?;
@@ -606,14 +821,14 @@ pub async fn quick_notes_update<R: Runtime>(
         return Err("quick note revision must be positive".to_string().into());
     }
     let body = body_plain_text(&runs);
-    let pool = connect_sqlite(app, db_url).await?;
     let mut tx = pool
         .begin()
         .await
         .map_err(|error| format!("begin quick note update: {error}"))?;
     let result = sqlx::query(
         "UPDATE quick_notes
-         SET title = ?, body_plain_text = ?, color = ?, tag_id = ?,
+         SET title = ?, body_plain_text = ?, color = ?,
+             tag_id = (SELECT id FROM quick_note_tags WHERE id = ?),
              pinned = CASE WHEN archived = 0 AND trashed_at IS NULL THEN ? ELSE 0 END,
              revision = revision + 1,
              updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
@@ -638,9 +853,26 @@ pub async fn quick_notes_update<R: Runtime>(
     tx.commit()
         .await
         .map_err(|error| format!("commit quick note update: {error}"))?;
-    load_note_from_pool(&pool, &note.id)
+    load_note_from_pool(pool, &note.id)
         .await
         .map_err(Into::into)
+}
+
+#[tauri::command]
+pub async fn quick_notes_update<R: Runtime>(
+    app: AppHandle<R>,
+    db_url: String,
+    note: QuickNoteUpdate,
+) -> Result<QuickNoteRead, QuickNoteWriteError> {
+    let pool = connect_sqlite(app, db_url).await?;
+    update_from_pool(&pool, note).await
+}
+
+/// Where a lifecycle change leaves the note in the active order.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Placement {
+    Unchanged,
+    FirstUnpinned,
 }
 
 async fn revision_mutation(
@@ -648,12 +880,17 @@ async fn revision_mutation(
     request: &QuickNoteRevisionRequest,
     sql: &str,
     context: &str,
+    placement: Placement,
 ) -> Result<QuickNoteRead, QuickNoteWriteError> {
     validate_id(&request.id)?;
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(|error| format!("begin {context}: {error}"))?;
     let result = sqlx::query(sql)
         .bind(&request.id)
         .bind(request.expected_revision)
-        .execute(pool)
+        .execute(&mut *tx)
         .await
         .map_err(|error| format!("{context}: {error}"))?;
     if result.rows_affected() != 1 {
@@ -661,6 +898,56 @@ async fn revision_mutation(
             "quick note revision conflict".to_string(),
         ));
     }
+    if placement == Placement::FirstUnpinned {
+        move_to_front(&mut tx, &request.id, false).await?;
+    }
+    tx.commit()
+        .await
+        .map_err(|error| format!("commit {context}: {error}"))?;
+    load_note_from_pool(pool, &request.id)
+        .await
+        .map_err(Into::into)
+}
+
+/// Pins or unpins an active note; a note that changes group moves to the front of it.
+async fn set_pinned_from_pool(
+    pool: &SqlitePool,
+    request: QuickNotePinRequest,
+) -> Result<QuickNoteRead, QuickNoteWriteError> {
+    validate_id(&request.id)?;
+    let mut tx = pool
+        .begin()
+        .await
+        .map_err(|error| format!("begin quick note pin: {error}"))?;
+    let current = sqlx::query_scalar::<_, i64>(
+        "SELECT pinned FROM quick_notes
+         WHERE id = ? AND revision = ? AND archived = 0 AND trashed_at IS NULL",
+    )
+    .bind(&request.id)
+    .bind(request.expected_revision)
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(|error| format!("load quick note pinned state: {error}"))?
+    .ok_or_else(|| {
+        QuickNoteWriteError::RevisionConflict("quick note revision conflict".to_string())
+    })?;
+    sqlx::query(
+        "UPDATE quick_notes
+         SET pinned = ?, revision = revision + 1,
+             updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+         WHERE id = ?",
+    )
+    .bind(i64::from(request.pinned))
+    .bind(&request.id)
+    .execute(&mut *tx)
+    .await
+    .map_err(|error| format!("set quick note pinned state: {error}"))?;
+    if current != i64::from(request.pinned) {
+        move_to_front(&mut tx, &request.id, request.pinned).await?;
+    }
+    tx.commit()
+        .await
+        .map_err(|error| format!("commit quick note pin: {error}"))?;
     load_note_from_pool(pool, &request.id)
         .await
         .map_err(Into::into)
@@ -672,47 +959,8 @@ pub async fn quick_notes_set_pinned<R: Runtime>(
     db_url: String,
     request: QuickNotePinRequest,
 ) -> Result<QuickNoteRead, QuickNoteWriteError> {
-    validate_id(&request.id)?;
     let pool = connect_sqlite(app, db_url).await?;
-    let result = sqlx::query(
-        "UPDATE quick_notes
-         SET manual_order = CASE
-                 WHEN pinned <> ? THEN COALESCE((
-                     SELECT MIN(candidate.manual_order) - 1024.0
-                     FROM quick_notes AS candidate
-                     WHERE candidate.pinned = ?
-                       AND candidate.archived = 0
-                       AND candidate.trashed_at IS NULL
-                 ), 0.0)
-                 ELSE manual_order
-             END,
-             pinned = ?, revision = revision + 1,
-             updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-         WHERE id = ? AND revision = ? AND archived = 0 AND trashed_at IS NULL",
-    )
-    .bind(i64::from(request.pinned))
-    .bind(i64::from(request.pinned))
-    .bind(i64::from(request.pinned))
-    .bind(&request.id)
-    .bind(request.expected_revision)
-    .execute(&pool)
-    .await
-    .map_err(|error| format!("set quick note pinned state: {error}"))?;
-    if result.rows_affected() != 1 {
-        return Err(QuickNoteWriteError::RevisionConflict(
-            "quick note revision conflict".to_string(),
-        ));
-    }
-    load_note_from_pool(&pool, &request.id)
-        .await
-        .map_err(Into::into)
-}
-
-#[derive(Debug, FromRow)]
-struct QuickNoteOrderRow {
-    id: String,
-    tag_id: Option<String>,
-    manual_order: f64,
+    set_pinned_from_pool(&pool, request).await
 }
 
 async fn reorder_from_pool(
@@ -734,8 +982,8 @@ async fn reorder_from_pool(
         .begin()
         .await
         .map_err(|error| format!("begin quick note reorder: {error}"))?;
-    let pinned = sqlx::query_scalar::<_, i64>(
-        "SELECT pinned FROM quick_notes
+    let (pinned, tag_id) = sqlx::query_as::<_, (i64, Option<String>)>(
+        "SELECT pinned, tag_id FROM quick_notes
          WHERE id = ? AND archived = 0 AND trashed_at IS NULL",
     )
     .bind(&request.id)
@@ -743,26 +991,10 @@ async fn reorder_from_pool(
     .await
     .map_err(|error| format!("load quick note reorder source: {error}"))?
     .ok_or_else(|| "active quick note not found".to_string())?;
-
-    let mut rows = sqlx::query_as::<_, QuickNoteOrderRow>(
-        "SELECT id, tag_id, manual_order
-         FROM quick_notes
-         WHERE pinned = ? AND archived = 0 AND trashed_at IS NULL
-         ORDER BY manual_order ASC, id ASC",
-    )
-    .bind(pinned)
-    .fetch_all(&mut *tx)
-    .await
-    .map_err(|error| format!("load quick note reorder group: {error}"))?;
-
-    let source = rows
-        .iter()
-        .find(|row| row.id == request.id)
-        .ok_or_else(|| "quick note reorder source is outside its order group".to_string())?;
-    if request.tag_id.is_some() && source.tag_id != request.tag_id {
+    if request.tag_id.is_some() && tag_id != request.tag_id {
         return Err("quick note reorder source is outside the selected tag".to_string());
     }
-    rows.retain(|row| row.id != request.id);
+    let rows = active_group(&mut tx, pinned != 0, &request.id).await?;
 
     let is_visible = |row: &&QuickNoteOrderRow| match request.tag_id.as_ref() {
         Some(tag_id) => row.tag_id.as_ref() == Some(tag_id),
@@ -803,33 +1035,8 @@ async fn reorder_from_pool(
     } else {
         0
     };
-    let previous_order = insertion_index
-        .checked_sub(1)
-        .map(|index| rows[index].manual_order);
-    let next_order = rows.get(insertion_index).map(|row| row.manual_order);
-    let new_order = match (previous_order, next_order) {
-        (Some(previous), Some(next)) if next - previous > 0.000_001 => (previous + next) / 2.0,
-        (None, Some(next)) => next - 1024.0,
-        (Some(previous), None) => previous + 1024.0,
-        (None, None) => 0.0,
-        (Some(_), Some(_)) => {
-            for (index, row) in rows.iter().enumerate() {
-                sqlx::query("UPDATE quick_notes SET manual_order = ? WHERE id = ?")
-                    .bind(index as f64 * 1024.0)
-                    .bind(&row.id)
-                    .execute(&mut *tx)
-                    .await
-                    .map_err(|error| format!("rebalance quick note order: {error}"))?;
-            }
-            insertion_index as f64 * 1024.0 - 512.0
-        }
-    };
-    sqlx::query("UPDATE quick_notes SET manual_order = ? WHERE id = ?")
-        .bind(new_order)
-        .bind(&request.id)
-        .execute(&mut *tx)
-        .await
-        .map_err(|error| format!("reorder quick note: {error}"))?;
+    let ordered = rows.iter().map(OrderedRow::from).collect::<Vec<_>>();
+    write_order_keys(&mut tx, &placement(&ordered, insertion_index, &request.id)?).await?;
     tx.commit()
         .await
         .map_err(|error| format!("commit quick note reorder: {error}"))?;
@@ -846,6 +1053,26 @@ pub async fn quick_notes_reorder<R: Runtime>(
     reorder_from_pool(&pool, request).await
 }
 
+const ARCHIVE_SQL: &str =
+    "UPDATE quick_notes SET archived = 1, pinned = 0, revision = revision + 1,
+     updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+     WHERE id = ? AND revision = ? AND archived = 0 AND trashed_at IS NULL";
+
+const UNARCHIVE_SQL: &str = "UPDATE quick_notes SET archived = 0, pinned = 0,
+     revision = revision + 1,
+     updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+     WHERE id = ? AND revision = ? AND archived = 1 AND trashed_at IS NULL";
+
+const TRASH_SQL: &str = "UPDATE quick_notes SET trashed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+     pinned = 0, revision = revision + 1,
+     updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+     WHERE id = ? AND revision = ? AND trashed_at IS NULL";
+
+const RESTORE_SQL: &str = "UPDATE quick_notes SET trashed_at = NULL, pinned = 0,
+     revision = revision + 1,
+     updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+     WHERE id = ? AND revision = ? AND trashed_at IS NOT NULL";
+
 #[tauri::command]
 pub async fn quick_notes_archive<R: Runtime>(
     app: AppHandle<R>,
@@ -856,10 +1083,9 @@ pub async fn quick_notes_archive<R: Runtime>(
     revision_mutation(
         &pool,
         &request,
-        "UPDATE quick_notes SET archived = 1, pinned = 0, revision = revision + 1,
-         updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-         WHERE id = ? AND revision = ? AND archived = 0 AND trashed_at IS NULL",
+        ARCHIVE_SQL,
         "archive quick note",
+        Placement::Unchanged,
     )
     .await
 }
@@ -874,18 +1100,9 @@ pub async fn quick_notes_unarchive<R: Runtime>(
     revision_mutation(
         &pool,
         &request,
-        "UPDATE quick_notes SET archived = 0, pinned = 0,
-         manual_order = COALESCE((
-             SELECT MIN(candidate.manual_order) - 1024.0
-             FROM quick_notes AS candidate
-             WHERE candidate.pinned = 0
-               AND candidate.archived = 0
-               AND candidate.trashed_at IS NULL
-         ), 0.0),
-         revision = revision + 1,
-         updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-         WHERE id = ? AND revision = ? AND archived = 1 AND trashed_at IS NULL",
+        UNARCHIVE_SQL,
         "unarchive quick note",
+        Placement::FirstUnpinned,
     )
     .await
 }
@@ -900,11 +1117,9 @@ pub async fn quick_notes_trash<R: Runtime>(
     revision_mutation(
         &pool,
         &request,
-        "UPDATE quick_notes SET trashed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
-         pinned = 0, revision = revision + 1,
-         updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-         WHERE id = ? AND revision = ? AND trashed_at IS NULL",
+        TRASH_SQL,
         "trash quick note",
+        Placement::Unchanged,
     )
     .await
 }
@@ -919,18 +1134,9 @@ pub async fn quick_notes_restore<R: Runtime>(
     revision_mutation(
         &pool,
         &request,
-        "UPDATE quick_notes SET trashed_at = NULL, pinned = 0,
-         manual_order = COALESCE((
-             SELECT MIN(candidate.manual_order) - 1024.0
-             FROM quick_notes AS candidate
-             WHERE candidate.pinned = 0
-               AND candidate.archived = 0
-               AND candidate.trashed_at IS NULL
-         ), 0.0),
-         revision = revision + 1,
-         updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-         WHERE id = ? AND revision = ? AND trashed_at IS NOT NULL",
+        RESTORE_SQL,
         "restore quick note",
+        Placement::FirstUnpinned,
     )
     .await
 }
@@ -972,7 +1178,8 @@ pub async fn quick_notes_list_tags<R: Runtime>(
     app: AppHandle<R>,
     db_url: String,
 ) -> Result<Vec<QuickNoteTagRead>, String> {
-    tags::list(app, db_url).await
+    let pool = connect_sqlite(app, db_url).await?;
+    tags::list_from_pool(&pool).await
 }
 
 #[tauri::command]
@@ -980,8 +1187,56 @@ pub async fn quick_notes_create_tag<R: Runtime>(
     app: AppHandle<R>,
     db_url: String,
     tag: QuickNoteTagWrite,
-) -> Result<QuickNoteTagRead, String> {
-    tags::create(app, db_url, tag).await
+) -> Result<QuickNoteTagRead, QuickNoteTagError> {
+    let pool = connect_sqlite(app, db_url).await?;
+    tags::create_from_pool(&pool, tag).await
+}
+
+#[tauri::command]
+pub async fn quick_notes_rename_tag<R: Runtime>(
+    app: AppHandle<R>,
+    db_url: String,
+    tag: QuickNoteTagWrite,
+) -> Result<QuickNoteTagRead, QuickNoteTagError> {
+    let pool = connect_sqlite(app, db_url).await?;
+    tags::rename_from_pool(&pool, tag).await
+}
+
+#[tauri::command]
+pub async fn quick_notes_delete_tag<R: Runtime>(
+    app: AppHandle<R>,
+    db_url: String,
+    id: String,
+) -> Result<(), QuickNoteTagError> {
+    let pool = connect_sqlite(app, db_url).await?;
+    tags::delete_from_pool(&pool, &id).await
+}
+
+/// The conflicts of a note, with every version and the device that wrote it.
+#[tauri::command]
+pub async fn quick_notes_conflict<R: Runtime>(
+    app: AppHandle<R>,
+    db_url: String,
+    id: String,
+) -> Result<QuickNoteConflictRead, QuickNoteConflictError> {
+    let vault_id = crate::vault::active_vault_id(&app)?;
+    let devices = crate::sync::DeviceNames::read(&app)?;
+    let pool = connect_sqlite(app, db_url).await?;
+    conflicts::conflict_from_pool(&pool, &vault_id, &devices, &id).await
+}
+
+/// Resolves a title or body conflict by keeping the displayed version, using another one, or
+/// keeping both in separate notes.
+#[tauri::command]
+pub async fn quick_notes_resolve_conflict<R: Runtime>(
+    app: AppHandle<R>,
+    db_url: String,
+    resolution: QuickNoteConflictResolution,
+) -> Result<QuickNoteConflictResolved, QuickNoteConflictError> {
+    let vault_id = crate::vault::active_vault_id(&app)?;
+    let now_ms = crate::sync::now_ms()?;
+    let pool = connect_sqlite(app, db_url).await?;
+    conflicts::resolve_from_pool(&pool, &vault_id, resolution, now_ms).await
 }
 
 #[cfg(test)]

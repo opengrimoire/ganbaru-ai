@@ -17,7 +17,7 @@ The repository has a substantial local desktop and Android foundation:
 - Local Music libraries and playlists with desktop and Android playback, plus YouTube integration.
 - Chromium website blocking, desktop application blocking, and consented Android application enforcement.
 - An adaptive Android shell covering the main features, portable backup and restore, and notifications.
-- Private-LAN device linking with single-writer whole-vault handoff between one person's desktop and Android devices.
+- Private-LAN device linking with single-writer whole-vault handoff between one person's desktop and Android devices, plus concurrent Quick notes sync through the coordinator desktop (physical multi-device acceptance pending).
 
 Implemented does not mean release-complete on every platform. The [feature index](features/README.md) and [Android platform document](platforms/android/README.md) identify partial areas and platform limits.
 
@@ -33,7 +33,7 @@ See [Calendar](features/calendar/README.md) and [Pomodoro](features/pomodoro/REA
 
 ### Concurrent device synchronization
 
-Build concurrent one-person synchronization beyond the current single-writer handoff: typed domain operations, collaborative text, end-to-end encrypted enrollment, and an optional user-hosted relay. See [Device linking and synchronization](data/sync.md).
+The sync engine, signed operation log, installation writers, and LAN hub transport exist, with Quick notes as the first concurrently synced domain while the rest of the vault keeps single-writer handoff. Remaining work: physical multi-device acceptance, converting the other domains, collaborative text, compaction, end-to-end operation encryption and enrollment, and an optional user-hosted relay. See [Device linking and synchronization](data/sync.md).
 
 ### Android release readiness
 

@@ -39,6 +39,10 @@ struct LocalPair {
 
 impl LocalPair {
     async fn start() -> Self {
+        Self::start_with_hub(None).await
+    }
+
+    async fn start_with_hub(hub: Option<crate::sync::hub::SyncHub>) -> Self {
         let desktop_root = TestDirectory::new("desktop");
         let phone_root = TestDirectory::new("phone");
         let desktop = PairingManager::default();
@@ -66,7 +70,13 @@ impl LocalPair {
             )
             .expect("create invitation");
         let (shutdown, receiver) = tokio::sync::oneshot::channel();
-        tokio::spawn(serve(listener, desktop.clone(), receiver));
+        tokio::spawn(serve_with_coordinator(
+            listener,
+            desktop.clone(),
+            None,
+            hub,
+            receiver,
+        ));
         Self {
             _desktop_root: desktop_root,
             _phone_root: phone_root,
@@ -124,6 +134,7 @@ impl LocalPair {
             listener,
             desktop.clone(),
             Some(requests),
+            None,
             receiver,
         ));
         (
@@ -985,4 +996,69 @@ async fn person_key_is_released_only_to_an_enrolled_device() {
         other => panic!("unexpected response: {other:?}"),
     }
     coordinator.await.expect("coordinator task");
+}
+
+#[tokio::test]
+async fn sync_requests_reach_the_hub_only_from_enrolled_devices() {
+    use crate::sync::hub::{OpenHubVault, SyncHub};
+
+    let open: OpenHubVault = std::sync::Arc::new(|| Box::pin(async { Ok(None) }));
+    let hub = SyncHub::new(open, tokio::sync::watch::Sender::new(0));
+    let pair = LocalPair::start_with_hub(Some(hub)).await;
+    let hello = |protocol_version| ControlMessage::SyncHello {
+        protocol_version,
+        vault_id: "vault-1".to_string(),
+        device_id: "device-phone".to_string(),
+        manifest_version: 1,
+        stored: Vec::new(),
+        probe: None,
+    };
+    let unauthenticated = unauthenticated_exchange(
+        &pair.invitation.endpoint,
+        &pair.invitation.coordinator_fingerprint,
+        hello(PROTOCOL_VERSION),
+    )
+    .await;
+    assert!(
+        unauthenticated.is_err(),
+        "a connection without a client certificate must not reach the hub"
+    );
+
+    pair.enroll().await;
+    assert_eq!(
+        sync_peer(&pair.phone).expect("sync peer"),
+        Some(("vault-1".to_string(), "device-phone".to_string()))
+    );
+    let response = sync_request(&pair.phone, hello(PROTOCOL_VERSION))
+        .await
+        .expect("sync exchange");
+    assert!(matches!(
+        response,
+        ControlMessage::Error { code, retryable: true, .. } if code == "sync_unavailable"
+    ));
+    assert!(
+        hello(PROTOCOL_VERSION - 1).validate().is_err(),
+        "sync messages of an older protocol are refused at the frame boundary"
+    );
+}
+
+#[tokio::test]
+async fn coordinator_without_a_hub_refuses_sync_requests() {
+    let pair = LocalPair::start().await;
+    pair.enroll().await;
+    let response = sync_request(
+        &pair.phone,
+        ControlMessage::SyncWait {
+            protocol_version: PROTOCOL_VERSION,
+            vault_id: "vault-1".to_string(),
+            device_id: "device-phone".to_string(),
+            known: Vec::new(),
+        },
+    )
+    .await
+    .expect("sync exchange");
+    assert!(matches!(
+        response,
+        ControlMessage::Error { code, retryable: false, .. } if code == "sync_unsupported"
+    ));
 }

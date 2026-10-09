@@ -19,8 +19,12 @@ The Cargo workspace extracts domains that benefit from Tauri-free contracts and 
 - `ganbaru-chat-providers` owns provider processes, transports, normalization, cancellation, and registry behavior.
 - `ganbaru-chat` owns Chat persistence, runtime services, Git workspaces, checkpoints, review, and source control.
 - `ganbaru-working-folders` owns portable folder identities, bindings, repository kinds, and device-local state shapes.
+- `ganbaru-sync-contracts` defines sync identifiers, clocks, version vectors, writer certificates, order keys, bounds, and the signed operation format. It has no database or Tauri dependency.
+- `ganbaru-sync` is the Tauri-free sync engine: the replication manifest, rendered capture and guard triggers, sealing, storage, causal apply, merges, conflicts, recovery, and re-sealing, plus the Quick notes domain adapter and the deterministic simulation harness.
 - `ganbaru-native-messaging` is the independent Chromium native messaging host.
 - `ganbaru-mobile-*` crates expose narrow Android notification, document, media, and anti-distraction plugins.
+
+The application's sync module composes the engine with the vault: it owns the per-vault service lifecycle around handoff quiescence, guarded replica database access, writer keys and the device-local writer record, carry-forward of local operations across whole-vault replacement, the hub and client sides of the LAN transport, and the status, pause, sync now, and recovery commands. Domain modules keep their own sync-facing commands, such as Quick notes conflict resolution. The engine never touches Tauri state, key stores, or the network, so its merge behavior is testable with in-memory databases. See the [sync engine decision](decisions/sync-engine.md) and [Device linking and synchronization](../data/sync.md).
 
 Code stays in the application crate when it is only composition or Tauri adaptation. It moves to a core crate when the domain boundary, portability, or independent tests justify the extraction.
 

@@ -118,6 +118,14 @@ impl PersonKeyPair {
             .map_err(|_| SignatureError::InvalidKey)
     }
 
+    /// Derives a key from a 32-byte secret seed. The seed must come from a secure random source,
+    /// except in reproducible test vectors.
+    pub fn from_seed(seed: &[u8; 32]) -> Result<Self, SignatureError> {
+        Ed25519KeyPair::from_seed_unchecked(seed)
+            .map(Self)
+            .map_err(|_| SignatureError::InvalidKey)
+    }
+
     /// Public half of the key.
     pub fn public_key(&self) -> PersonPublicKey {
         let mut bytes = [0u8; PUBLIC_KEY_BYTES];

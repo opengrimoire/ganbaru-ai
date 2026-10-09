@@ -18,6 +18,10 @@ This directory specifies deterministic domain decisions that must stay consisten
 - [Adaptive policy](pomodoro/adaptive-policy.md)
 - [Adaptive experiments](pomodoro/adaptive-experiments.md)
 
+## Sync
+
+- [Sync merge rules](sync/README.md)
+
 ## Reading algorithm status
 
 These documents describe the intended product contract. A note labeled implementation gap identifies a known divergence in current code. Do not remove a desired invariant merely to match an accidental implementation detail: resolve the product decision, update code and tests, then remove the gap note.

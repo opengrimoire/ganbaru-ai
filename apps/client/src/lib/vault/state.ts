@@ -58,6 +58,8 @@ export interface VaultOwnershipStatus {
   generation: number;
   role: "owner" | "read-only" | "recovery";
   canWrite: boolean;
+  /** A linked replica that can write replicated tables, such as Quick notes, while the rest of the vault is read-only. */
+  replicatedWrites: boolean;
   transferPhase: VaultTransferPhase;
 }
 
@@ -182,6 +184,7 @@ function parseVaultOwnershipStatus(value: unknown): VaultOwnershipStatus {
   const generation = readNonNegativeInteger(value.generation);
   const role = value.role;
   const canWrite = readBoolean(value.canWrite);
+  const replicatedWrites = readBoolean(value.replicatedWrites);
   if (
     !vaultId
     || !deviceId
@@ -189,11 +192,15 @@ function parseVaultOwnershipStatus(value: unknown): VaultOwnershipStatus {
     || generation === null
     || (role !== "owner" && role !== "read-only" && role !== "recovery")
     || canWrite === null
+    || replicatedWrites === null
   ) {
     throw new Error("vault ownership response is incomplete");
   }
   if (canWrite !== (role === "owner")) {
     throw new Error("vault ownership response has an inconsistent role");
+  }
+  if (replicatedWrites && role !== "read-only") {
+    throw new Error("vault ownership response has inconsistent replicated writes");
   }
   return {
     vaultId,
@@ -202,6 +209,7 @@ function parseVaultOwnershipStatus(value: unknown): VaultOwnershipStatus {
     generation,
     role,
     canWrite,
+    replicatedWrites,
     transferPhase: parseTransferPhase(value.transferPhase),
   };
 }

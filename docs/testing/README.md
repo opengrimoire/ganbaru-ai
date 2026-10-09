@@ -72,7 +72,22 @@ cargo test -p ganbaru-db --lib -j 1 test_name -- --test-threads=1
 cargo test -p ganbaru-tauri-app --lib -j 1 test_name -- --test-threads=1
 ```
 
-Substitute `ganbaru-chat-contracts`, `ganbaru-chat-providers`, `ganbaru-pomodoro`, or `ganbaru-working-folders` when that crate owns the behavior.
+Substitute `ganbaru-chat-contracts`, `ganbaru-chat-providers`, `ganbaru-pomodoro`, `ganbaru-working-folders`, `ganbaru-people`, `ganbaru-sync-contracts`, or `ganbaru-sync` when that crate owns the behavior.
+
+### Focused sync behavior
+
+```sh
+cargo test -p ganbaru-sync-contracts --lib -j 1 -- --test-threads=1
+cargo test -p ganbaru-sync --lib -j 1 conformance -- --test-threads=1
+cargo test -p ganbaru-sync --lib -j 1 sim -- --test-threads=1
+cargo test -p ganbaru-tauri-app --lib -j 1 sync -- --test-threads=1
+```
+
+The contracts crate owns golden operation vectors, mutation tests, and order key fuzzing. A golden vector mismatch means the operation encoding changed by accident, because every stored log depends on it; regenerate vectors with `GANBARU_SYNC_BLESS_VECTORS=1` only when deliberately introducing a new format version. The engine's conformance tests compare every table, column, and capture trigger of a freshly migrated database with the sync manifest.
+
+The engine simulation replays seeded runs of several installations that edit Quick notes, partly offline, through a hub over a network that drops, duplicates, and reorders messages, with crash failpoints, clock skew, and revocations. It checks database invariants after every step and identical replicated state at quiescence. Normal validation runs 48 seeds of 60 steps. `GANBARU_SYNC_SOAK_SEEDS` sets a larger seed count for a soak run, and `GANBARU_SYNC_SEED` replays the single seed that a failing run prints. The simulation keeps one replica set in memory at a time, so a soak run stays within the single-thread memory budget.
+
+The engine's desktop performance budgets (capture overhead per write, seal of 100 changed notes, apply of a 256-operation batch) are an ignored test that asserts only in the release profile, on the median of several runs: `cargo test -p ganbaru-sync --lib --release -j 1 budgets -- --ignored --nocapture --test-threads=1`.
 
 Use the native messaging binary only for binary-local tests:
 

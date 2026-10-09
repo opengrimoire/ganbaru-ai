@@ -13,6 +13,7 @@ Current code uses the network only for these feature-owned purposes:
 - User-initiated Notion API import and remote project-icon import from a user-supplied HTTPS URL.
 - Chat browser previews and URLs explicitly opened by the user.
 - Local LAN device linking and whole-vault handoff, restricted to a private LAN address with pinned certificates and mutual TLS (see [Synchronization](../sync.md)).
+- Concurrent Quick notes sync on the same listener. Every sync request is answered only after the peer is authenticated as an enrolled device of the vault it names; the coordinator stores and serves operations and accepts a new writer only when its certificate names the authenticated device. Requests carry the vault and device identifiers, version vectors, operation hashes, and signed operations that contain Quick notes and tag values with the writer certificates; no other vault data travels this way. Operations are signed but not separately encrypted, so the mutual TLS link is their only confidentiality protection.
 - Contact requests and status polls on the same LAN listener, which are the only inbound messages accepted without a client certificate (see [People and contact requests](../sync.md#people-and-contact-requests)). The surface is bounded: a card is at most 512 bytes and must carry a valid signature before anything is written, the recipient card nonce is compared in constant time, status polls are signed and rejected outside a five-minute window, pending received requests are capped at 64 with the oldest expired first, and a blocked requester receives the same response as an accepted one. Outbound, the requester connects only to the endpoint and certificate fingerprint named in the card it was handed.
 - The Chrome extension's native-messaging connection, which is local and not a remote service.
 
@@ -24,7 +25,7 @@ Provider network behavior follows the selected provider and its own policy. Ganb
 
 Not implemented:
 
-- Concurrent operation sync and optional remote synchronization through a user-hosted Rust relay.
+- Concurrent sync of domains other than Quick notes, operation encryption, and optional remote synchronization through a user-hosted Rust relay.
 - A hosted or local BYOK chat widget separate from coding-agent Chat.
 - A separately authorized external MCP service.
 - A `ganbaru-ai` CLI with external integration commands.
@@ -61,6 +62,8 @@ The vault and SQLite database are not application-encrypted. Ganbaru AI relies o
 Why: this keeps user files accessible to ordinary backup and editing tools and avoids a second fragile key-recovery system. The cost is that malware running as the same user can read the vault, and documentation must state that limitation honestly.
 
 Secrets are different. Provider credentials live behind operating-system credential references and are materialized only at the native operation that needs them. They never belong in `config.json`, the vault database, provider DTOs, diagnostics, or exports.
+
+Sync writer keys are per installation and per vault. Desktop stores them in the operating-system keyring; Android stores them in private application files, with the same protection as the person key, until Keystore wrapping is implemented. Neither location is inside the vault, so writer keys never enter snapshots, backups, or device transfers. A restored or copied database is detected and gets a new writer instead of reusing an old key's sequence.
 
 ## Future synchronization encryption
 

@@ -262,6 +262,7 @@ pub(crate) async fn create_handoff_archive(
     let snapshot_result = vacuum_database(&pool, database_snapshot).await;
     registry.close_all().await?;
     snapshot_result?;
+    prepare_snapshot_copy(database_snapshot).await?;
     create_backup_archive(vault_root, database_snapshot, archive_path)
 }
 
@@ -522,6 +523,12 @@ async fn activate_handoff_at_path<R: Runtime>(
         return Err("a previous handoff copy still requires recovery".to_string());
     }
     let quiescence = super::quiescence::begin_snapshot_quiescence(app).await?;
+    if let Err(error) = carry_forward_local_changes(app, staging, target, expected_vault_id).await {
+        return Err(match quiescence.finish() {
+            Ok(()) => error,
+            Err(resume) => format!("{error}; {resume}"),
+        });
+    }
     let activation_app = app.clone();
     let staging = staging.to_path_buf();
     let target = target.to_path_buf();
@@ -548,6 +555,43 @@ async fn activate_handoff_at_path<R: Runtime>(
     })
     .await
     .map_err(|error| format!("handoff activation worker failed: {error}"))?
+}
+
+/// Clears installation-local sync state from a snapshot copy before it leaves this device.
+async fn prepare_snapshot_copy(snapshot: &Path) -> Result<(), String> {
+    use sqlx::Connection;
+    let options = sqlx::sqlite::SqliteConnectOptions::new().filename(snapshot);
+    let mut conn = sqlx::SqliteConnection::connect_with(&options)
+        .await
+        .map_err(|error| format!("open handoff snapshot: {error}"))?;
+    let result = ganbaru_sync::local::prepare_snapshot_copy(&mut conn)
+        .await
+        .map_err(|error| format!("prepare handoff snapshot: {error}"));
+    let closed = conn
+        .close()
+        .await
+        .map_err(|error| format!("close handoff snapshot: {error}"));
+    result.and(closed)
+}
+
+/// Exports local sync operations the staged replacement lacks, so the next service start
+/// imports them into the replacement. Only a replacement of the same vault carries anything.
+async fn carry_forward_local_changes<R: Runtime>(
+    app: &tauri::AppHandle<R>,
+    staging: &Path,
+    target: &Path,
+    expected_vault_id: &str,
+) -> Result<(), String> {
+    let same_vault =
+        vault_info_from_path(target).is_ok_and(|info| info.vault_id == expected_vault_id);
+    if !staging.exists() || !same_vault {
+        return Ok(());
+    }
+    let files = crate::sync::sync_files(app, expected_vault_id)?;
+    crate::sync::export_for_replacement(&database_path(target), &database_path(staging), &files)
+        .await
+        .map(|_| ())
+        .map_err(|error| format!("keep local Quick notes changes: {error}"))
 }
 
 fn preserved_handoff_path(parent: &Path, target: &Path, transfer_id: &str) -> PathBuf {
@@ -949,7 +993,7 @@ mod tests {
             "INSERT INTO notes_pages (id, parent_type, title) VALUES ('handoff-note', 'workspace', 'Portable note')",
             "INSERT INTO chat_conversations (id, project_id, conversation_kind, last_activity_at, created_at, updated_at) VALUES ('handoff-conversation', 'project-routine-learning', 'channel', '2026-09-14T09:00:00Z', '2026-09-14T09:00:00Z', '2026-09-14T09:00:00Z')",
             "INSERT INTO chat_channels (id, project_id, conversation_id, name, created_at, updated_at) VALUES ('handoff-channel', 'project-routine-learning', 'handoff-conversation', 'Portable chat', '2026-09-14T09:00:00Z', '2026-09-14T09:00:00Z')",
-            "INSERT INTO quick_notes (id, title, body_plain_text) VALUES ('handoff-quick-note', 'Portable quick note', 'Portable quick-note body')",
+            "INSERT INTO quick_notes (id, title, body_plain_text, order_key) VALUES ('handoff-quick-note', 'Portable quick note', 'Portable quick-note body', 'a0')",
             "INSERT INTO themes (id, display_name, blend_canvas, seed_blend_canvas, derivation_engine_version, created_at_ms, updated_at_ms, icon_label, seed_icon_label) VALUES ('handoff-theme', 'Portable theme', '{}', '{}', 1, 1, 1, 'dark', 'dark')",
             "INSERT INTO distractions_usage_samples (id, source_type, source_key, display_name, started_at_ms, elapsed_seconds, local_date, created_at_ms) VALUES ('handoff-usage', 'mobile-app', 'app.example', 'Portable usage', 1, 45, '2026-09-14', 1)",
             "INSERT INTO music_playlists (id, name, created_at_ms, updated_at_ms) VALUES ('handoff-playlist', 'Portable playlist', 1, 1)",

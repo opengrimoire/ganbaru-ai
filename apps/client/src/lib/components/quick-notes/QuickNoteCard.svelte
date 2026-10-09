@@ -1,6 +1,7 @@
 <script lang="ts">
   import Archive from "@lucide/svelte/icons/archive";
   import ArchiveRestore from "@lucide/svelte/icons/archive-restore";
+  import GitCompareArrows from "@lucide/svelte/icons/git-compare-arrows";
   import Pin from "@lucide/svelte/icons/pin";
   import PinOff from "@lucide/svelte/icons/pin-off";
   import RotateCcw from "@lucide/svelte/icons/rotate-ccw";
@@ -91,7 +92,16 @@
     {#if note.title}
       <h3 class="mb-1.5 wrap-break-word text-[0.92rem] font-semibold leading-snug">{note.title}</h3>
     {/if}
-    {#if tag}<span class="mb-1.5 inline-flex max-w-full truncate rounded-md bg-black/8 px-1.5 py-0.5 text-[0.65rem] font-medium dark:bg-white/10">{tag.name}</span>{/if}
+    {#if note.hasConflict || tag}
+      <span class="mb-1.5 flex max-w-full flex-wrap items-center gap-1">
+        {#if note.hasConflict}
+          <span class="inline-flex items-center gap-1 rounded-md bg-black/8 px-1.5 py-0.5 text-[0.65rem] font-medium dark:bg-white/10" title={t("quickNotes.conflict.cardHint")}>
+            <GitCompareArrows class="size-3" strokeWidth={1.75} aria-hidden="true" />{t("quickNotes.conflict.badge")}
+          </span>
+        {/if}
+        {#if tag}<span class="inline-flex max-w-full truncate rounded-md bg-black/8 px-1.5 py-0.5 text-[0.65rem] font-medium dark:bg-white/10">{tag.name}</span>{/if}
+      </span>
+    {/if}
     {#if note.runs.length > 0}
       <div class="quick-note-preview relative max-h-65 overflow-hidden text-[0.82rem] leading-relaxed">
         <QuickNoteRichText runs={note.runs} />

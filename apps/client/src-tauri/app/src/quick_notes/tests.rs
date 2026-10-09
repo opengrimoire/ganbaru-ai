@@ -21,18 +21,81 @@ fn runs(content: &str) -> Vec<QuickNoteTextRun> {
     }]
 }
 
-async fn create(pool: &SqlitePool, id: &str, title: &str, body: &str) {
-    let normalized = runs(body);
-    let mut tx = pool.begin().await.unwrap();
-    sqlx::query("INSERT INTO quick_notes (id, title, body_plain_text) VALUES (?, ?, ?)")
+fn note(id: &str, body: &str) -> QuickNoteWrite {
+    QuickNoteWrite {
+        id: id.to_string(),
+        title: id.to_string(),
+        runs: runs(body),
+        color: 0,
+        tag_id: None,
+        pinned: false,
+    }
+}
+
+async fn create(pool: &SqlitePool, id: &str, body: &str) -> QuickNoteRead {
+    create_from_pool(pool, note(id, body)).await.unwrap()
+}
+
+fn revision(id: &str, expected_revision: i64) -> QuickNoteRevisionRequest {
+    QuickNoteRevisionRequest {
+        id: id.to_string(),
+        expected_revision,
+    }
+}
+
+fn list_request(collection: QuickNotesCollection, tag_id: Option<&str>) -> QuickNotesListRequest {
+    QuickNotesListRequest {
+        collection,
+        query: None,
+        tag_id: tag_id.map(str::to_string),
+        cursor: None,
+        page_size: Some(60),
+    }
+}
+
+async fn listed(
+    pool: &SqlitePool,
+    collection: QuickNotesCollection,
+    tag_id: Option<&str>,
+) -> Vec<String> {
+    list_window_from_pool(pool, list_request(collection, tag_id))
+        .await
+        .unwrap()
+        .notes
+        .into_iter()
+        .map(|note| note.id)
+        .collect()
+}
+
+async fn create_tag(
+    pool: &SqlitePool,
+    id: &str,
+    name: &str,
+) -> Result<QuickNoteTagRead, QuickNoteTagError> {
+    tags::create_from_pool(
+        pool,
+        QuickNoteTagWrite {
+            id: id.to_string(),
+            name: name.to_string(),
+        },
+    )
+    .await
+}
+
+fn error_code<T: Serialize>(error: T) -> String {
+    serde_json::to_value(error).unwrap()["code"]
+        .as_str()
+        .unwrap()
+        .to_string()
+}
+
+async fn set_order_key(pool: &SqlitePool, id: &str, order_key: &str) {
+    sqlx::query("UPDATE quick_notes SET order_key = ? WHERE id = ?")
+        .bind(order_key)
         .bind(id)
-        .bind(title)
-        .bind(body)
-        .execute(&mut *tx)
+        .execute(pool)
         .await
         .unwrap();
-    replace_runs(&mut tx, id, &normalized).await.unwrap();
-    tx.commit().await.unwrap();
 }
 
 #[test]
@@ -65,58 +128,58 @@ fn normalizes_adjacent_runs_and_enforces_limits() {
 }
 
 #[test]
-fn crud_search_lifecycle_and_revision_conflicts_are_consistent() {
+fn search_lifecycle_and_revision_conflicts_are_consistent() {
     tauri::async_runtime::block_on(async {
         let pool = pool().await;
-        create(&pool, "one", "First", "alpha body").await;
-        create(&pool, "two", "Second", "beta body").await;
+        create(&pool, "one", "alpha body").await;
+        create(&pool, "two", "beta body").await;
 
-        let active = list_window_from_pool(
-            &pool,
-            QuickNotesListRequest {
-                collection: QuickNotesCollection::Active,
-                query: Some("alpha".into()),
-                tag_id: None,
-                cursor: None,
-                page_size: Some(60),
-            },
-        )
-        .await
-        .unwrap();
+        let mut search = list_request(QuickNotesCollection::Active, None);
+        search.query = Some("alpha".into());
+        let active = list_window_from_pool(&pool, search).await.unwrap();
         assert_eq!(active.notes.len(), 1);
         assert_eq!(active.notes[0].id, "one");
 
         let archived = revision_mutation(
             &pool,
-            &QuickNoteRevisionRequest { id: "one".into(), expected_revision: 1 },
-            "UPDATE quick_notes SET archived = 1, pinned = 0, revision = revision + 1 WHERE id = ? AND revision = ?",
+            &revision("one", 1),
+            ARCHIVE_SQL,
             "archive",
-        ).await.unwrap();
+            Placement::Unchanged,
+        )
+        .await
+        .unwrap();
         assert!(archived.archived);
         let conflict = revision_mutation(
             &pool,
-            &QuickNoteRevisionRequest { id: "one".into(), expected_revision: 1 },
-            "UPDATE quick_notes SET archived = 0, revision = revision + 1 WHERE id = ? AND revision = ?",
-            "conflict",
-        ).await.unwrap_err();
-        assert_eq!(
-            serde_json::to_value(conflict).unwrap()["code"],
-            "revision_conflict"
-        );
+            &revision("one", 1),
+            UNARCHIVE_SQL,
+            "unarchive",
+            Placement::FirstUnpinned,
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(error_code(conflict), "revision_conflict");
 
         let trashed = revision_mutation(
             &pool,
-            &QuickNoteRevisionRequest { id: "one".into(), expected_revision: 2 },
-            "UPDATE quick_notes SET trashed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), revision = revision + 1 WHERE id = ? AND revision = ?",
+            &revision("one", 2),
+            TRASH_SQL,
             "trash",
-        ).await.unwrap();
+            Placement::Unchanged,
+        )
+        .await
+        .unwrap();
         assert!(trashed.trashed_at.is_some());
         let restored = revision_mutation(
             &pool,
-            &QuickNoteRevisionRequest { id: "one".into(), expected_revision: 3 },
-            "UPDATE quick_notes SET trashed_at = NULL, revision = revision + 1 WHERE id = ? AND revision = ?",
+            &revision("one", 3),
+            RESTORE_SQL,
             "restore",
-        ).await.unwrap();
+            Placement::FirstUnpinned,
+        )
+        .await
+        .unwrap();
         assert!(restored.archived);
         assert!(restored.trashed_at.is_none());
     });
@@ -127,40 +190,146 @@ fn list_cursor_preserves_pinned_then_manual_order() {
     tauri::async_runtime::block_on(async {
         let pool = pool().await;
         for id in ["a", "b", "c"] {
-            create(&pool, id, id, id).await;
+            create(&pool, id, id).await;
         }
-        sqlx::query("UPDATE quick_notes SET pinned = 1 WHERE id = 'b'")
-            .execute(&pool)
-            .await
-            .unwrap();
-        let first = list_window_from_pool(
+        set_pinned_from_pool(
             &pool,
-            QuickNotesListRequest {
-                collection: QuickNotesCollection::Active,
-                query: None,
-                tag_id: None,
-                cursor: None,
-                page_size: Some(2),
+            QuickNotePinRequest {
+                id: "b".into(),
+                expected_revision: 1,
+                pinned: true,
             },
         )
         .await
         .unwrap();
+        let mut request = list_request(QuickNotesCollection::Active, None);
+        request.page_size = Some(2);
+        let first = list_window_from_pool(&pool, request).await.unwrap();
         assert_eq!(first.notes[0].id, "b");
         assert!(first.next_cursor.is_some());
-        let second = list_window_from_pool(
+        let mut request = list_request(QuickNotesCollection::Active, None);
+        request.page_size = Some(2);
+        request.cursor = first.next_cursor;
+        let second = list_window_from_pool(&pool, request).await.unwrap();
+        assert_eq!(second.notes.len(), 1);
+        assert!(!first.notes.iter().any(|note| note.id == second.notes[0].id));
+    });
+}
+
+#[test]
+fn new_and_returning_notes_go_first_in_their_group() {
+    tauri::async_runtime::block_on(async {
+        let pool = pool().await;
+        for id in ["a", "b", "c"] {
+            create(&pool, id, id).await;
+        }
+        assert_eq!(
+            listed(&pool, QuickNotesCollection::Active, None).await,
+            ["c", "b", "a"]
+        );
+
+        let mut pinned = note("p", "pinned");
+        pinned.pinned = true;
+        create_from_pool(&pool, pinned).await.unwrap();
+        assert_eq!(
+            listed(&pool, QuickNotesCollection::Active, None).await,
+            ["p", "c", "b", "a"]
+        );
+
+        set_pinned_from_pool(
             &pool,
-            QuickNotesListRequest {
-                collection: QuickNotesCollection::Active,
-                query: None,
-                tag_id: None,
-                cursor: first.next_cursor,
-                page_size: Some(2),
+            QuickNotePinRequest {
+                id: "a".into(),
+                expected_revision: 1,
+                pinned: true,
             },
         )
         .await
         .unwrap();
-        assert_eq!(second.notes.len(), 1);
-        assert!(!first.notes.iter().any(|note| note.id == second.notes[0].id));
+        assert_eq!(
+            listed(&pool, QuickNotesCollection::Active, None).await,
+            ["a", "p", "c", "b"]
+        );
+        set_pinned_from_pool(
+            &pool,
+            QuickNotePinRequest {
+                id: "p".into(),
+                expected_revision: 1,
+                pinned: false,
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            listed(&pool, QuickNotesCollection::Active, None).await,
+            ["a", "p", "c", "b"]
+        );
+
+        revision_mutation(
+            &pool,
+            &revision("b", 1),
+            ARCHIVE_SQL,
+            "archive",
+            Placement::Unchanged,
+        )
+        .await
+        .unwrap();
+        revision_mutation(
+            &pool,
+            &revision("b", 2),
+            UNARCHIVE_SQL,
+            "unarchive",
+            Placement::FirstUnpinned,
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            listed(&pool, QuickNotesCollection::Active, None).await,
+            ["a", "b", "p", "c"]
+        );
+
+        revision_mutation(
+            &pool,
+            &revision("c", 1),
+            TRASH_SQL,
+            "trash",
+            Placement::Unchanged,
+        )
+        .await
+        .unwrap();
+        revision_mutation(
+            &pool,
+            &revision("c", 2),
+            RESTORE_SQL,
+            "restore",
+            Placement::FirstUnpinned,
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            listed(&pool, QuickNotesCollection::Active, None).await,
+            ["a", "c", "b", "p"]
+        );
+    });
+}
+
+#[test]
+fn pinning_with_a_stale_revision_conflicts_without_moving() {
+    tauri::async_runtime::block_on(async {
+        let pool = pool().await;
+        create(&pool, "a", "a").await;
+        let error = set_pinned_from_pool(
+            &pool,
+            QuickNotePinRequest {
+                id: "a".into(),
+                expected_revision: 7,
+                pinned: true,
+            },
+        )
+        .await
+        .unwrap_err();
+        assert_eq!(error_code(error), "revision_conflict");
+        assert!(!load_note_from_pool(&pool, "a").await.unwrap().pinned);
     });
 }
 
@@ -168,21 +337,10 @@ fn list_cursor_preserves_pinned_then_manual_order() {
 fn reorder_persists_between_adjacent_visible_anchors() {
     tauri::async_runtime::block_on(async {
         let pool = pool().await;
-        for (index, id) in ["a", "hidden", "b", "c"].iter().enumerate() {
-            create(&pool, id, id, id).await;
-            sqlx::query("UPDATE quick_notes SET manual_order = ? WHERE id = ?")
-                .bind(index as f64 * 1024.0)
-                .bind(id)
-                .execute(&pool)
-                .await
-                .unwrap();
+        for id in ["c", "b", "hidden", "a"] {
+            create(&pool, id, id).await;
         }
-        sqlx::query(
-            "INSERT INTO quick_note_tags (id, name, sort_order) VALUES ('tag-1', 'Work', 0)",
-        )
-        .execute(&pool)
-        .await
-        .unwrap();
+        create_tag(&pool, "tag-1", "Work").await.unwrap();
         sqlx::query("UPDATE quick_notes SET tag_id = 'tag-1' WHERE id IN ('a', 'b', 'c')")
             .execute(&pool)
             .await
@@ -200,65 +358,113 @@ fn reorder_persists_between_adjacent_visible_anchors() {
         .await
         .unwrap();
 
-        let tagged = list_window_from_pool(
-            &pool,
-            QuickNotesListRequest {
-                collection: QuickNotesCollection::Active,
-                query: None,
-                tag_id: Some("tag-1".into()),
-                cursor: None,
-                page_size: Some(60),
-            },
-        )
-        .await
-        .unwrap();
         assert_eq!(
-            tagged
-                .notes
-                .iter()
-                .map(|note| note.id.as_str())
-                .collect::<Vec<_>>(),
-            vec!["a", "c", "b"]
+            listed(&pool, QuickNotesCollection::Active, Some("tag-1")).await,
+            ["a", "c", "b"]
         );
         assert_eq!(load_note_from_pool(&pool, "c").await.unwrap().revision, 1);
     });
 }
 
 #[test]
-fn reorder_rejects_nonadjacent_filtered_anchors() {
+fn reorder_separates_rows_that_share_a_key() {
     tauri::async_runtime::block_on(async {
         let pool = pool().await;
-        for (index, id) in ["a", "b", "c", "d"].iter().enumerate() {
-            create(&pool, id, id, id).await;
-            sqlx::query("UPDATE quick_notes SET manual_order = ? WHERE id = ?")
-                .bind(index as f64 * 1024.0)
-                .bind(id)
-                .execute(&pool)
-                .await
-                .unwrap();
+        for id in ["d", "c", "b", "a", "n"] {
+            create(&pool, id, id).await;
         }
-        let result = reorder_from_pool(
+        for id in ["a", "b", "c"] {
+            set_order_key(&pool, id, "a0").await;
+        }
+        set_order_key(&pool, "d", "a1").await;
+        set_order_key(&pool, "n", "a2").await;
+
+        reorder_from_pool(
             &pool,
             QuickNoteReorderRequest {
-                id: "d".into(),
+                id: "n".into(),
                 previous_id: Some("a".into()),
-                next_id: Some("c".into()),
+                next_id: Some("b".into()),
                 tag_id: None,
             },
         )
-        .await;
-        assert!(result.is_err());
+        .await
+        .unwrap();
+        assert_eq!(
+            listed(&pool, QuickNotesCollection::Active, None).await,
+            ["a", "n", "b", "c", "d"]
+        );
     });
 }
 
 #[test]
-fn expired_trash_is_deleted_with_its_runs_and_search_projection() {
+fn reorder_rejects_nonadjacent_and_unknown_anchors() {
     tauri::async_runtime::block_on(async {
         let pool = pool().await;
-        create(&pool, "expired", "Expired", "old body").await;
-        sqlx::query("UPDATE quick_notes SET trashed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-8 days') WHERE id = 'expired'")
-            .execute(&pool).await.unwrap();
-        assert_eq!(cleanup_expired_trash(&pool).await.unwrap(), 1);
+        for id in ["d", "c", "b", "a"] {
+            create(&pool, id, id).await;
+        }
+        let request = |previous: &str, next: &str| QuickNoteReorderRequest {
+            id: "d".into(),
+            previous_id: Some(previous.into()),
+            next_id: Some(next.into()),
+            tag_id: None,
+        };
+        assert!(reorder_from_pool(&pool, request("a", "c")).await.is_err());
+        assert!(
+            reorder_from_pool(&pool, request("a", "missing"))
+                .await
+                .is_err()
+        );
+        assert_eq!(
+            listed(&pool, QuickNotesCollection::Active, None).await,
+            ["a", "b", "c", "d"]
+        );
+    });
+}
+
+#[test]
+fn expired_trash_is_hidden_then_purged_with_its_runs_and_search_projection() {
+    tauri::async_runtime::block_on(async {
+        let pool = pool().await;
+        create(&pool, "expired", "old body").await;
+        create(&pool, "recent", "new body").await;
+        sqlx::query(
+            "UPDATE quick_notes SET trashed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-8 days')
+             WHERE id = 'expired'",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+        sqlx::query(
+            "UPDATE quick_notes SET trashed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-1 days')
+             WHERE id = 'recent'",
+        )
+        .execute(&pool)
+        .await
+        .unwrap();
+
+        assert!(load_note_from_pool(&pool, "expired").await.is_err());
+        assert_eq!(
+            listed(&pool, QuickNotesCollection::Trash, None).await,
+            ["recent"]
+        );
+
+        let purge = purge_expired_trash(&pool).await.unwrap();
+        assert_eq!(purge.purged, 1);
+        let recent_trashed_at = load_note_from_pool(&pool, "recent")
+            .await
+            .unwrap()
+            .trashed_at
+            .unwrap();
+        let expected: String =
+            sqlx::query_scalar("SELECT strftime('%Y-%m-%dT%H:%M:%fZ', ?, '+7 days')")
+                .bind(&recent_trashed_at)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(purge.next_purge_at.as_deref(), Some(expected.as_str()));
+
         let runs: i64 = sqlx::query_scalar(
             "SELECT COUNT(*) FROM quick_note_text_runs WHERE note_id = 'expired'",
         )
@@ -273,6 +479,14 @@ fn expired_trash_is_deleted_with_its_runs_and_search_projection() {
         .unwrap();
         assert_eq!(runs, 0);
         assert_eq!(search, 0);
+
+        sqlx::query("DELETE FROM quick_notes WHERE id = 'recent'")
+            .execute(&pool)
+            .await
+            .unwrap();
+        let empty = purge_expired_trash(&pool).await.unwrap();
+        assert_eq!(empty.purged, 0);
+        assert!(empty.next_purge_at.is_none());
     });
 }
 
@@ -280,32 +494,145 @@ fn expired_trash_is_deleted_with_its_runs_and_search_projection() {
 fn tag_filtering_returns_only_matching_notes() {
     tauri::async_runtime::block_on(async {
         let pool = pool().await;
-        create(&pool, "tagged", "Tagged", "tagged body").await;
-        create(&pool, "plain", "Plain", "plain body").await;
-        sqlx::query(
-            "INSERT INTO quick_note_tags (id, name, sort_order) VALUES ('tag-1', 'Work', 0)",
-        )
-        .execute(&pool)
-        .await
-        .unwrap();
-        sqlx::query("UPDATE quick_notes SET tag_id = 'tag-1' WHERE id = 'tagged'")
-            .execute(&pool)
+        create_tag(&pool, "tag-1", "Work").await.unwrap();
+        let mut tagged = note("tagged", "tagged body");
+        tagged.tag_id = Some("tag-1".into());
+        create_from_pool(&pool, tagged).await.unwrap();
+        create(&pool, "plain", "plain body").await;
+
+        assert_eq!(
+            listed(&pool, QuickNotesCollection::Active, Some("tag-1")).await,
+            ["tagged"]
+        );
+    });
+}
+
+#[test]
+fn tags_append_in_order_and_enforce_the_local_create_rules() {
+    tauri::async_runtime::block_on(async {
+        let pool = pool().await;
+        for index in 0..9 {
+            create_tag(&pool, &format!("tag-{index}"), &format!("Tag {index}"))
+                .await
+                .unwrap();
+        }
+        let tags = tags::list_from_pool(&pool).await.unwrap();
+        assert_eq!(
+            tags.iter().map(|tag| tag.id.as_str()).collect::<Vec<_>>(),
+            (0..9)
+                .map(|index| format!("tag-{index}"))
+                .collect::<Vec<_>>()
+        );
+        assert!(
+            tags.windows(2)
+                .all(|pair| pair[0].order_key < pair[1].order_key)
+        );
+
+        let limit = create_tag(&pool, "tag-9", "Tag 9").await.unwrap_err();
+        assert_eq!(error_code(limit), "limit_reached");
+
+        tags::delete_from_pool(&pool, "tag-8").await.unwrap();
+        let duplicate = create_tag(&pool, "tag-9", " tag 0 ").await.unwrap_err();
+        assert_eq!(error_code(duplicate), "duplicate_name");
+        let invalid = create_tag(&pool, "tag-9", "   ").await.unwrap_err();
+        assert_eq!(error_code(invalid), "failed");
+    });
+}
+
+#[test]
+fn renaming_a_tag_checks_names_and_existence() {
+    tauri::async_runtime::block_on(async {
+        let pool = pool().await;
+        create_tag(&pool, "tag-1", "Work").await.unwrap();
+        create_tag(&pool, "tag-2", "Home").await.unwrap();
+        let rename = |id: &str, name: &str| QuickNoteTagWrite {
+            id: id.to_string(),
+            name: name.to_string(),
+        };
+
+        let renamed = tags::rename_from_pool(&pool, rename("tag-1", " Office "))
             .await
             .unwrap();
+        assert_eq!(renamed.name, "Office");
+        let recased = tags::rename_from_pool(&pool, rename("tag-1", "OFFICE"))
+            .await
+            .unwrap();
+        assert_eq!(recased.name, "OFFICE");
 
-        let tagged = list_window_from_pool(
-            &pool,
-            QuickNotesListRequest {
-                collection: QuickNotesCollection::Active,
-                query: None,
-                tag_id: Some("tag-1".into()),
-                cursor: None,
-                page_size: Some(60),
-            },
-        )
-        .await
-        .unwrap();
-        assert_eq!(tagged.notes.len(), 1);
-        assert_eq!(tagged.notes[0].id, "tagged");
+        let duplicate = tags::rename_from_pool(&pool, rename("tag-2", "office"))
+            .await
+            .unwrap_err();
+        assert_eq!(error_code(duplicate), "duplicate_name");
+        let missing = tags::rename_from_pool(&pool, rename("tag-3", "Garden"))
+            .await
+            .unwrap_err();
+        assert_eq!(error_code(missing), "not_found");
+    });
+}
+
+#[test]
+fn deleting_a_tag_untags_its_notes_with_a_new_revision() {
+    tauri::async_runtime::block_on(async {
+        let pool = pool().await;
+        create_tag(&pool, "tag-1", "Work").await.unwrap();
+        let mut tagged = note("tagged", "body");
+        tagged.tag_id = Some("tag-1".into());
+        create_from_pool(&pool, tagged).await.unwrap();
+        create(&pool, "plain", "body").await;
+
+        tags::delete_from_pool(&pool, "tag-1").await.unwrap();
+        tags::delete_from_pool(&pool, "tag-1").await.unwrap();
+
+        let untagged = load_note_from_pool(&pool, "tagged").await.unwrap();
+        assert!(untagged.tag_id.is_none());
+        assert_eq!(untagged.revision, 2);
+        assert_eq!(
+            load_note_from_pool(&pool, "plain").await.unwrap().revision,
+            1
+        );
+        assert!(tags::list_from_pool(&pool).await.unwrap().is_empty());
+
+        let stale = QuickNoteUpdate {
+            id: "tagged".into(),
+            expected_revision: 1,
+            title: "tagged".into(),
+            runs: runs("edited"),
+            color: 0,
+            tag_id: Some("tag-1".into()),
+            pinned: false,
+        };
+        assert_eq!(
+            error_code(update_from_pool(&pool, stale).await.unwrap_err()),
+            "revision_conflict"
+        );
+    });
+}
+
+#[test]
+fn writes_that_name_a_deleted_tag_leave_the_note_untagged() {
+    tauri::async_runtime::block_on(async {
+        let pool = pool().await;
+        let mut created = note("note", "body");
+        created.tag_id = Some("gone".into());
+        assert!(
+            create_from_pool(&pool, created)
+                .await
+                .unwrap()
+                .tag_id
+                .is_none()
+        );
+
+        let update = QuickNoteUpdate {
+            id: "note".into(),
+            expected_revision: 1,
+            title: "note".into(),
+            runs: runs("edited"),
+            color: 0,
+            tag_id: Some("gone".into()),
+            pinned: false,
+        };
+        let updated = update_from_pool(&pool, update).await.unwrap();
+        assert!(updated.tag_id.is_none());
+        assert_eq!(updated.revision, 2);
     });
 }

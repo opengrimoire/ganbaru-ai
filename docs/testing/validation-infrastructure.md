@@ -31,7 +31,7 @@ Benchmark fixture and harness contracts are deliberately outside `validate`. Run
 
 ## Resource policy
 
-The 1,792 MiB Svelte Check heap is the lowest measured stable limit for the current full graph. Treat exhaustion as a controlled failure. Investigate graph growth and checker topology before raising it.
+The 2,048 MiB Svelte Check heap leaves headroom over the measured full-graph peak of about 1,750 MiB after Quick notes sync (whole-process resident peak about 2.35 GiB). Treat exhaustion as a controlled failure. Investigate graph growth and checker topology before raising it.
 
 Cargo development and test profiles retain line-level debugging with reduced debug detail. One-job development builds prevent competing compiler or linker peaks. Restore full native debug information only for a concrete debugging session:
 
