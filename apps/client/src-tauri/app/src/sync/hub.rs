@@ -2,12 +2,11 @@
 //! and answers long polls when its log grows. Its own service applies what the hub stores.
 
 use super::wire::{
-    hash_to_wire, ops_from_wire, ops_to_wire, refusal_to_wire, vector_from_wire, vector_to_wire,
-    writer_from_wire,
+    hash_to_wire, ops_from_wire, ops_to_wire, vector_from_wire, vector_to_wire, writer_from_wire,
 };
 use crate::vault::handoff::protocol::{ControlMessage, SyncRefusal, SyncRefusalCode};
-use ganbaru_sync::{Engine, SpaceContext, StoreOutcome, local};
-use ganbaru_sync_contracts::{Envelope, VersionVector};
+use ganbaru_sync::{Engine, SpaceContext, StoreOutcome, StoreRefusal, local};
+use ganbaru_sync_contracts::{Envelope, Seq, VersionVector, WriterId};
 use sqlx::SqlitePool;
 use std::collections::HashMap;
 use std::future::Future;
@@ -246,10 +245,7 @@ impl HubSession {
     }
 
     /// The hub's stored vector and its hash at the probed operation, when it holds it.
-    async fn state(
-        &self,
-        probe: Option<(ganbaru_sync_contracts::WriterId, u64)>,
-    ) -> Result<ControlMessage, HubError> {
+    async fn state(&self, probe: Option<(WriterId, u64)>) -> Result<ControlMessage, HubError> {
         let stored = self.stored().await?;
         let probe_hash = match probe {
             Some((writer, seq)) => {
@@ -330,7 +326,7 @@ impl HubSession {
 
     async fn hashes(
         &self,
-        writer: ganbaru_sync_contracts::WriterId,
+        writer: WriterId,
         from_seq: u64,
         limit: u32,
     ) -> Result<ControlMessage, HubError> {
@@ -390,6 +386,26 @@ fn invalid_refusal() -> SyncRefusal {
         code: SyncRefusalCode::Invalid,
         writer: None,
         seq: None,
+    }
+}
+
+/// The wire refusal of an engine store refusal of `(writer, seq)`.
+fn refusal_to_wire(refusal: StoreRefusal, writer: WriterId, seq: Seq) -> SyncRefusal {
+    let (code, seq) = match refusal {
+        StoreRefusal::Fork { seq } => (SyncRefusalCode::Fork, seq),
+        StoreRefusal::Gap { expected } => (SyncRefusalCode::Gap, expected),
+        StoreRefusal::Revoked => (SyncRefusalCode::Revoked, seq),
+        StoreRefusal::UnknownWriter => (SyncRefusalCode::UnknownWriter, seq),
+        StoreRefusal::NewerFormatGenesis => (SyncRefusalCode::NewerFormat, seq),
+        StoreRefusal::Malformed
+        | StoreRefusal::WrongSpace
+        | StoreRefusal::BadSignature
+        | StoreRefusal::Untrusted => (SyncRefusalCode::Invalid, seq),
+    };
+    SyncRefusal {
+        code,
+        writer: Some(writer.to_hex()),
+        seq: Some(seq),
     }
 }
 

@@ -5,6 +5,7 @@
 use super::access::vault_connection_hook;
 use super::carry_forward;
 use super::client::{ClientSession, Exchange, ForkPoint, PairedTransport, PeerIds};
+#[cfg(desktop)]
 use super::hub::{HubVault, OpenHubVault, SyncHub};
 use super::recovery::{RecoveryChoice, RecoveryRequest};
 use super::status::{SyncRole, SyncState, SyncStatusView, emit_applied, emit_status};
@@ -140,6 +141,7 @@ pub(crate) fn setup<R: Runtime>(app: &AppHandle<R>) {
 }
 
 /// The hub the coordinator listener routes sync requests to, serving the active vault.
+#[cfg(desktop)]
 pub(crate) fn sync_hub<R: Runtime>(app: &AppHandle<R>) -> SyncHub {
     let opener = app.clone();
     let open: OpenHubVault = Arc::new(move || {
@@ -149,6 +151,7 @@ pub(crate) fn sync_hub<R: Runtime>(app: &AppHandle<R>) -> SyncHub {
     SyncHub::new(open, app.state::<SyncRuntime>().changes.clone())
 }
 
+#[cfg(desktop)]
 async fn open_hub_vault<R: Runtime>(app: &AppHandle<R>) -> Result<Option<HubVault>, String> {
     if !sync_enabled(app)? {
         return Ok(None);

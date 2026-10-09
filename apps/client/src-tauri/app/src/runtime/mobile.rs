@@ -431,7 +431,7 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
         #[cfg(target_os = "android")]
         if matches!(_event, tauri::RunEvent::Resumed) {
             vault::handoff::receiver::trigger_coordinator_reconciliation(_app.clone());
-            _app.state::<crate::sync::SyncRuntime>().sync_now();
+            tauri::Manager::state::<crate::sync::SyncRuntime>(_app).sync_now();
             crate::distractions::android::runtime::wake(_app);
         }
         #[cfg(target_os = "android")]

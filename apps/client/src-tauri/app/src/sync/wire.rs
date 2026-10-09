@@ -1,10 +1,9 @@
 //! Conversions between engine values and the sync wire forms of protocol 5.
 
-use crate::vault::handoff::protocol::{SyncRefusal, SyncRefusalCode, SyncSeq};
+use crate::vault::handoff::protocol::SyncSeq;
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-use ganbaru_sync::StoreRefusal;
-use ganbaru_sync_contracts::{Digest32, Seq, VersionVector, WriterId};
+use ganbaru_sync_contracts::{Digest32, VersionVector, WriterId};
 
 /// Wire entries of a version vector, in writer order.
 pub(crate) fn vector_to_wire(vector: &VersionVector) -> Vec<SyncSeq> {
@@ -58,26 +57,6 @@ pub(crate) fn ops_from_wire(ops: &[String]) -> Result<Vec<Vec<u8>>, String> {
                 .map_err(|_| "sync operation text is invalid".to_string())
         })
         .collect()
-}
-
-/// The wire refusal of an engine store refusal of `(writer, seq)`.
-pub(crate) fn refusal_to_wire(refusal: StoreRefusal, writer: WriterId, seq: Seq) -> SyncRefusal {
-    let (code, seq) = match refusal {
-        StoreRefusal::Fork { seq } => (SyncRefusalCode::Fork, seq),
-        StoreRefusal::Gap { expected } => (SyncRefusalCode::Gap, expected),
-        StoreRefusal::Revoked => (SyncRefusalCode::Revoked, seq),
-        StoreRefusal::UnknownWriter => (SyncRefusalCode::UnknownWriter, seq),
-        StoreRefusal::NewerFormatGenesis => (SyncRefusalCode::NewerFormat, seq),
-        StoreRefusal::Malformed
-        | StoreRefusal::WrongSpace
-        | StoreRefusal::BadSignature
-        | StoreRefusal::Untrusted => (SyncRefusalCode::Invalid, seq),
-    };
-    SyncRefusal {
-        code,
-        writer: Some(writer.to_hex()),
-        seq: Some(seq),
-    }
 }
 
 #[cfg(test)]

@@ -145,7 +145,7 @@ impl SyncSubscribers {
             return;
         };
         subscribers.retain(|webview, subscriber| {
-            app.get_webview(webview).is_some()
+            webview_is_open(app, webview)
                 && match subscriber.channel.send(notice.clone()) {
                     Ok(()) => true,
                     Err(error) => {
@@ -161,6 +161,19 @@ impl SyncSubscribers {
             .lock()
             .map_err(|_| "sync subscribers are unavailable".to_string())
     }
+}
+
+/// Whether the WebView labeled `label` is still open, including child WebViews of a window.
+#[cfg(desktop)]
+fn webview_is_open<R: Runtime>(app: &AppHandle<R>, label: &str) -> bool {
+    app.get_webview(label).is_some()
+}
+
+/// Whether the WebView labeled `label` is still open. Mobile builds have no child WebViews, so
+/// every WebView belongs to a webview window.
+#[cfg(mobile)]
+fn webview_is_open<R: Runtime>(app: &AppHandle<R>, label: &str) -> bool {
+    app.get_webview_window(label).is_some()
 }
 
 fn notify<R: Runtime>(app: &AppHandle<R>, notice: &SyncNotice) {
