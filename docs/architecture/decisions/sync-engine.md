@@ -24,7 +24,7 @@
 | Value hashes in the signed header, values in an unsigned body | Later compaction can drop superseded values without breaking signature verification. |
 | Variable-length string order keys with a row id tie breaker | Concurrent moves never require rebalancing other rows, and byte comparison matches SQLite `BINARY` ordering. |
 | Mixed mode with connection-scoped guard triggers | Each domain converts when ready while unconverted data stays single-writer and safe. Guards live only on the connection, so they never travel in a snapshot. |
-| Star topology through the coordinator desktop | Revocation cutoffs and fork detection are deterministic without consensus because every operation passes one point. A relay later becomes another hub, which requires redesigning revocation first. |
+| Star topology through the coordinator desktop | Revocation cutoffs and fork detection are deterministic without consensus because every operation passes one point. Delivery through other devices or a relay requires the anchored authority in [Sync topology and authority](sync-topology-and-authority.md) first. |
 | Single connection per vault pool | Capture suppression during apply and the seal-then-apply order rely on nothing interleaving inside an engine transaction. Raising the pool size requires redesigning capture suppression first. |
 
 ## Rejected alternatives
@@ -40,7 +40,7 @@
 ## Accepted limitations
 
 - Operations are plaintext at rest inside the vault, like the rest of the vault, until per-space encryption exists.
-- Every linked device holds the person key, so a revoked device could still certify a new writer; the hub refuses revoked devices at TLS, and key separation is planned with encryption.
+- Every linked device holds the person key, so a revoked device could still certify a new writer; the hub refuses revoked devices at TLS, and a separate admin key is planned with anchored authority.
 - Android writer keys use app-private files until Android Keystore wrapping exists.
 - The operation log and retained state grow until causal stability and compaction exist.
 - Linked devices must run the same protocol version, which is acceptable before external users.

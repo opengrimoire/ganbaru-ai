@@ -33,7 +33,7 @@ See [Calendar](features/calendar/README.md) and [Pomodoro](features/pomodoro/REA
 
 ### Concurrent device synchronization
 
-The sync engine, signed operation log, installation writers, and LAN hub transport exist, with Quick notes as the first concurrently synced domain while the rest of the vault keeps single-writer handoff. Remaining work: physical multi-device acceptance, converting the other domains, collaborative text, compaction, end-to-end operation encryption and enrollment, and an optional user-hosted relay. See [Device linking and synchronization](data/sync.md).
+The sync engine, signed operation log, installation writers, and LAN hub transport exist, with Quick notes as the first concurrently synced domain while the rest of the vault keeps single-writer handoff. Remaining work: physical multi-device acceptance, converting the other domains, collaborative text, compaction, anchored authority with LAN peer exchange, end-to-end operation encryption and enrollment, and delivery beyond the LAN through an optional user-hosted relay or always-on anchor. See [Device linking and synchronization](data/sync.md).
 
 ### Android release readiness
 

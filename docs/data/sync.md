@@ -1,10 +1,10 @@
 # Device linking and synchronization
 
-**Status: Partial.** The vault runs in mixed mode. Quick notes replicate concurrently between linked devices as signed operations through the coordinator desktop, with conflicts and recovery entries; this is implemented in source. Every other domain keeps single-writer whole-vault handoff: secure LAN pairing, one administration desktop, explicit write ownership, read-only refresh, and combined distraction usage accounting. Physical multi-device acceptance is pending for both. Concurrent replication of the remaining domains, Notes text and tree merging, operation encryption, and the relay are planned.
+**Status: Partial.** The vault runs in mixed mode. Quick notes replicate concurrently between linked devices as signed operations through the coordinator desktop, with conflicts and recovery entries; this is implemented in source. Every other domain keeps single-writer whole-vault handoff: secure LAN pairing, one administration desktop, explicit write ownership, read-only refresh, and combined distraction usage accounting. Physical multi-device acceptance is pending for both. Concurrent replication of the remaining domains, Notes text and tree merging, anchored authority with LAN peer exchange, operation encryption, and delivery beyond the LAN are planned.
 
 This contract links one person's devices; multi-person sharing is later work. The phone must provide full offline access to portable Notes, Projects, Calendar, and other synchronized content. Focus execution has its own controller and evidence rules in [Focus authority](../algorithms/pomodoro/focus-authority.md).
 
-Related documents: [Sync engine decision](../architecture/decisions/sync-engine.md) explains why the engine is built this way, [Sync merge rules](../algorithms/sync/README.md) owns merge semantics and worked examples, and [Sync schema](schema/sync.md) owns the engine tables.
+Related documents: [Sync engine decision](../architecture/decisions/sync-engine.md) explains why the engine is built this way, [Sync topology and authority](../architecture/decisions/sync-topology-and-authority.md) why authority is ordered by one anchor per space, [Sync merge rules](../algorithms/sync/README.md) owns merge semantics and worked examples, and [Sync schema](schema/sync.md) owns the engine tables.
 
 ## Implemented local whole-vault handoff
 
@@ -83,7 +83,7 @@ Source: `crates/ganbaru-sync-contracts/`, `crates/ganbaru-sync/`, and `apps/clie
 - A device-local writer record holds a sequence reservation made durable before signing and the last committed sequence. At service start and after every database replacement, the record is checked against the operation log. A restored database, a database copied from another installation, or a lost key retires the writer and creates a successor, so one installation never signs a sequence twice.
 - A full-disk clone copies the key itself, so two machines can sign the same sequence. The hub detects the diverging chain as a fork. The device keeps the agreeing prefix, rotates to a successor writer, and re-seals its later operations under it; both histories survive.
 - Sealing waits while the person key is unavailable, status reports waiting for identity, and the key is requested from the coordinator as described in [People and contact requests](#people-and-contact-requests).
-- Removing a device makes the hub seal a revocation of that device's writers with a cutoff at the hub's stored sequence. Every replica refuses later operations of a revoked writer. This relies on the single hub and must be redesigned before any second hub exists.
+- Removing a device makes the hub seal a revocation of that device's writers with a cutoff at the hub's stored sequence. Every replica refuses later operations of a revoked writer. This relies on the single hub; any second delivery path waits for the [anchored authority](#topology-and-authority).
 
 ### Exchange
 
@@ -132,6 +132,24 @@ Local network linking works without an account or server. An optional user-hoste
 
 The `ganbaru-sync-contracts` and `ganbaru-sync` crates exist; the optional `ganbaru-sync-relay` binary is planned. Domain adapters keep composite value codecs, intrinsic validation, and projection ownership; the sync engine owns delivery, causality, and merging. Durable replication, live presence, and executable commands are distinct protocols.
 
+### Topology and authority
+
+Content merges without a leader and any path may deliver signed operations; only authority is ordered, once per space. The reasons are in [Sync topology and authority](../architecture/decisions/sync-topology-and-authority.md).
+
+| Role | Meaning |
+| --- | --- |
+| Coordinator | The desktop that pairs devices and hosts the LAN listener. It is the personal space's first anchor. |
+| Hub | Any member installation that stores and serves operations. Every reachable member serves its LAN peers, authenticated by mutual TLS with the certificates its enrollment names. |
+| Anchor | The one member installation per space that sequences the hash-chained authorization log of enrollments, removals, roles, admin keys, and handovers. It holds the space keys and never gates content. |
+| Relay | A blind, self-hosted store-and-forward service for encrypted records. It is never an anchor. |
+| Always-on anchor | A self-hosted server running as an enrolled member that holds the keys, so it is also a hub reachable from every network and a backup. |
+
+- Editing and delivery continue while the anchor is unreachable; only authorization proposals wait.
+- Proposals are signed with an admin key separate from the person key, held by the anchor and chosen admin devices.
+- A removal's cutoff is the anchor's stored vector. Operations the anchor stored are final. Operations only peers had seen are provisional, and those beyond the cutoff are excluded on every replica and kept as late changes for an admin to restore or discard.
+- Any device can quarantine another locally while the anchor is unreachable. Quarantine never excludes operations by itself.
+- Anchor handover is signed with the admin key and starts a new anchor epoch. A restored or cloned anchor is detected the same way a restored or cloned writer is.
+
 ### Storage ownership
 
 Every persisted field needs an explicit replication classification before it can leave a device. Unknown fields fail closed.
@@ -177,7 +195,7 @@ Whole-block replacement is not a collaborative text protocol, and current Notes 
 
 Both enrolling devices show a verification code, and the existing device confirms before releasing vault keys. Direct connections use TLS 1.3 with pinned device identity, operations are signed, records and asset chunks use XChaCha20-Poly1305, and resource-key distribution uses HPKE with X25519 and HKDF-SHA256. Secrets live in native credential storage or Android Keystore wrapping. [HPKE](https://www.rfc-editor.org/rfc/rfc9180.html) alone does not provide authorization, replay protection, or downgrade protection, so the protocol composition needs review before transport is enabled.
 
-Enrollment and revocation follow signed administration history. A separate owner recovery identity and recovery kit receive resource-key envelopes. Revocation rotates affected keys and rejects new operations from the removed device; it cannot erase copies that device already holds.
+Enrollment and revocation follow the anchor-sequenced authorization log in [Topology and authority](#topology-and-authority). A separate owner recovery identity and recovery kit receive resource-key envelopes. Revocation rotates affected keys and rejects new operations from the removed device; it cannot erase copies that device already holds.
 
 ### People and contact requests
 
@@ -197,7 +215,7 @@ Vault replacement must fence the generation across processes, not only within on
 
 ### Settings and Android delivery
 
-Onboarding and Settings will show linked devices, connection method, last successful sync, pending changes, unavailable assets, conflicts, recovery status, focus controller, and relay configuration, with pause, retry, removal, and recovery export.
+Onboarding and Settings will show linked devices, connection method, last successful sync, pending changes, unavailable assets, conflicts, recovery status, focus controller, anchor, and relay configuration, with pause, retry, removal, and recovery export.
 
 Android uses WorkManager for deferred sync and a visible, user-enabled connected-device service for live companion status. Permission denial, process death, reboot, network changes, and background restrictions must surface as degraded connectivity. Background service availability never establishes focus or idle activity.
 
@@ -210,8 +228,8 @@ Android uses WorkManager for deferred sync and a visible, user-enabled connected
 | Local whole-vault handoff | Partial | Physical multi-device acceptance |
 | Concurrent replication of Quick notes | Implemented | Physical multi-device acceptance |
 | Concurrent replication of other domains | Planned | Preferences, People, Projects, distraction rules and usage counters, Calendar, Focus history, Music library, Chat organizational content, Notes text and tree merging, managed assets, and retiring whole-vault handoff |
-| Concurrent secure local linking | Planned | Operation encryption, key lifecycle, revocation beyond one hub, typed bootstrap, and compaction |
-| Relay and Android sync | Planned | Encrypted relay, native background runtime, encrypted backup, measurements, and physical acceptance |
+| Concurrent secure local linking | Planned | Anchored authority with admin keys and late changes, LAN peer exchange, operation encryption, key lifecycle, typed bootstrap, and compaction |
+| Delivery beyond the LAN and Android sync | Planned | Encrypted relay or always-on anchor, native background runtime, encrypted backup, measurements, and physical acceptance |
 
 Required tests include reordered, duplicated, delayed, and interrupted delivery; text and tree convergence; deletion, undo, and history restore; crashes at persistence and acknowledgement boundaries; full disks, corrupt staging, and missing assets; invalid identity, signatures, invitation replay, revocation, key epochs, payload bounds, and protocol versions; controller handoff failure and expired commands; duplicate jobs; and long-offline replicas, compaction, restored backups, and cloned writers.
 

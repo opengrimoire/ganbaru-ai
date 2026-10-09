@@ -25,7 +25,7 @@ Provider network behavior follows the selected provider and its own policy. Ganb
 
 Not implemented:
 
-- Concurrent sync of domains other than Quick notes, operation encryption, and optional remote synchronization through a user-hosted Rust relay.
+- Concurrent sync of domains other than Quick notes, LAN peer exchange between enrolled devices, operation encryption, and optional remote synchronization through a user-hosted Rust relay or always-on anchor.
 - A hosted or local BYOK chat widget separate from coding-agent Chat.
 - A separately authorized external MCP service.
 - A `ganbaru-ai` CLI with external integration commands.

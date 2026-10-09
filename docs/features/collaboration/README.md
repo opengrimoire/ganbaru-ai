@@ -112,6 +112,7 @@ An agent executes only on devices of the person who owns it. Other members of a 
 
 - Nothing is discoverable. Without a handed-out card there is no way to reach a person.
 - Removal and revocation stop future reads, context assembly, notifications, and exports immediately, and never rewrite legitimate shared history. They cannot erase copies another person already holds, and the app says so where it matters.
+- Each space has an anchor that orders membership and role changes; editing never waits for it, and an organization can run it always-on on hardware it controls. Offline edits by a removed member that the anchor had not received become late changes that an admin restores or discards. See [Device linking and synchronization](../../data/sync.md#topology-and-authority).
 - Mentions, links, and references identify context and never transfer access, for people exactly as for agents.
 - Anti-burnout defaults apply to people as to agents: no read receipts, typing indicators, or online presence are required for the model, and none are planned as defaults.
 
