@@ -292,6 +292,18 @@
     });
   }
 
+  /**
+   * Recovers the Focus run without blocking startup or resume: a read-only replica cannot
+   * recover, and the native projection reports that failure to the Focus surface.
+   */
+  async function recoverFocusRun(): Promise<void> {
+    try {
+      await pomodoro.recoverMobileRun();
+    } catch (error) {
+      console.warn("Failed to recover the mobile Focus run", error);
+    }
+  }
+
   async function prepareCriticalSurfaces(): Promise<void> {
     const [calendarModule, pomodoroMenuModule, linkedDeviceControlModule] = await Promise.all([
       import("$lib/components/calendar/CalendarView.svelte"),
@@ -486,7 +498,7 @@
       perfMark("boot.mobile-database-ready");
       await Promise.all([
         criticalSurfaces,
-        pomodoro.recoverMobileRun(),
+        recoverFocusRun(),
         calendars.load(),
         calendar.load(),
       ]);
@@ -683,7 +695,7 @@
       quickNotesTrashPurge?.scheduler.resume();
       if (schedulerResume) return;
       schedulerResume = (async () => {
-        await pomodoro.recoverMobileRun();
+        await recoverFocusRun();
         await Promise.all([
           calendarNotificationScheduler?.reconcile(),
           pomodoroScheduleScheduler?.reconcile(),
