@@ -165,10 +165,14 @@
       width: rect.width,
       height: rect.height,
     };
-    node.setPointerCapture(event.pointerId);
   }
 
+  /**
+   * Captures the pointer only once a drag starts: a captured pointer sends the click that follows
+   * to the card wrapper instead of the card's open button.
+   */
   function activateDrag(event: PointerEvent, pending: PendingPointer): void {
+    pending.node.setPointerCapture(event.pointerId);
     previousCursor = document.documentElement.style.cursor;
     document.documentElement.style.cursor = "grabbing";
     document.documentElement.dataset.quickNoteDragging = "true";
@@ -186,6 +190,11 @@
     const pending = pendingPointer;
     if (!pending || pending.pointerId !== event.pointerId) return;
     if (!drag) {
+      // An uncaptured press can be released outside the card, where its pointerup never arrives.
+      if ((event.buttons & 1) === 0) {
+        pendingPointer = null;
+        return;
+      }
       const threshold = pending.pointerType === "touch" ? 3 : 5;
       if (Math.hypot(event.clientX - pending.startX, event.clientY - pending.startY) < threshold) return;
       activateDrag(event, pending);
