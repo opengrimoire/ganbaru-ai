@@ -502,6 +502,41 @@ pub(crate) async fn activate_active_handoff<R: Runtime>(
     .await
 }
 
+/// Activates an ownership snapshot a linked owner uploaded to this coordinator. The replaced
+/// folder is kept only when it holds a different vault: the coordinator's own copy of the linked
+/// vault is read-only while another device owns it, and its Quick notes changes carry forward.
+#[cfg(desktop)]
+pub(crate) async fn activate_uploaded_ownership<R: Runtime>(
+    app: &tauri::AppHandle<R>,
+    staging: &Path,
+    transfer_id: &str,
+    expected_vault_id: &str,
+) -> Result<VaultInfo, String> {
+    let target = super::active_vault_path(app)?;
+    let preserve_previous = replaces_independent_vault(&target, expected_vault_id);
+    activate_handoff_at_path(
+        app,
+        staging,
+        &target,
+        transfer_id,
+        expected_vault_id,
+        preserve_previous,
+    )
+    .await
+}
+
+/// Whether the folder at `path` is the vault `vault_id`.
+fn holds_vault(path: &Path, vault_id: &str) -> bool {
+    vault_info_from_path(path).is_ok_and(|info| info.vault_id == vault_id)
+}
+
+/// Whether replacing `target` discards a vault other than `vault_id`. A folder whose marker
+/// cannot be read counts as another vault, so it is kept.
+#[cfg(any(desktop, test))]
+fn replaces_independent_vault(target: &Path, vault_id: &str) -> bool {
+    target.exists() && !holds_vault(target, vault_id)
+}
+
 async fn activate_handoff_at_path<R: Runtime>(
     app: &tauri::AppHandle<R>,
     staging: &Path,
@@ -582,9 +617,7 @@ async fn carry_forward_local_changes<R: Runtime>(
     target: &Path,
     expected_vault_id: &str,
 ) -> Result<(), String> {
-    let same_vault =
-        vault_info_from_path(target).is_ok_and(|info| info.vault_id == expected_vault_id);
-    if !staging.exists() || !same_vault {
+    if !staging.exists() || !holds_vault(target, expected_vault_id) {
         return Ok(());
     }
     let files = crate::sync::sync_files(app, expected_vault_id)?;
@@ -843,6 +876,22 @@ mod tests {
             preserved,
             parent.join("Ganbaru AI before linking transfer-123")
         );
+    }
+
+    #[test]
+    fn replaced_folder_is_independent_only_when_it_holds_another_or_unreadable_vault() {
+        let parent = unique_test_path("independent");
+        let target = parent.join("Ganbaru AI");
+        assert!(!replaces_independent_vault(&target, "vault-linked"));
+
+        fs::create_dir_all(&target).unwrap();
+        let linked = crate::vault::initialize_vault(&target).unwrap();
+        assert!(!replaces_independent_vault(&target, &linked.vault_id));
+        assert!(replaces_independent_vault(&target, "vault-other"));
+
+        fs::write(target.join("vault.json"), "invalid json").unwrap();
+        assert!(replaces_independent_vault(&target, &linked.vault_id));
+        let _ = fs::remove_dir_all(parent);
     }
 
     #[test]
