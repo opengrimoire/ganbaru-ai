@@ -12,7 +12,7 @@ import {
 } from "$lib/calendar/utils";
 import { getCalendarZoom } from "$lib/stores/calendar-zoom.svelte";
 import { isPendingCreateEventId } from "$lib/components/calendar/display-events";
-import { CalendarTouchHoldArbiter } from "$lib/components/calendar/mobile-gestures";
+import { TouchHoldArbiter } from "$lib/utils/touch-hold";
 
 let cursorStyle: HTMLStyleElement | null = null;
 
@@ -87,7 +87,7 @@ export function createTimedEventDragController(config: TimedEventDragControllerC
   let autoScrollRaf = 0;
   let scrollUpdateRaf = 0;
   let scrollUpdateContainer: HTMLElement | null = null;
-  const touchHold = new CalendarTouchHoldArbiter();
+  const touchHold = new TouchHoldArbiter();
 
   // Auto-scroll
 
