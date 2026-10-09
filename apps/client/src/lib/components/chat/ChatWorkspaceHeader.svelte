@@ -4,11 +4,13 @@
   import Hash from "@lucide/svelte/icons/hash";
   import Menu from "@lucide/svelte/icons/menu";
   import MessageSquare from "@lucide/svelte/icons/message-square";
+  import { summarizeChannelMembers } from "$lib/chat/teammates/channel-members";
   import {
     COMPACT_IDENTITY_EMOJI_SCALE,
     COMPACT_IDENTITY_ICON_SIZE,
     COMPACT_IDENTITY_ICON_STROKE_WIDTH,
   } from "$lib/icon-sizing";
+  import { formatNumber } from "$lib/i18n/formatters";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import { projectLifecycleBadgeClass, projectLifecycleLabel } from "$lib/projects/display";
   import { projectNavigatorPanelGeometry, type ProjectNavigatorPanelMode } from "$lib/projects/toolbar";
@@ -16,12 +18,14 @@
   import { getProjects } from "$lib/stores/projects.svelte";
   import { getViewport } from "$lib/stores/viewport.svelte";
   import { cn } from "$lib/utils";
+  import ChatParticipantAvatar from "$lib/components/chat/identity/ChatParticipantAvatar.svelte";
+  import LocalPersonAvatar from "$lib/components/people/LocalPersonAvatar.svelte";
   import ProjectIcon from "$lib/components/projects/ProjectIcon.svelte";
   import ProjectPickerMobileDialog from "$lib/components/projects/pickers/ProjectPickerMobileDialog.svelte";
   import WorkspaceBreadcrumbTerminalIcon from "$lib/components/ui/WorkspaceBreadcrumbTerminalIcon.svelte";
   import ChatChannelPickerPanel from "$lib/components/chat/channels/ChatChannelPickerPanel.svelte";
-  import ChatChannelRoster from "$lib/components/chat/channels/ChatChannelRoster.svelte";
   import ChatProjectNavigator from "$lib/components/chat/channels/ChatProjectNavigator.svelte";
+  import { CHAT_OPEN_MEMBERS_EVENT, readChatOpenMembersDetail } from "$lib/components/chat/channels/members-panel-events";
   import ChatTitleEditor from "./ChatTitleEditor.svelte";
 
   type ChatNavigatorMode = ProjectNavigatorPanelMode | "channels";
@@ -45,11 +49,21 @@
   const chat = getChat();
   const projects = getProjects();
   const viewport = getViewport();
-  const { t } = getLocalization();
+  const { t, locale } = getLocalization();
   const identityIconSize = COMPACT_IDENTITY_ICON_SIZE;
   const identityIconStrokeWidth = COMPACT_IDENTITY_ICON_STROKE_WIDTH;
   const identityEmojiScale = COMPACT_IDENTITY_EMOJI_SCALE;
+  /** Avatars shown in the header trigger before the count takes over. */
+  const MEMBER_STACK_LIMIT = 3;
+  const MEMBER_STACK_AVATAR_SIZE = 18;
+  type ChatChannelMembersPanelComponent =
+    typeof import("$lib/components/chat/channels/ChatChannelMembersPanel.svelte").default;
   let navigatorOpen = $state(false);
+  let membersChannelId = $state<string | null>(null);
+  let membersPickerOnOpen = $state(false);
+  let MembersPanel = $state<ChatChannelMembersPanelComponent | null>(null);
+  let membersPanelLoad: Promise<void> | null = null;
+  let membersTrigger = $state<HTMLButtonElement | null>(null);
   let navigatorMode = $state<ChatNavigatorMode>("groups");
   let navigatorAnchorElement = $state<HTMLButtonElement | null>(null);
   let groupTriggerElement = $state<HTMLButtonElement | null>(null);
@@ -70,6 +84,10 @@
   );
   const selectedFolder = $derived(chat.selectedWorkingFolder);
   const showChannelBreadcrumb = $derived(!explorerExpanded || (editingTitle && !!selectedChannel && !selectedChannel.isDefault));
+  const memberSummary = $derived(summarizeChannelMembers(selectedChannel?.memberships ?? []));
+  const memberStackTeammates = $derived(chat.teammates
+    .filter((teammate) => memberSummary.teammateIds.has(teammate.participant.id))
+    .slice(0, MEMBER_STACK_LIMIT - 1));
 
   function triggerForMode(mode: ChatNavigatorMode): HTMLButtonElement | null {
     if (mode === "groups") return groupTriggerElement;
@@ -133,6 +151,46 @@
     navigatorOpen = false;
     window.dispatchEvent(new Event("ganbaru-ai:chat-new-channel"));
   }
+
+  const membersOpen = $derived(membersChannelId !== null && membersChannelId === chat.selectedChannelId);
+
+  /** Load the members panel only when the trigger is approached or used. */
+  function loadMembersPanel(): Promise<void> {
+    if (MembersPanel) return Promise.resolve();
+    membersPanelLoad ??= import("$lib/components/chat/channels/ChatChannelMembersPanel.svelte")
+      .then((module) => { MembersPanel = module.default; })
+      .catch((error: unknown) => {
+        console.error("Load Chat members panel failed", error);
+        membersChannelId = null;
+      })
+      .finally(() => { membersPanelLoad = null; });
+    return membersPanelLoad;
+  }
+
+  function toggleChannelMembers(): void {
+    if (!selectedChannel) return;
+    membersPickerOnOpen = false;
+    membersChannelId = membersOpen ? null : selectedChannel.id;
+    if (membersChannelId) void loadMembersPanel();
+  }
+
+  function closeChannelMembers(): void {
+    membersChannelId = null;
+    membersPickerOnOpen = false;
+  }
+
+  /** Reopens the panel for a surface that had to close while Settings covered it. */
+  $effect(() => {
+    const openMembers = (event: Event): void => {
+      const detail = readChatOpenMembersDetail(event);
+      if (!detail || detail.channelId !== chat.selectedChannelId) return;
+      membersPickerOnOpen = detail.addMembers;
+      membersChannelId = detail.channelId;
+      void loadMembersPanel();
+    };
+    window.addEventListener(CHAT_OPEN_MEMBERS_EVENT, openMembers);
+    return () => window.removeEventListener(CHAT_OPEN_MEMBERS_EVENT, openMembers);
+  });
 
   async function commitTitle(title: string): Promise<void> {
     if (!selectedChannel || selectedChannel.isDefault || !editingTitle) return;
@@ -254,11 +312,22 @@
   <div class="flex shrink-0 items-center gap-1">
     {#if selectedFolder?.bindingStatus === "available"}<button type="button" class="chat-toolbar-icon-button" title={t("chat.openFolder")} aria-label={t("chat.openFolder")} onclick={() => run(() => chat.openWorkingFolder(selectedFolder.workingFolder.id))}><FolderOpen size={14} /></button>{/if}
     {#if selectedChannel}
-      <ChatChannelRoster />
+      <button bind:this={membersTrigger} type="button" class="chat-members-trigger" class:open={membersOpen} aria-label={t("chat.organization.membersPanel", memberSummary.count)} data-app-tooltip={t("chat.organization.members")} aria-haspopup="dialog" aria-expanded={membersOpen} data-chat-members-trigger onpointerenter={() => { void loadMembersPanel(); }} onfocus={() => { void loadMembersPanel(); }} onclick={toggleChannelMembers}>
+        <span class="chat-members-stack" aria-hidden="true">
+          <LocalPersonAvatar size={MEMBER_STACK_AVATAR_SIZE} />
+          {#each memberStackTeammates as teammate (teammate.participant.id)}<ChatParticipantAvatar participant={teammate.participant} {teammate} size={MEMBER_STACK_AVATAR_SIZE} />{/each}
+        </span>
+        <span class="chat-members-count tabular-nums">{formatNumber(locale, memberSummary.count)}</span>
+      </button>
     {/if}
     {#if selectedFolder?.currentBranch}<span class="chat-branch" title={t("chat.header.branch", selectedFolder.currentBranch)}><GitBranch size={13} /><span>{selectedFolder.currentBranch}</span></span>{/if}
   </div>
 </div>
+
+{#if membersOpen && selectedChannel && MembersPanel}
+  {@const LoadedMembersPanel = MembersPanel}
+  <LoadedMembersPanel anchor={membersTrigger} channel={selectedChannel} mobileLayout={mobilePresentation} initialPickerOpen={membersPickerOnOpen} onClose={closeChannelMembers} />
+{/if}
 
 <style>
   .chat-workspace-header.mobilePresentation { scrollbar-width: none; }
@@ -268,6 +337,13 @@
   .chat-context-divider { flex:0 0 auto;padding-inline:0.125rem;font-weight:600;color:var(--muted-foreground); }
   .chat-inline-new-button,.chat-toolbar-icon-button { display:flex;height:1.75rem;width:1.75rem;flex:0 0 auto;align-items:center;justify-content:center;border-radius:0.375rem;color:var(--foreground); }
   .chat-inline-new-button:hover,.chat-toolbar-icon-button:hover { background:var(--accent); }
+  .chat-members-trigger { display:flex;height:1.75rem;flex:0 0 auto;align-items:center;gap:0.3rem;border-radius:0.375rem;padding-inline:0.3rem 0.5rem;color:var(--foreground); }
+  .chat-members-trigger:hover,.chat-members-trigger.open { background:var(--accent); }
+  .chat-members-stack { display:flex;align-items:center; }
+  .chat-members-stack > :global(span) { flex:0 0 auto;border-radius:22%;box-shadow:0 0 0 1.5px var(--cal-header-bg); }
+  .chat-members-trigger:hover .chat-members-stack > :global(span),.chat-members-trigger.open .chat-members-stack > :global(span) { box-shadow:0 0 0 1.5px var(--accent); }
+  .chat-members-stack > :global(span + span) { margin-inline-start:-0.3rem; }
+  .chat-members-count { font-size: calc(0.733333rem * var(--type-scale));font-weight:500; }
   .chat-branch { display:none;min-width:0;max-width:9rem;align-items:center;gap:0.3rem;border-radius:0.375rem;padding:0.25rem 0.4rem;color:var(--muted-foreground);font-size: calc(0.666667rem * var(--type-scale)); }
   .chat-branch span { overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
   @container chat-shell (min-width:760px) { .chat-branch { display:inline-flex; } }
@@ -277,5 +353,6 @@
     .mobilePresentation [data-chat-group-trigger], .mobilePresentation [data-chat-project-trigger], .mobilePresentation [data-chat-channel-trigger] { height: 3rem; min-width: 0; flex: 0 1 auto; font-size: calc(0.9rem * var(--type-scale)); }
     .mobilePresentation .chat-inline-new-button { display: none; }
     .mobilePresentation .chat-toolbar-icon-button { width: 2.5rem; height: 2.5rem; }
+    .mobilePresentation .chat-members-trigger { height: 2.5rem; padding-inline: 0.5rem 0.625rem; }
   }
 </style>

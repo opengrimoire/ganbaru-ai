@@ -96,10 +96,10 @@ html[data-shell="mobile"] {
   &:focus-visible {
     outline: none;
   }
-  &:is(:hover, :focus-visible, [aria-expanded="true"], [data-highlighted]):not(:disabled, [aria-disabled="true"]) {
+  &:is(:hover, :focus-visible, [aria-expanded="true"], [data-highlighted]):not(:disabled, [aria-disabled="true"]:not(.control-unavailable)) {
     background-color: var(--accent);
   }
-  &:is(:disabled, [aria-disabled="true"]) {
+  &:is(:disabled, [aria-disabled="true"]):not(.control-unavailable) {
     cursor: not-allowed;
     color: color-mix(in srgb, var(--muted-foreground) 60%, transparent);
   }
@@ -157,9 +157,21 @@ html[data-shell="mobile"] {
   &:is([aria-invalid="true"], [data-invalid], :has(> [aria-invalid="true"])) {
     border-color: var(--destructive);
   }
-  &:is(:disabled, [aria-disabled="true"]) {
+  &:is(:disabled, [aria-disabled="true"]):not(.control-unavailable) {
     cursor: not-allowed;
     opacity: 0.5;
+  }
+}
+
+/*
+ * A control whose behavior is not implemented yet. It keeps its final appearance and placement, shows the not-allowed
+ * cursor, and has no activation handler; pair it with `aria-disabled="true"`. It never dims or explains itself, so it
+ * stays distinguishable from a control disabled by state. docs/features/collaboration/README.md records the rule.
+ */
+@utility control-unavailable {
+  cursor: not-allowed;
+  & > * {
+    cursor: inherit;
   }
 }
 

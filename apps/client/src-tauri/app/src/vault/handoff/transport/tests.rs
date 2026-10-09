@@ -1,6 +1,7 @@
 use super::*;
 use crate::vault::handoff::pairing::random_token;
 use crate::vault::handoff::protocol::{DeviceKind, MAX_ARCHIVE_BYTES, PROTOCOL_VERSION};
+use base64::Engine;
 use std::fs;
 use tokio::net::TcpListener;
 
@@ -804,4 +805,184 @@ fn oversized_bundle_metadata_is_rejected_before_network_work() {
         archive_sha256: "a".repeat(64),
     };
     assert!(metadata.validate().unwrap_err().contains("bundle size"));
+}
+
+fn sample_contact_card() -> (ganbaru_people::PersonKeyPair, String) {
+    let (_, key) = ganbaru_people::PersonKeyPair::generate().expect("person key");
+    let card = ganbaru_people::ContactCard {
+        public_key: key.public_key(),
+        display_name: "Requester".to_string(),
+        color: 3,
+        nonce: [4u8; ganbaru_people::CARD_NONCE_BYTES],
+        endpoint_hint: "127.0.0.1:43821".to_string(),
+        coordinator_fingerprint: Some([5u8; 32]),
+        issued_at_ms: unix_time_ms(),
+    };
+    let signed = ganbaru_people::sign_card(&card, &key).expect("sign card");
+    (key, signed.text())
+}
+
+fn base64url(bytes: &[u8]) -> String {
+    base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes)
+}
+
+#[tokio::test]
+async fn unauthenticated_contact_request_is_forwarded_to_the_coordinator() {
+    use super::super::coordinator::{CoordinatorOperation, CoordinatorResponse};
+
+    let (pair, mut requests) = LocalPair::start_with_coordinator().await;
+    let (key, card) = sample_contact_card();
+    let recipient_nonce = [7u8; ganbaru_people::CARD_NONCE_BYTES];
+    let signature = key.sign(&ganbaru_people::request_signature_payload(
+        &recipient_nonce,
+        "contact-one",
+    ));
+    let expected_card = card.clone();
+    let coordinator = tokio::spawn(async move {
+        let request = requests.recv().await.expect("contact request");
+        match request.operation {
+            CoordinatorOperation::ContactRequest {
+                recipient_card_nonce,
+                requester_card,
+                request_id,
+                ..
+            } => {
+                assert_eq!(
+                    recipient_card_nonce,
+                    ganbaru_people::encode_nonce(&recipient_nonce)
+                );
+                assert_eq!(requester_card, expected_card);
+                assert_eq!(request_id, "contact-one");
+            }
+            operation => panic!("unexpected coordinator operation: {operation:?}"),
+        }
+        request
+            .response
+            .send(Ok(CoordinatorResponse::ContactRequestReceived {
+                request_id: "contact-one".to_string(),
+            }))
+            .expect("send contact response");
+    });
+
+    let response = unauthenticated_exchange(
+        &pair.invitation.endpoint,
+        &pair.invitation.coordinator_fingerprint,
+        ControlMessage::ContactRequest {
+            protocol_version: PROTOCOL_VERSION,
+            recipient_card_nonce: ganbaru_people::encode_nonce(&recipient_nonce),
+            requester_card: card,
+            request_id: "contact-one".to_string(),
+            signature: base64url(&signature),
+        },
+    )
+    .await
+    .expect("contact request exchange");
+    assert!(matches!(
+        response,
+        ControlMessage::ContactRequestReceived { request_id } if request_id == "contact-one"
+    ));
+    coordinator.await.expect("coordinator task");
+}
+
+#[tokio::test]
+async fn coordinator_rejection_reaches_the_requester_as_a_protocol_error() {
+    use super::super::coordinator::{CoordinatorOperation, CoordinatorResponse};
+
+    let (pair, mut requests) = LocalPair::start_with_coordinator().await;
+    let (key, _) = sample_contact_card();
+    let issued_at_ms = unix_time_ms();
+    let signature = key.sign(&ganbaru_people::status_signature_payload(
+        "contact-one",
+        issued_at_ms,
+    ));
+    let coordinator = tokio::spawn(async move {
+        let request = requests.recv().await.expect("status request");
+        assert!(matches!(
+            request.operation,
+            CoordinatorOperation::ContactRequestStatus { ref request_id, .. }
+                if request_id == "contact-one"
+        ));
+        request
+            .response
+            .send(Ok(CoordinatorResponse::Rejected {
+                code: "card_revoked".to_string(),
+                message: "the recipient regenerated their contact card".to_string(),
+                retryable: false,
+            }))
+            .expect("send rejection");
+    });
+
+    let response = unauthenticated_exchange(
+        &pair.invitation.endpoint,
+        &pair.invitation.coordinator_fingerprint,
+        ControlMessage::ContactRequestStatus {
+            protocol_version: PROTOCOL_VERSION,
+            request_id: "contact-one".to_string(),
+            requester_public_key: key.public_key().to_text(),
+            issued_at_ms,
+            signature: base64url(&signature),
+        },
+    )
+    .await
+    .expect("status exchange");
+    assert!(matches!(
+        response,
+        ControlMessage::Error { code, retryable: false, .. } if code == "card_revoked"
+    ));
+    coordinator.await.expect("coordinator task");
+}
+
+#[tokio::test]
+async fn person_key_is_released_only_to_an_enrolled_device() {
+    use super::super::coordinator::{CoordinatorOperation, CoordinatorResponse};
+
+    let (pair, mut requests) = LocalPair::start_with_coordinator().await;
+    let unauthenticated = unauthenticated_exchange(
+        &pair.invitation.endpoint,
+        &pair.invitation.coordinator_fingerprint,
+        ControlMessage::PersonKeyRequest {
+            protocol_version: PROTOCOL_VERSION,
+            vault_id: "vault-1".to_string(),
+            device_id: "device-phone".to_string(),
+        },
+    )
+    .await;
+    assert!(
+        unauthenticated.is_err(),
+        "a connection without a client certificate must not receive the key"
+    );
+
+    pair.enroll().await;
+    let (pkcs8, key) = ganbaru_people::PersonKeyPair::generate().expect("person key");
+    let public_key = key.public_key().to_text();
+    let released_key = public_key.clone();
+    let released_pkcs8 = base64url(&pkcs8);
+    let expected_pkcs8 = released_pkcs8.clone();
+    let coordinator = tokio::spawn(async move {
+        let request = requests.recv().await.expect("key request");
+        assert!(matches!(
+            request.operation,
+            CoordinatorOperation::ReleasePersonKey
+        ));
+        request
+            .response
+            .send(Ok(CoordinatorResponse::PersonKeyReleased {
+                public_key: released_key,
+                private_key_pkcs8: released_pkcs8,
+            }))
+            .expect("send key");
+    });
+
+    let response = request_person_key(&pair.phone).await.expect("key exchange");
+    match response {
+        ControlMessage::PersonKeyRelease {
+            public_key: released,
+            private_key_pkcs8,
+        } => {
+            assert_eq!(released, public_key);
+            assert_eq!(private_key_pkcs8, expected_pkcs8);
+        }
+        other => panic!("unexpected response: {other:?}"),
+    }
+    coordinator.await.expect("coordinator task");
 }

@@ -265,6 +265,19 @@ export function isCalendarTimeFormat(value: unknown): value is CalendarTimeForma
   return value === "24h" || value === "12h";
 }
 
+/**
+ * How long a contact keeps one trust permission, as chosen in People settings and the trust editor. Kept here so the
+ * preferences store validates its trust defaults without loading People modules into every shell.
+ */
+export const PEOPLE_TRUST_DURATIONS = ["notAllowed", "once", "sevenDays", "thirtyDays", "untilRevoked"] as const;
+export type PeopleTrustDuration = (typeof PEOPLE_TRUST_DURATIONS)[number];
+/** Asking every time is the privacy-first default for new contacts. */
+export const DEFAULT_PEOPLE_TRUST_DURATION: PeopleTrustDuration = "notAllowed";
+
+export function isPeopleTrustDuration(value: unknown): value is PeopleTrustDuration {
+  return typeof value === "string" && (PEOPLE_TRUST_DURATIONS as readonly string[]).includes(value);
+}
+
 export function clampFocusIdleThresholdMinutes(value: number): number {
   if (!Number.isFinite(value)) return DEFAULT_FOCUS_IDLE_THRESHOLD_MINUTES;
   const integerValue = Math.round(value);

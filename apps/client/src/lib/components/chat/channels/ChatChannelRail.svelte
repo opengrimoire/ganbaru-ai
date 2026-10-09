@@ -8,12 +8,14 @@
   import ChevronRight from "@lucide/svelte/icons/chevron-right";
   import ChevronsLeft from "@lucide/svelte/icons/chevrons-left";
   import ChevronsRight from "@lucide/svelte/icons/chevrons-right";
+  import ContactRound from "@lucide/svelte/icons/contact-round";
   import EllipsisVertical from "@lucide/svelte/icons/ellipsis-vertical";
   import Folder from "@lucide/svelte/icons/folder";
   import FolderInput from "@lucide/svelte/icons/folder-input";
   import FolderPlus from "@lucide/svelte/icons/folder-plus";
   import Hash from "@lucide/svelte/icons/hash";
   import LoaderCircle from "@lucide/svelte/icons/loader-circle";
+  import Mail from "@lucide/svelte/icons/mail";
   import Pencil from "@lucide/svelte/icons/pencil";
   import Plus from "@lucide/svelte/icons/plus";
   import Trash2 from "@lucide/svelte/icons/trash-2";
@@ -31,12 +33,21 @@
   import { getChat } from "$lib/stores/chat.svelte";
   import { getPreferences } from "$lib/stores/preferences.svelte";
   import { getProjects } from "$lib/stores/projects.svelte";
+  import { getSettingsLauncher } from "$lib/stores/settings-launcher.svelte";
   import { onActiveVaultIdentityChange } from "$lib/vault/active-vault";
   import { overflowTooltip } from "$lib/utils/overflow-tooltip";
   import { scrollEdgeFadeAction } from "$lib/utils/scroll-edge-fade";
   import { SUBMENU_CLOSE_DELAY_MS, SUBMENU_OPEN_DELAY_MS } from "$lib/utils/menu-aim";
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
-  import ChatChannelSetupDialog from "./ChatChannelSetupDialog.svelte";
+
+  /** Which header opened the section menu: the default Channels group, a custom section, or Direct messages. */
+  type SectionMenuTarget =
+    | { kind: "channels" }
+    | { kind: "section"; section: ChatSidebarSection }
+    | { kind: "directMessages" };
+  type ChatChannelSetupDialogComponent = typeof import("./ChatChannelSetupDialog.svelte").default;
+  type ParticipantPickerComponent =
+    typeof import("$lib/components/people/ParticipantPicker.svelte").default;
 
   let {
     presentation = "column",
@@ -55,8 +66,12 @@
   const chat = getChat();
   const preferences = getPreferences();
   const projects = getProjects();
+  const settings = getSettingsLauncher();
   const { t } = getLocalization();
   let query = $state("");
+  let directMessagesCollapsed = $state(false);
+  let directMessageButton = $state<HTMLButtonElement | null>(null);
+  let directMessagePickerOpen = $state(false);
   let railElement = $state<HTMLElement | null>(null);
   let channelMenuTrigger: HTMLElement | null = null;
   const menuViewportGap = 8;
@@ -68,7 +83,7 @@
   let sectionRenameControlPointerActive = false;
   let sectionMenuTrigger: HTMLButtonElement | null = null;
   let sectionContextMenuElement = $state<HTMLElement | null>(null);
-  let sectionContextMenu = $state<{ section: ChatSidebarSection | null; x: number; y: number } | null>(null);
+  let sectionContextMenu = $state<{ target: SectionMenuTarget; x: number; y: number } | null>(null);
   let channelContextMenuElement = $state<HTMLElement | null>(null);
   let channelContextMenu = $state<{ channel: ChatChannelRead; x: number; y: number } | null>(null);
   let moveMenuTrigger = $state<HTMLButtonElement | null>(null);
@@ -78,6 +93,10 @@
   let moveMenuHoverTimer: ReturnType<typeof setTimeout> | null = null;
   let setupChannel = $state<ChatChannelRead | null | undefined>(undefined);
   let setupSectionId = $state<string | null>(null);
+  let SetupDialog = $state<ChatChannelSetupDialogComponent | null>(null);
+  let setupDialogLoad: Promise<void> | null = null;
+  let DirectMessagePicker = $state<ParticipantPickerComponent | null>(null);
+  let directMessagePickerLoad: Promise<void> | null = null;
   let sections = $state<ChatSidebarSection[]>([]);
   let loadedProjectId = $state<string | null>(null);
   let newSectionName = $state("");
@@ -267,7 +286,7 @@
     sectionContextMenu = null;
   }
 
-  async function toggleSectionContextMenu(event: MouseEvent, section: ChatSidebarSection | null): Promise<void> {
+  async function toggleSectionContextMenu(event: MouseEvent, menuTarget: SectionMenuTarget): Promise<void> {
     const trigger = event.currentTarget;
     if (!(trigger instanceof HTMLButtonElement)) return;
     if (sectionContextMenu && sectionMenuTrigger === trigger) {
@@ -279,16 +298,20 @@
     const bounds = trigger.getBoundingClientRect();
     const initialX = bounds.left;
     const initialY = bounds.bottom;
-    sectionContextMenu = { section, x: initialX, y: initialY };
+    sectionContextMenu = { target: menuTarget, x: initialX, y: initialY };
     await tick();
     if (!sectionContextMenu || !sectionContextMenuElement || sectionMenuTrigger !== trigger) return;
     const menuBounds = sectionContextMenuElement.getBoundingClientRect();
     sectionContextMenu = {
-      section,
+      target: menuTarget,
       x: Math.min(Math.max(menuViewportGap, initialX), Math.max(menuViewportGap, window.innerWidth - menuBounds.width - menuViewportGap)),
       y: Math.min(Math.max(menuViewportGap, initialY), Math.max(menuViewportGap, window.innerHeight - menuBounds.height - menuViewportGap)),
     };
     (sectionContextMenuElement.querySelector<HTMLButtonElement>("button:not(:disabled)") ?? sectionContextMenuElement).focus();
+  }
+
+  function contextMenuSection(): ChatSidebarSection | null {
+    return sectionContextMenu?.target.kind === "section" ? sectionContextMenu.target.section : null;
   }
 
   function createSectionFromContextMenu(): void {
@@ -297,15 +320,20 @@
   }
 
   function renameSectionFromContextMenu(): void {
-    const section = sectionContextMenu?.section;
+    const section = contextMenuSection();
     closeSectionContextMenu();
     if (section) startSectionRename(section);
   }
 
   function deleteSectionFromContextMenu(): void {
-    const section = sectionContextMenu?.section;
+    const section = contextMenuSection();
     closeSectionContextMenu();
     if (section) deleteSectionCandidate = section;
+  }
+
+  function openPeopleFromContextMenu(peopleTab: "contacts" | "invitations"): void {
+    closeSectionContextMenu();
+    settings.open("people", { peopleTab });
   }
 
   function moveChannel(channelId: string, sectionId: string | null): void {
@@ -405,8 +433,7 @@
     const menu = channelContextMenu;
     if (!menu) return;
     closeChannelContextMenu();
-    setupChannel = menu.channel;
-    setupSectionId = sections.find((section) => section.channelIds.includes(menu.channel.id))?.id ?? null;
+    openEdit(menu.channel);
   }
 
   function moveChannelFromContextMenu(sectionId: string | null): void {
@@ -447,10 +474,61 @@
     void tick().then(() => railElement?.querySelector<HTMLInputElement>('input[type="search"]')?.focus());
   }
 
+  /** Load the channel setup dialog only when a channel is created or edited. */
+  function loadSetupDialog(): Promise<void> {
+    if (SetupDialog) return Promise.resolve();
+    setupDialogLoad ??= import("./ChatChannelSetupDialog.svelte")
+      .then((module) => { SetupDialog = module.default; })
+      .catch((cause: unknown) => {
+        railError = cause instanceof Error ? cause.message : String(cause);
+        setupChannel = undefined;
+        setupSectionId = null;
+      })
+      .finally(() => { setupDialogLoad = null; });
+    return setupDialogLoad;
+  }
+
+  /** Load the direct message picker only when the rail approaches or opens it. */
+  function loadDirectMessagePicker(): Promise<void> {
+    if (DirectMessagePicker) return Promise.resolve();
+    directMessagePickerLoad ??= import("$lib/components/people/ParticipantPicker.svelte")
+      .then((module) => { DirectMessagePicker = module.default; })
+      .catch((cause: unknown) => {
+        railError = cause instanceof Error ? cause.message : String(cause);
+        directMessagePickerOpen = false;
+      })
+      .finally(() => { directMessagePickerLoad = null; });
+    return directMessagePickerLoad;
+  }
+
+  function openDirectMessagePicker(): void {
+    directMessagePickerOpen = true;
+    void loadDirectMessagePicker();
+  }
+
   function openCreate(sectionId: string | null = null): void {
     onExpand();
     setupChannel = null;
     setupSectionId = sectionId;
+    void loadSetupDialog();
+  }
+
+  function openEdit(channel: ChatChannelRead): void {
+    setupChannel = channel;
+    setupSectionId = sections.find((section) => section.channelIds.includes(channel.id))?.id ?? null;
+    void loadSetupDialog();
+  }
+
+  function editChannelFromEvent(event: Event): void {
+    const channelId = event instanceof CustomEvent
+      && typeof event.detail === "object"
+      && event.detail !== null
+      && "channelId" in event.detail
+      && typeof event.detail.channelId === "string"
+      ? event.detail.channelId
+      : null;
+    const channel = chat.activeChannels.find((entry) => entry.id === channelId);
+    if (channel) openEdit(channel);
   }
 
   async function selectChannel(channelId: string): Promise<void> {
@@ -499,6 +577,7 @@
       }
     };
     window.addEventListener("ganbaru-ai:chat-new-channel", createChannel);
+    window.addEventListener("ganbaru-ai:chat-edit-channel", editChannelFromEvent);
     window.addEventListener("ganbaru-ai:chat-focus-search", focusSearch);
     document.addEventListener("pointerdown", closeOpenMenus);
     const unsubscribeVault = onActiveVaultIdentityChange(() => {
@@ -509,6 +588,7 @@
     });
     return () => {
       window.removeEventListener("ganbaru-ai:chat-new-channel", createChannel);
+      window.removeEventListener("ganbaru-ai:chat-edit-channel", editChannelFromEvent);
       window.removeEventListener("ganbaru-ai:chat-focus-search", focusSearch);
       document.removeEventListener("pointerdown", closeOpenMenus);
       unsubscribeVault();
@@ -553,7 +633,7 @@
             {#if channelsCollapsed}<ChevronRight class="section-chevron" size={13} />{:else}<ChevronDown class="section-chevron" size={13} />{/if}
           </button>
           <button type="button" class="section-create-action" aria-label={t("chat.channels.createTitle")} data-app-tooltip={t("chat.channels.createTitle")} onclick={() => openCreate()}><Plus size={13} /></button>
-          <button bind:this={sectionButton} type="button" class="explorer-icon explorer-row-action" aria-label={t("chat.moreActions")} data-app-tooltip-disabled="true" aria-haspopup="menu" aria-expanded={sectionContextMenu !== null && sectionContextMenu.section === null} onclick={(event) => void toggleSectionContextMenu(event, null)}><EllipsisVertical size={14} /></button>
+          <button bind:this={sectionButton} type="button" class="explorer-icon explorer-row-action" aria-label={t("chat.moreActions")} data-app-tooltip-disabled="true" aria-haspopup="menu" aria-expanded={sectionContextMenu?.target.kind === "channels"} onclick={(event) => void toggleSectionContextMenu(event, { kind: "channels" })}><EllipsisVertical size={14} /></button>
         </div>
         {#if !channelsCollapsed}
           {#if chat.channelsLoading && projects.selectedProjectId}
@@ -596,7 +676,7 @@
                 {#if section.collapsed}<ChevronRight class="section-chevron" size={13} />{:else}<ChevronDown class="section-chevron" size={13} />{/if}
               </button>
               <button type="button" class="section-create-action" aria-label={t("chat.channels.createTitle")} data-app-tooltip={t("chat.channels.createTitle")} onclick={() => openCreate(section.id)}><Plus size={13} /></button>
-              <button type="button" class="explorer-icon explorer-row-action" aria-label={`${t("chat.moreActions")}: ${section.name}`} data-app-tooltip-disabled="true" aria-haspopup="menu" aria-expanded={sectionContextMenu?.section?.id === section.id} onclick={(event) => void toggleSectionContextMenu(event, section)}><EllipsisVertical size={14} /></button>
+              <button type="button" class="explorer-icon explorer-row-action" aria-label={`${t("chat.moreActions")}: ${section.name}`} data-app-tooltip-disabled="true" aria-haspopup="menu" aria-expanded={sectionContextMenu?.target.kind === "section" && sectionContextMenu.target.section.id === section.id} onclick={(event) => void toggleSectionContextMenu(event, { kind: "section", section })}><EllipsisVertical size={14} /></button>
             {/if}
           </div>
           {#if !section.collapsed}
@@ -604,6 +684,22 @@
           {/if}
         </section>
       {/each}
+
+      {#if !query.trim()}
+        <section class="channel-section" role="group" data-chat-direct-messages>
+          <div class="section-heading">
+            <button type="button" class="section-toggle" class:collapsed={directMessagesCollapsed} aria-label={sectionToggleLabel(t("chat.channels.directMessages"), directMessagesCollapsed)} aria-expanded={!directMessagesCollapsed} onclick={() => { directMessagesCollapsed = !directMessagesCollapsed; }}>
+              <span use:overflowTooltip={t("chat.channels.directMessages")}>{t("chat.channels.directMessages")}</span>
+              {#if directMessagesCollapsed}<ChevronRight class="section-chevron" size={13} />{:else}<ChevronDown class="section-chevron" size={13} />{/if}
+            </button>
+            <button bind:this={directMessageButton} type="button" class="section-create-action" aria-label={t("chat.channels.newDirectMessage")} data-app-tooltip={t("chat.channels.newDirectMessage")} aria-haspopup="dialog" aria-expanded={directMessagePickerOpen} onpointerenter={() => { void loadDirectMessagePicker(); }} onfocus={() => { void loadDirectMessagePicker(); }} onclick={openDirectMessagePicker}><Plus size={13} /></button>
+            <button type="button" class="explorer-icon explorer-row-action" aria-label={`${t("chat.moreActions")}: ${t("chat.channels.directMessages")}`} data-app-tooltip-disabled="true" aria-haspopup="menu" aria-expanded={sectionContextMenu?.target.kind === "directMessages"} onclick={(event) => void toggleSectionContextMenu(event, { kind: "directMessages" })}><EllipsisVertical size={14} /></button>
+          </div>
+          {#if !directMessagesCollapsed}
+            <p class="section-hint" data-chat-direct-messages-hint>{t("chat.channels.directMessagesHint")}</p>
+          {/if}
+        </section>
+      {/if}
 
     </div>
 
@@ -629,8 +725,11 @@
       }
     }}
   >
-    {#if sectionContextMenu.section === null}
+    {#if sectionContextMenu.target.kind === "channels"}
       <button type="button" role="menuitem" disabled={!projects.selectedProjectId} class="menu-item" onclick={createSectionFromContextMenu}><FolderPlus class="size-4" /><span>{t("chat.channels.newSection")}</span></button>
+    {:else if sectionContextMenu.target.kind === "directMessages"}
+      <button type="button" role="menuitem" class="menu-item" onclick={() => openPeopleFromContextMenu("contacts")}><ContactRound class="size-4" /><span>{t("people.tabs.contacts")}</span></button>
+      <button type="button" role="menuitem" class="menu-item" data-chat-invitations onclick={() => openPeopleFromContextMenu("invitations")}><Mail class="size-4" /><span>{t("people.tabs.invitations")}</span></button>
     {:else}
       <button type="button" role="menuitem" class="menu-item" onclick={renameSectionFromContextMenu}><Pencil class="size-4" /><span>{t("chat.rename")}</span></button>
       <button type="button" role="menuitem" class="menu-item menu-item-destructive" onclick={deleteSectionFromContextMenu}><Trash2 class="size-4" /><span>{t("chat.channels.deleteSectionConfirm")}</span></button>
@@ -697,8 +796,22 @@
   </div>
 {/snippet}
 
-{#if setupChannel !== undefined}
-  <ChatChannelSetupDialog channel={setupChannel} {sections} initialSectionId={setupSectionId} onSaved={savedChannel} onCancel={() => { setupChannel = undefined; setupSectionId = null; }} />
+{#if setupChannel !== undefined && SetupDialog}
+  {@const LoadedSetupDialog = SetupDialog}
+  <LoadedSetupDialog channel={setupChannel} {sections} initialSectionId={setupSectionId} onSaved={savedChannel} onCancel={() => { setupChannel = undefined; setupSectionId = null; }} />
+{/if}
+
+{#if directMessagePickerOpen && DirectMessagePicker}
+  {@const LoadedDirectMessagePicker = DirectMessagePicker}
+  <LoadedDirectMessagePicker
+    anchor={directMessageButton}
+    title={t("chat.channels.newDirectMessage")}
+    includePeople
+    includeTeammates={false}
+    horizontalAlign="start"
+    confirmLabel={t("chat.channels.startDirectMessage")}
+    onClose={() => { directMessagePickerOpen = false; }}
+  />
 {/if}
 
 {#if archiveCandidate}<ConfirmDialog title={t("chat.channels.archiveConfirmTitle", archiveCandidate.name)} message={t("chat.channels.archiveConfirmMessage")} confirmLabel={t("chat.archive")} cancelLabel={t("chat.cancel")} onConfirm={() => void confirmArchive()} onCancel={() => { archiveCandidate = null; }} />{/if}
@@ -733,6 +846,7 @@
   .channel-row-group { position: relative; display: flex; min-width: 0; align-items: center; }
   .channel-row { display: flex; width: 100%; min-width: 0; min-height: var(--explorer-row-height); align-items: center; gap: 0.375rem; border-radius: 0.35rem; padding: var(--explorer-row-padding) 0.5rem; color: var(--foreground); text-align: left; }
   .channel-row-group .channel-row { flex: 1; }
+  .section-hint { padding: 0.25rem 0.5rem 0.375rem; color: var(--muted-foreground); font-size: var(--panel-detail-font-size); line-height: 1.35; }
   .explorer-touch .section-heading > button { min-width: var(--touch-target-min); min-height: var(--touch-target-min); }
   .explorer-touch .section-heading > .section-toggle { min-width: 0; }
   .channel-loading { padding-right: 0.55rem; opacity: 0.72; }

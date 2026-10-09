@@ -1,6 +1,7 @@
 import type { Component } from "svelte";
 import Palette from "@lucide/svelte/icons/palette";
 import UserRound from "@lucide/svelte/icons/user-round";
+import UsersRound from "@lucide/svelte/icons/users-round";
 import Calendar from "@lucide/svelte/icons/calendar";
 import Folder from "@lucide/svelte/icons/folder";
 import Book from "@lucide/svelte/icons/book";
@@ -29,6 +30,7 @@ export interface SettingsSectionMeta {
 export const SETTINGS_SECTIONS: SettingsSectionMeta[] = [
   { id: "appearance", labelKey: "settings.section.appearance", icon: Palette },
   { id: "profile", labelKey: "settings.section.profile", icon: UserRound },
+  { id: "people", labelKey: "settings.section.people", icon: UsersRound },
   { id: "calendars", labelKey: "settings.section.calendars", icon: Calendar },
   { id: "projects", labelKey: "settings.section.projects", icon: Folder },
   { id: "notes", labelKey: "settings.section.notes", icon: Book },

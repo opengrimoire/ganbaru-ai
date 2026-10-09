@@ -20,13 +20,13 @@ import type {
 } from "$lib/chat/contracts";
 import { chatErrorCode, chatErrorField, chatErrorMessage } from "$lib/chat/error-presentation";
 import {
-  capabilitiesForPreset,
   teammateAccessConfirmationImpact,
   teammateAccessDraftErrors,
   teammateAccessDraftSnapshot,
   teammateAccessNeedsConfirmation,
   type ChatTeammateAccessConfirmationImpact,
 } from "./access";
+import { conversationAccessProfile, defaultChannelAccessInput } from "./channel-membership";
 import { teammateExecutionSummary, teammateProfileDraftSnapshot } from "./draft";
 import {
   cloneChatTeammateStudioDraft,
@@ -548,9 +548,7 @@ export function createTeammateEditorController(options: TeammateEditorOptions) {
   }
 
   function conversationProfile(): ChatAccessProfileRead | null {
-    return accessProfiles.find((profile) => profile.builtinKey === "conversationOnly")
-      ?? accessProfiles[0]
-      ?? null;
+    return conversationAccessProfile(accessProfiles);
   }
 
   function providerCapabilityIssue(capability: ChatFolderCapability): string | null {
@@ -611,17 +609,7 @@ export function createTeammateEditorController(options: TeammateEditorOptions) {
   }
 
   function defaultChannelAccess(channelId: string): ChatTeammateChannelAccessInput {
-    const profile = conversationProfile();
-    return {
-      channelId,
-      accessProfileId: profile?.id ?? "",
-      accessProfileRevision: profile?.latestRevision.revision ?? 0,
-      capabilities: capabilitiesForPreset("isolatedResponder"),
-      historyBoundary: { kind: "entire" },
-      runtimeApprovalOverride: null,
-      scratchRuntimeApprovalOverride: null,
-      folderGrants: [],
-    };
+    return defaultChannelAccessInput(channelId, conversationProfile());
   }
 
   function handleProfilesChange(nextProfiles: ChatAccessProfileRead[]): void {

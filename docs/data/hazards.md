@@ -95,7 +95,7 @@ Search, summaries, unread state, suggestions, exports, cached prompts, and sync 
 
 ## 14. AI identity used as an authority bridge
 
-Mentioning a teammate, giving it a role label, or selecting a capable provider can suggest broad project access. None of these grants membership, history, folder, terminal, Git, or tool authority. Assignment review shows unresolved targets and denied capabilities instead of inferring them from instructions.
+Mentioning an agent, giving it a role label, or selecting a capable provider can suggest broad project access. None of these grants membership, history, folder, terminal, Git, or tool authority. Assignment review shows unresolved targets and denied capabilities instead of inferring them from instructions.
 
 **Governed by:** [Chat access control](access-control.md) and invariant 13.
 

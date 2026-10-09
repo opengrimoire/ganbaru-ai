@@ -2,14 +2,20 @@
   import LoaderCircle from "@lucide/svelte/icons/loader-circle";
   import { onMount } from "svelte";
   import { getLocalization } from "$lib/i18n/translator.svelte";
-  import { PairingCameraScanner } from "$lib/vault/pairing-camera";
+  import { PairingCameraScanner, type QrFrameDecoder } from "$lib/vault/pairing-camera";
 
+  /** Rear-camera scanner; the decoder decides which QR payload family it accepts (pairing by default). */
   let {
     disabled = false,
+    decode,
+    label,
     onInvitation,
     onError,
   }: {
     disabled?: boolean;
+    decode?: QrFrameDecoder;
+    /** Accessible name of the preview; the pairing label is the default. */
+    label?: string;
     onInvitation: (invitation: string) => void | Promise<void>;
     onError: (cause: unknown) => void;
   } = $props();
@@ -45,7 +51,7 @@
   }
 
   onMount(() => {
-    scanner = new PairingCameraScanner(video);
+    scanner = new PairingCameraScanner(video, decode);
     void scanner.start().then(() => {
       ready = true;
       scheduleScan();
@@ -56,7 +62,7 @@
 
 <div class="grid w-full">
   <div class="relative mx-auto aspect-square w-full overflow-hidden rounded-md bg-black">
-    <video bind:this={video} muted class="h-full w-full object-cover" aria-label={t("vaultHandoff.scanQr")}></video>
+    <video bind:this={video} muted class="h-full w-full object-cover" aria-label={label ?? t("vaultHandoff.scanQr")}></video>
     {#if !ready}
       <div class="absolute inset-0 flex items-center justify-center gap-2 text-sm text-white">
         <LoaderCircle size={16} strokeWidth={2} class="animate-spin" aria-hidden="true" />

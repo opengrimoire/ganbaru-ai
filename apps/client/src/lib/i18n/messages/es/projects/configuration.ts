@@ -12,6 +12,10 @@ export const configuration = {
     group: "Grupo",
     lifecycle: "Ciclo de vida",
     icon: "Icono",
+    members: {
+      heading: "Miembros",
+      invite: "Invitar",
+    },
     workingFolders: {
       title: "Carpetas de trabajo",
       managed: "Administrada",

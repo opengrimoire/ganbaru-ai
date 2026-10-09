@@ -1872,6 +1872,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "ganbaru-people"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "chrono",
+ "ring",
+ "serde",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
 name = "ganbaru-pomodoro"
 version = "0.1.5"
 dependencies = [
@@ -1902,6 +1914,7 @@ dependencies = [
  "ganbaru-mobile-media",
  "ganbaru-mobile-notifications",
  "ganbaru-notes",
+ "ganbaru-people",
  "ganbaru-pomodoro",
  "ganbaru-working-folders",
  "gtk",

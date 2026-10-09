@@ -247,12 +247,47 @@ function firstUseBundleMetadata(): Plugin {
   };
 }
 
+const SVELTE_STYLE_VIRTUAL_ID = /\?svelte&type=style/u;
+
+function hasCompiledSvelteCss(meta: Record<string, unknown> | undefined): boolean {
+  const svelteMeta = meta?.svelte;
+  return typeof svelteMeta === "object" && svelteMeta !== null && "css" in svelteMeta && Boolean(svelteMeta.css);
+}
+
+/**
+ * Compile a Svelte component before serving its style virtual
+ * (`?svelte&type=style&lang.css`) when the component has not been compiled
+ * by this dev server yet. vite-plugin-svelte reads component CSS from the
+ * compiled component's module metadata, but the Tauri webview's network cache
+ * speculatively revalidates every subresource of the previous page load in
+ * parallel, so a fresh dev server can receive style requests before the
+ * components that import them.
+ */
+function compileSvelteStyleOwners(): Plugin {
+  return {
+    name: "ganbaru-ai:compile-svelte-style-owners",
+    apply: "serve",
+    enforce: "pre",
+    load: {
+      filter: { id: SVELTE_STYLE_VIRTUAL_ID },
+      async handler(id) {
+        if (this.environment.mode !== "dev") return null;
+        const [ownerFile] = id.split("?", 1);
+        const owner = ownerFile ? await this.resolve(ownerFile) : null;
+        if (!owner || hasCompiledSvelteCss(this.getModuleInfo(owner.id)?.meta)) return null;
+        await this.environment.transformRequest(owner.id);
+        return null;
+      },
+    },
+  };
+}
+
 /**
  * Skip Svelte component style virtuals (`?svelte&type=style&lang.css`) in
  * Tailwind's transform. None of the project's `<style>` blocks use Tailwind
- * directives, and on cold dev-server requests the Svelte plugin's CSS cache
- * can be empty, so Vite's default loader hands Tailwind the raw `.svelte`
- * source and the CSS parser explodes on JS imports.
+ * directives, and when a component's compiled CSS is unavailable (for
+ * example after a compile error), Vite's default loader hands Tailwind the
+ * raw `.svelte` source and the CSS parser explodes on JS imports.
  */
 function skipSvelteStyleVirtuals(plugins: Plugin[]): Plugin[] {
   for (const plugin of plugins) {
@@ -270,10 +305,13 @@ function skipSvelteStyleVirtuals(plugins: Plugin[]): Plugin[] {
 }
 
 export default defineConfig({
+  // Desktop and mobile dev servers resolve different modules, so a shared cache makes each run invalidate the other.
+  cacheDir: `node_modules/.vite/${buildPlatform}`,
   plugins: [
     tauriDevReady(),
     firstUseBundleMetadata(),
     ...skipSvelteStyleVirtuals(tailwindcss()),
+    compileSvelteStyleOwners(),
     svelte(),
   ],
   define: {

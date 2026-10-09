@@ -6,9 +6,9 @@ This document is the normative authorization specification for organizational Ch
 
 ## Principles
 
-1. Identity is not authority. Creating an AI teammate does not create membership, history access, a folder grant, scratch scope, or ambient context.
-2. The local owner is the only required seeded participant. There is no privileged default AI teammate.
-3. Provider, model, role, instructions, and runtime defaults are replaceable configuration on an ordinary teammate identity.
+1. Identity is not authority. Creating an AI agent does not create membership, history access, a folder grant, scratch scope, or ambient context.
+2. The local owner is the only required seeded participant. There is no privileged default AI agent.
+3. Provider, model, role, instructions, and runtime defaults are replaceable configuration on an ordinary agent identity.
 4. Channel presence, readable history, and executable resources are separate decisions.
 5. Access profiles are reusable ceilings and defaults. They are not principals and cannot grant authority without membership and an exact resource grant.
 6. Authority is closed world. Missing, stale, fabricated, revoked, or unsupported authority is denied.
@@ -17,9 +17,11 @@ This document is the normative authorization specification for organizational Ch
 
 ## Principals and scopes
 
-The portable vault owns stable identities for the local owner and configured AI teammates. Provider identities are not application principals.
+The portable vault owns stable identities for the local owner and configured AI agents. Provider identities are not application principals. Planned human collaborators are principals with their own key-based identity, reachable only through accepted contacts, as specified in [People and invitations](../features/collaboration/README.md).
 
 Channel membership answers whether a participant may appear in, read, or contribute to one channel. It never implies access to another channel in the same project. Resource grants answer a separate question: what the participant or assigned run may do with a working folder, scratch generation, terminal, Git repository, attachment, preview, or internal application tool.
+
+Human roles (owner, administrator, member, guest, or custom) are presets over the same capability vocabulary as agent access profiles, plus management capabilities that agents never hold. A role granted on a group is the default for its projects, and a project role is the default for its channels; each lower level may narrow the inherited role and never widens it. An agent owned by a collaborator acts within the intersection of that collaborator's role and the agent's access profile.
 
 Every decision is scoped to the active vault. IDs copied from another vault authorize nothing.
 
@@ -33,9 +35,9 @@ Authorization is checked when work is assigned and again at every privileged bou
 
 ## Channel capabilities and history
 
-A teammate membership stores two explicit channel capabilities, reading history and participating, plus a history boundary. Each may inherit from the selected profile or be set on the membership.
+An agent membership stores two explicit channel capabilities, reading history and participating, plus a history boundary. Each may inherit from the selected profile or be set on the membership.
 
-The history boundary is either the entire retained history or a lower bound fixed when access was granted. Adding a teammate does not automatically disclose earlier messages. The bound applies to reads, context construction, search, references, summaries, exports, and internal tools.
+The history boundary is either the entire retained history or a lower bound fixed when access was granted. Adding an agent does not automatically disclose earlier messages. The bound applies to reads, context construction, search, references, summaries, exports, and internal tools.
 
 Archiving a channel stops new ordinary activity but does not erase authorized history and is not a substitute for revocation. Personal channel sections and last-selected-channel state are device-local presentation preferences and never change organizational visibility.
 
@@ -85,7 +87,7 @@ Scratch is a private execution target, not an unowned temporary directory. Each 
 
 Scratch content is not published because a run completed. Promotion into a working folder or managed attachment is explicit, preserves provenance, checks the destination grant, and revalidates every file. Replacing a generation revokes the old one for new work, and a continuation that materialized the old scratch is never silently rebound to the new one.
 
-Scratch reuse resolves the teammate through the run's assignment and authorization revision. The generation must belong to that teammate and destination, remain active, and satisfy every retained-source restriction.
+Scratch reuse resolves the agent through the run's assignment and authorization revision. The generation must belong to that agent and destination, remain active, and satisfy every retained-source restriction.
 
 ## Attachments, references, and derived context
 

@@ -43,6 +43,8 @@ The repository-owned Tauri wrapper sets one Cargo build job for development comm
 
 Persistent swap is a system safety margin, not a replacement for bounded jobs. Do not clear Cargo or Turbo caches as a routine memory fix.
 
+Cargo never removes stale artifacts. Version bumps, lockfile and toolchain updates, per-package feature sets, and each Android ABI leave separate copies, so `target/` grows by tens of gigabytes per month of active work. Run `pnpm -w run clean:rust` when it grows large (with no dev run or gate active); the next build is a cold rebuild.
+
 ## Cache behavior
 
 Cargo reuses compatible compilation artifacts, but tests still execute. Turbo hashes declared inputs, configuration, environment inputs, and command arguments. Each Vitest shard has a distinct cache key. Bundle contracts cache their declared build output.

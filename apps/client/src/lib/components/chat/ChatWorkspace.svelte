@@ -233,15 +233,24 @@
         chatSubsection: "teammates",
         chatTeammateId: participantId,
         chatChannelId: channelId,
-        chatCreateTeammate: event.type === "ganbaru-ai:chat-new-teammate",
       });
     };
     window.addEventListener("ganbaru-ai:chat-revert-message", revertMessage);
     window.addEventListener("ganbaru-ai:chat-open-review", openWorkspaceTool);
     window.addEventListener("ganbaru-ai:chat-open-file", openWorkspaceTool);
+    const manageMembers = (event: Event) => {
+      const channelId = event instanceof CustomEvent
+        && typeof event.detail === "object"
+        && event.detail !== null
+        && "channelId" in event.detail
+        && typeof event.detail.channelId === "string"
+        ? event.detail.channelId
+        : chat.selectedChannelId;
+      if (!channelId) return;
+      window.dispatchEvent(new CustomEvent("ganbaru-ai:chat-edit-channel", { detail: { channelId } }));
+    };
     window.addEventListener("ganbaru-ai:chat-configure-teammate", openTeammates);
-    window.addEventListener("ganbaru-ai:chat-manage-members", openTeammates);
-    window.addEventListener("ganbaru-ai:chat-new-teammate", openTeammates);
+    window.addEventListener("ganbaru-ai:chat-manage-members", manageMembers);
     return () => {
       observer.disconnect();
       headerGeometryObserver.disconnect();
@@ -259,8 +268,7 @@
       window.removeEventListener("ganbaru-ai:chat-open-review", openWorkspaceTool);
       window.removeEventListener("ganbaru-ai:chat-open-file", openWorkspaceTool);
       window.removeEventListener("ganbaru-ai:chat-configure-teammate", openTeammates);
-      window.removeEventListener("ganbaru-ai:chat-manage-members", openTeammates);
-      window.removeEventListener("ganbaru-ai:chat-new-teammate", openTeammates);
+      window.removeEventListener("ganbaru-ai:chat-manage-members", manageMembers);
       void unlisten.then((dispose) => dispose());
     };
   });

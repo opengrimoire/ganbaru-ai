@@ -1339,6 +1339,7 @@
           bind:guestCanSeeOtherGuests={session.guestCanSeeOtherGuests}
           organizer={session.organizer}
           selfEmail={calendarIdentityEmail}
+          eventTitle={session.title}
           description={session.description}
           readOnly={controlsDisabled}
           allowReadOnlyExpand={readOnly && !parked}

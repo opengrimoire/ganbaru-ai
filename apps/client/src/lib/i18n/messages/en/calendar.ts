@@ -189,6 +189,7 @@ export const calendar = {
     markOptional: "Mark optional",
     removeAttendee: "Remove attendee",
     addEmail: "Add email...",
+    pickAttendees: "Add from contacts",
   },
   timezone: {
     title: "Timezones",

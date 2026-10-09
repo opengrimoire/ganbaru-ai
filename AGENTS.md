@@ -55,6 +55,7 @@ apps/
         music/: frontend music source and playback helpers
         notes/: Notes contracts, validation, editor operations, databases, and tree helpers
         pomodoro/: Focus command contracts, native projections, and presentation helpers
+        people/: contact trust mapping and presentation helpers
         profile/, projects/, quick-notes/: domain logic for those features
         scheduling/: lifecycle and notification schedulers
         settings/: Settings section identifiers shared by launchers and the Settings modal
@@ -81,6 +82,7 @@ apps/
         src/music.rs, music/: local playback, native Music session, media controls, YouTube host, and soundscapes
         src/notifications.rs, notifications/: desktop native notifications and Android notification capabilities
         src/civil_time.rs, sound_effects.rs, system_command.rs: shared civil-time math, app sound effects, and bounded fixed-command execution
+        src/people.rs, people/: person identity storage, contact card assembly, contact and request persistence, and LAN request delivery
         src/quick_notes.rs, quick_notes/, tray.rs, themes.rs, updates.rs, profile_images.rs: remaining feature modules
         src/benchmark.rs, benchmark/, first_use_contracts.rs: benchmark state, seed data, memory reports, and first-use query contracts
       capabilities/: permission declarations (desktop and mobile)
@@ -98,6 +100,7 @@ crates/
   ganbaru-chat-providers/: provider processes, transports, drivers, cancellation, and registry
   ganbaru-chat/: Chat persistence, runtime, Git workspaces, checkpoints, review, and application services
   ganbaru-working-folders/: Tauri-free working-folder IDs, bindings, and device-state operations
+  ganbaru-people/: Tauri-free person key pairs, signed contact cards, request signatures, and trust kinds
   ganbaru-native-messaging/: ganbaru-ai-native-messaging browser host binary
   ganbaru-mobile-*/: Android plugins for documents, the distraction blocker, media, and notifications
 extensions/chromium/: Chromium extension (manifest v3); chromium-dev/ is a generated, ignored dev copy
@@ -180,7 +183,7 @@ Read `docs/testing/README.md` when changing tests, validation scripts, task orde
 - `pnpm -w run editor-check`: editor diagnostics, including Tailwind canonical class checks.
 - `pnpm -w run test`: serialized Rust tests followed by sequential one-worker Vitest shards.
 - `pnpm --dir apps/client exec vitest run path/to/file.test.ts --maxWorkers=1`: focused frontend test file.
-- `cargo test -p ganbaru-chat --lib -j 1 test_name -- --test-threads=1`: focused core crate test (substitute `ganbaru-notes`, `ganbaru-db`, `ganbaru-chat-contracts`, `ganbaru-chat-providers`, `ganbaru-pomodoro`, or `ganbaru-working-folders`).
+- `cargo test -p ganbaru-chat --lib -j 1 test_name -- --test-threads=1`: focused core crate test (substitute `ganbaru-notes`, `ganbaru-db`, `ganbaru-chat-contracts`, `ganbaru-chat-providers`, `ganbaru-pomodoro`, `ganbaru-working-folders`, or `ganbaru-people`).
 - `cargo test -p ganbaru-tauri-app --lib -j 1 test_name -- --test-threads=1`: focused Tauri composition or command-adapter test.
 - `cargo test -p ganbaru-native-messaging --bin ganbaru-ai-native-messaging -j 1 test_name -- --test-threads=1`: focused native messaging host test.
 - `cargo check -p ganbaru-ai --bin ganbaru-ai -j 1`: focused desktop composition check.

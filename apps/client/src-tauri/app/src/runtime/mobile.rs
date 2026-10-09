@@ -1,7 +1,7 @@
 //! Mobile Tauri composition with app-private persistence and portable commands.
 
 use crate::{
-    calendar, chat, db, music, notes, notifications, pomodoro, profile_images, projects,
+    calendar, chat, db, music, notes, notifications, people, pomodoro, profile_images, projects,
     quick_notes, themes, vault,
 };
 
@@ -363,6 +363,20 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             quick_notes::quick_notes_empty_trash,
             quick_notes::quick_notes_list_tags,
             quick_notes::quick_notes_create_tag,
+            people::people_list,
+            people::people_local_card,
+            people::people_regenerate_card,
+            people::people_parse_card,
+            people::people_decode_card_qr,
+            people::people_send_request,
+            people::people_accept_request,
+            people::people_decline_request,
+            people::people_cancel_request,
+            people::people_block,
+            people::people_unblock,
+            people::people_remove_contact,
+            people::people_update_trust,
+            people::people_sync_requests,
             profile_images::profile_image_asset_data_url,
             profile_images::profile_image_save_data_url,
             profile_images::profile_image_delete_file,
@@ -391,6 +405,7 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             crate::distractions::android::runtime::setup(app.handle());
             #[cfg(target_os = "android")]
             vault::handoff::receiver::start_reconnect_refresh(app.handle().clone());
+            people::requests::start_request_polling(app.handle().clone());
             Ok(())
         })
         .build(context)

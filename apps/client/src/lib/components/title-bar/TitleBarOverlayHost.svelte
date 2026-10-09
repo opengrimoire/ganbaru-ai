@@ -139,6 +139,7 @@
     onClose={() => settingsLauncher.close()}
     initialSection={settingsLauncher.targetSection}
     initialDistractionsTab={settingsLauncher.targetDistractionsTab}
+    initialPeopleTab={settingsLauncher.targetPeopleTab}
     initialChatSubsection={settingsLauncher.targetChatSubsection}
     initialChatTeammateId={settingsLauncher.targetChatTeammateId}
     initialChatChannelId={settingsLauncher.targetChatChannelId}

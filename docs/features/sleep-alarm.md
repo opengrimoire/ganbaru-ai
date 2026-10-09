@@ -35,4 +35,4 @@ The interval from intended bedtime to dismissal is a rough sleep-window estimate
 
 ## Privacy
 
-Sleep intent and diary data remain private personal information. Project participants, reports, channels, and teammates do not receive it through project access. An explicit personal planning action can use a coarse derived capacity signal after showing what will be shared with the selected provider.
+Sleep intent and diary data remain private personal information. Project participants, reports, channels, and agents do not receive it through project access. An explicit personal planning action can use a coarse derived capacity signal after showing what will be shared with the selected provider.

@@ -477,6 +477,38 @@ pub(crate) async fn exchange_distractions(
     }
 }
 
+/// Sends one People message to a coordinator reached through a contact card hint. The
+/// connection pins the hinted certificate but presents no client identity.
+pub(crate) async fn unauthenticated_exchange(
+    endpoint: &str,
+    certificate_fingerprint: &str,
+    message: ControlMessage,
+) -> Result<ControlMessage, String> {
+    let endpoint = endpoint
+        .parse()
+        .map_err(|_| "contact endpoint is invalid".to_string())?;
+    let mut stream = connect_pinned(endpoint, certificate_fingerprint, None).await?;
+    timeout_control(write_control(&mut stream, &message)).await?;
+    timeout_control(read_control(&mut stream)).await
+}
+
+/// Asks the coordinator for the person's signing key over the linked-device identity.
+pub(crate) async fn request_person_key(manager: &PairingManager) -> Result<ControlMessage, String> {
+    let coordinator = manager
+        .coordinator_pin()?
+        .ok_or_else(|| "this device is not linked to a coordinator".to_string())?;
+    let (device_id, _) = manager.identity()?;
+    authenticated_exchange(
+        manager,
+        ControlMessage::PersonKeyRequest {
+            protocol_version: PROTOCOL_VERSION,
+            vault_id: coordinator.vault_id,
+            device_id,
+        },
+    )
+    .await
+}
+
 async fn authenticated_exchange(
     manager: &PairingManager,
     message: ControlMessage,

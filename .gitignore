@@ -46,5 +46,8 @@ coverage/
 .codex/
 .claude/
 
+# Local goal plans
+goal/
+
 # Sample data
 sample/

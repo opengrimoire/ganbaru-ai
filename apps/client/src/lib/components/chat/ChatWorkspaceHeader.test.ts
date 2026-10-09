@@ -246,19 +246,32 @@ describe("ChatWorkspaceHeader", () => {
     expect(collapsed.querySelector("[data-chat-new-channel-button]")).not.toBeNull();
   });
 
-  it("uses one members icon and portals the roster outside the Chat header", async () => {
+  it("opens the selected channel's members panel from the avatar stack", async () => {
     const target = setup(true);
-    const rosterTrigger = target.querySelector<HTMLButtonElement>("[data-chat-roster-trigger]");
+    const membersTrigger = target.querySelector<HTMLButtonElement>("[data-chat-members-trigger]");
 
-    expect(rosterTrigger?.querySelectorAll("svg")).toHaveLength(1);
-    expect(rosterTrigger?.textContent?.trim()).toBe("");
+    expect(membersTrigger?.querySelector(".chat-members-count")?.textContent).toBe("1");
+    expect(membersTrigger?.querySelector(".chat-members-stack")?.getAttribute("aria-hidden")).toBe("true");
+    expect(membersTrigger?.getAttribute("aria-expanded")).toBe("false");
+    expect(document.querySelector("[data-chat-members-panel]")).toBeNull();
 
-    rosterTrigger?.click();
+    membersTrigger?.click();
+    await vi.waitFor(() => {
+      expect(document.querySelector("[data-chat-members-panel]")).not.toBeNull();
+    });
+
+    const panel = document.querySelector("[data-chat-members-panel]");
+    expect(membersTrigger?.getAttribute("aria-expanded")).toBe("true");
+    expect(panel?.getAttribute("role")).toBe("dialog");
+    expect(panel?.textContent).toContain("#general");
+    expect(panel?.textContent).toContain("Project coordination");
+    expect(panel?.textContent).toContain("Owner");
+
+    membersTrigger?.click();
     await tick();
 
-    const roster = document.querySelector("#chat-channel-roster");
-    expect(roster?.parentElement).toBe(document.body);
-    expect(roster?.classList.contains("roster-popover")).toBe(true);
+    expect(document.querySelector("[data-chat-members-panel]")).toBeNull();
+    expect(membersTrigger?.getAttribute("aria-expanded")).toBe("false");
   });
 
   it("opens the current project's complete channel navigator from the channel segment", async () => {

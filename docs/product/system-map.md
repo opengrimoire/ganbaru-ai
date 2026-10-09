@@ -42,7 +42,7 @@ Pomodoro phase changes can activate or relax configured distraction rules and ca
 
 ### Calendar and work environments (planned)
 
-An eligible session block can activate a human work environment. That action may open applications, prepare browser tabs, choose Music, and apply anti-distraction policy. It never grants an AI teammate folder or shell access.
+An eligible session block can activate a human work environment. That action may open applications, prepare browser tabs, choose Music, and apply anti-distraction policy. It never grants an AI agent folder or shell access.
 
 ### Diary, sleep, and future AI (planned)
 

@@ -14,7 +14,11 @@ Provider thread IDs and model names are never conversation or participant identi
 
 ## Navigation and lifecycle
 
-The sidebar shows project channels, personal sections, and search, following the [shared Notes and Chat sidebar design](../notes/pages-and-navigation.md#shared-notes-and-chat-sidebar-design). Channel ordering and membership are durable vault data. Personal sections and the last selected channel are device-local presentation state. Navigation entries for direct messages stay hidden until that feature has a working destination.
+The sidebar shows project channels, personal sections, direct messages, pending invitations, and search, following the [shared Notes and Chat sidebar design](../notes/pages-and-navigation.md#shared-notes-and-chat-sidebar-design). Channel ordering and membership are durable vault data. Personal sections and the last selected channel are device-local presentation state. Direct messages and invitations follow [People and invitations](../collaboration/README.md).
+
+One channel dialog, opened from the sidebar, edits the name, topic, personal section, and members together. The local person is always the first member and cannot be removed there; leaving a channel is an action on the channel itself, and the last person cannot leave. Members are grouped as People and Agents, added through the shared people picker, and changes apply on save. Adding an agent from the channel grants the conversation-only default, and its detailed access is edited in Settings > Chat > Agents. Removing an agent that has active work asks for confirmation with the impact.
+
+The channel header shows the members as an avatar stack with a count. It opens a details panel with the topic and the member list, where members can be added or removed by someone who may manage members and the channel dialog can be opened. A channel never shows an in-feed prompt to add agents.
 
 Archive hides a conversation from normal navigation without destroying its messages, links, drafts, or review history. Restore returns it to its project. Permanent deletion is explicit and includes a cleanup plan for owned execution resources.
 
@@ -28,7 +32,7 @@ Reply threads keep detailed work from overwhelming the main channel. A provider 
 
 ## Composer
 
-The composer supports drafts, attachments, replies, explicit teammate mentions, provider interactions, and scheduled sends. A message can be sent without invoking AI, and plain conversation never silently becomes an execution request.
+The composer supports drafts, attachments, replies, explicit agent mentions, provider interactions, and scheduled sends. A message can be sent without invoking AI, and plain conversation never silently becomes an execution request.
 
 Slash commands are discoverable actions, not an alternate security model. They can change presentation, select an interaction mode, or start a typed application action, but cannot bypass project, folder, provider, or confirmation boundaries.
 

@@ -49,6 +49,6 @@ Mobile can consume portable context and feature-level defaults but cannot orches
 
 ## AI execution distinction
 
-A human work environment prepares the person's context. An AI execution environment is exactly one authorized project working folder or private scratch generation resolved for a run. Activating a work environment cannot grant a teammate access, choose an unapproved folder, or change a running provider session.
+A human work environment prepares the person's context. An AI execution environment is exactly one authorized project working folder or private scratch generation resolved for a run. Activating a work environment cannot grant an agent access, choose an unapproved folder, or change a running provider session.
 
 See [Calendar](calendar/README.md), [Music automation](music/automation.md), [Distraction blocker](distractions/README.md), [Edge panel](edge-panel.md), and [Chat execution](chat/execution-and-workspace.md).

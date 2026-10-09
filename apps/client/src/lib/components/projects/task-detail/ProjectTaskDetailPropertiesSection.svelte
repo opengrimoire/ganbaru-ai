@@ -11,6 +11,7 @@
     ProjectTaskType,
   } from "$lib/projects/types";
   import type { Theme } from "$lib/themes";
+  import LocalPersonAvatar from "$lib/components/people/LocalPersonAvatar.svelte";
   import PriorityFlagIcon from "$lib/components/projects/PriorityFlagIcon.svelte";
 
   let {
@@ -42,9 +43,18 @@
   } = $props();
 
   const { t } = getLocalization();
-
-
+  const UNASSIGNED_VALUE = "unassigned";
+  const LOCAL_PERSON_VALUE = "you";
+  const PERSON_AVATAR_SIZE = 16;
+  const personOptions = $derived([
+    { value: UNASSIGNED_VALUE, label: t("projects.detail.unassigned") },
+    { value: LOCAL_PERSON_VALUE, label: t("people.you") },
+  ]);
 </script>
+
+{#snippet personLeading(value: string)}
+  {#if value === LOCAL_PERSON_VALUE}<LocalPersonAvatar size={PERSON_AVATAR_SIZE} />{/if}
+{/snippet}
 
 <div class="grid gap-1">
   <div class="task-property-row">
@@ -90,5 +100,23 @@
         const option = PROJECT_TASK_TYPES.find((entry) => entry === value);
         if (option) onTaskTypeChange(option);
       }} />
+  </div>
+  <div class="task-property-row">
+    <span>{t("projects.detail.assignee")}</span>
+    <Select inline appearance="quiet" contentAlign="start" class="w-full" value={UNASSIGNED_VALUE}
+      ariaLabel={t("projects.detail.assignee")}
+      options={personOptions}
+      unavailable
+      leading={personLeading}
+      onChange={() => {}} />
+  </div>
+  <div class="task-property-row">
+    <span>{t("projects.detail.reviewer")}</span>
+    <Select inline appearance="quiet" contentAlign="start" class="w-full" value={UNASSIGNED_VALUE}
+      ariaLabel={t("projects.detail.reviewer")}
+      options={personOptions}
+      unavailable
+      leading={personLeading}
+      onChange={() => {}} />
   </div>
 </div>

@@ -1,6 +1,6 @@
 # Guided planning and review
 
-Status: Planned. The current Projects and Chat foundations (tasks, dependencies, date proposals, history, AI teammates, and context packages) are the base this workflow builds on.
+Status: Planned. The current Projects and Chat foundations (tasks, dependencies, date proposals, history, AI agents, and context packages) are the base this workflow builds on.
 
 Guided planning helps a user turn an unclear intention into a bounded project without pretending that AI-generated plans are commitments. It works without AI through structured prompts and templates.
 
@@ -32,7 +32,7 @@ An AI provider never receives the complete vault by default. Context packages in
 
 ## Assignment and review
 
-Human and AI assignments carry the same objective, project, authority, expected output, and review destination. A teammate can propose task changes but does not commit them unless the assignment explicitly grants that typed action. Coordination rules live in [Chat teammates and coordination](../chat/teammates-and-coordination.md).
+Human and AI assignments carry the same objective, project, authority, expected output, and review destination. An agent can propose task changes but does not commit them unless the assignment explicitly grants that typed action. Coordination rules live in [Chat agents and coordination](../chat/agents-and-coordination.md).
 
 Review records accepted results, rejected proposals, exceptions, and follow-up work without flooding the project with low-level execution events. Detailed provider events stay in the linked run. Approval of one result does not grant standing approval for future actions.
 
@@ -54,4 +54,4 @@ Reports summarize progress, blockers, risks, schedule changes, review needs, and
 
 Software projects can link an authorized working folder, Chat runs, checkpoints, commits, and review artifacts. Git remains canonical for repository content; Project tasks and decisions remain canonical organizational records.
 
-Future collaboration applies project, task, Notes, conversation, and working-folder permissions separately. Assigning a task never implies access to every project Note or filesystem path. See [access control](../../data/access-control.md).
+Future collaboration applies project, task, Notes, conversation, and working-folder permissions separately. Assigning a task never implies access to every project Note or filesystem path. See [People and invitations](../collaboration/README.md) and [access control](../../data/access-control.md).

@@ -311,6 +311,10 @@ fn unused_archived_teammates_can_be_restored_or_permanently_deleted() {
         assert!(archived.participant.archived_at.is_some());
         assert_eq!(archived.active_assignment_count, 0);
         assert!(!archived.has_durable_history);
+        let archived_access = access::read_teammate_access(&pool, &teammate_id)
+            .await
+            .expect("archived agents stay inspectable in Settings");
+        assert!(archived_access.channels.is_empty());
 
         let restored = super::teammate_lifecycle::set_teammate_archived(
             &pool,

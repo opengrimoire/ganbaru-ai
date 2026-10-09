@@ -161,7 +161,7 @@ impl CoordinatorLifecycle {
         }
     }
 
-    fn endpoint(&self) -> Result<Option<SocketAddr>, String> {
+    pub(crate) fn endpoint(&self) -> Result<Option<SocketAddr>, String> {
         let runtime = self
             .runtime
             .lock()
@@ -169,7 +169,7 @@ impl CoordinatorLifecycle {
         Ok(runtime.as_ref().map(|runtime| runtime.endpoint))
     }
 
-    fn request_sender(&self) -> Result<coordinator::CoordinatorSender, String> {
+    pub(crate) fn request_sender(&self) -> Result<coordinator::CoordinatorSender, String> {
         let runtime = self
             .runtime
             .lock()

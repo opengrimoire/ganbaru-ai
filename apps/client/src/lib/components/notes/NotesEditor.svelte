@@ -23,6 +23,7 @@
   import MoreHorizontal from "@lucide/svelte/icons/more-horizontal";
   import Pencil from "@lucide/svelte/icons/pencil";
   import PencilLine from "@lucide/svelte/icons/pencil-line";
+  import Share2 from "@lucide/svelte/icons/share-2";
   import SmilePlus from "@lucide/svelte/icons/smile-plus";
   import Star from "@lucide/svelte/icons/star";
   import Trash2 from "@lucide/svelte/icons/trash-2";
@@ -173,6 +174,8 @@
   let coverMenuButton: HTMLButtonElement | null = $state(null);
   let commentButton: HTMLButtonElement | null = $state(null);
   let commentsPanelFromTitle = $state(false);
+  let shareButton: HTMLButtonElement | null = $state(null);
+  let shareOpen = $state(false);
   let pageMenuOpen = $state(false);
   let moveMenuOpen = $state(false);
   let folderMoveMenuOpen = $state(false);
@@ -386,6 +389,12 @@
       };
       console.error(`load Notes ${kind} panel failed`, error);
     });
+  }
+
+  /** Toggle the share popover, loading its surface only on first use. */
+  function toggleSharePanel(): void {
+    shareOpen = !shareOpen;
+    if (shareOpen) requestEditorPanel("share");
   }
 
   function openIconPicker(kind: "action" | "icon", panelAnchor: HTMLElement | null = null): void {
@@ -1138,6 +1147,29 @@
             </div>
           {/if}
         </div>
+        <button
+          bind:this={shareButton}
+          type="button"
+          class={actionButtonClass(shareOpen)}
+          aria-label={t("notes.share")}
+          data-app-tooltip={t("notes.share")}
+          aria-haspopup="dialog"
+          aria-expanded={shareOpen}
+          data-notes-share-button
+          onpointerenter={() => requestEditorPanel("share")}
+          onfocus={() => requestEditorPanel("share")}
+          onclick={toggleSharePanel}
+        >
+          <Share2 class="size-4" strokeWidth={noteActionIconStrokeWidth} />
+        </button>
+        {#if shareOpen}
+          {#if panelLoadStates.share?.status === "ready" && panelLoadStates.share.component.kind === "share"}
+            {@const NotesSharePopover = panelLoadStates.share.component.component}
+            <NotesSharePopover anchor={shareButton} pageTitle={currentPageTitle} {mobileLayout} onClose={() => { shareOpen = false; }} />
+          {:else if panelLoadStates.share?.status === "failed"}
+            <button class="surface-floating fixed inset-0 z-50 m-auto h-10 px-3" type="button" onclick={() => requestEditorPanel("share", true)}>{t("common.retry")}</button>
+          {/if}
+        {/if}
         <button
           type="button"
           class={actionButtonClass(pageFavorited)}

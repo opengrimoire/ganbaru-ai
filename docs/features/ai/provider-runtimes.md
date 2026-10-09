@@ -20,7 +20,7 @@ Rationale: provider probes spawn external processes, so they must not slow start
 
 ## Codex
 
-Codex uses its native app-server protocol. Ganbaru AI owns the process, thread association, event ingestion, interaction requests, cancellation, and workspace authority. The app-server thread identity is an execution detail and never replaces the Chat conversation or teammate identity. Provider-supported model, reasoning, approval, and sandbox choices are recorded with the run.
+Codex uses its native app-server protocol. Ganbaru AI owns the process, thread association, event ingestion, interaction requests, cancellation, and workspace authority. The app-server thread identity is an execution detail and never replaces the Chat conversation or agent identity. Provider-supported model, reasoning, approval, and sandbox choices are recorded with the run.
 
 ## Claude
 

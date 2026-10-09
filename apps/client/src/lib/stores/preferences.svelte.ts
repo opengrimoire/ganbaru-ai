@@ -26,6 +26,7 @@ import {
   DEFAULT_PROJECTS_SHOW_PROPERTY_ICONS,
   DEFAULT_TITLE_BAR_VISIBILITY,
   DEFAULT_CALENDAR_VIEW_MODE,
+  DEFAULT_PEOPLE_TRUST_DURATION,
   LANGUAGE_PREFERENCES,
   type CalendarTimeFormat,
   type CalendarViewMode,
@@ -34,6 +35,7 @@ import {
   type FocusBreakSoundIntervalSeconds,
   type FocusPauseNotificationIntervalMinutes,
   type LanguagePreference,
+  type PeopleTrustDuration,
   type TitleBarControlId,
   type TitleBarVisibility,
   clampFocusIdleThresholdMinutes,
@@ -41,6 +43,7 @@ import {
   getFontFamilyById,
   isCalendarTimeFormat,
   isCalendarViewMode,
+  isPeopleTrustDuration,
   isProfileColor,
   randomProfileColor,
   isProfileImagePath,
@@ -108,6 +111,8 @@ const NOTES_NOTIFICATION_INCLUDE_CONTENT_CONFIG_KEY =
 const NOTES_SHOW_PROPERTY_ICONS_CONFIG_KEY = "preferences.notesShowPropertyIcons";
 const PROJECTS_SHOW_PROPERTY_ICONS_CONFIG_KEY = "preferences.projectsShowPropertyIcons";
 const TITLE_BAR_VISIBILITY_CONFIG_KEY = "preferences.titleBarVisibility";
+const PEOPLE_INVITE_TRUST_DEFAULT_CONFIG_KEY = "people.trustDefaults.invite";
+const PEOPLE_MESSAGE_TRUST_DEFAULT_CONFIG_KEY = "people.trustDefaults.message";
 
 export type EventTimezoneDisplay = "device" | "homeZone";
 const DEFAULT_EVENT_TIMEZONE_DISPLAY: EventTimezoneDisplay = "device";
@@ -254,6 +259,11 @@ function loadSavedNotesDefaultOpenMode(): NotesPageOpenMode {
   return DEFAULT_NOTES_PAGE_OPEN_MODE;
 }
 
+function loadSavedPeopleTrustDuration(key: string): PeopleTrustDuration {
+  const saved = getConfigKey<unknown>(key, undefined);
+  return isPeopleTrustDuration(saved) ? saved : DEFAULT_PEOPLE_TRUST_DURATION;
+}
+
 function loadSavedTitleBarVisibility(): TitleBarVisibility {
   const saved = getConfigKey<unknown>(TITLE_BAR_VISIBILITY_CONFIG_KEY, undefined);
   return parseTitleBarVisibility(saved);
@@ -327,6 +337,12 @@ let projectsShowPropertyIcons = $state<boolean>(
   loadSavedBooleanPreference(PROJECTS_SHOW_PROPERTY_ICONS_CONFIG_KEY, DEFAULT_PROJECTS_SHOW_PROPERTY_ICONS),
 );
 let titleBarVisibility = $state<TitleBarVisibility>(loadSavedTitleBarVisibility());
+let peopleInviteTrustDefault = $state<PeopleTrustDuration>(
+  loadSavedPeopleTrustDuration(PEOPLE_INVITE_TRUST_DEFAULT_CONFIG_KEY),
+);
+let peopleMessageTrustDefault = $state<PeopleTrustDuration>(
+  loadSavedPeopleTrustDuration(PEOPLE_MESSAGE_TRUST_DEFAULT_CONFIG_KEY),
+);
 const localization = getLocalization();
 
 function applyPreferencesToDom(): void {
@@ -413,6 +429,18 @@ function setProfileColor(value: EventColor): boolean {
   profileColor = value;
   setConfigKey(PROFILE_COLOR_CONFIG_KEY, value);
   return true;
+}
+
+function setPeopleInviteTrustDefault(value: PeopleTrustDuration): void {
+  if (!isPeopleTrustDuration(value)) return;
+  peopleInviteTrustDefault = value;
+  setConfigKey(PEOPLE_INVITE_TRUST_DEFAULT_CONFIG_KEY, value === DEFAULT_PEOPLE_TRUST_DURATION ? undefined : value);
+}
+
+function setPeopleMessageTrustDefault(value: PeopleTrustDuration): void {
+  if (!isPeopleTrustDuration(value)) return;
+  peopleMessageTrustDefault = value;
+  setConfigKey(PEOPLE_MESSAGE_TRUST_DEFAULT_CONFIG_KEY, value === DEFAULT_PEOPLE_TRUST_DURATION ? undefined : value);
 }
 
 function setCalendarTimeFormat(value: CalendarTimeFormat): void {
@@ -661,6 +689,14 @@ export function getPreferences() {
     get titleBarVisibility(): TitleBarVisibility {
       return titleBarVisibility;
     },
+    /** Trust scope every new contact starts with for inviting the local person. */
+    get peopleInviteTrustDefault(): PeopleTrustDuration {
+      return peopleInviteTrustDefault;
+    },
+    /** Trust scope every new contact starts with for messaging the local person directly. */
+    get peopleMessageTrustDefault(): PeopleTrustDuration {
+      return peopleMessageTrustDefault;
+    },
     setFontFamily,
     setFontScale,
     setProfileDisplayName,
@@ -692,6 +728,8 @@ export function getPreferences() {
     setProjectsShowPropertyIcons,
     setTitleBarControlVisible,
     toggleTitleBarControl,
+    setPeopleInviteTrustDefault,
+    setPeopleMessageTrustDefault,
     resetFontFamily() {
       setFontFamily(DEFAULT_FONT_FAMILY_ID);
     },

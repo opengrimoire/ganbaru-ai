@@ -62,7 +62,7 @@ Resolve, reopen, accept, and reject operations validate base versions. Future sy
 
 ## Access
 
-**Planned:** shared collaboration can grant group-wide, project-wide, folder-subtree, page, comment, or task-context access. Project membership alone does not imply access to every Note.
+**Planned:** shared collaboration can grant group-wide, project-wide, folder-subtree, page, comment, or task-context access. Project membership alone does not imply access to every Note. A page's Share action uses the shared people picker from [People and invitations](../collaboration/README.md) with page or subtree scope and the roles Can view, Can comment, Can edit, and Full access.
 
 Search, backlinks, mentions, notifications, history, templates, imports, exports, Chat links, reports, and AI context packages enforce the same effective access as direct page reads.
 

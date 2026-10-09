@@ -33,6 +33,7 @@
     DistractionsLimitEditorTarget,
     DistractionsSettingsTab,
     NotesTransferOperation,
+    PeopleSettingsTab,
     ChatProviderSetupTarget,
     ChatSettingsSubsection,
     SectionId,
@@ -52,6 +53,7 @@
     onClose,
     initialSection,
     initialDistractionsTab,
+    initialPeopleTab,
     initialChatSubsection,
     initialChatTeammateId,
     initialChatChannelId,
@@ -61,6 +63,7 @@
     onClose: () => void;
     initialSection?: SectionId;
     initialDistractionsTab?: DistractionsSettingsTab;
+    initialPeopleTab?: PeopleSettingsTab;
     initialChatSubsection?: ChatSettingsSubsection;
     initialChatTeammateId?: string;
     initialChatChannelId?: string;
@@ -474,6 +477,7 @@
             <SettingsSectionRenderer
               {activeSection}
               {initialDistractionsTab}
+              {initialPeopleTab}
               {activeChatSubsection}
               {initialChatTeammateId}
               {initialChatChannelId}
@@ -733,6 +737,7 @@
           <SettingsSectionRenderer
             {activeSection}
             {initialDistractionsTab}
+            {initialPeopleTab}
             {activeChatSubsection}
             {initialChatTeammateId}
             {initialChatChannelId}

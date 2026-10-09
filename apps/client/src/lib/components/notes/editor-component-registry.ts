@@ -102,6 +102,7 @@ export type NotesEditorPanelKind =
   | "database-csv-import"
   | "database-csv-export"
   | "page-history"
+  | "share"
   | "confirm-dialog";
 
 export type LoadedNotesEditorPanel =
@@ -118,6 +119,7 @@ export type LoadedNotesEditorPanel =
   | { kind: "database-csv-import"; component: typeof import("$lib/components/notes/database/NotesDatabaseCsvImportPanel.svelte").default }
   | { kind: "database-csv-export"; component: typeof import("$lib/components/notes/database/NotesDatabaseCsvExportPanel.svelte").default }
   | { kind: "page-history"; component: typeof import("$lib/components/notes/history/NotesPageVersionHistoryModal.svelte").default }
+  | { kind: "share"; component: typeof import("$lib/components/notes/NotesSharePopover.svelte").default }
   | { kind: "confirm-dialog"; component: typeof import("$lib/components/ui/ConfirmDialog.svelte").default };
 
 export type NotesTextControlKind =
@@ -203,6 +205,8 @@ const EDITOR_PANEL_IMPORTERS = {
     .then((module) => ({ default: { kind: "database-csv-export" as const, component: module.default } })),
   "page-history": () => import("$lib/components/notes/history/NotesPageVersionHistoryModal.svelte")
     .then((module) => ({ default: { kind: "page-history" as const, component: module.default } })),
+  share: () => import("$lib/components/notes/NotesSharePopover.svelte")
+    .then((module) => ({ default: { kind: "share" as const, component: module.default } })),
   "confirm-dialog": () => import("$lib/components/ui/ConfirmDialog.svelte")
     .then((module) => ({ default: { kind: "confirm-dialog" as const, component: module.default } })),
 } satisfies Readonly<Record<NotesEditorPanelKind, LazyComponentImporter<LoadedNotesEditorPanel>>>;
