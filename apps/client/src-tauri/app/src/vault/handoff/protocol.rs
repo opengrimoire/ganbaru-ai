@@ -4,7 +4,13 @@ use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::path::Path;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
-pub(crate) const PROTOCOL_VERSION: u16 = 4;
+mod sync;
+
+pub(crate) use sync::{
+    MAX_SYNC_HASHES, SYNC_PAGE_BYTES, SyncProbe, SyncRefusal, SyncRefusalCode, SyncSeq,
+};
+
+pub(crate) const PROTOCOL_VERSION: u16 = 5;
 pub(crate) const MAX_CONTROL_BYTES: usize = 1024 * 1024;
 pub(crate) const MAX_ARCHIVE_BYTES: u64 = 100 * 1024 * 1024 * 1024;
 pub(crate) const MAX_IDENTIFIER_BYTES: usize = 160;
@@ -309,6 +315,65 @@ pub(crate) enum ControlMessage {
         public_key: String,
         private_key_pkcs8: String,
     },
+    /// Authenticated: a linked device compares its stored operations with the hub's.
+    SyncHello {
+        protocol_version: u16,
+        vault_id: String,
+        device_id: String,
+        manifest_version: u16,
+        stored: Vec<SyncSeq>,
+        probe: Option<SyncProbe>,
+    },
+    /// The hub's stored operations and its hash at the probed sequence, when it holds it.
+    SyncState {
+        manifest_version: u16,
+        stored: Vec<SyncSeq>,
+        probe_hash: Option<String>,
+    },
+    /// Authenticated: operations the hub lacks, in an order that keeps chains contiguous.
+    SyncPush {
+        protocol_version: u16,
+        vault_id: String,
+        device_id: String,
+        ops: Vec<String>,
+    },
+    SyncPushResult {
+        stored: Vec<SyncSeq>,
+        refusal: Option<SyncRefusal>,
+    },
+    /// Authenticated: a page of operations past `known`.
+    SyncPull {
+        protocol_version: u16,
+        vault_id: String,
+        device_id: String,
+        known: Vec<SyncSeq>,
+        max_bytes: u32,
+    },
+    SyncOps {
+        ops: Vec<String>,
+        more: bool,
+    },
+    /// Authenticated: answered with `SyncState` once the hub stores operations past `known`,
+    /// or after a bounded wait.
+    SyncWait {
+        protocol_version: u16,
+        vault_id: String,
+        device_id: String,
+        known: Vec<SyncSeq>,
+    },
+    /// Authenticated: hashes of a writer's chain from `from_seq`, to locate a fork.
+    SyncHashes {
+        protocol_version: u16,
+        vault_id: String,
+        device_id: String,
+        writer: String,
+        from_seq: u64,
+        limit: u32,
+    },
+    /// Consecutive hashes from the requested sequence; fewer when the chain ends.
+    SyncHashList {
+        hashes: Vec<String>,
+    },
     Error {
         code: String,
         message: String,
@@ -317,6 +382,39 @@ pub(crate) enum ControlMessage {
 }
 
 impl ControlMessage {
+    /// The vault and device a sync request names, or `None` for any other message.
+    #[cfg(desktop)]
+    pub(crate) fn sync_peer(&self) -> Option<(&str, &str)> {
+        match self {
+            Self::SyncHello {
+                vault_id,
+                device_id,
+                ..
+            }
+            | Self::SyncPush {
+                vault_id,
+                device_id,
+                ..
+            }
+            | Self::SyncPull {
+                vault_id,
+                device_id,
+                ..
+            }
+            | Self::SyncWait {
+                vault_id,
+                device_id,
+                ..
+            }
+            | Self::SyncHashes {
+                vault_id,
+                device_id,
+                ..
+            } => Some((vault_id, device_id)),
+            _ => None,
+        }
+    }
+
     pub(crate) fn validate(&self) -> Result<(), String> {
         match self {
             Self::Enroll {
@@ -582,6 +680,79 @@ impl ControlMessage {
                     return Err("person private key is invalid".to_string());
                 }
             }
+            Self::SyncHello {
+                protocol_version,
+                vault_id,
+                device_id,
+                manifest_version: _,
+                stored,
+                probe,
+            } => {
+                validate_sync_peer(*protocol_version, vault_id, device_id)?;
+                sync::validate_vector(stored)?;
+                if let Some(probe) = probe {
+                    sync::validate_probe(probe)?;
+                }
+            }
+            Self::SyncState {
+                manifest_version: _,
+                stored,
+                probe_hash,
+            } => {
+                sync::validate_vector(stored)?;
+                if let Some(hash) = probe_hash {
+                    sync::validate_hashes(std::slice::from_ref(hash))?;
+                }
+            }
+            Self::SyncPush {
+                protocol_version,
+                vault_id,
+                device_id,
+                ops,
+            } => {
+                validate_sync_peer(*protocol_version, vault_id, device_id)?;
+                sync::validate_ops(ops)?;
+            }
+            Self::SyncPushResult { stored, refusal } => {
+                sync::validate_vector(stored)?;
+                if let Some(refusal) = refusal {
+                    sync::validate_refusal(refusal)?;
+                }
+            }
+            Self::SyncPull {
+                protocol_version,
+                vault_id,
+                device_id,
+                known,
+                max_bytes,
+            } => {
+                validate_sync_peer(*protocol_version, vault_id, device_id)?;
+                sync::validate_vector(known)?;
+                sync::validate_page_bytes(*max_bytes)?;
+            }
+            Self::SyncOps { ops, more: _ } => sync::validate_ops(ops)?,
+            Self::SyncWait {
+                protocol_version,
+                vault_id,
+                device_id,
+                known,
+            } => {
+                validate_sync_peer(*protocol_version, vault_id, device_id)?;
+                sync::validate_vector(known)?;
+            }
+            Self::SyncHashes {
+                protocol_version,
+                vault_id,
+                device_id,
+                writer,
+                from_seq,
+                limit,
+            } => {
+                validate_sync_peer(*protocol_version, vault_id, device_id)?;
+                sync::validate_writer(writer)?;
+                sync::validate_hash_range(*from_seq, *limit)?;
+            }
+            Self::SyncHashList { hashes } => sync::validate_hashes(hashes)?,
             Self::Error { code, message, .. } => {
                 validate_identifier("error code", code)?;
                 if message.is_empty() || message.len() > 1024 {
@@ -950,6 +1121,12 @@ fn validate_protocol(version: u16) -> Result<(), String> {
         return Err("handoff protocol version is unsupported".to_string());
     }
     Ok(())
+}
+
+fn validate_sync_peer(version: u16, vault_id: &str, device_id: &str) -> Result<(), String> {
+    validate_protocol(version)?;
+    validate_identifier("vault id", vault_id)?;
+    validate_identifier("device id", device_id)
 }
 
 fn validate_sha256(value: &str) -> Result<(), String> {

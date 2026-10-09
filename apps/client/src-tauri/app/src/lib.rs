@@ -23,6 +23,7 @@ mod projects;
 mod quick_notes;
 #[cfg(desktop)]
 mod sound_effects;
+mod sync;
 #[cfg(desktop)]
 mod system_command;
 mod themes;

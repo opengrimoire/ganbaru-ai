@@ -236,12 +236,11 @@ impl<R: Runtime> CoordinatorState<R> {
         };
         let staging =
             crate::vault::backup::active_handoff_staging_path(&self.app, &metadata.transfer_id)?;
-        crate::vault::backup::activate_active_handoff(
+        crate::vault::backup::activate_uploaded_ownership(
             &self.app,
             &staging,
             &metadata.transfer_id,
             &metadata.vault_id,
-            true,
         )
         .await?;
         if needs_finalize {

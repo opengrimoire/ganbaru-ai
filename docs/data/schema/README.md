@@ -11,6 +11,7 @@ The authoritative schema is the ordered migration set in `crates/ganbaru-db/migr
 - [Notes and projects](notes-and-projects.md) covers the Notes graph, databases, assets, history, project planning, tasks, templates, and managed working folders.
 - [Chat](chat.md) covers organizational channels, provider execution, assignments, working-folder identity, canonical events, attachments, checkpoints, and cleanup.
 - [Supporting domains](supporting-domains.md) covers Quick notes, themes, Music, the distraction blocker, and other smaller persisted surfaces.
+- [Sync engine](sync.md) covers replication spaces, local capture, writers, the operation log, register versions, tombstones, and the guards on replicated tables.
 - [Query plans](query-plans.md) records latency-sensitive reads whose index use is protected by tests.
 
 ## Migration policy

@@ -283,9 +283,40 @@ impl PairingManager {
         Ok(initialized_state(&inner)?.coordinator.clone())
     }
 
+    /// Whether this device shares `vault_id` with a linked peer or a pinned coordinator.
+    pub(crate) fn is_linked_for(&self, vault_id: &str) -> Result<bool, String> {
+        let inner = self.lock()?;
+        let state = initialized_state(&inner)?;
+        if state.revoked_by_coordinator {
+            return Ok(false);
+        }
+        Ok(state
+            .coordinator
+            .as_ref()
+            .is_some_and(|coordinator| coordinator.vault_id == vault_id)
+            || state
+                .linked_peers
+                .values()
+                .any(|peer| peer.vault_id == vault_id))
+    }
+
     pub(crate) fn revoked_by_coordinator(&self) -> Result<bool, String> {
         let inner = self.lock()?;
         Ok(initialized_state(&inner)?.revoked_by_coordinator)
+    }
+
+    /// Devices this coordinator unlinked from `vault_id`, whose sync writers it revokes.
+    pub(crate) fn revoked_device_ids(
+        &self,
+        vault_id: &str,
+    ) -> Result<std::collections::BTreeSet<String>, String> {
+        let inner = self.lock()?;
+        Ok(initialized_state(&inner)?
+            .revoked_peers
+            .values()
+            .filter(|peer| peer.vault_id == vault_id)
+            .map(|peer| peer.device_id.clone())
+            .collect())
     }
 
     #[cfg(desktop)]

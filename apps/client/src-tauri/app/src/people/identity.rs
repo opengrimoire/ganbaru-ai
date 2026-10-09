@@ -25,6 +25,9 @@ const KEY_UNAVAILABLE_CODE: &str = "key_unavailable";
 /// Vault whose key copy this device has already confirmed, so reconnect polls skip the lookup.
 static KEY_CONFIRMED_FOR_VAULT: Mutex<Option<String>> = Mutex::new(None);
 
+/// Serializes identity creation between People commands and the sync service.
+static IDENTITY_CREATION: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
 /// The person identity as this device knows it.
 pub(crate) struct LocalIdentity {
     pub public_key: PersonPublicKey,
@@ -89,6 +92,18 @@ pub(crate) fn identity_from_row(
     })
 }
 
+/// The device-local copy of the person key when it matches `public_key`. It reads no vault
+/// database, so it is usable while the vault is quiesced.
+pub(crate) async fn person_key_matching<R: Runtime>(
+    app: &AppHandle<R>,
+    public_key: &PersonPublicKey,
+) -> Result<Option<PersonKeyPair>, String> {
+    let key = load_key(app).await?;
+    Ok(key
+        .and_then(|bytes| PersonKeyPair::from_pkcs8(&bytes).ok())
+        .filter(|key| key.public_key() == *public_key))
+}
+
 /// Loads the identity with whichever key copy this device holds, without creating one.
 pub(crate) async fn load_identity<R: Runtime>(
     app: &AppHandle<R>,
@@ -106,6 +121,12 @@ pub(crate) async fn ensure_identity<R: Runtime>(
     app: &AppHandle<R>,
     pool: &SqlitePool,
 ) -> Result<LocalIdentity, PeopleError> {
+    if let Some(identity) = load_identity(app, pool).await? {
+        return Ok(identity);
+    }
+    // Callers race on a fresh vault, and a losing insert removes the stored key, so creation
+    // runs one at a time and rechecks the row.
+    let _creating = IDENTITY_CREATION.lock().await;
     if let Some(identity) = load_identity(app, pool).await? {
         return Ok(identity);
     }

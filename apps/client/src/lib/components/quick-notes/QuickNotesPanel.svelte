@@ -8,11 +8,14 @@
   import {
     archiveQuickNote,
     createQuickNoteTag,
+    deleteQuickNoteTag,
     deleteQuickNotePermanently,
     emptyQuickNotesTrash,
     getQuickNote,
     listQuickNotes,
     listQuickNoteTags,
+    QuickNoteTagError,
+    renameQuickNoteTag,
     restoreQuickNote,
     reorderQuickNote,
     setQuickNotePinned,
@@ -22,7 +25,7 @@
   } from "$lib/api/quick-notes";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import { getQuickNoteColor } from "$lib/quick-notes/colors";
-  import { quickNoteViewIndexForKey, quickNoteViewShortcut } from "$lib/quick-notes/tags";
+  import { compareQuickNoteTags, quickNoteViewIndexForKey, quickNoteViewShortcut } from "$lib/quick-notes/tags";
   import { applyQuickNoteGroupOrder } from "$lib/quick-notes/masonry";
   import {
     cacheQuickNotesAllWindow,
@@ -38,6 +41,7 @@
   import { getTheme } from "$lib/stores/theme.svelte";
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
   import QuickNoteEditorModal from "./QuickNoteEditorModal.svelte";
+  import QuickNoteTagChip from "./QuickNoteTagChip.svelte";
   import QuickNoteTagManager from "./QuickNoteTagManager.svelte";
   import QuickNotesMasonry from "./QuickNotesMasonry.svelte";
   import { scrollEdgeFadeAction } from "$lib/utils/scroll-edge-fade";
@@ -74,6 +78,7 @@
   let loadError = $state("");
   let editorNote = $state<QuickNote | null | undefined>(undefined);
   let deleteTarget = $state<QuickNote | null>(null);
+  let deleteTagTarget = $state<QuickNoteTag | null>(null);
   let confirmEmptyTrash = $state(false);
   let undoMessage = $state("");
   let reorderAnnouncement = $state("");
@@ -105,7 +110,7 @@
       : collection === "trash"
         ? t("quickNotes.empty.trash")
         : null);
-  const childOverlayOpen = $derived(editorNote !== undefined || deleteTarget !== null || confirmEmptyTrash);
+  const childOverlayOpen = $derived(editorNote !== undefined || deleteTarget !== null || deleteTagTarget !== null || confirmEmptyTrash);
   const panelClass = $derived(mobileLayout
     ? "surface-dialog fixed z-50 flex flex-col overflow-hidden text-foreground outline-none"
     : "surface-dialog fixed right-2 z-50 flex w-[min(760px,calc(100vw-1rem))] flex-col overflow-hidden text-foreground outline-none");
@@ -195,8 +200,37 @@
 
   async function createTag(name: string): Promise<void> {
     const created = await createQuickNoteTag(crypto.randomUUID(), name);
-    tags = [...tags, created].sort((left, right) => left.sortOrder - right.sortOrder);
+    tags = [...tags, created].sort(compareQuickNoteTags);
     publishQuickNotesChanged();
+  }
+
+  function tagErrorMessage(error: unknown): string {
+    if (error instanceof QuickNoteTagError && error.code === "duplicate_name") return t("quickNotes.tag.duplicateName");
+    if (error instanceof QuickNoteTagError && error.code === "not_found") return t("quickNotes.tag.notFound");
+    return t("quickNotes.tag.renameFailed");
+  }
+
+  async function renameTag(tag: QuickNoteTag, name: string): Promise<void> {
+    try {
+      const renamed = await renameQuickNoteTag(tag.id, name);
+      tags = tags.map((current) => current.id === renamed.id ? renamed : current).sort(compareQuickNoteTags);
+      cacheQuickNoteTags(tags);
+      publishQuickNotesChanged();
+    } catch (error: unknown) {
+      if (error instanceof QuickNoteTagError && error.code === "not_found") void loadTags();
+      throw new Error(tagErrorMessage(error), { cause: error });
+    }
+  }
+
+  async function confirmDeleteTag(): Promise<void> {
+    const target = deleteTagTarget;
+    if (!target) return;
+    deleteTagTarget = null;
+    if (selectedTagId === target.id) selectTag(null);
+    await runMutation(async () => {
+      await deleteQuickNoteTag(target.id);
+      await loadTags();
+    });
   }
 
   function tagTitle(tag: QuickNoteTag, index: number): string {
@@ -402,12 +436,13 @@
   }
 
   function handlePanelKeydown(event: KeyboardEvent): void {
-    if (editorNote !== undefined || deleteTarget || confirmEmptyTrash) return;
+    if (editorNote !== undefined || deleteTarget || deleteTagTarget || confirmEmptyTrash) return;
     const target = event.target instanceof Element ? event.target : null;
     const targetDialog = target?.closest("[role='dialog']") ?? null;
     if (event.key === "Escape") {
       if (document.documentElement.dataset.quickNoteDragging === "true") return;
       if (target?.closest("[data-quick-note-tag-creator]") !== null) return;
+      if (target?.closest("[role='menu']") !== null) return;
       if (targetDialog !== null && targetDialog !== panel) return;
       event.preventDefault();
       event.stopPropagation();
@@ -421,6 +456,7 @@
     const shortcutIndex = quickNoteViewIndexForKey(event.key);
     const shortcutBlocked = event.ctrlKey || event.metaKey || event.altKey || event.shiftKey
       || target?.closest("input, textarea, [contenteditable='true']") !== null
+      || target?.closest("[role='menu']") !== null
       || (targetDialog !== null && targetDialog !== panel);
     if (shortcutIndex !== null && !shortcutBlocked) {
       if (shortcutIndex === 0) {
@@ -545,14 +581,16 @@
           title={`${t("quickNotes.collection.active")} (${t("calendar.toolbar.shortcutKey", "1")})`}
           onclick={() => selectTag(null)}
         >{t("quickNotes.collection.active")}</button>
-        {#each tags as tag, index}
-          <button
-            type="button"
-            aria-pressed={collection === "active" && selectedTagId === tag.id}
-            class={`flex shrink-0 items-center text-foreground transition-colors ${mobileLayout ? "min-h-12 max-w-40 rounded-xl px-4 text-sm active:bg-accent" : "h-7 max-w-32 rounded-md px-2.5 text-xs hover:bg-accent/60"} ${collection === "active" && selectedTagId === tag.id ? "bg-accent/60" : ""}`}
+        {#each tags as tag, index (tag.id)}
+          <QuickNoteTagChip
+            {tag}
+            selected={collection === "active" && selectedTagId === tag.id}
             title={tagTitle(tag, index)}
-            onclick={() => selectTag(tag.id)}
-          ><span class="truncate">{tag.name}</span></button>
+            {mobileLayout}
+            onSelect={() => selectTag(tag.id)}
+            onRename={(name) => renameTag(tag, name)}
+            onDelete={() => { deleteTagTarget = tag; }}
+          />
         {/each}
         <QuickNoteTagManager tagCount={tags.length} onCreate={createTag} {mobileLayout} />
       </div>
@@ -682,6 +720,17 @@
     cancelLabel={t("common.cancel")}
     onConfirm={() => void confirmDelete()}
     onCancel={() => { deleteTarget = null; }}
+  />
+{/if}
+
+{#if deleteTagTarget}
+  <ConfirmDialog
+    title={t("quickNotes.tag.deleteConfirmTitle", deleteTagTarget.name)}
+    message={t("quickNotes.tag.deleteConfirmMessage")}
+    confirmLabel={t("quickNotes.tag.delete")}
+    cancelLabel={t("common.cancel")}
+    onConfirm={() => void confirmDeleteTag()}
+    onCancel={() => { deleteTagTarget = null; }}
   />
 {/if}
 

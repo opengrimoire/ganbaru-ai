@@ -12,7 +12,7 @@ use tauri::{Manager, Runtime};
 
 const OWNERSHIP_STATE_FILE: &str = "vault-ownership.json";
 const OWNERSHIP_STATE_SCHEMA_VERSION: u32 = 1;
-const READ_ONLY_ERROR: &str = "This vault is read-only on this device";
+pub(crate) const READ_ONLY_ERROR: &str = "This vault is read-only on this device";
 const MANAGED_WRITE_DRAIN_BUDGET: Duration = Duration::from_secs(10);
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
@@ -80,11 +80,15 @@ struct OwnershipManagerInner {
     fail_next_directory_sync: bool,
 }
 
+/// Reports whether this device is linked to other devices of a vault.
+pub(crate) type LinkProbe = Arc<dyn Fn(&str) -> bool + Send + Sync>;
+
 /// Process-local facade over the platform-private ownership state file.
 #[derive(Default)]
 pub(crate) struct VaultOwnershipManager {
     inner: Mutex<OwnershipManagerInner>,
     write_fence: Arc<ManagedWriteFenceControl>,
+    link_probe: Mutex<Option<LinkProbe>>,
 }
 
 #[derive(Default)]
@@ -131,6 +135,8 @@ impl Drop for ManagedVaultWriteFence {
 pub(crate) enum VaultDatabaseAccess {
     ReadOnly,
     ReadWrite,
+    /// Writable for replicated tables only, with read-only guards on every other table.
+    Guarded,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
@@ -142,6 +148,8 @@ pub(crate) struct VaultOwnershipStatus {
     pub generation: u64,
     pub role: &'static str,
     pub can_write: bool,
+    /// Replicated tables accept local writes while the rest of the vault is read-only.
+    pub replicated_writes: bool,
     pub transfer_phase: TransferPhase,
 }
 
@@ -187,10 +195,40 @@ impl VaultOwnershipManager {
         Ok(())
     }
 
+    /// Installs the probe that decides whether a stable replica is linked to its vault.
+    pub(crate) fn set_link_probe(&self, probe: Option<LinkProbe>) -> Result<(), String> {
+        *self
+            .link_probe
+            .lock()
+            .map_err(|_| "vault link probe lock is unavailable".to_string())? = probe;
+        Ok(())
+    }
+
+    /// Whether this device shares the vault with a linked peer or a pinned coordinator. Call it
+    /// outside the ownership lock, because the probe takes the pairing lock.
+    pub(crate) fn is_linked(&self, vault_id: &str) -> bool {
+        self.link_probe
+            .lock()
+            .ok()
+            .and_then(|probe| probe.clone())
+            .is_some_and(|probe| probe(vault_id))
+    }
+
+    /// Marks a stable, linked replica as able to write replicated tables. The probe runs
+    /// after the ownership lock is released so it never nests inside it.
+    fn with_replicated_writes(&self, mut status: VaultOwnershipStatus) -> VaultOwnershipStatus {
+        let replica = status.role == "read-only"
+            && !status.can_write
+            && status.transfer_phase == TransferPhase::Stable;
+        status.replicated_writes = replica && self.is_linked(&status.vault_id);
+        status
+    }
+
     pub(crate) fn status(&self, vault_id: &str) -> Result<VaultOwnershipStatus, String> {
-        self.with_record(vault_id, |device_id, record| {
+        let status = self.with_record(vault_id, |device_id, record| {
             Ok(status_from_record(device_id, record))
-        })
+        })?;
+        Ok(self.with_replicated_writes(status))
     }
 
     /// Read known committed authority without materializing a record or accessing storage.
@@ -208,13 +246,17 @@ impl VaultOwnershipManager {
             return Ok(None);
         };
         let device_id = initialized_device_id(&inner)?;
-        Ok(Some(status_from_record(device_id, record)))
+        let status = status_from_record(device_id, record);
+        drop(inner);
+        Ok(Some(self.with_replicated_writes(status)))
     }
 
     pub(crate) fn database_access(&self, vault_id: &str) -> Result<VaultDatabaseAccess, String> {
         let status = self.status(vault_id)?;
         Ok(if status.can_write {
             VaultDatabaseAccess::ReadWrite
+        } else if status.replicated_writes {
+            VaultDatabaseAccess::Guarded
         } else {
             VaultDatabaseAccess::ReadOnly
         })
@@ -768,6 +810,7 @@ fn status_from_record(device_id: &str, record: &OwnershipRecord) -> VaultOwnersh
             "read-only"
         },
         can_write: local_owner && stable,
+        replicated_writes: false,
         transfer_phase: record.transfer_phase.clone(),
     }
 }
@@ -1091,6 +1134,58 @@ mod tests {
         assert!(!status.can_write);
         assert_eq!(status.owner_device_id, "phone");
         assert_eq!(status.generation, 1);
+        fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn linked_stable_replicas_get_guarded_access_and_owners_stay_read_write() {
+        let path = test_path("guarded-access");
+        let replica = load_manager(&path, "phone");
+        replica
+            .register_remote_owner("vault", "desktop".into(), 0)
+            .unwrap();
+        assert_eq!(
+            replica.database_access("vault").unwrap(),
+            VaultDatabaseAccess::ReadOnly
+        );
+        replica
+            .set_link_probe(Some(Arc::new(|vault_id: &str| vault_id == "vault")))
+            .unwrap();
+        let status = replica.status("vault").unwrap();
+        assert!(status.replicated_writes && !status.can_write);
+        assert!(
+            replica
+                .cached_status("vault")
+                .unwrap()
+                .unwrap()
+                .replicated_writes
+        );
+        assert_eq!(
+            replica.database_access("vault").unwrap(),
+            VaultDatabaseAccess::Guarded
+        );
+        assert!(replica.require_writable("vault").is_err());
+
+        replica
+            .accept_incoming_grant("vault", "transfer".into(), "desktop".into(), 1)
+            .unwrap();
+        assert!(!replica.status("vault").unwrap().replicated_writes);
+        assert_eq!(
+            replica.database_access("vault").unwrap(),
+            VaultDatabaseAccess::ReadOnly
+        );
+        fs::remove_file(&path).unwrap();
+
+        let owner = load_manager(&path, "desktop");
+        owner
+            .set_link_probe(Some(Arc::new(|_: &str| true)))
+            .unwrap();
+        let status = owner.status("vault").unwrap();
+        assert!(status.can_write && !status.replicated_writes);
+        assert_eq!(
+            owner.database_access("vault").unwrap(),
+            VaultDatabaseAccess::ReadWrite
+        );
         fs::remove_file(path).unwrap();
     }
 

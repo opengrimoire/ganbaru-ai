@@ -27,6 +27,7 @@
   } from "$lib/api/vault-handoff";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import SwitchField from "$lib/components/ui/SwitchField.svelte";
+  import SyncSection from "$lib/components/sync/SyncSection.svelte";
   import {
     formatHandoffError,
     formatPairingCodeError,
@@ -703,6 +704,9 @@
     {/if}
 
     </fieldset>
+    {#if presentation === "settings" && status.linked}
+      <SyncSection {buttonClass} mobileLayout={platform === "android"} />
+    {/if}
   {:else if error && presentation !== "onboarding"}
     <button type="button" class={buttonClass} disabled={busy !== null} onclick={() => void refreshStatus()}>
       {t("vaultHandoff.retry")}

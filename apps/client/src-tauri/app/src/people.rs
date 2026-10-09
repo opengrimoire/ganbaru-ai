@@ -48,6 +48,23 @@ impl From<String> for PeopleError {
     }
 }
 
+impl PeopleError {
+    /// The failure message without its code.
+    pub(crate) fn into_message(self) -> String {
+        match self {
+            Self::IdentityUnavailable(message)
+            | Self::KeyUnavailable(message)
+            | Self::ProfileIncomplete(message)
+            | Self::InvalidCard(message)
+            | Self::CardRevoked(message)
+            | Self::RecipientUnreachable(message)
+            | Self::ReadOnly(message)
+            | Self::RevisionConflict(message)
+            | Self::Failed(message) => message,
+        }
+    }
+}
+
 /// The local person as the frontend sees it.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]

@@ -27,6 +27,8 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
         .manage(vault::handoff::pairing::PairingManager::default())
         .manage(vault::handoff::receiver::ReceiverLifecycle::default())
         .manage(vault::handoff::source::SourceLifecycle::default())
+        .manage(crate::sync::SyncRuntime::default())
+        .manage(crate::sync::SyncSubscribers::default())
         .invoke_handler(tauri::generate_handler![
             vault::vault_read_app_state,
             vault::vault_device_id,
@@ -361,8 +363,21 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             quick_notes::quick_notes_restore,
             quick_notes::quick_notes_delete_permanently,
             quick_notes::quick_notes_empty_trash,
+            quick_notes::quick_notes_purge_expired_trash,
             quick_notes::quick_notes_list_tags,
             quick_notes::quick_notes_create_tag,
+            quick_notes::quick_notes_rename_tag,
+            quick_notes::quick_notes_delete_tag,
+            quick_notes::quick_notes_conflict,
+            quick_notes::quick_notes_resolve_conflict,
+            crate::sync::commands::sync_status,
+            crate::sync::commands::sync_subscribe,
+            crate::sync::commands::sync_unsubscribe,
+            crate::sync::commands::sync_now,
+            crate::sync::commands::sync_set_paused,
+            crate::sync::commands::sync_recovery_list,
+            crate::sync::commands::sync_recovery_restore,
+            crate::sync::commands::sync_recovery_discard,
             people::people_list,
             people::people_local_card,
             people::people_regenerate_card,
@@ -398,6 +413,7 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             vault::handoff::initialize(app.handle())?;
             #[cfg(target_os = "android")]
             vault::backup::recover_interrupted_restore_for_app(app.handle())?;
+            crate::sync::setup(app.handle());
             music::setup_youtube_host(app.handle())?;
             music::session::setup(app.handle());
             pomodoro::setup(app.handle());
@@ -415,6 +431,7 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
         #[cfg(target_os = "android")]
         if matches!(_event, tauri::RunEvent::Resumed) {
             vault::handoff::receiver::trigger_coordinator_reconciliation(_app.clone());
+            tauri::Manager::state::<crate::sync::SyncRuntime>(_app).sync_now();
             crate::distractions::android::runtime::wake(_app);
         }
         #[cfg(target_os = "android")]

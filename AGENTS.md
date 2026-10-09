@@ -2,7 +2,7 @@
 
 Ganbaru AI is an anti-procrastination and anti-burnout productivity app. It is free, local, open-source (AGPL 3.0), privacy-first, and lightweight, with opt-in AI. It is built with Tauri v2 (Rust) and Svelte 5 for Linux, Windows, and a pre-release Android implementation. macOS and iOS are future platform work.
 
-Features are highly interconnected. Calendar, Pomodoro, Projects, Notes, Chat with local coding agents, the distraction blocker, Music, Quick notes, themes, localization, and the Android shell exist and are still being completed. The diary, sleep alarm, work environments, and concurrent sync are planned; gamification is deferred. [docs/features/README.md](docs/features/README.md) owns the current status of each feature.
+Features are highly interconnected. Calendar, Pomodoro, Projects, Notes, Chat with local coding agents, the distraction blocker, Music, Quick notes, themes, localization, and the Android shell exist and are still being completed. Concurrent sync covers Quick notes so far. The diary, sleep alarm, and work environments are planned; gamification is deferred. [docs/features/README.md](docs/features/README.md) owns the current status of each feature.
 
 ## Documentation
 
@@ -44,7 +44,7 @@ apps/
       main-desktop.ts, main-mobile.ts, main.ts: platform bootstraps and virtual entry selector
       lib/: shared frontend code
         api/: typed wrappers around Tauri commands, split by domain (Chat and Notes have several clients)
-        components/: Svelte components grouped by feature (calendar, chat, collections, diagnostics, icon-picker, mobile, music, notes, pomodoro, projects, quick-notes, settings, themes, title-bar, vault, and others), with subfolders that mirror lib/ domains (for example calendar/grid/, chat/timeline/, notes/blocks/, projects/list/); ui/ holds handwritten shared primitives
+        components/: Svelte components grouped by feature (calendar, chat, collections, diagnostics, icon-picker, mobile, music, notes, pomodoro, projects, quick-notes, settings, sync, themes, title-bar, vault, and others), with subfolders that mirror lib/ domains (for example calendar/grid/, chat/timeline/, notes/blocks/, projects/list/); ui/ holds handwritten shared primitives
         benchmark/: benchmark runner, samplers, output, and scenarios
         calendar/: shared Calendar logic, types, recurrence rules, navigation helpers, and iCalendar parser/serializer
         chat/: Chat contracts, runtime validation of untrusted responses, and interaction models and controllers
@@ -59,6 +59,7 @@ apps/
         profile/, projects/, quick-notes/: domain logic for those features
         scheduling/: lifecycle and notification schedulers
         settings/: Settings section identifiers shared by launchers and the Settings modal
+        sync/: sync status presentation helpers
         mobile/: Android shell back handling, layout, and persistence lifecycle helpers
         stores/: Svelte rune stores and domain controllers for runtime state; large stores keep private modules in a same-named subfolder (calendar/, chat/, music-player/, notes/, projects/)
         themes/: theme definitions, derivation, serialization, operations, editor session, and theme JSON file access
@@ -83,6 +84,7 @@ apps/
         src/notifications.rs, notifications/: desktop native notifications and Android notification capabilities
         src/civil_time.rs, sound_effects.rs, system_command.rs: shared civil-time math, app sound effects, and bounded fixed-command execution
         src/people.rs, people/: person identity storage, contact card assembly, contact and request persistence, and LAN request delivery
+        src/sync.rs, sync/: sync service lifecycle, guarded replica access, writer keys and record, carry-forward, LAN hub and client exchange, and sync commands
         src/quick_notes.rs, quick_notes/, tray.rs, themes.rs, updates.rs, profile_images.rs: remaining feature modules
         src/benchmark.rs, benchmark/, first_use_contracts.rs: benchmark state, seed data, memory reports, and first-use query contracts
       capabilities/: permission declarations (desktop and mobile)
@@ -101,6 +103,8 @@ crates/
   ganbaru-chat/: Chat persistence, runtime, Git workspaces, checkpoints, review, and application services
   ganbaru-working-folders/: Tauri-free working-folder IDs, bindings, and device-state operations
   ganbaru-people/: Tauri-free person key pairs, signed contact cards, request signatures, and trust kinds
+  ganbaru-sync-contracts/: Tauri-free sync identifiers, clocks, version vectors, writer certificates, order keys, and the signed operation format
+  ganbaru-sync/: Tauri-free sync engine with the replication manifest, capture triggers, sealing, apply and merge, conflicts, recovery, and the simulation harness
   ganbaru-native-messaging/: ganbaru-ai-native-messaging browser host binary
   ganbaru-mobile-*/: Android plugins for documents, the distraction blocker, media, and notifications
 extensions/chromium/: Chromium extension (manifest v3); chromium-dev/ is a generated, ignored dev copy
@@ -140,7 +144,7 @@ Tauri's platform app config directory stores device-local bootstrap and runtime 
 - **AI integration:** three opt-in paths. (1) Implemented: local coding-agent Chat in project channels over Rust-owned native provider sessions (Codex, Claude, Cursor, Grok, OpenCode), with durable SQLite history, project working folders, and a scoped ephemeral loopback MCP endpoint for application-owned host tools. That endpoint is infrastructure, not a participant identity. (2) Planned: a BYOK assistant for hosted and local user-configured providers. (3) Planned: a separately authorized MCP service for external AI clients. See `docs/features/ai/` and `docs/features/chat/`.
 - **Chat storage boundary:** organizational Chat state (channels, sessions, events, drafts, checkpoints, access profiles, authorization revisions, scratch scopes) lives in the vault SQLite database. Managed attachment bytes live under `assets/chat/attachments/`. Absolute folder paths, scratch paths, executables, provider homes, diagnostics, provider-native trust, and process state are device-local. Provider-native trust never widens organizational authority. Provider secrets live only behind operating-system credential references. See `docs/data/schema/chat.md` and `docs/data/security/chat.md`.
 - **Localization:** user-facing UI text must use the typed i18n catalog. Language selectors show languages as autonyms (`English`, `Español`), while non-language options like system preference are localized. Dates, times, numbers, plurals, relative minutes, and lists use the locale helpers.
-- **Sync:** LAN device linking and single-writer whole-vault handoff are implemented in source, with physical multi-device acceptance pending. Concurrent operation replication, Yrs/Yjs text, encrypted relay, and conflict convergence are planned. See `docs/data/sync.md`.
+- **Sync:** LAN device linking, single-writer whole-vault handoff, and concurrent Quick notes replication through the coordinator desktop (signed operation logs, installation writers, deterministic merges, conflicts, and recovery) are implemented in source, with physical multi-device acceptance pending. The rest of the vault stays single-writer on replicas. Concurrent sync of other domains, Yrs/Yjs text, anchored authority with LAN peer exchange, operation encryption, and the encrypted relay are planned. See `docs/data/sync.md`.
 - **Focus evidence:** Android Calendar alarms are reminders and cannot start runs or record later phases. Recovery uses only committed SQLite execution. Desktop automatic admission requires fresh local activity; explicit starts remain available.
 - **Branching and releases:** topic branches from `dev`, PRs back to `dev`. Direct pushes to `dev` or `main` are not normal workflow. `main`, `app-v*` tags, release approval, published releases, and package publication are controlled by organization admins for supply-chain safety. See `CONTRIBUTING.md`, `docs/operations/release/README.md`, and `docs/operations/repository-policy.md`.
 - **Pull requests:** for review work, create a neutral topic branch from current `dev` (for example `docs/github-templates` or `fix/calendar-import`; never tool, assistant, or vanity names in branches, commits, or PR titles). Open PRs into `dev` unless the user asks for a release PR. Creating a PR does not imply merging. Merge only when the user explicitly asks, or asks to complete the whole PR flow after checks pass; first confirm the PR is mergeable, required checks passed, and the branch is up to date. Release PRs from `dev` to `main` go through the `main` merge queue: do not update `dev` with `main`, do not enable auto-merge, and if `gh pr merge` tries auto-merge, use GitHub's queue action or the GraphQL `enqueuePullRequest` mutation. If a non-release branch is out of date, update it once, then merge if already authorized. After merging into `dev`, sync local `dev` to `origin/dev` and delete the merged topic branch locally and remotely. After merging into `main`, sync local `main` to `origin/main`. Do not keep backup branches unless asked.
@@ -164,7 +168,7 @@ Read `docs/testing/README.md` when changing tests, validation scripts, task orde
 - Use the root `check`, `test`, and `validate` scripts for broad verification instead of direct full-suite `turbo`, `vitest`, or `cargo` commands. They run Rust before frontend work, use one Cargo build job and one Rust test thread, and split Vitest into sequential one-worker shards. `validate:ci` (two Cargo jobs) is for hosted Linux CI only. Do not raise concurrency, combine stages, or remove sharding without measuring peak memory and confirming coverage.
 - Never run Cargo work concurrently with Vitest, Svelte checks, Turbo, or another Node validation command, and never start another validation command while a root `check`, `test`, `validate`, or `validate:full` is running.
 - For focused checks, use one Vitest worker and one Cargo job and test thread. Add `--lib` when the filtered Rust test is in the library; use `--bin <name>` only when testing that binary. Confirm focused Vitest runs report only the requested files.
-- The workspace test profile uses limited debug information; do not restore full test debug information unless a debugger session needs it.
+- The workspace test profile inherits the development profile's line-tables-only debug information so both share dependency artifacts; do not restore full test debug information unless a debugger session needs it.
 - Keep Cargo commands portable across Linux, Windows, and macOS. Do not require an external linker; optional linker optimizations must fall back to the standard toolchain and be benchmarked before adoption.
 
 **Choosing a gate:**

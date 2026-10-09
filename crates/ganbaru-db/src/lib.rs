@@ -1,10 +1,13 @@
 use sqlx::{
-    Row, SqlitePool,
+    Row, SqliteConnection, SqlitePool,
+    pool::PoolConnectionMetadata,
     sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous},
 };
 use std::{
     collections::HashMap,
+    future::Future,
     path::{Path, PathBuf},
+    pin::Pin,
     sync::Arc,
     time::Duration,
 };
@@ -16,12 +19,43 @@ const WRITE_CONTENTION_TIMEOUT: Duration = Duration::from_secs(5);
 /// Native access mode applied when opening a vault database pool.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DatabaseAccessMode {
+    /// Reads only, through a read-only connection.
     ReadOnly,
+    /// Full write access with migrations applied at open.
     ReadWrite,
+    /// A writable connection without migrations whose connection hook restricts writes, used by
+    /// replicas that write replicated tables while the rest of the vault stays read-only.
+    Guarded,
+}
+
+/// Future returned by a [`ConnectionHook`].
+pub type ConnectionHookFuture<'c> = Pin<Box<dyn Future<Output = Result<(), String>> + Send + 'c>>;
+
+/// Setup that runs on every new writable connection, with the access mode of its pool.
+///
+/// Pools may recycle their connection, so per-connection state such as TEMP triggers and
+/// commit hooks belongs here instead of in a one-time initialization.
+pub type ConnectionHook = Arc<
+    dyn for<'c> Fn(&'c mut SqliteConnection, DatabaseAccessMode) -> ConnectionHookFuture<'c>
+        + Send
+        + Sync,
+>;
+
+/// Wraps a hook function, fixing the higher-ranked signature that closures cannot infer.
+pub fn connection_hook<F>(hook: F) -> ConnectionHook
+where
+    F: for<'c> Fn(&'c mut SqliteConnection, DatabaseAccessMode) -> ConnectionHookFuture<'c>
+        + Send
+        + Sync
+        + 'static,
+{
+    Arc::new(hook)
 }
 
 struct RegisteredPool {
     access: DatabaseAccessMode,
+    /// Whether a guarded request opened this pool read-only because the schema differs.
+    guarded_fallback: bool,
     pool: SqlitePool,
 }
 
@@ -32,40 +66,105 @@ struct RegisteredPool {
 #[derive(Clone, Default)]
 pub struct DatabasePoolRegistry {
     pools: Arc<Mutex<HashMap<PathBuf, RegisteredPool>>>,
+    hook: Arc<std::sync::RwLock<Option<ConnectionHook>>>,
 }
 
 impl DatabasePoolRegistry {
+    /// Sets the hook that later writable connections run. Open pools keep their connections
+    /// until they are closed.
+    pub fn set_connection_hook(&self, hook: Option<ConnectionHook>) {
+        let mut slot = self
+            .hook
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        *slot = hook;
+    }
+
+    fn connection_hook(&self) -> Option<ConnectionHook> {
+        self.hook
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone()
+    }
+
     /// Connects to an authorized SQLite path or returns its existing pool.
     pub async fn connect_path(&self, path: impl AsRef<Path>) -> Result<SqlitePool, String> {
         self.connect_path_with_access(path, DatabaseAccessMode::ReadWrite)
             .await
+            .map(|(pool, _)| pool)
     }
 
-    /// Connects to an existing authorized SQLite path without write access.
+    /// Connects to an existing authorized SQLite path without write access. An open guarded
+    /// pool for the path is returned instead, because a path holds one pool at a time.
     pub async fn connect_path_read_only(
         &self,
         path: impl AsRef<Path>,
     ) -> Result<SqlitePool, String> {
         self.connect_path_with_access(path, DatabaseAccessMode::ReadOnly)
             .await
+            .map(|(pool, _)| pool)
+    }
+
+    /// Connects to an existing authorized SQLite path in guarded mode, without migrations.
+    ///
+    /// When the database schema differs from the embedded migration set, the pool reopens
+    /// read-only instead, and the returned mode says so.
+    pub async fn connect_path_guarded(
+        &self,
+        path: impl AsRef<Path>,
+    ) -> Result<(SqlitePool, DatabaseAccessMode), String> {
+        self.connect_path_with_access(path, DatabaseAccessMode::Guarded)
+            .await
+    }
+
+    /// Access mode of the open pool for a path.
+    pub async fn access(&self, path: impl AsRef<Path>) -> Option<DatabaseAccessMode> {
+        self.pools
+            .lock()
+            .await
+            .get(path.as_ref())
+            .map(|registered| registered.access)
     }
 
     async fn connect_path_with_access(
         &self,
         path: impl AsRef<Path>,
         access: DatabaseAccessMode,
-    ) -> Result<SqlitePool, String> {
+    ) -> Result<(SqlitePool, DatabaseAccessMode), String> {
         let path = path.as_ref().to_path_buf();
         let mut pools = self.pools.lock().await;
         if let Some(registered) = pools.get(&path) {
-            if registered.access != access {
+            let reusable = registered.access == access
+                || (access == DatabaseAccessMode::ReadOnly
+                    && registered.access == DatabaseAccessMode::Guarded)
+                || (access == DatabaseAccessMode::Guarded && registered.guarded_fallback);
+            if !reusable {
                 return Err("database access changed; close the existing pool first".to_string());
             }
-            return Ok(registered.pool.clone());
+            return Ok((registered.pool.clone(), registered.access));
         }
 
+        let mut effective = access;
+        let mut pool = self.open(&path, access).await?;
+        if access == DatabaseAccessMode::Guarded && validate_current_schema(&pool).await.is_err() {
+            pool.close().await;
+            effective = DatabaseAccessMode::ReadOnly;
+            pool = self.open(&path, effective).await?;
+        }
+        pools.insert(
+            path,
+            RegisteredPool {
+                access: effective,
+                guarded_fallback: access != effective,
+                pool: pool.clone(),
+            },
+        );
+        Ok((pool, effective))
+    }
+
+    async fn open(&self, path: &Path, access: DatabaseAccessMode) -> Result<SqlitePool, String> {
         let mut options = SqliteConnectOptions::new()
-            .filename(&path)
+            .filename(path)
             .foreign_keys(true)
             .busy_timeout(WRITE_CONTENTION_TIMEOUT);
         options = match access {
@@ -74,24 +173,45 @@ impl DatabasePoolRegistry {
                 .create_if_missing(true)
                 .journal_mode(SqliteJournalMode::Wal)
                 .synchronous(SqliteSynchronous::Full),
+            DatabaseAccessMode::Guarded => options
+                .journal_mode(SqliteJournalMode::Wal)
+                .synchronous(SqliteSynchronous::Full),
         };
-        let pool = SqlitePoolOptions::new()
-            .max_connections(1)
+        let mut pool_options = SqlitePoolOptions::new().max_connections(1);
+        if access != DatabaseAccessMode::ReadOnly
+            && let Some(hook) = self.connection_hook()
+        {
+            pool_options = pool_options.after_connect(
+                move |conn: &mut SqliteConnection, _: PoolConnectionMetadata| {
+                    let hook = hook.clone();
+                    Box::pin(async move {
+                        hook(conn, access)
+                            .await
+                            .map_err(|error| sqlx::Error::Configuration(error.into()))
+                    })
+                },
+            );
+        }
+        let pool = pool_options
             .connect_with(options)
             .await
             .map_err(|error| format!("connect: {error}"))?;
         let initialization = async {
-            if access == DatabaseAccessMode::ReadWrite {
-                run_migrations(&pool).await?;
-                sqlx::raw_sql("PRAGMA optimize")
-                    .execute(&pool)
-                    .await
-                    .map_err(|error| format!("pragma optimize: {error}"))?;
-            } else {
-                sqlx::raw_sql("PRAGMA query_only = ON")
-                    .execute(&pool)
-                    .await
-                    .map_err(|error| format!("enable query-only database access: {error}"))?;
+            match access {
+                DatabaseAccessMode::ReadWrite => {
+                    run_migrations(&pool).await?;
+                    sqlx::raw_sql("PRAGMA optimize")
+                        .execute(&pool)
+                        .await
+                        .map_err(|error| format!("pragma optimize: {error}"))?;
+                }
+                DatabaseAccessMode::ReadOnly => {
+                    sqlx::raw_sql("PRAGMA query_only = ON")
+                        .execute(&pool)
+                        .await
+                        .map_err(|error| format!("enable query-only database access: {error}"))?;
+                }
+                DatabaseAccessMode::Guarded => {}
             }
             Ok::<(), String>(())
         }
@@ -100,13 +220,6 @@ impl DatabasePoolRegistry {
             pool.close().await;
             return Err(error);
         }
-        pools.insert(
-            path,
-            RegisteredPool {
-                access,
-                pool: pool.clone(),
-            },
-        );
         Ok(pool)
     }
 

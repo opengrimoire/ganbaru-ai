@@ -5,7 +5,7 @@ import type {
 } from "$lib/calendar/types";
 import { formatDatePart } from "$lib/calendar/utils";
 import { onDestroy } from "svelte";
-import { CalendarTouchHoldArbiter } from "$lib/components/calendar/mobile-gestures";
+import { TouchHoldArbiter } from "$lib/utils/touch-hold";
 
 let cursorStyle: HTMLStyleElement | null = null;
 
@@ -44,7 +44,7 @@ export function createAllDayEventDragController(config: AllDayEventDragControlle
   let draggingEventId = $state<string | null>(null);
   let grabbingId = $state<string | null>(null); // Set immediately on pointerdown for visual feedback
   let _didDrag = $state(false);
-  const touchHold = new CalendarTouchHoldArbiter();
+  const touchHold = new TouchHoldArbiter();
 
   function columnFromX(clientX: number, bounds: DOMRect[]): number {
     for (let i = 0; i < bounds.length; i++) {

@@ -57,6 +57,7 @@ async fn freeze_runtimes<R: Runtime>(
         resume: Some(Box::new(move || super::resume_native_runtimes(&resume_app))),
         _transition: transition,
     };
+    crate::sync::stop_for_vault_handoff(app).await?;
     crate::pomodoro::stop_for_vault_handoff(app).await?;
     crate::music::session::stop_for_vault_handoff(app).await?;
     #[cfg(desktop)]
@@ -208,6 +209,7 @@ pub(crate) async fn begin_source_quiescence<R: Runtime>(
     let vault_id = super::active_vault_id(app)?;
     check_pomodoro_blocker(app).await?;
     check_chat_blocker(app)?;
+    let sync_plan = crate::sync::quiesced_sync(app);
 
     let frozen = freeze_and_fence(app, transition).await?;
 
@@ -245,6 +247,7 @@ pub(crate) async fn begin_source_quiescence<R: Runtime>(
     let result = async {
         check_chat_blocker(app)?;
         db::close_all_sqlite_pools_for_restore(app).await?;
+        crate::sync::seal_quiesced(app, sync_plan).await;
         check_drained_pomodoro_blocker(app).await?;
         check_chat_blocker(app)
     }
@@ -273,9 +276,11 @@ pub(crate) async fn begin_reserved_quiescence<R: Runtime>(
     app: &tauri::AppHandle<R>,
     transition: VaultTransition,
 ) -> Result<SnapshotQuiescence, String> {
+    let sync_plan = crate::sync::quiesced_sync(app);
     let frozen = freeze_and_fence(app, transition).await?;
     let database_guard = db::begin_vault_exclusive().await;
     db::close_all_sqlite_pools_for_restore(app).await?;
+    crate::sync::seal_quiesced(app, sync_plan).await;
     Ok(SnapshotQuiescence {
         _database_guard: database_guard,
         _managed_write_fence: frozen.managed_write_fence,

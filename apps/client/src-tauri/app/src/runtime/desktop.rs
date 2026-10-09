@@ -237,6 +237,8 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
         .manage(vault::handoff::CoordinatorLifecycle::default())
         .manage(vault::handoff::receiver::ReceiverLifecycle::default())
         .manage(vault::handoff::source::SourceLifecycle::default())
+        .manage(crate::sync::SyncRuntime::default())
+        .manage(crate::sync::SyncSubscribers::default())
         .manage(sound_effects::AppSoundState::default())
         .manage(pomodoro::overlay::PomodoroOverlayState::default())
         .manage(music::player::MediaPlayerState::default())
@@ -825,8 +827,21 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             quick_notes::quick_notes_restore,
             quick_notes::quick_notes_delete_permanently,
             quick_notes::quick_notes_empty_trash,
+            quick_notes::quick_notes_purge_expired_trash,
             quick_notes::quick_notes_list_tags,
             quick_notes::quick_notes_create_tag,
+            quick_notes::quick_notes_rename_tag,
+            quick_notes::quick_notes_delete_tag,
+            quick_notes::quick_notes_conflict,
+            quick_notes::quick_notes_resolve_conflict,
+            crate::sync::commands::sync_status,
+            crate::sync::commands::sync_subscribe,
+            crate::sync::commands::sync_unsubscribe,
+            crate::sync::commands::sync_now,
+            crate::sync::commands::sync_set_paused,
+            crate::sync::commands::sync_recovery_list,
+            crate::sync::commands::sync_recovery_restore,
+            crate::sync::commands::sync_recovery_discard,
             people::people_list,
             people::people_local_card,
             people::people_regenerate_card,
@@ -868,6 +883,7 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
         .setup(|app| {
             vault::ownership::initialize(app.handle())?;
             vault::handoff::initialize(app.handle())?;
+            crate::sync::setup(app.handle());
             if let Err(error) = vault::handoff::start_desktop(app.handle()) {
                 eprintln!("vault handoff coordinator is unavailable: {error}");
             }

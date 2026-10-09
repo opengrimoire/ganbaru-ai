@@ -65,7 +65,34 @@ pub async fn connect_sqlite<R: Runtime>(
             registry.connect_path_read_only(path).await
         }
         vault::ownership::VaultDatabaseAccess::ReadWrite => registry.connect_path(path).await,
+        // A pool opened read-only before the replica was linked stays read-only until the next
+        // vault replacement or restart closes it, so readers are never cut off mid-session.
+        vault::ownership::VaultDatabaseAccess::Guarded => {
+            if registry.access(&path).await == Some(ganbaru_db::DatabaseAccessMode::ReadOnly) {
+                registry.connect_path_read_only(path).await
+            } else {
+                registry
+                    .connect_path_guarded(path)
+                    .await
+                    .map(|(pool, _)| pool)
+            }
+        }
     }
+}
+
+/// Opens the active vault for sync work and returns the pool only when this device may write
+/// replicated rows: an owner opens it read-write, a linked replica opens it guarded. A replica
+/// whose schema differs from the embedded migrations gets a read-only pool and no sync access.
+pub(crate) async fn connect_active_vault_for_sync<R: Runtime>(
+    app: &AppHandle<R>,
+) -> Result<Option<sqlx::SqlitePool>, String> {
+    let pool = connect_sqlite(app.clone(), format!("sqlite:{}", vault::APP_SQLITE_FILE)).await?;
+    let path = resolve_sqlite_path(app, &format!("sqlite:{}", vault::APP_SQLITE_FILE))?;
+    let writable = matches!(
+        app.state::<DatabaseState>().access(path).await,
+        Some(ganbaru_db::DatabaseAccessMode::ReadWrite | ganbaru_db::DatabaseAccessMode::Guarded)
+    );
+    Ok(writable.then_some(pool))
 }
 
 /// Open the authorized active vault without creation, migrations, or write access.

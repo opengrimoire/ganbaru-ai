@@ -77,9 +77,10 @@
   } from "$lib/scheduling/notification-schedulers";
   import { onMount } from "svelte";
   import { getNotesProjectHistoryScheduler } from "$lib/notes/history/project-history-scheduler";
-  import { onActiveVaultIdentityChange } from "$lib/vault/active-vault";
+  import { activeVaultIdentity, onActiveVaultIdentityChange } from "$lib/vault/active-vault";
   import { listenForNotesDatabaseChanges } from "$lib/notes/database/window-sync";
   import type { ProjectChatIntegration } from "$lib/projects/types";
+  import type { QuickNotesTrashPurgeRuntime } from "$lib/quick-notes/trash-purge-runtime";
 
   perfMark("boot.script-start");
 
@@ -353,6 +354,7 @@
       ? onActiveVaultIdentityChange((previousVaultId, nextVaultId) => {
           notesProjectHistoryScheduler.switchVault();
           chat.resetForVault();
+          syncQuickNotesTrashPurge();
           if (!nextVaultId) return;
           const projectsRequest = previousVaultId ? projects.load() : projects.ensureLoaded();
           void projectsRequest.then(() => Promise.all([
@@ -365,6 +367,7 @@
       : null;
 
     if (isMainWindow) {
+      void startQuickNotesTrashPurgeJob();
       void prepareDesktopWorkspace()
         .catch((error) => {
           console.error("core workspace preload failed", error);
@@ -784,20 +787,49 @@
     if (enabled && wasEnabled) eventNotificationScheduler.invalidate();
   });
 
+  let quickNotesTrashPurge: QuickNotesTrashPurgeRuntime | null = null;
+  let lifecycleSchedulersDisposed = false;
+
+  /** Loads the Quick notes trash purge job outside the startup bundle. */
+  async function startQuickNotesTrashPurgeJob(): Promise<void> {
+    try {
+      const module = await import("$lib/quick-notes/trash-purge-runtime");
+      if (lifecycleSchedulersDisposed || quickNotesTrashPurge) return;
+      quickNotesTrashPurge = module.startQuickNotesTrashPurge();
+      syncQuickNotesTrashPurge();
+    } catch (error: unknown) {
+      console.error("Failed to start the Quick notes trash purge", error);
+    }
+  }
+
+  /** Runs the purge for the active vault, and stops it while no vault is open. */
+  function syncQuickNotesTrashPurge(): void {
+    const scheduler = quickNotesTrashPurge?.scheduler;
+    if (!scheduler) return;
+    const enabled = activeVaultIdentity() !== null;
+    const wasEnabled = scheduler.isEnabled();
+    scheduler.setEnabled(enabled);
+    if (enabled && wasEnabled) scheduler.invalidate();
+  }
+
   function resumeLifecycleSchedulers(): void {
     eventNotificationScheduler.resume();
     notesNotificationScheduler.resume();
     chatScheduledMessageScheduler.resume();
     notesProjectHistoryScheduler.resume();
     distractionsUsageScheduler.resume();
+    quickNotesTrashPurge?.scheduler.resume();
     music.resumeSnapshotScheduler();
   }
 
   function disposeLifecycleSchedulers(): void {
+    lifecycleSchedulersDisposed = true;
     eventNotificationScheduler.dispose();
     notesNotificationScheduler.dispose();
     chatScheduledMessageScheduler.dispose();
     distractionsUsageScheduler.dispose();
+    quickNotesTrashPurge?.dispose();
+    quickNotesTrashPurge = null;
   }
 </script>
 

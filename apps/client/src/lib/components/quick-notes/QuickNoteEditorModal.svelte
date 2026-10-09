@@ -51,15 +51,22 @@
     QUICK_NOTE_BODY_MAX_CHARS,
     QUICK_NOTE_TITLE_MAX_CHARS,
     type QuickNote,
+    type QuickNoteConflictResolved,
     type QuickNoteTag,
     type QuickNoteFormatting,
     type QuickNoteFormattingName,
     type QuickNoteTextRun,
   } from "$lib/quick-notes/types";
-  import { publishQuickNotesChanged } from "$lib/quick-notes/window-sync";
+  import {
+    quickNoteEditableFields,
+    rebaseQuickNoteEdits,
+    type QuickNoteEditableFields,
+  } from "$lib/quick-notes/rebase";
+  import { listenForQuickNotesChanges, publishQuickNotesChanged } from "$lib/quick-notes/window-sync";
   import { getMobileBackStack } from "$lib/stores/mobile-back-stack.svelte";
   import type { Theme } from "$lib/themes";
   import QuickNoteColorPicker from "./QuickNoteColorPicker.svelte";
+  import QuickNoteConflictBanner from "./QuickNoteConflictBanner.svelte";
   import QuickNoteRichText from "./QuickNoteRichText.svelte";
   import QuickNoteTagPicker from "./QuickNoteTagPicker.svelte";
   import { scrollEdgeFadeAction } from "$lib/utils/scroll-edge-fade";
@@ -166,7 +173,81 @@
     publishQuickNotesChanged();
   }
 
-  async function persistCurrent(targetVersion: number): Promise<void> {
+  function currentFields(): QuickNoteEditableFields {
+    return quickNoteEditableFields({ title, runs, color, tagId, pinned });
+  }
+
+  /** Shows canonical or rebased values, keeping the caret inside the new body. */
+  function applyFields(fields: QuickNoteEditableFields): void {
+    title = fields.title;
+    color = fields.color;
+    tagId = fields.tagId;
+    pinned = fields.pinned;
+    if (runsEqual(runs, fields.runs)) return;
+    runs = fields.runs;
+    const length = quickNotePlainText(runs).length;
+    const nextSelection = { start: Math.min(selection.start, length), end: Math.min(selection.end, length) };
+    selection = nextSelection;
+    if (editor?.contains(document.activeElement)) void restoreEditorSelection(nextSelection);
+  }
+
+  /**
+   * Replays unsaved edits on the newer canonical note after a revision conflict.
+   *
+   * @returns Whether the edits were rebased and can be saved again.
+   */
+  async function rebaseOnCanonical(): Promise<boolean> {
+    const base = persisted;
+    if (!base) return false;
+    let fresh: QuickNote;
+    try {
+      fresh = await getQuickNote(base.id);
+    } catch (error: unknown) {
+      console.warn("quick note could not be reloaded for rebase", error);
+      return false;
+    }
+    if (fresh.trashedAt !== null || persisted !== base) return false;
+    const result = rebaseQuickNoteEdits(base, currentFields(), fresh);
+    if (result.kind === "conflict") return false;
+    applyFields(result.fields);
+    persisted = fresh;
+    revision = fresh.revision;
+    onSaved(fresh);
+    return true;
+  }
+
+  /** Shows changes from another window or device while the editor has nothing unsaved. */
+  async function refreshFromCanonical(): Promise<void> {
+    const shown = persisted;
+    if (!shown || saveTimer || savedVersion !== dirtyVersion || status === "saving" || composing) return;
+    const expectedVersion = dirtyVersion;
+    let fresh: QuickNote;
+    try {
+      fresh = await getQuickNote(shown.id);
+    } catch (error: unknown) {
+      console.warn("quick note could not be refreshed", error);
+      return;
+    }
+    if (persisted !== shown || dirtyVersion !== expectedVersion || savedVersion !== dirtyVersion || saveTimer) return;
+    if (fresh.revision === shown.revision && fresh.hasConflict === shown.hasConflict) return;
+    applyFields(quickNoteEditableFields(fresh));
+    persisted = fresh;
+    revision = fresh.revision;
+    if (status === "conflict") status = "saved";
+  }
+
+  function conflictResolved(result: QuickNoteConflictResolved): void {
+    const base = persisted;
+    const rebased = base
+      ? rebaseQuickNoteEdits(base, currentFields(), result.note)
+      : { kind: "rebased" as const, fields: quickNoteEditableFields(result.note) };
+    // A field edited here while resolving keeps the newer local value for the next save.
+    if (rebased.kind === "rebased") applyFields(rebased.fields);
+    applyCanonical(result.note);
+    if (result.copy) onSaved(result.copy);
+  }
+
+  async function persistCurrent(targetVersion: number, allowRebase = true): Promise<void> {
     if (!meaningful() && persisted === null) {
       savedVersion = targetVersion;
       status = "idle";
@@ -191,7 +272,12 @@
       status = dirtyVersion === targetVersion ? "saved" : "idle";
       if (dirtyVersion !== targetVersion) scheduleSave();
     } catch (error: unknown) {
-      status = error instanceof QuickNoteWriteError && error.code === "revision_conflict" ? "conflict" : "failed";
+      const revisionConflict = error instanceof QuickNoteWriteError && error.code === "revision_conflict";
+      if (revisionConflict && allowRebase && await rebaseOnCanonical()) {
+        await persistCurrent(targetVersion, false);
+        return;
+      }
+      status = revisionConflict ? "conflict" : "failed";
       throw error;
     }
   }
@@ -552,7 +638,17 @@
       : () => undefined;
     window.addEventListener("keydown", handleDialogKeydown, true);
     void tick().then(() => (titleInput ?? editor ?? dialog)?.focus());
+    let mounted = true;
+    let stopChanges: (() => void) | null = null;
+    void listenForQuickNotesChanges(() => { void refreshFromCanonical(); })
+      .then((stop) => {
+        if (mounted) stopChanges = stop;
+        else stop();
+      })
+      .catch((error: unknown) => console.warn("quick note changes could not be observed", error));
     return () => {
+      mounted = false;
+      stopChanges?.();
       unregister();
       deactivateMobileBack();
       if (saveTimer) clearTimeout(saveTimer);
@@ -635,6 +731,15 @@
         onclick={syncSelection}
       ><QuickNoteRichText {runs} /></div>
       {#if limitError}<p class="pb-2 text-xs text-destructive" role="alert">{limitError}</p>{/if}
+      {#if persisted?.hasConflict && !readOnly}
+        <QuickNoteConflictBanner
+          noteId={persisted.id}
+          revision={persisted.revision}
+          onResolved={conflictResolved}
+          onStale={() => void refreshFromCanonical()}
+          {mobileLayout}
+        />
+      {/if}
       {#if status === "conflict"}
         <div class="mb-2 flex flex-wrap items-center gap-2 rounded-md bg-warning/15 px-2.5 py-2 text-xs">
           <span>{t("quickNotes.editor.conflict")}</span>

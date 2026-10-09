@@ -966,18 +966,22 @@ impl Owner {
             return Err(error(FocusErrorCode::Unavailable, "Focus vault is frozen"));
         }
         let app = self.app.clone();
-        let (vault_id, generation) = tauri::async_runtime::spawn_blocking(move || {
+        let (vault_id, status) = tauri::async_runtime::spawn_blocking(move || {
             let vault_id = crate::vault::active_vault_id(&app)?;
             let status = app
                 .state::<crate::vault::ownership::VaultOwnershipManager>()
                 .status(&vault_id)?;
-            if !status.can_write {
-                return Err("This vault is read-only on this device".to_owned());
-            }
-            Ok::<_, String>((vault_id, status.generation))
+            Ok::<_, String>((vault_id, status))
         })
         .await
         .map_err(|error| error.to_string())??;
+        if !status.can_write {
+            return Err(error(
+                FocusErrorCode::ReadOnly,
+                "This vault is read-only on this device",
+            ));
+        }
+        let generation = status.generation;
         let attached = self.projection.vault_id.as_deref() == Some(&vault_id)
             && self.ownership_generation == Some(generation)
             && self.pool.is_some();

@@ -1895,6 +1895,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "ganbaru-sync"
+version = "0.1.0"
+dependencies = [
+ "ganbaru-db",
+ "ganbaru-people",
+ "ganbaru-sync-contracts",
+ "sqlx",
+ "tokio",
+]
+
+[[package]]
+name = "ganbaru-sync-contracts"
+version = "0.1.0"
+dependencies = [
+ "ganbaru-people",
+ "ring",
+ "sha2",
+]
+
+[[package]]
 name = "ganbaru-tauri-app"
 version = "0.1.5"
 dependencies = [
@@ -1916,6 +1936,8 @@ dependencies = [
  "ganbaru-notes",
  "ganbaru-people",
  "ganbaru-pomodoro",
+ "ganbaru-sync",
+ "ganbaru-sync-contracts",
  "ganbaru-working-folders",
  "gtk",
  "jiff",

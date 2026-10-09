@@ -509,7 +509,8 @@ pub(crate) fn resume_native_runtimes<R: Runtime>(app: &tauri::AppHandle<R>) -> R
     let distractions = crate::distractions::android::runtime::resume_after_vault_handoff(app);
     #[cfg(target_os = "ios")]
     let distractions = Ok(());
-    focus.and(music).and(distractions)
+    let sync = crate::sync::resume_after_vault_handoff(app);
+    focus.and(music).and(distractions).and(sync)
 }
 
 #[cfg(desktop)]
@@ -810,7 +811,6 @@ pub(crate) fn active_vault_id<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<S
     active_vault(app).map(|(_, manifest)| manifest.vault_id)
 }
 
-#[cfg(desktop)]
 pub fn active_database_path<R: Runtime>(app: &tauri::AppHandle<R>) -> Result<PathBuf, String> {
     Ok(database_path(&active_vault_path(app)?))
 }

@@ -47,12 +47,12 @@ fn hot_domain_queries_use_expected_indexes() {
             ),
             (
                 "active Quick notes",
-                "SELECT id FROM quick_notes WHERE archived = 0 AND trashed_at IS NULL ORDER BY pinned DESC, manual_order ASC, id ASC LIMIT 60",
+                "SELECT id FROM quick_notes WHERE archived = 0 AND trashed_at IS NULL ORDER BY pinned DESC, order_key ASC, id ASC LIMIT 60",
                 "idx_quick_notes_active",
             ),
             (
                 "tagged Quick notes",
-                "SELECT id FROM quick_notes WHERE tag_id = 'tag-1' AND archived = 0 AND trashed_at IS NULL ORDER BY pinned DESC, manual_order ASC, id ASC LIMIT 60",
+                "SELECT id FROM quick_notes WHERE tag_id = 'tag-1' AND archived = 0 AND trashed_at IS NULL ORDER BY pinned DESC, order_key ASC, id ASC LIMIT 60",
                 "idx_quick_notes_tag_active",
             ),
         ];

@@ -152,6 +152,7 @@ describe("vault state api", () => {
       generation: 4,
       role: "read-only",
       canWrite: false,
+      replicatedWrites: false,
       transferPhase: { kind: "stable" },
     });
     const { getVaultOwnershipStatus } = await loadModule();
@@ -163,6 +164,7 @@ describe("vault state api", () => {
       generation: 4,
       role: "read-only",
       canWrite: false,
+      replicatedWrites: false,
       transferPhase: { kind: "stable" },
     });
   });
@@ -175,6 +177,7 @@ describe("vault state api", () => {
       generation: 4,
       role: "read-only",
       canWrite: true,
+      replicatedWrites: false,
       transferPhase: { kind: "stable" },
     });
     const { getVaultOwnershipStatus } = await loadModule();
@@ -182,5 +185,27 @@ describe("vault state api", () => {
     await expect(getVaultOwnershipStatus()).rejects.toThrow(
       "vault ownership response has an inconsistent role",
     );
+  });
+  it("accepts replicated writes only on read-only replicas", async () => {
+    const replica = {
+      vaultId: "vault-1",
+      deviceId: "phone",
+      ownerDeviceId: "desktop",
+      generation: 4,
+      role: "read-only",
+      canWrite: false,
+      replicatedWrites: true,
+      transferPhase: { kind: "stable" },
+    };
+    invokeMock.mockResolvedValueOnce(replica);
+    const { getVaultOwnershipStatus } = await loadModule();
+    await expect(getVaultOwnershipStatus()).resolves.toMatchObject({ replicatedWrites: true, canWrite: false });
+
+    invokeMock.mockResolvedValueOnce({ ...replica, role: "owner", canWrite: true });
+    await expect(getVaultOwnershipStatus()).rejects.toThrow("inconsistent replicated writes");
+
+    const { replicatedWrites: _omitted, ...withoutFlag } = replica;
+    invokeMock.mockResolvedValueOnce(withoutFlag);
+    await expect(getVaultOwnershipStatus()).rejects.toThrow("vault ownership response is incomplete");
   });
 });
