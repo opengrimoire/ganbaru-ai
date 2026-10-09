@@ -159,6 +159,3 @@ zip = { version = "8", default-features = false, features = ["deflate"] }
 
 [profile.dev]
 debug = "line-tables-only"
-
-[profile.test]
-debug = 1

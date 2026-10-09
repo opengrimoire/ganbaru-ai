@@ -168,7 +168,7 @@ Read `docs/testing/README.md` when changing tests, validation scripts, task orde
 - Use the root `check`, `test`, and `validate` scripts for broad verification instead of direct full-suite `turbo`, `vitest`, or `cargo` commands. They run Rust before frontend work, use one Cargo build job and one Rust test thread, and split Vitest into sequential one-worker shards. `validate:ci` (two Cargo jobs) is for hosted Linux CI only. Do not raise concurrency, combine stages, or remove sharding without measuring peak memory and confirming coverage.
 - Never run Cargo work concurrently with Vitest, Svelte checks, Turbo, or another Node validation command, and never start another validation command while a root `check`, `test`, `validate`, or `validate:full` is running.
 - For focused checks, use one Vitest worker and one Cargo job and test thread. Add `--lib` when the filtered Rust test is in the library; use `--bin <name>` only when testing that binary. Confirm focused Vitest runs report only the requested files.
-- The workspace test profile uses limited debug information; do not restore full test debug information unless a debugger session needs it.
+- The workspace test profile inherits the development profile's line-tables-only debug information so both share dependency artifacts; do not restore full test debug information unless a debugger session needs it.
 - Keep Cargo commands portable across Linux, Windows, and macOS. Do not require an external linker; optional linker optimizations must fall back to the standard toolchain and be benchmarked before adoption.
 
 **Choosing a gate:**
