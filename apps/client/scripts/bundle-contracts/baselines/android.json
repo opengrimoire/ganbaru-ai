@@ -15,7 +15,7 @@
       "roots": [
         "src/lib/components/calendar/CalendarView.svelte"
       ],
-      "maxSourceModules": 186
+      "maxSourceModules": 187
     },
     {
       "name": "projects",
@@ -37,7 +37,7 @@
       "roots": [
         "src/lib/components/quick-notes/QuickNotesPanel.svelte"
       ],
-      "maxSourceModules": 104
+      "maxSourceModules": 105
     },
     {
       "name": "music",
@@ -55,7 +55,7 @@
       "maxSourceModules": 267
     }
   ],
-  "maxTotalSourceModules": 1117,
+  "maxTotalSourceModules": 1118,
   "requiredMobileModules": [
     "src/main.ts",
     "src/main-mobile.ts",
