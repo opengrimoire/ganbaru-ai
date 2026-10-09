@@ -390,7 +390,15 @@ impl ServiceState {
         } else {
             SyncRole::Hub
         });
-        let Some(session) = Session::open(app, pool, &vault_id, KeyRelease::Request).await? else {
+        let session = match Session::open(app, pool.clone(), &vault_id, KeyRelease::Request).await?
+        {
+            Some(session) => Some(session),
+            None if create_identity(app, &pool).await? => {
+                Session::open(app, pool, &vault_id, KeyRelease::Request).await?
+            }
+            None => None,
+        };
+        let Some(session) = session else {
             view.state = SyncState::WaitingForIdentity;
             return Ok(Next::Idle);
         };
@@ -576,6 +584,20 @@ impl ServiceState {
         }
         emit_status(app, &view);
         self.view = view;
+    }
+}
+
+/// Creates the person identity the sync space is anchored at when this device generates it:
+/// the writable owner without a coordinator pin. Other devices wait for the row to arrive with
+/// a vault refresh. Returns whether an identity now exists.
+async fn create_identity<R: Runtime>(
+    app: &AppHandle<R>,
+    pool: &SqlitePool,
+) -> Result<bool, String> {
+    match crate::people::identity::ensure_identity(app, pool).await {
+        Ok(_) => Ok(true),
+        Err(crate::people::PeopleError::IdentityUnavailable(_)) => Ok(false),
+        Err(error) => Err(format!("create person identity: {}", error.into_message())),
     }
 }
 
