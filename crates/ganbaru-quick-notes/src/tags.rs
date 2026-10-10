@@ -1,3 +1,5 @@
+//! Quick notes tags: an ordered, uniquely named set that filters the active notes.
+
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, Sqlite, SqlitePool, Transaction};
 
@@ -41,7 +43,8 @@ pub struct QuickNoteTagRead {
     updated_at: String,
 }
 
-pub(super) async fn list_from_pool(pool: &SqlitePool) -> Result<Vec<QuickNoteTagRead>, String> {
+/// Every tag in display order.
+pub async fn list_from_pool(pool: &SqlitePool) -> Result<Vec<QuickNoteTagRead>, String> {
     sqlx::query_as::<_, QuickNoteTagRead>(
         "SELECT id, name, order_key, created_at, updated_at
          FROM quick_note_tags ORDER BY order_key, id",
@@ -85,7 +88,7 @@ async fn ensure_unique_name(
 }
 
 /// Creates a tag after the last one.
-pub(super) async fn create_from_pool(
+pub async fn create_from_pool(
     pool: &SqlitePool,
     tag: QuickNoteTagWrite,
 ) -> Result<QuickNoteTagRead, QuickNoteTagError> {
@@ -129,7 +132,8 @@ pub(super) async fn create_from_pool(
     load(pool, &tag.id).await
 }
 
-pub(super) async fn rename_from_pool(
+/// Renames a tag, keeping names unique without regard to case.
+pub async fn rename_from_pool(
     pool: &SqlitePool,
     tag: QuickNoteTagWrite,
 ) -> Result<QuickNoteTagRead, QuickNoteTagError> {
@@ -163,7 +167,7 @@ pub(super) async fn rename_from_pool(
 
 /// Deletes a tag and untags its notes. Deleting a missing tag succeeds, because another device
 /// may have deleted it first.
-pub(super) async fn delete_from_pool(pool: &SqlitePool, id: &str) -> Result<(), QuickNoteTagError> {
+pub async fn delete_from_pool(pool: &SqlitePool, id: &str) -> Result<(), QuickNoteTagError> {
     validate_id(id)?;
     let mut tx = pool
         .begin()

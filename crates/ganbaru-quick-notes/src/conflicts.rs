@@ -4,7 +4,9 @@
 
 use ganbaru_sync::domains::quick_notes::decode_runs;
 use ganbaru_sync::manifest::vault::quick_notes::{NOTES_TABLE, note_group};
-use ganbaru_sync::{ConflictDetail, ConflictVersion, Engine, SpaceContext, local};
+use ganbaru_sync::{
+    ConflictDetail, ConflictVersion, DeviceNames, DeviceRef, Engine, SpaceContext, local,
+};
 use ganbaru_sync_contracts::{Field, GroupId, Value, WriterId};
 use serde::{Deserialize, Serialize};
 use sqlx::{Sqlite, SqlitePool, Transaction};
@@ -13,7 +15,6 @@ use super::{
     QuickNoteRead, QuickNoteTextRun, QuickNoteWrite, body_plain_text, insert_note,
     load_note_from_pool, new_note_id, normalized_runs, replace_runs, validate_id,
 };
-use crate::sync::{DeviceNames, DeviceRef};
 
 /// Stable conflict outcomes, independent of diagnostic wording.
 #[derive(Debug, Serialize)]
@@ -184,7 +185,7 @@ async fn details(
 }
 
 /// Reads the conflicts of a note.
-pub(crate) async fn conflict_from_pool(
+pub async fn conflict_from_pool(
     pool: &SqlitePool,
     vault_id: &str,
     devices: &DeviceNames,
@@ -306,7 +307,7 @@ async fn insert_copy(
 
 /// Resolves a field in conflict. The chosen value is written as a local edit and the field is
 /// sealed even when its value did not change, so the write covers every version it saw.
-pub(crate) async fn resolve_from_pool(
+pub async fn resolve_from_pool(
     pool: &SqlitePool,
     vault_id: &str,
     request: QuickNoteConflictResolution,

@@ -12,7 +12,7 @@ use ganbaru_sync::{Engine, SpaceContext};
 use ganbaru_sync_contracts::op::RevokeReason;
 use ganbaru_sync_contracts::{VersionVector, WriterId};
 use sqlx::SqlitePool;
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
@@ -548,7 +548,7 @@ async fn converge(hub: &mut Replica, phone: &mut Replica, transport: &DirectTran
 }
 
 async fn note_json(replica: &Replica, id: &str) -> serde_json::Value {
-    let note = crate::quick_notes::load_note_from_pool(&replica.pool, id)
+    let note = ganbaru_quick_notes::load_note_from_pool(&replica.pool, id)
         .await
         .expect("load note");
     serde_json::to_value(note).expect("serialize note")
@@ -593,10 +593,10 @@ fn a_resolved_title_conflict_closes_on_both_replicas() {
         assert_eq!(phone_note["hasConflict"], true);
         assert_eq!(hub_note["title"], phone_note["title"]);
 
-        let conflict = crate::quick_notes::conflict_from_pool(
+        let conflict = ganbaru_quick_notes::conflict_from_pool(
             &phone.pool,
             VAULT_ID,
-            &crate::sync::DeviceNames::unlabeled(PHONE_DEVICE),
+            &ganbaru_sync::DeviceNames::new(PHONE_DEVICE, HashMap::new()),
             "note-1",
         )
         .await
@@ -630,7 +630,7 @@ fn a_resolved_title_conflict_closes_on_both_replicas() {
         }))
         .expect("resolution");
         let resolved =
-            crate::quick_notes::resolve_from_pool(&phone.pool, VAULT_ID, resolution, NOW_MS + 1)
+            ganbaru_quick_notes::resolve_from_pool(&phone.pool, VAULT_ID, resolution, NOW_MS + 1)
                 .await
                 .expect("resolve conflict");
         let resolved = serde_json::to_value(resolved).expect("serialize resolution");

@@ -24,6 +24,7 @@ ganbaru-db = { workspace = true }
 ganbaru-notes = { workspace = true }
 ganbaru-people = { workspace = true }
 ganbaru-pomodoro = { workspace = true }
+ganbaru-quick-notes = { workspace = true }
 ganbaru-sync = { workspace = true }
 ganbaru-sync-contracts = { workspace = true }
 ganbaru-working-folders = { workspace = true }

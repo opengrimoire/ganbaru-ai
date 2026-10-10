@@ -15,6 +15,7 @@ members = [
   "crates/ganbaru-notes",
   "crates/ganbaru-people",
   "crates/ganbaru-pomodoro",
+  "crates/ganbaru-quick-notes",
   "crates/ganbaru-sync",
   "crates/ganbaru-sync-contracts",
   "crates/ganbaru-working-folders",
@@ -50,6 +51,7 @@ ganbaru-mobile-notifications = { path = "crates/ganbaru-mobile-notifications" }
 ganbaru-notes = { path = "crates/ganbaru-notes" }
 ganbaru-people = { path = "crates/ganbaru-people" }
 ganbaru-pomodoro = { path = "crates/ganbaru-pomodoro" }
+ganbaru-quick-notes = { path = "crates/ganbaru-quick-notes" }
 ganbaru-sync = { path = "crates/ganbaru-sync" }
 ganbaru-sync-contracts = { path = "crates/ganbaru-sync-contracts" }
 ganbaru-working-folders = { path = "crates/ganbaru-working-folders" }

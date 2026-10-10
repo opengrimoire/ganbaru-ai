@@ -1895,12 +1895,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "ganbaru-quick-notes"
+version = "0.1.0"
+dependencies = [
+ "ganbaru-db",
+ "ganbaru-sync",
+ "ganbaru-sync-contracts",
+ "ring",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "tokio",
+]
+
+[[package]]
 name = "ganbaru-sync"
 version = "0.1.0"
 dependencies = [
  "ganbaru-db",
  "ganbaru-people",
  "ganbaru-sync-contracts",
+ "serde",
  "sqlx",
  "tokio",
 ]
@@ -1936,6 +1951,7 @@ dependencies = [
  "ganbaru-notes",
  "ganbaru-people",
  "ganbaru-pomodoro",
+ "ganbaru-quick-notes",
  "ganbaru-sync",
  "ganbaru-sync-contracts",
  "ganbaru-working-folders",

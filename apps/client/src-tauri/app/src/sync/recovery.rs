@@ -2,10 +2,9 @@
 //! engine directly; restoring and discarding seal with the local writer, so the service runs
 //! them inside a pass.
 
-use super::devices::{DeviceNames, DeviceRef};
 use super::writer::ActiveWriter;
 use ganbaru_sync::manifest::vault::quick_notes::{NOTES, NOTES_TABLE};
-use ganbaru_sync::{Engine, SpaceContext, local};
+use ganbaru_sync::{DeviceRef, Engine, SpaceContext, local};
 use ganbaru_sync_contracts::TableId;
 use serde::{Deserialize, Serialize};
 use sqlx::pool::PoolConnection;
@@ -84,7 +83,7 @@ pub(crate) async fn list<R: Runtime>(app: &AppHandle<R>) -> Result<Vec<RecoveryE
         .await
         .map_err(|error| format!("read recovery offers: {error}"))?;
     drop(conn);
-    let devices = DeviceNames::read(app)?;
+    let devices = super::devices::read(app)?;
     let mut views: Vec<RecoveryEntryView> = entries
         .into_iter()
         .filter_map(|entry| {
@@ -130,7 +129,7 @@ pub(super) async fn close(
                     .map_err(|error| format!("read recovered values: {error}"))?
             }
             .ok_or_else(|| "the recovery offer is closed".to_string())?;
-            Some(crate::quick_notes::restore_recovered(pool, &values).await?)
+            Some(ganbaru_quick_notes::restore_recovered(pool, &values).await?)
         }
     };
     let report = {

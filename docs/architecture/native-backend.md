@@ -14,6 +14,7 @@ The Cargo workspace extracts domains that benefit from Tauri-free contracts and 
 
 - `ganbaru-db` owns the SQLite pool registry, connection configuration, embedded migrations, and schema tests.
 - `ganbaru-pomodoro` owns focus persistence, history, validation, recovery, local activity admission, transactional execution, and adaptive run and phase decisions.
+- `ganbaru-quick-notes` owns Quick notes persistence, search windows, revisioned writes, lifecycle and trash retention, ordering, tags, and resolution of replicated conflicts.
 - `ganbaru-notes` owns the Notes graph, persistence, transfers, history, assets, and bounded file operations.
 - `ganbaru-chat-contracts` defines provider-neutral identifiers, commands, events, read models, and errors.
 - `ganbaru-chat-providers` owns provider processes, transports, normalization, cancellation, and registry behavior.
@@ -26,7 +27,7 @@ The Cargo workspace extracts domains that benefit from Tauri-free contracts and 
 
 The application's sync module composes the engine with the vault: it owns the per-vault service lifecycle around handoff quiescence, guarded replica database access, writer keys and the device-local writer record, carry-forward of local operations across whole-vault replacement, the hub and client sides of the LAN transport, and the status, pause, sync now, and recovery commands. Domain modules keep their own sync-facing commands, such as Quick notes conflict resolution. The engine never touches Tauri state, key stores, or the network, so its merge behavior is testable with in-memory databases. See the [sync engine decision](decisions/sync-engine.md) and [Device linking and synchronization](../data/sync.md).
 
-Code stays in the application crate when it is only composition or Tauri adaptation. It moves to a core crate when the domain boundary, portability, or independent tests justify the extraction.
+Code stays in the application crate when it is composition, Tauri adaptation, or bound to Tauri-managed platform services. Tauri-free domain logic belongs in a core crate, which keeps its tests independent and bounds the application crate's compiler peak.
 
 ## SQLite
 

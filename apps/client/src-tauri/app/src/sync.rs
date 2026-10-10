@@ -6,7 +6,7 @@ mod access;
 mod carry_forward;
 mod client;
 pub(crate) mod commands;
-mod devices;
+pub(crate) mod devices;
 #[cfg(desktop)]
 pub(crate) mod hub;
 mod recovery;
@@ -18,7 +18,6 @@ mod writer;
 #[cfg(test)]
 mod tests;
 
-pub(crate) use devices::{DeviceNames, DeviceRef};
 #[cfg(desktop)]
 pub(crate) use service::sync_hub;
 pub(crate) use service::{

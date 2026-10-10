@@ -2,6 +2,15 @@ use super::*;
 use ganbaru_db::run_migrations;
 use sqlx::sqlite::SqlitePoolOptions;
 
+/// Runs persistence tests on a single-thread runtime without platform initialization.
+fn block_on<F: std::future::Future>(future: F) -> F::Output {
+    tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("create quick notes test runtime")
+        .block_on(future)
+}
+
 async fn pool() -> SqlitePool {
     let pool = SqlitePoolOptions::new()
         .max_connections(1)
@@ -129,7 +138,7 @@ fn normalizes_adjacent_runs_and_enforces_limits() {
 
 #[test]
 fn search_lifecycle_and_revision_conflicts_are_consistent() {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         let pool = pool().await;
         create(&pool, "one", "alpha body").await;
         create(&pool, "two", "beta body").await;
@@ -187,7 +196,7 @@ fn search_lifecycle_and_revision_conflicts_are_consistent() {
 
 #[test]
 fn list_cursor_preserves_pinned_then_manual_order() {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         let pool = pool().await;
         for id in ["a", "b", "c"] {
             create(&pool, id, id).await;
@@ -218,7 +227,7 @@ fn list_cursor_preserves_pinned_then_manual_order() {
 
 #[test]
 fn new_and_returning_notes_go_first_in_their_group() {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         let pool = pool().await;
         for id in ["a", "b", "c"] {
             create(&pool, id, id).await;
@@ -315,7 +324,7 @@ fn new_and_returning_notes_go_first_in_their_group() {
 
 #[test]
 fn pinning_with_a_stale_revision_conflicts_without_moving() {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         let pool = pool().await;
         create(&pool, "a", "a").await;
         let error = set_pinned_from_pool(
@@ -335,7 +344,7 @@ fn pinning_with_a_stale_revision_conflicts_without_moving() {
 
 #[test]
 fn reorder_persists_between_adjacent_visible_anchors() {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         let pool = pool().await;
         for id in ["c", "b", "hidden", "a"] {
             create(&pool, id, id).await;
@@ -368,7 +377,7 @@ fn reorder_persists_between_adjacent_visible_anchors() {
 
 #[test]
 fn reorder_separates_rows_that_share_a_key() {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         let pool = pool().await;
         for id in ["d", "c", "b", "a", "n"] {
             create(&pool, id, id).await;
@@ -399,7 +408,7 @@ fn reorder_separates_rows_that_share_a_key() {
 
 #[test]
 fn reorder_rejects_nonadjacent_and_unknown_anchors() {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         let pool = pool().await;
         for id in ["d", "c", "b", "a"] {
             create(&pool, id, id).await;
@@ -425,7 +434,7 @@ fn reorder_rejects_nonadjacent_and_unknown_anchors() {
 
 #[test]
 fn expired_trash_is_hidden_then_purged_with_its_runs_and_search_projection() {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         let pool = pool().await;
         create(&pool, "expired", "old body").await;
         create(&pool, "recent", "new body").await;
@@ -492,7 +501,7 @@ fn expired_trash_is_hidden_then_purged_with_its_runs_and_search_projection() {
 
 #[test]
 fn tag_filtering_returns_only_matching_notes() {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         let pool = pool().await;
         create_tag(&pool, "tag-1", "Work").await.unwrap();
         let mut tagged = note("tagged", "tagged body");
@@ -509,7 +518,7 @@ fn tag_filtering_returns_only_matching_notes() {
 
 #[test]
 fn tags_append_in_order_and_enforce_the_local_create_rules() {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         let pool = pool().await;
         for index in 0..9 {
             create_tag(&pool, &format!("tag-{index}"), &format!("Tag {index}"))
@@ -541,7 +550,7 @@ fn tags_append_in_order_and_enforce_the_local_create_rules() {
 
 #[test]
 fn renaming_a_tag_checks_names_and_existence() {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         let pool = pool().await;
         create_tag(&pool, "tag-1", "Work").await.unwrap();
         create_tag(&pool, "tag-2", "Home").await.unwrap();
@@ -572,7 +581,7 @@ fn renaming_a_tag_checks_names_and_existence() {
 
 #[test]
 fn deleting_a_tag_untags_its_notes_with_a_new_revision() {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         let pool = pool().await;
         create_tag(&pool, "tag-1", "Work").await.unwrap();
         let mut tagged = note("tagged", "body");
@@ -610,7 +619,7 @@ fn deleting_a_tag_untags_its_notes_with_a_new_revision() {
 
 #[test]
 fn writes_that_name_a_deleted_tag_leave_the_note_untagged() {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         let pool = pool().await;
         let mut created = note("note", "body");
         created.tag_id = Some("gone".into());
