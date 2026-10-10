@@ -16,7 +16,7 @@ Chat is Ganbaru AI's project communication and coding-work surface. It combines 
 | Private scratch execution with explicit promotion and cleanup | Implemented |
 | Structured delegation, budgets, quiet periods, and task-linked assignments | Planned |
 | Direct messages and task discussions | Planned; the schema reserves these conversation kinds |
-| Human members, invitations, and encrypted sync | Planned; the experience is designed in [People and invitations](../collaboration/README.md) |
+| Human members, invitations, and encrypted sync | Planned; the experience is designed in [Contacts and invitations](../collaboration/README.md) |
 
 ## Product boundary
 

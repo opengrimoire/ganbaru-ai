@@ -52,11 +52,11 @@ Linked-device accounting follows [Sync](../sync.md#distraction-usage-exception).
 
 Profile metadata is portable configuration. Profile and project-icon bytes use bounded feature-owned asset paths, and rows store managed relative identity, never an absolute or hardcoded vault path. Replacing an image stages validated bytes, updates the relationship atomically, and removes the old asset only after rechecking references.
 
-## People
+## Contacts
 
 Source: `crates/ganbaru-db/migrations/`, `crates/ganbaru-contacts/`, and `apps/client/src-tauri/app/src/contacts/`.
 
-The vault holds one local identity row (public key, current card nonce, card revision), contact rows keyed by the contact's public key with a state of active or blocked and two independent trust scopes with optional expiry, and contact request rows in either direction with the peer's signed card, delivery hint, expiry, and last delivery error. The private key is never stored in the vault; see [People and contact requests](../sync.md#people-and-contact-requests). Contacts and requests carry a revision, and every mutation names the revision it expects. Regenerating the card changes only the nonce and revision, so existing contacts keep working while earlier cards stop admitting requests. Removing a contact deletes its row; blocking keeps a row in the blocked state so later requests from that key can be dropped silently. Rows for the same vault follow it across linked devices as part of the whole-vault handoff.
+The vault holds one local identity row (public key, current card nonce, card revision), contact rows keyed by the contact's public key with a state of active or blocked and two independent trust scopes with optional expiry, and contact request rows in either direction with the peer's signed card, delivery hint, expiry, and last delivery error. The private key is never stored in the vault; see [Contacts and contact requests](../sync.md#contacts-and-contact-requests). Contacts and requests carry a revision, and every mutation names the revision it expects. Regenerating the card changes only the nonce and revision, so existing contacts keep working while earlier cards stop admitting requests. Removing a contact deletes its row; blocking keeps a row in the blocked state so later requests from that key can be dropped silently. Rows for the same vault follow it across linked devices as part of the whole-vault handoff.
 
 ## Domain evolution
 

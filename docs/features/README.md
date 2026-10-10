@@ -20,7 +20,7 @@ Source paths, schema inventories, cache tuning, device test matrices, and delive
 | Localization | Partial | [Localization](localization.md) |
 | Quick notes | Implemented | [Quick notes](quick-notes.md) |
 | Profile | Implemented | [Profile](profile.md) |
-| People and invitations | Partial | [People and invitations](collaboration/README.md) |
+| Contacts and invitations | Partial | [Contacts and invitations](collaboration/README.md) |
 
 Linked devices share a vault through single-writer whole-vault handoff. Quick notes are the first domain with concurrent sync, editable on every linked device; it is implemented in source, with physical multi-device acceptance pending. Concurrent sync for other domains and the encrypted relay remain planned. See [Device linking and synchronization](../data/sync.md).
 

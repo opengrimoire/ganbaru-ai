@@ -87,7 +87,7 @@ Reviewable planning proposals, task-linked agent runs, assignment and review wor
 
 ### Human collaboration
 
-Multi-person collaboration with resource-scoped authorization, invitations, revocation, and permission-safe derived data. This is separate from linking one person's devices. The experience is specified in [People and invitations](features/collaboration/README.md); delivery belongs to [Device linking and synchronization](data/sync.md).
+Multi-person collaboration with resource-scoped authorization, invitations, revocation, and permission-safe derived data. This is separate from linking one person's devices. The experience is specified in [Contacts and invitations](features/collaboration/README.md); delivery belongs to [Device linking and synchronization](data/sync.md).
 
 ### General BYOK assistants and external access
 

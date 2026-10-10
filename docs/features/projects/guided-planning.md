@@ -54,4 +54,4 @@ Reports summarize progress, blockers, risks, schedule changes, review needs, and
 
 Software projects can link an authorized working folder, Chat runs, checkpoints, commits, and review artifacts. Git remains canonical for repository content; Project tasks and decisions remain canonical organizational records.
 
-Future collaboration applies project, task, Notes, conversation, and working-folder permissions separately. Assigning a task never implies access to every project Note or filesystem path. See [People and invitations](../collaboration/README.md) and [access control](../../data/access-control.md).
+Future collaboration applies project, task, Notes, conversation, and working-folder permissions separately. Assigning a task never implies access to every project Note or filesystem path. See [Contacts and invitations](../collaboration/README.md) and [access control](../../data/access-control.md).
