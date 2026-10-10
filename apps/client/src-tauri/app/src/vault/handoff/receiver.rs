@@ -390,7 +390,7 @@ async fn refresh_after_reconnect(app: &tauri::AppHandle) -> bool {
     .await;
     let reachable = poll.is_ok();
     if reachable {
-        crate::people::identity::try_release(app).await;
+        crate::contacts::identity::try_release(app).await;
     }
     let was_connected = lifecycle.connected.swap(reachable, Ordering::AcqRel);
     if let Ok(Some(purpose)) = poll {

@@ -14,7 +14,7 @@ doctest = false
 workspace = true
 
 [dependencies]
-ganbaru-people = { workspace = true }
+ganbaru-contacts = { workspace = true }
 ganbaru-sync-contracts = { workspace = true }
 serde = { workspace = true }
 sqlx = { workspace = true }

@@ -1823,6 +1823,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "ganbaru-contacts"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "chrono",
+ "ring",
+ "serde",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
 name = "ganbaru-db"
 version = "0.1.5"
 dependencies = [
@@ -1850,7 +1862,7 @@ version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
  "chrono",
- "ganbaru-people",
+ "ganbaru-contacts",
  "ganbaru-sync-contracts",
  "qrcode",
  "quircs",
@@ -1967,18 +1979,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ganbaru-people"
-version = "0.1.0"
-dependencies = [
- "base64 0.22.1",
- "chrono",
- "ring",
- "serde",
- "serde_json",
- "sha2",
-]
-
-[[package]]
 name = "ganbaru-pomodoro"
 version = "0.1.5"
 dependencies = [
@@ -2021,8 +2021,8 @@ dependencies = [
 name = "ganbaru-sync"
 version = "0.1.0"
 dependencies = [
+ "ganbaru-contacts",
  "ganbaru-db",
- "ganbaru-people",
  "ganbaru-sync-contracts",
  "serde",
  "sqlx",
@@ -2033,7 +2033,7 @@ dependencies = [
 name = "ganbaru-sync-contracts"
 version = "0.1.0"
 dependencies = [
- "ganbaru-people",
+ "ganbaru-contacts",
  "ring",
  "sha2",
 ]
@@ -2043,9 +2043,9 @@ name = "ganbaru-sync-replica"
 version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
+ "ganbaru-contacts",
  "ganbaru-db",
  "ganbaru-handoff",
- "ganbaru-people",
  "ganbaru-quick-notes",
  "ganbaru-sync",
  "ganbaru-sync-contracts",
@@ -2071,6 +2071,7 @@ dependencies = [
  "ganbaru-chat-contracts",
  "ganbaru-chat-providers",
  "ganbaru-civil-time",
+ "ganbaru-contacts",
  "ganbaru-db",
  "ganbaru-distractions",
  "ganbaru-handoff",
@@ -2082,7 +2083,6 @@ dependencies = [
  "ganbaru-music-library",
  "ganbaru-music-player",
  "ganbaru-notes",
- "ganbaru-people",
  "ganbaru-pomodoro",
  "ganbaru-projects",
  "ganbaru-quick-notes",

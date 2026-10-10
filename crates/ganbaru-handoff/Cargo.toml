@@ -19,7 +19,7 @@ workspace = true
 [dependencies]
 base64 = { workspace = true }
 chrono = { workspace = true }
-ganbaru-people = { workspace = true }
+ganbaru-contacts = { workspace = true }
 ganbaru-sync-contracts = { workspace = true }
 qrcode = { workspace = true }
 quircs = { workspace = true }

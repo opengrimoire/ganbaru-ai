@@ -1,15 +1,15 @@
-use super::contacts::{self, ContactState, RequestDirection, RequestState, TrustGrant};
 use super::identity::LocalIdentity;
 use super::requests::{
     self, CARD_REVOKED_CODE, INVALID_REQUEST_CODE, MAX_PENDING_RECEIVED, PeerReply, StatusOutcome,
 };
+use super::store::{self, ContactState, RequestDirection, RequestState, TrustGrant};
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-use ganbaru_db::run_migrations;
-use ganbaru_people::{
+use ganbaru_contacts::{
     CARD_NONCE_BYTES, ContactCard, PersonKeyPair, SignedCard, TrustKind, encode_nonce,
     random_bytes, request_signature_payload, sign_card, status_signature_payload,
 };
+use ganbaru_db::run_migrations;
 use sqlx::SqlitePool;
 
 async fn migrated_memory_pool() -> SqlitePool {
@@ -90,7 +90,7 @@ async fn deliver(
     requests::receive_request(
         pool,
         &recipient.identity,
-        contacts::now(),
+        store::now(),
         &encode_nonce(&recipient.identity.card_nonce),
         &requester.card().text(),
         request_id,
@@ -117,7 +117,7 @@ async fn verified_request_is_stored_as_pending_received() {
         received("contact-one")
     );
 
-    let rows = contacts::list_requests(&pool).await.unwrap();
+    let rows = store::list_requests(&pool).await.unwrap();
     assert_eq!(rows.len(), 1);
     let row = &rows[0];
     assert_eq!(row.direction, "received");
@@ -141,7 +141,7 @@ async fn stale_nonce_is_rejected_as_revoked_without_a_row() {
     let reply = requests::receive_request(
         &pool,
         &recipient.identity,
-        contacts::now(),
+        store::now(),
         &encode_nonce(&old_nonce),
         &requester.card().text(),
         "contact-old",
@@ -158,7 +158,7 @@ async fn stale_nonce_is_rejected_as_revoked_without_a_row() {
             ..
         }
     ));
-    assert!(contacts::list_requests(&pool).await.unwrap().is_empty());
+    assert!(store::list_requests(&pool).await.unwrap().is_empty());
 }
 
 #[tokio::test]
@@ -170,7 +170,7 @@ async fn request_signed_for_another_id_is_invalid() {
     let reply = requests::receive_request(
         &pool,
         &recipient.identity,
-        contacts::now(),
+        store::now(),
         &encode_nonce(&recipient.identity.card_nonce),
         &requester.card().text(),
         "contact-b",
@@ -186,7 +186,7 @@ async fn request_signed_for_another_id_is_invalid() {
             ..
         }
     ));
-    assert!(contacts::list_requests(&pool).await.unwrap().is_empty());
+    assert!(store::list_requests(&pool).await.unwrap().is_empty());
 }
 
 #[tokio::test]
@@ -196,25 +196,21 @@ async fn blocked_requester_gets_the_same_reply_and_no_row() {
     let requester = Person::new("Requester");
 
     let open_reply = deliver(&pool, &recipient, &requester, "contact-first").await;
-    requests::block_person(
-        &pool,
-        &requester.key.public_key().to_text(),
-        contacts::now(),
-    )
-    .await
-    .unwrap();
+    requests::block_person(&pool, &requester.key.public_key().to_text(), store::now())
+        .await
+        .unwrap();
     let blocked_reply = deliver(&pool, &recipient, &requester, "contact-second").await;
 
     assert_eq!(open_reply, received("contact-first"));
     assert_eq!(blocked_reply, received("contact-second"));
-    let rows = contacts::list_requests(&pool).await.unwrap();
+    let rows = store::list_requests(&pool).await.unwrap();
     assert_eq!(
         rows.len(),
         1,
         "blocking leaves only the declined first request"
     );
     assert_eq!(rows[0].state, "declined");
-    let contacts = contacts::list_contacts(&pool).await.unwrap();
+    let contacts = store::list_contacts(&pool).await.unwrap();
     assert_eq!(contacts.len(), 1);
     assert_eq!(contacts[0].state, "blocked");
     assert_eq!(contacts[0].display_name, "Requester");
@@ -240,7 +236,7 @@ async fn newer_request_from_the_same_person_replaces_the_pending_one() {
     deliver(&pool, &recipient, &requester, "contact-first").await;
     deliver(&pool, &recipient, &requester, "contact-second").await;
 
-    let rows = contacts::list_requests(&pool).await.unwrap();
+    let rows = store::list_requests(&pool).await.unwrap();
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0].id, "contact-second");
 }
@@ -262,7 +258,7 @@ async fn request_id_owned_by_another_person_is_invalid() {
             ..
         }
     ));
-    let rows = contacts::list_requests(&pool).await.unwrap();
+    let rows = store::list_requests(&pool).await.unwrap();
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0].public_key, first.key.public_key().to_text());
 }
@@ -282,7 +278,7 @@ async fn pending_received_requests_are_capped() {
         );
     }
 
-    let rows = contacts::list_requests(&pool).await.unwrap();
+    let rows = store::list_requests(&pool).await.unwrap();
     assert_eq!(rows.len(), total);
     let pending = rows.iter().filter(|row| row.state == "pending").count();
     let expired: Vec<&str> = rows
@@ -381,11 +377,11 @@ async fn accepting_creates_an_active_contact_with_the_chosen_trust() {
     let recipient = Person::new("Recipient");
     let requester = Person::new("Requester");
     deliver(&pool, &recipient, &requester, "contact-one").await;
-    let row = contacts::request_by_id(&pool, "contact-one")
+    let row = store::request_by_id(&pool, "contact-one")
         .await
         .unwrap()
         .unwrap();
-    let now = contacts::now();
+    let now = store::now();
 
     requests::accept_request(
         &pool,
@@ -398,7 +394,7 @@ async fn accepting_creates_an_active_contact_with_the_chosen_trust() {
     .await
     .unwrap();
 
-    let contacts_rows = contacts::list_contacts(&pool).await.unwrap();
+    let contacts_rows = store::list_contacts(&pool).await.unwrap();
     assert_eq!(contacts_rows.len(), 1);
     let contact = contacts_rows[0].clone().view().unwrap();
     assert_eq!(contact.state, ContactState::Active);
@@ -431,7 +427,7 @@ async fn accepting_with_a_stale_revision_is_a_conflict() {
     let recipient = Person::new("Recipient");
     let requester = Person::new("Requester");
     deliver(&pool, &recipient, &requester, "contact-one").await;
-    let row = contacts::request_by_id(&pool, "contact-one")
+    let row = store::request_by_id(&pool, "contact-one")
         .await
         .unwrap()
         .unwrap();
@@ -442,13 +438,13 @@ async fn accepting_with_a_stale_revision_is_a_conflict() {
         row.revision + 1,
         TrustKind::Once,
         TrustKind::Once,
-        contacts::now(),
+        store::now(),
     )
     .await
     .unwrap_err();
 
-    assert!(matches!(error, super::PeopleError::RevisionConflict(_)));
-    assert!(contacts::list_contacts(&pool).await.unwrap().is_empty());
+    assert!(matches!(error, super::ContactsError::RevisionConflict(_)));
+    assert!(store::list_contacts(&pool).await.unwrap().is_empty());
 }
 
 #[tokio::test]
@@ -457,7 +453,7 @@ async fn declining_answers_declined_and_cancel_only_touches_sent_rows() {
     let recipient = Person::new("Recipient");
     let requester = Person::new("Requester");
     deliver(&pool, &recipient, &requester, "contact-one").await;
-    let row = contacts::request_by_id(&pool, "contact-one")
+    let row = store::request_by_id(&pool, "contact-one")
         .await
         .unwrap()
         .unwrap();
@@ -472,7 +468,7 @@ async fn declining_answers_declined_and_cancel_only_touches_sent_rows() {
     .await;
     assert!(matches!(
         cancel,
-        Err(super::PeopleError::RevisionConflict(_))
+        Err(super::ContactsError::RevisionConflict(_))
     ));
 
     requests::close_request(
@@ -503,11 +499,11 @@ async fn trust_updates_and_removal_respect_revisions() {
     let recipient = Person::new("Recipient");
     let requester = Person::new("Requester");
     deliver(&pool, &recipient, &requester, "contact-one").await;
-    let row = contacts::request_by_id(&pool, "contact-one")
+    let row = store::request_by_id(&pool, "contact-one")
         .await
         .unwrap()
         .unwrap();
-    let now = contacts::now();
+    let now = store::now();
     requests::accept_request(
         &pool,
         "contact-one",
@@ -518,9 +514,9 @@ async fn trust_updates_and_removal_respect_revisions() {
     )
     .await
     .unwrap();
-    let contact = contacts::list_contacts(&pool).await.unwrap().remove(0);
+    let contact = store::list_contacts(&pool).await.unwrap().remove(0);
 
-    let stale = contacts::update_contact_trust(
+    let stale = store::update_contact_trust(
         &pool,
         &contact.id,
         contact.revision + 1,
@@ -530,7 +526,7 @@ async fn trust_updates_and_removal_respect_revisions() {
     )
     .await
     .unwrap();
-    let fresh = contacts::update_contact_trust(
+    let fresh = store::update_contact_trust(
         &pool,
         &contact.id,
         contact.revision,
@@ -540,7 +536,7 @@ async fn trust_updates_and_removal_respect_revisions() {
     )
     .await
     .unwrap();
-    let updated = contacts::contact_by_id(&pool, &contact.id)
+    let updated = store::contact_by_id(&pool, &contact.id)
         .await
         .unwrap()
         .unwrap();
@@ -551,16 +547,15 @@ async fn trust_updates_and_removal_respect_revisions() {
     assert_eq!(updated.revision, contact.revision + 1);
 
     let wrong_state =
-        contacts::delete_contact(&pool, &contact.id, updated.revision, ContactState::Blocked)
+        store::delete_contact(&pool, &contact.id, updated.revision, ContactState::Blocked)
             .await
             .unwrap();
-    let removed =
-        contacts::delete_contact(&pool, &contact.id, updated.revision, ContactState::Active)
-            .await
-            .unwrap();
+    let removed = store::delete_contact(&pool, &contact.id, updated.revision, ContactState::Active)
+        .await
+        .unwrap();
     assert!(!wrong_state);
     assert!(removed);
-    assert!(contacts::list_contacts(&pool).await.unwrap().is_empty());
+    assert!(store::list_contacts(&pool).await.unwrap().is_empty());
 }
 
 #[tokio::test]
@@ -569,11 +564,11 @@ async fn blocking_an_active_contact_clears_trust_and_unblocking_removes_the_row(
     let recipient = Person::new("Recipient");
     let requester = Person::new("Requester");
     deliver(&pool, &recipient, &requester, "contact-one").await;
-    let row = contacts::request_by_id(&pool, "contact-one")
+    let row = store::request_by_id(&pool, "contact-one")
         .await
         .unwrap()
         .unwrap();
-    let now = contacts::now();
+    let now = store::now();
     requests::accept_request(
         &pool,
         "contact-one",
@@ -587,26 +582,18 @@ async fn blocking_an_active_contact_clears_trust_and_unblocking_removes_the_row(
     let key = requester.key.public_key().to_text();
 
     requests::block_person(&pool, &key, now).await.unwrap();
-    let blocked = contacts::contact_by_key(&pool, &key)
-        .await
-        .unwrap()
-        .unwrap();
+    let blocked = store::contact_by_key(&pool, &key).await.unwrap().unwrap();
     assert_eq!(blocked.state, "blocked");
     assert_eq!(blocked.invite_trust, "not_allowed");
     assert_eq!(blocked.message_trust, "not_allowed");
     assert!(blocked.blocked_at.is_some());
 
     let removed =
-        contacts::delete_contact(&pool, &blocked.id, blocked.revision, ContactState::Blocked)
+        store::delete_contact(&pool, &blocked.id, blocked.revision, ContactState::Blocked)
             .await
             .unwrap();
     assert!(removed);
-    assert!(
-        contacts::contact_by_key(&pool, &key)
-            .await
-            .unwrap()
-            .is_none()
-    );
+    assert!(store::contact_by_key(&pool, &key).await.unwrap().is_none());
 }
 
 #[tokio::test]
@@ -616,10 +603,10 @@ async fn expired_requests_stop_being_pending() {
     let requester = Person::new("Requester");
     deliver(&pool, &recipient, &requester, "contact-one").await;
 
-    let later = contacts::now() + chrono::Duration::days(requests::REQUEST_TTL_DAYS + 1);
-    contacts::expire_stale_requests(&pool, later).await.unwrap();
+    let later = store::now() + chrono::Duration::days(requests::REQUEST_TTL_DAYS + 1);
+    store::expire_stale_requests(&pool, later).await.unwrap();
 
-    let row = contacts::request_by_id(&pool, "contact-one")
+    let row = store::request_by_id(&pool, "contact-one")
         .await
         .unwrap()
         .unwrap();

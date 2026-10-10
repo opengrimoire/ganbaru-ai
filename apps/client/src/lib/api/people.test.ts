@@ -112,7 +112,7 @@ describe("command wrappers", () => {
     invokeMock.mockRejectedValue({ code: "recipient_unreachable", message: "offline" });
     const { PeopleError, sendContactRequest } = await import("./people");
     await expect(sendContactRequest("GANB-x", { inviteTrust: "once", messageTrust: "not_allowed" })).rejects.toBeInstanceOf(PeopleError);
-    expect(invokeMock).toHaveBeenCalledWith("people_send_request", {
+    expect(invokeMock).toHaveBeenCalledWith("contacts_send_request", {
       request: { cardText: "GANB-x", inviteTrust: "once", messageTrust: "not_allowed" },
     });
   });
@@ -121,7 +121,7 @@ describe("command wrappers", () => {
     invokeMock.mockResolvedValue("GANB-decoded");
     const { decodeContactCardQr } = await import("./people");
     await expect(decodeContactCardQr(2, 1, new Uint8Array([0, 255]))).resolves.toBe("GANB-decoded");
-    expect(invokeMock).toHaveBeenCalledWith("people_decode_card_qr", { width: 2, height: 1, luma: [0, 255] });
+    expect(invokeMock).toHaveBeenCalledWith("contacts_decode_card_qr", { width: 2, height: 1, luma: [0, 255] });
   });
 
   it("rejects malformed snapshots from the native side", async () => {

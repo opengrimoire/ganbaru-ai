@@ -1,13 +1,13 @@
 //! The local person identity row and the device-local copy of the signing key.
 
-use super::{IdentityView, PeopleError};
+use super::{ContactsError, IdentityView};
 #[cfg(desktop)]
 use crate::vault::handoff::coordinator::CoordinatorResponse;
 use crate::vault::handoff::pairing::PairingManager;
 use crate::vault::handoff::protocol::ControlMessage;
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-use ganbaru_people::{
+use ganbaru_contacts::{
     CARD_NONCE_BYTES, PersonKeyPair, PersonPublicKey, decode_nonce, encode_nonce, random_bytes,
 };
 use sqlx::{FromRow, SqlitePool};
@@ -15,17 +15,17 @@ use std::sync::Mutex;
 use tauri::{AppHandle, Manager, Runtime};
 
 #[cfg(desktop)]
-const KEYRING_SERVICE: &str = "com.ganbaru-ai.people";
+const KEYRING_SERVICE: &str = "com.ganbaru-ai.contacts";
 const KEY_REFERENCE_PREFIX: &str = "person-key:";
 #[cfg(mobile)]
-const KEY_DIRECTORY: &str = "people";
+const KEY_DIRECTORY: &str = "contacts";
 #[cfg(desktop)]
 const KEY_UNAVAILABLE_CODE: &str = "key_unavailable";
 
 /// Vault whose key copy this device has already confirmed, so reconnect polls skip the lookup.
 static KEY_CONFIRMED_FOR_VAULT: Mutex<Option<String>> = Mutex::new(None);
 
-/// Serializes identity creation between People commands and the sync service.
+/// Serializes identity creation between Contacts commands and the sync service.
 static IDENTITY_CREATION: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 /// The person identity as this device knows it.
@@ -47,9 +47,9 @@ impl LocalIdentity {
         }
     }
 
-    pub(crate) fn signing_key(&self) -> Result<&PersonKeyPair, PeopleError> {
+    pub(crate) fn signing_key(&self) -> Result<&PersonKeyPair, ContactsError> {
         self.key.as_ref().ok_or_else(|| {
-            PeopleError::KeyUnavailable(
+            ContactsError::KeyUnavailable(
                 "this device holds no copy of the person key yet".to_string(),
             )
         })
@@ -65,7 +65,7 @@ pub(crate) struct IdentityRow {
 
 pub(crate) async fn load_identity_row(pool: &SqlitePool) -> Result<Option<IdentityRow>, String> {
     sqlx::query_as(
-        "SELECT public_key, card_nonce, card_revision FROM people_local_identity WHERE singleton = 1",
+        "SELECT public_key, card_nonce, card_revision FROM contacts_local_identity WHERE singleton = 1",
     )
     .fetch_optional(pool)
     .await
@@ -120,7 +120,7 @@ pub(crate) async fn load_identity<R: Runtime>(
 pub(crate) async fn ensure_identity<R: Runtime>(
     app: &AppHandle<R>,
     pool: &SqlitePool,
-) -> Result<LocalIdentity, PeopleError> {
+) -> Result<LocalIdentity, ContactsError> {
     if let Some(identity) = load_identity(app, pool).await? {
         return Ok(identity);
     }
@@ -132,25 +132,25 @@ pub(crate) async fn ensure_identity<R: Runtime>(
     }
     let status = crate::vault::ownership::active_status(app)?;
     if !status.can_write {
-        return Err(PeopleError::IdentityUnavailable(
+        return Err(ContactsError::IdentityUnavailable(
             "the vault owner creates the person identity".to_string(),
         ));
     }
     if app.state::<PairingManager>().coordinator_pin()?.is_some() {
-        return Err(PeopleError::IdentityUnavailable(
+        return Err(ContactsError::IdentityUnavailable(
             "the coordinator creates the person identity".to_string(),
         ));
     }
     let (pkcs8, key) = PersonKeyPair::generate()
-        .map_err(|error| PeopleError::Failed(format!("generate person key: {error}")))?;
+        .map_err(|error| ContactsError::Failed(format!("generate person key: {error}")))?;
     let mut card_nonce = [0u8; CARD_NONCE_BYTES];
     random_bytes(&mut card_nonce)
-        .map_err(|error| PeopleError::Failed(format!("generate card nonce: {error}")))?;
+        .map_err(|error| ContactsError::Failed(format!("generate card nonce: {error}")))?;
     let public_key = key.public_key();
     store_key(app, pkcs8).await?;
-    let now = super::contacts::format_time(super::contacts::now());
+    let now = super::store::format_time(super::store::now());
     let inserted = sqlx::query(
-        "INSERT INTO people_local_identity (singleton, public_key, card_nonce, created_at, updated_at)
+        "INSERT INTO contacts_local_identity (singleton, public_key, card_nonce, created_at, updated_at)
          VALUES (1, ?, ?, ?, ?)",
     )
     .bind(public_key.to_text())
@@ -161,7 +161,7 @@ pub(crate) async fn ensure_identity<R: Runtime>(
     .await;
     if let Err(error) = inserted {
         let _ = remove_key(app).await;
-        return Err(PeopleError::Failed(format!(
+        return Err(ContactsError::Failed(format!(
             "store person identity: {error}"
         )));
     }
@@ -293,7 +293,7 @@ pub(crate) async fn release_key_for_coordinator<R: Runtime>(
         message: message.to_string(),
         retryable: true,
     };
-    let pool = super::people_pool(app).await?;
+    let pool = super::contacts_pool(app).await?;
     let Some(row) = load_identity_row(&pool).await? else {
         return Ok(unavailable("the vault has no person identity yet"));
     };
@@ -325,7 +325,7 @@ pub(crate) async fn try_release<R: Runtime>(app: &AppHandle<R>) -> bool {
     {
         return true;
     }
-    let Ok(pool) = super::people_pool(app).await else {
+    let Ok(pool) = super::contacts_pool(app).await else {
         return false;
     };
     let Ok(Some(row)) = load_identity_row(&pool).await else {

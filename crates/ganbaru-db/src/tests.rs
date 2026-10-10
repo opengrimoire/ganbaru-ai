@@ -1,12 +1,12 @@
 mod access;
 mod calendar;
 mod chat;
+mod contacts;
 mod core;
 mod distractions;
 mod helpers;
 mod music;
 mod notes;
-mod people;
 mod pomodoro;
 mod projects;
 mod query_plans;

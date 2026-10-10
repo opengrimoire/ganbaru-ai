@@ -2,12 +2,12 @@
 //! writable device, and the local accept, decline, cancel, and block transitions.
 
 use super::card::sign_local_card;
-use super::contacts::{
+use super::identity::LocalIdentity;
+use super::store::{
     self, ContactState, NewContact, NewRequest, RequestDirection, RequestRow, RequestState,
     TrustGrant,
 };
-use super::identity::LocalIdentity;
-use super::{PeopleError, people_pool};
+use super::{ContactsError, contacts_pool};
 #[cfg(desktop)]
 use crate::vault::handoff::coordinator::CoordinatorResponse;
 use crate::vault::handoff::pairing::random_token;
@@ -18,12 +18,12 @@ use crate::vault::handoff::transport::unauthenticated_exchange;
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use chrono::{DateTime, Duration, Utc};
-use ganbaru_people::{
+use ganbaru_contacts::{
     PersonPublicKey, TrustKind, decode_card_text, encode_nonce, request_signature_payload,
     status_signature_payload,
 };
 #[cfg(any(desktop, test))]
-use ganbaru_people::{SIGNATURE_BYTES, SignedCard, decode_nonce, nonces_match, verify};
+use ganbaru_contacts::{SIGNATURE_BYTES, SignedCard, decode_nonce, nonces_match, verify};
 use sqlx::SqlitePool;
 use tauri::{AppHandle, Runtime};
 
@@ -40,7 +40,7 @@ pub(crate) const CARD_REVOKED_CODE: &str = "card_revoked";
 pub(crate) const INVALID_REQUEST_CODE: &str = "invalid_request";
 pub(crate) const RECIPIENT_UNAVAILABLE_CODE: &str = "recipient_unavailable";
 
-/// What the coordinator answers to an unauthenticated People message.
+/// What the coordinator answers to an unauthenticated Contacts message.
 #[cfg(any(desktop, test))]
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum PeerReply {
@@ -125,7 +125,7 @@ fn decode_signature(text: &str) -> Option<[u8; SIGNATURE_BYTES]> {
 fn fingerprint_hex(card: &SignedCard) -> String {
     card.card
         .coordinator_fingerprint
-        .map(|fingerprint| contacts::encode_hex(&fingerprint))
+        .map(|fingerprint| store::encode_hex(&fingerprint))
         .unwrap_or_default()
 }
 
@@ -164,12 +164,12 @@ pub(crate) async fn receive_request(
         request_id: request_id.to_string(),
     };
     let public_key = signed.card.public_key.to_text();
-    if let Some(contact) = contacts::contact_by_key(pool, &public_key).await?
+    if let Some(contact) = store::contact_by_key(pool, &public_key).await?
         && ContactState::parse(&contact.state) == Some(ContactState::Blocked)
     {
         return Ok(acknowledged);
     }
-    if let Some(existing) = contacts::request_by_id(pool, request_id).await? {
+    if let Some(existing) = store::request_by_id(pool, request_id).await? {
         if existing.public_key != public_key {
             return Ok(PeerReply::invalid());
         }
@@ -181,13 +181,13 @@ pub(crate) async fn receive_request(
         .begin()
         .await
         .map_err(|error| format!("begin contact request transaction: {error}"))?;
-    contacts::delete_pending(&mut *tx, RequestDirection::Received, &public_key).await?;
-    if contacts::pending_received_count(&mut *tx).await? >= MAX_PENDING_RECEIVED {
-        contacts::expire_oldest_pending_received(&mut *tx, MAX_PENDING_RECEIVED - 1, now).await?;
+    store::delete_pending(&mut *tx, RequestDirection::Received, &public_key).await?;
+    if store::pending_received_count(&mut *tx).await? >= MAX_PENDING_RECEIVED {
+        store::expire_oldest_pending_received(&mut *tx, MAX_PENDING_RECEIVED - 1, now).await?;
     }
-    let digest = contacts::encode_hex(&signed.digest);
+    let digest = store::encode_hex(&signed.digest);
     let fingerprint = fingerprint_hex(&signed);
-    contacts::insert_request(
+    store::insert_request(
         &mut *tx,
         NewRequest {
             id: request_id,
@@ -240,7 +240,7 @@ pub(crate) async fn request_state(
     if verify(&public_key, &payload, &signature).is_err() {
         return Ok(StatusOutcome::Invalid);
     }
-    let Some(row) = contacts::request_by_id(pool, request_id).await? else {
+    let Some(row) = store::request_by_id(pool, request_id).await? else {
         return Ok(StatusOutcome::Pending);
     };
     if row.public_key != requester_public_key
@@ -248,7 +248,7 @@ pub(crate) async fn request_state(
     {
         return Ok(StatusOutcome::Pending);
     }
-    if let Some(contact) = contacts::contact_by_key(pool, &row.public_key).await?
+    if let Some(contact) = store::contact_by_key(pool, &row.public_key).await?
         && ContactState::parse(&contact.state) == Some(ContactState::Blocked)
     {
         return Ok(StatusOutcome::Pending);
@@ -279,14 +279,14 @@ pub(crate) async fn receive_request_for_coordinator<R: Runtime>(
     request_id: String,
     signature: String,
 ) -> Result<CoordinatorResponse, String> {
-    let pool = people_pool(app).await?;
+    let pool = contacts_pool(app).await?;
     let Some(identity) = coordinator_identity(app, &pool).await? else {
         return Ok(PeerReply::unavailable().into_coordinator_response());
     };
     let reply = receive_request(
         &pool,
         &identity,
-        contacts::now(),
+        store::now(),
         &recipient_card_nonce,
         &requester_card,
         &request_id,
@@ -304,7 +304,7 @@ pub(crate) async fn request_state_for_coordinator<R: Runtime>(
     issued_at_ms: i64,
     signature: String,
 ) -> Result<CoordinatorResponse, String> {
-    let pool = people_pool(app).await?;
+    let pool = contacts_pool(app).await?;
     let Some(identity) = coordinator_identity(app, &pool).await? else {
         return Ok(PeerReply::unavailable().into_coordinator_response());
     };
@@ -348,29 +348,29 @@ pub(crate) async fn send_request<R: Runtime>(
     card_text: &str,
     invite_trust: TrustKind,
     message_trust: TrustKind,
-) -> Result<(), PeopleError> {
-    let recipient =
-        decode_card_text(card_text).map_err(|error| PeopleError::InvalidCard(error.to_string()))?;
+) -> Result<(), ContactsError> {
+    let recipient = decode_card_text(card_text)
+        .map_err(|error| ContactsError::InvalidCard(error.to_string()))?;
     if recipient.card.public_key == identity.public_key {
-        return Err(PeopleError::InvalidCard(
+        return Err(ContactsError::InvalidCard(
             "this is your own contact card".to_string(),
         ));
     }
     let public_key = recipient.card.public_key.to_text();
-    if let Some(contact) = contacts::contact_by_key(pool, &public_key).await? {
+    if let Some(contact) = store::contact_by_key(pool, &public_key).await? {
         let message = match ContactState::parse(&contact.state) {
             Some(ContactState::Blocked) => "this person is blocked",
             _ => "this person is already a contact",
         };
-        return Err(PeopleError::Failed(message.to_string()));
+        return Err(ContactsError::Failed(message.to_string()));
     }
     let Some(fingerprint) = recipient.card.coordinator_fingerprint else {
-        return Err(PeopleError::RecipientUnreachable(
+        return Err(ContactsError::RecipientUnreachable(
             "the card carries no delivery address".to_string(),
         ));
     };
     if recipient.card.endpoint_hint.is_empty() {
-        return Err(PeopleError::RecipientUnreachable(
+        return Err(ContactsError::RecipientUnreachable(
             "the card carries no delivery address".to_string(),
         ));
     }
@@ -388,28 +388,28 @@ pub(crate) async fn send_request<R: Runtime>(
         request_id: request_id.clone(),
         signature: URL_SAFE_NO_PAD.encode(signature),
     };
-    let fingerprint_hex = contacts::encode_hex(&fingerprint);
+    let fingerprint_hex = store::encode_hex(&fingerprint);
     let response =
         unauthenticated_exchange(&recipient.card.endpoint_hint, &fingerprint_hex, message)
             .await
-            .map_err(PeopleError::RecipientUnreachable)?;
+            .map_err(ContactsError::RecipientUnreachable)?;
     match response {
         ControlMessage::ContactRequestReceived { request_id: echoed } if echoed == request_id => {}
         ControlMessage::Error { code, message, .. } => return Err(peer_error(&code, message)),
         _ => {
-            return Err(PeopleError::Failed(
+            return Err(ContactsError::Failed(
                 "the recipient answered with an unexpected message".to_string(),
             ));
         }
     }
-    let now = contacts::now();
-    let digest = contacts::encode_hex(&recipient.digest);
+    let now = store::now();
+    let digest = store::encode_hex(&recipient.digest);
     let mut tx = pool
         .begin()
         .await
         .map_err(|error| format!("begin contact request transaction: {error}"))?;
-    contacts::delete_pending(&mut *tx, RequestDirection::Sent, &public_key).await?;
-    contacts::insert_request(
+    store::delete_pending(&mut *tx, RequestDirection::Sent, &public_key).await?;
+    store::insert_request(
         &mut *tx,
         NewRequest {
             id: &request_id,
@@ -434,24 +434,24 @@ pub(crate) async fn send_request<R: Runtime>(
     Ok(())
 }
 
-fn peer_error(code: &str, message: String) -> PeopleError {
+fn peer_error(code: &str, message: String) -> ContactsError {
     match code {
-        CARD_REVOKED_CODE => PeopleError::CardRevoked(message),
-        RECIPIENT_UNAVAILABLE_CODE => PeopleError::RecipientUnreachable(message),
-        _ => PeopleError::Failed(message),
+        CARD_REVOKED_CODE => ContactsError::CardRevoked(message),
+        RECIPIENT_UNAVAILABLE_CODE => ContactsError::RecipientUnreachable(message),
+        _ => ContactsError::Failed(message),
     }
 }
 
-fn revision_conflict() -> PeopleError {
-    PeopleError::RevisionConflict("the request changed since it was last read".to_string())
+fn revision_conflict() -> ContactsError {
+    ContactsError::RevisionConflict("the request changed since it was last read".to_string())
 }
 
 async fn pending_row_in_direction(
     pool: &SqlitePool,
     id: &str,
     direction: RequestDirection,
-) -> Result<RequestRow, PeopleError> {
-    let row = contacts::request_by_id(pool, id)
+) -> Result<RequestRow, ContactsError> {
+    let row = store::request_by_id(pool, id)
         .await?
         .ok_or_else(revision_conflict)?;
     if RequestDirection::parse(&row.direction) != Some(direction)
@@ -470,13 +470,13 @@ pub(crate) async fn accept_request(
     invite_trust: TrustKind,
     message_trust: TrustKind,
     now: DateTime<Utc>,
-) -> Result<(), PeopleError> {
+) -> Result<(), ContactsError> {
     let row = pending_row_in_direction(pool, id, RequestDirection::Received).await?;
     let mut tx = pool
         .begin()
         .await
         .map_err(|error| format!("begin accept transaction: {error}"))?;
-    let updated = contacts::set_request_state(
+    let updated = store::set_request_state(
         &mut *tx,
         id,
         Some(expected_revision),
@@ -488,19 +488,19 @@ pub(crate) async fn accept_request(
     if !updated {
         return Err(revision_conflict());
     }
-    contacts::upsert_active_contact(
+    store::upsert_active_contact(
         &mut *tx,
         NewContact {
             public_key: &row.public_key,
             display_name: &row.display_name,
-            color: contacts::color_from_row(row.color),
+            color: store::color_from_row(row.color),
         },
         &TrustGrant::new(invite_trust, now),
         &TrustGrant::new(message_trust, now),
         now,
     )
     .await?;
-    contacts::close_pending_from(
+    store::close_pending_from(
         &mut *tx,
         RequestDirection::Sent,
         &row.public_key,
@@ -521,17 +521,11 @@ pub(crate) async fn close_request(
     expected_revision: i64,
     direction: RequestDirection,
     state: RequestState,
-) -> Result<(), PeopleError> {
+) -> Result<(), ContactsError> {
     pending_row_in_direction(pool, id, direction).await?;
-    let updated = contacts::set_request_state(
-        pool,
-        id,
-        Some(expected_revision),
-        state,
-        None,
-        contacts::now(),
-    )
-    .await?;
+    let updated =
+        store::set_request_state(pool, id, Some(expected_revision), state, None, store::now())
+            .await?;
     if updated {
         Ok(())
     } else {
@@ -544,28 +538,22 @@ pub(crate) async fn block_person(
     pool: &SqlitePool,
     public_key: &str,
     now: DateTime<Utc>,
-) -> Result<(), PeopleError> {
+) -> Result<(), ContactsError> {
     PersonPublicKey::from_text(public_key)
-        .map_err(|error| PeopleError::Failed(format!("public key is invalid: {error}")))?;
+        .map_err(|error| ContactsError::Failed(format!("public key is invalid: {error}")))?;
     let (display_name, color) =
-        if let Some(contact) = contacts::contact_by_key(pool, public_key).await? {
-            (
-                contact.display_name,
-                contacts::color_from_row(contact.color),
-            )
-        } else if let Some(request) = contacts::latest_request_from(pool, public_key).await? {
-            (
-                request.display_name,
-                contacts::color_from_row(request.color),
-            )
+        if let Some(contact) = store::contact_by_key(pool, public_key).await? {
+            (contact.display_name, store::color_from_row(contact.color))
+        } else if let Some(request) = store::latest_request_from(pool, public_key).await? {
+            (request.display_name, store::color_from_row(request.color))
         } else {
-            return Err(PeopleError::Failed("this person is unknown".to_string()));
+            return Err(ContactsError::Failed("this person is unknown".to_string()));
         };
     let mut tx = pool
         .begin()
         .await
         .map_err(|error| format!("begin block transaction: {error}"))?;
-    contacts::block_contact(
+    store::block_contact(
         &mut *tx,
         NewContact {
             public_key,
@@ -575,7 +563,7 @@ pub(crate) async fn block_person(
         now,
     )
     .await?;
-    contacts::close_pending_from(
+    store::close_pending_from(
         &mut *tx,
         RequestDirection::Received,
         public_key,
@@ -583,7 +571,7 @@ pub(crate) async fn block_person(
         now,
     )
     .await?;
-    contacts::close_pending_from(
+    store::close_pending_from(
         &mut *tx,
         RequestDirection::Sent,
         public_key,
@@ -606,12 +594,12 @@ pub(crate) async fn poll_sent_requests(
     let key = identity
         .signing_key()
         .map_err(|_| "this device holds no person key".to_string())?;
-    let now = contacts::now();
-    contacts::expire_stale_requests(pool, now).await?;
+    let now = store::now();
+    store::expire_stale_requests(pool, now).await?;
     let mut still_pending = false;
-    for row in contacts::pending_requests(pool, RequestDirection::Sent).await? {
+    for row in store::pending_requests(pool, RequestDirection::Sent).await? {
         if row.endpoint_hint.is_empty() || row.coordinator_fingerprint.is_empty() {
-            contacts::touch_request_attempt(pool, &row.id, now, Some(RECIPIENT_UNAVAILABLE_CODE))
+            store::touch_request_attempt(pool, &row.id, now, Some(RECIPIENT_UNAVAILABLE_CODE))
                 .await?;
             still_pending = true;
             continue;
@@ -647,12 +635,12 @@ async fn apply_status_response(
             recipient_card: Some(card_text),
         }) => {
             let Ok(card) = decode_card_text(&card_text) else {
-                contacts::touch_request_attempt(pool, &row.id, now, Some(INVALID_REQUEST_CODE))
+                store::touch_request_attempt(pool, &row.id, now, Some(INVALID_REQUEST_CODE))
                     .await?;
                 return Ok(false);
             };
             if card.card.public_key.to_text() != row.public_key {
-                contacts::touch_request_attempt(pool, &row.id, now, Some(INVALID_REQUEST_CODE))
+                store::touch_request_attempt(pool, &row.id, now, Some(INVALID_REQUEST_CODE))
                     .await?;
                 return Ok(false);
             }
@@ -662,9 +650,9 @@ async fn apply_status_response(
                 .begin()
                 .await
                 .map_err(|error| format!("begin accepted transaction: {error}"))?;
-            contacts::set_request_state(&mut *tx, &row.id, None, RequestState::Accepted, None, now)
+            store::set_request_state(&mut *tx, &row.id, None, RequestState::Accepted, None, now)
                 .await?;
-            contacts::upsert_active_contact(
+            store::upsert_active_contact(
                 &mut *tx,
                 NewContact {
                     public_key: &row.public_key,
@@ -685,16 +673,16 @@ async fn apply_status_response(
             state: ContactRequestOutcome::Declined,
             ..
         }) => {
-            contacts::set_request_state(pool, &row.id, None, RequestState::Declined, None, now)
+            store::set_request_state(pool, &row.id, None, RequestState::Declined, None, now)
                 .await?;
             Ok(true)
         }
         Ok(ControlMessage::ContactRequestState { .. }) => {
-            contacts::touch_request_attempt(pool, &row.id, now, None).await?;
+            store::touch_request_attempt(pool, &row.id, now, None).await?;
             Ok(false)
         }
         Ok(ControlMessage::Error { code, .. }) if code == CARD_REVOKED_CODE => {
-            contacts::set_request_state(
+            store::set_request_state(
                 pool,
                 &row.id,
                 None,
@@ -706,15 +694,15 @@ async fn apply_status_response(
             Ok(true)
         }
         Ok(ControlMessage::Error { code, .. }) => {
-            contacts::touch_request_attempt(pool, &row.id, now, Some(&code)).await?;
+            store::touch_request_attempt(pool, &row.id, now, Some(&code)).await?;
             Ok(false)
         }
         Ok(_) => {
-            contacts::touch_request_attempt(pool, &row.id, now, Some(INVALID_REQUEST_CODE)).await?;
+            store::touch_request_attempt(pool, &row.id, now, Some(INVALID_REQUEST_CODE)).await?;
             Ok(false)
         }
         Err(_) => {
-            contacts::touch_request_attempt(pool, &row.id, now, Some(RECIPIENT_UNAVAILABLE_CODE))
+            store::touch_request_attempt(pool, &row.id, now, Some(RECIPIENT_UNAVAILABLE_CODE))
                 .await?;
             Ok(false)
         }
@@ -744,7 +732,7 @@ async fn poll_once<R: Runtime>(app: &AppHandle<R>) -> Result<(), ()> {
     if !status.can_write {
         return Ok(());
     }
-    let Ok(pool) = people_pool(app).await else {
+    let Ok(pool) = contacts_pool(app).await else {
         return Ok(());
     };
     let Ok(Some(identity)) = super::identity::load_identity(app, &pool).await else {
@@ -753,7 +741,7 @@ async fn poll_once<R: Runtime>(app: &AppHandle<R>) -> Result<(), ()> {
     if identity.key.is_none() {
         return Ok(());
     }
-    let has_pending = contacts::pending_requests(&pool, RequestDirection::Sent)
+    let has_pending = store::pending_requests(&pool, RequestDirection::Sent)
         .await
         .map(|rows| !rows.is_empty())
         .unwrap_or(false);

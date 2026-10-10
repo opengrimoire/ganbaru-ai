@@ -14,7 +14,7 @@
 
 use std::io;
 
-use ganbaru_people::PersonPublicKey;
+use ganbaru_contacts::PersonPublicKey;
 use ganbaru_sync_contracts::{SignedCertificate, SpaceId, WriterId, WriterKeyPair};
 use sqlx::SqliteConnection;
 

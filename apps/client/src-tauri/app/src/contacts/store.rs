@@ -2,7 +2,7 @@
 
 use super::{ContactRequestView, ContactView};
 use chrono::{DateTime, Utc};
-use ganbaru_people::{PersonPublicKey, TrustKind};
+use ganbaru_contacts::{PersonPublicKey, TrustKind};
 use serde::{Deserialize, Serialize};
 use sqlx::{Executor, FromRow, Sqlite};
 
@@ -245,7 +245,7 @@ where
     E: Executor<'e, Database = Sqlite>,
 {
     sqlx::query_as(&format!(
-        "SELECT {CONTACT_COLUMNS} FROM people_contacts ORDER BY state, lower(display_name), id"
+        "SELECT {CONTACT_COLUMNS} FROM contacts ORDER BY state, lower(display_name), id"
     ))
     .fetch_all(executor)
     .await
@@ -260,7 +260,7 @@ where
     E: Executor<'e, Database = Sqlite>,
 {
     sqlx::query_as(&format!(
-        "SELECT {CONTACT_COLUMNS} FROM people_contacts WHERE public_key = ?"
+        "SELECT {CONTACT_COLUMNS} FROM contacts WHERE public_key = ?"
     ))
     .bind(public_key)
     .fetch_optional(executor)
@@ -277,7 +277,7 @@ where
     E: Executor<'e, Database = Sqlite>,
 {
     sqlx::query_as(&format!(
-        "SELECT {CONTACT_COLUMNS} FROM people_contacts WHERE id = ?"
+        "SELECT {CONTACT_COLUMNS} FROM contacts WHERE id = ?"
     ))
     .bind(id)
     .fetch_optional(executor)
@@ -306,7 +306,7 @@ where
     let time = format_time(now);
     let id = crate::vault::handoff::pairing::random_token("contact")?;
     sqlx::query(
-        "INSERT INTO people_contacts (
+        "INSERT INTO contacts (
             id, public_key, display_name, color, state, invite_trust, invite_trust_expires_at,
             message_trust, message_trust_expires_at, accepted_at, blocked_at, created_at, updated_at
          ) VALUES (?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, NULL, ?, ?)
@@ -351,7 +351,7 @@ where
     let time = format_time(now);
     let id = crate::vault::handoff::pairing::random_token("contact")?;
     sqlx::query(
-        "INSERT INTO people_contacts (
+        "INSERT INTO contacts (
             id, public_key, display_name, color, state, invite_trust, invite_trust_expires_at,
             message_trust, message_trust_expires_at, accepted_at, blocked_at, created_at, updated_at
          ) VALUES (?, ?, ?, ?, 'blocked', 'not_allowed', NULL, 'not_allowed', NULL, NULL, ?, ?, ?)
@@ -390,7 +390,7 @@ where
     E: Executor<'e, Database = Sqlite>,
 {
     let result = sqlx::query(
-        "UPDATE people_contacts
+        "UPDATE contacts
          SET invite_trust = ?, invite_trust_expires_at = ?, message_trust = ?,
              message_trust_expires_at = ?, updated_at = ?
          WHERE id = ? AND revision = ? AND state = 'active'",
@@ -418,14 +418,13 @@ pub(crate) async fn delete_contact<'e, E>(
 where
     E: Executor<'e, Database = Sqlite>,
 {
-    let result =
-        sqlx::query("DELETE FROM people_contacts WHERE id = ? AND revision = ? AND state = ?")
-            .bind(id)
-            .bind(expected_revision)
-            .bind(state.as_str())
-            .execute(executor)
-            .await
-            .map_err(|error| db_error("delete contact", error))?;
+    let result = sqlx::query("DELETE FROM contacts WHERE id = ? AND revision = ? AND state = ?")
+        .bind(id)
+        .bind(expected_revision)
+        .bind(state.as_str())
+        .execute(executor)
+        .await
+        .map_err(|error| db_error("delete contact", error))?;
     Ok(result.rows_affected() == 1)
 }
 
@@ -434,7 +433,7 @@ where
     E: Executor<'e, Database = Sqlite>,
 {
     sqlx::query_as(&format!(
-        "SELECT {REQUEST_COLUMNS} FROM people_contact_requests ORDER BY created_at DESC, id"
+        "SELECT {REQUEST_COLUMNS} FROM contact_requests ORDER BY created_at DESC, id"
     ))
     .fetch_all(executor)
     .await
@@ -449,7 +448,7 @@ where
     E: Executor<'e, Database = Sqlite>,
 {
     sqlx::query_as(&format!(
-        "SELECT {REQUEST_COLUMNS} FROM people_contact_requests WHERE id = ?"
+        "SELECT {REQUEST_COLUMNS} FROM contact_requests WHERE id = ?"
     ))
     .bind(id)
     .fetch_optional(executor)
@@ -466,7 +465,7 @@ where
     E: Executor<'e, Database = Sqlite>,
 {
     sqlx::query_as(&format!(
-        "SELECT {REQUEST_COLUMNS} FROM people_contact_requests
+        "SELECT {REQUEST_COLUMNS} FROM contact_requests
          WHERE direction = ? AND public_key = ? AND state = 'pending'"
     ))
     .bind(direction.as_str())
@@ -484,7 +483,7 @@ where
     E: Executor<'e, Database = Sqlite>,
 {
     sqlx::query_as(&format!(
-        "SELECT {REQUEST_COLUMNS} FROM people_contact_requests
+        "SELECT {REQUEST_COLUMNS} FROM contact_requests
          WHERE direction = ? AND state = 'pending' ORDER BY created_at, id"
     ))
     .bind(direction.as_str())
@@ -502,7 +501,7 @@ where
     E: Executor<'e, Database = Sqlite>,
 {
     sqlx::query_as(&format!(
-        "SELECT {REQUEST_COLUMNS} FROM people_contact_requests
+        "SELECT {REQUEST_COLUMNS} FROM contact_requests
          WHERE public_key = ? ORDER BY created_at DESC, id LIMIT 1"
     ))
     .bind(public_key)
@@ -537,7 +536,7 @@ where
 {
     let time = format_time(now);
     sqlx::query(
-        "INSERT INTO people_contact_requests (
+        "INSERT INTO contact_requests (
             id, direction, public_key, display_name, color, card, card_digest, endpoint_hint,
             coordinator_fingerprint, invite_trust, message_trust, state, expires_at, created_at,
             updated_at
@@ -573,7 +572,7 @@ where
     E: Executor<'e, Database = Sqlite>,
 {
     sqlx::query(
-        "DELETE FROM people_contact_requests
+        "DELETE FROM contact_requests
          WHERE direction = ? AND public_key = ? AND state = 'pending'",
     )
     .bind(direction.as_str())
@@ -596,7 +595,7 @@ where
     E: Executor<'e, Database = Sqlite>,
 {
     sqlx::query(
-        "UPDATE people_contact_requests
+        "UPDATE contact_requests
          SET state = ?, updated_at = ?
          WHERE direction = ? AND public_key = ? AND state = 'pending'",
     )
@@ -623,7 +622,7 @@ where
     E: Executor<'e, Database = Sqlite>,
 {
     let result = sqlx::query(
-        "UPDATE people_contact_requests
+        "UPDATE contact_requests
          SET state = ?, last_error_code = ?, updated_at = ?
          WHERE id = ? AND state = 'pending' AND (? IS NULL OR revision = ?)",
     )
@@ -645,7 +644,7 @@ where
     E: Executor<'e, Database = Sqlite>,
 {
     sqlx::query_scalar(
-        "SELECT count(*) FROM people_contact_requests
+        "SELECT count(*) FROM contact_requests
          WHERE direction = 'received' AND state = 'pending'",
     )
     .fetch_one(executor)
@@ -664,10 +663,10 @@ where
     E: Executor<'e, Database = Sqlite>,
 {
     sqlx::query(
-        "UPDATE people_contact_requests
+        "UPDATE contact_requests
          SET state = 'expired', updated_at = ?
          WHERE id IN (
-            SELECT id FROM people_contact_requests
+            SELECT id FROM contact_requests
             WHERE direction = 'received' AND state = 'pending'
             ORDER BY created_at DESC, id DESC
             LIMIT -1 OFFSET ?
@@ -692,7 +691,7 @@ where
     E: Executor<'e, Database = Sqlite>,
 {
     sqlx::query(
-        "UPDATE people_contact_requests
+        "UPDATE contact_requests
          SET last_attempt_at = ?, last_error_code = ?, updated_at = ?
          WHERE id = ?",
     )
@@ -716,7 +715,7 @@ where
 {
     let time = format_time(now);
     sqlx::query(
-        "UPDATE people_contact_requests
+        "UPDATE contact_requests
          SET state = 'expired', updated_at = ?
          WHERE state = 'pending' AND expires_at <= ?",
     )

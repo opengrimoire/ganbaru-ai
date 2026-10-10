@@ -1,10 +1,10 @@
 //! The signed local contact card, its LAN hint, and QR rendering.
 
 use super::identity::LocalIdentity;
-use super::{CardView, LocalCardView, PeopleError};
+use super::{CardView, ContactsError, LocalCardView};
 use crate::vault::handoff::pairing::PairingManager;
 use crate::vault::handoff::protocol::{decode_qr_bytes_luma, qr_matrix_for_bytes, unix_time_ms};
-use ganbaru_people::{
+use ganbaru_contacts::{
     CARD_MAGIC, CARD_NONCE_BYTES, ContactCard, MAX_DISPLAY_NAME_BYTES, MAX_ENDPOINT_HINT_BYTES,
     SignedCard, decode_card, encode_nonce, random_bytes, sign_card,
 };
@@ -40,10 +40,10 @@ impl DeliveryHint {
 }
 
 /// Reads the profile display name and color from the active vault configuration.
-pub(crate) fn read_profile<R: Runtime>(app: &AppHandle<R>) -> Result<CardProfile, PeopleError> {
+pub(crate) fn read_profile<R: Runtime>(app: &AppHandle<R>) -> Result<CardProfile, ContactsError> {
     let raw = crate::vault::read_active_config_bounded(app, MAX_CONFIG_BYTES)?;
     let value: serde_json::Value = serde_json::from_str(&raw)
-        .map_err(|error| PeopleError::Failed(format!("parse vault configuration: {error}")))?;
+        .map_err(|error| ContactsError::Failed(format!("parse vault configuration: {error}")))?;
     let profile = value.get(PROFILE_KEY);
     let display_name = profile
         .and_then(|profile| profile.get(DISPLAY_NAME_KEY))
@@ -52,7 +52,7 @@ pub(crate) fn read_profile<R: Runtime>(app: &AppHandle<R>) -> Result<CardProfile
         .filter(|name| !name.is_empty())
         .map(|name| truncate_at_char_boundary(name, MAX_DISPLAY_NAME_BYTES))
         .ok_or_else(|| {
-            PeopleError::ProfileIncomplete("set a display name in the profile first".to_string())
+            ContactsError::ProfileIncomplete("set a display name in the profile first".to_string())
         })?;
     let color = profile
         .and_then(|profile| profile.get(COLOR_KEY))
@@ -96,7 +96,7 @@ pub(crate) fn resolve_delivery_hint<R: Runtime>(app: &AppHandle<R>) -> DeliveryH
 }
 
 fn bounded_hint(endpoint: String, fingerprint_hex: &str) -> DeliveryHint {
-    let Some(fingerprint) = super::contacts::decode_hex_digest(fingerprint_hex) else {
+    let Some(fingerprint) = super::store::decode_hex_digest(fingerprint_hex) else {
         return DeliveryHint::unreachable();
     };
     if endpoint.is_empty() || endpoint.len() > MAX_ENDPOINT_HINT_BYTES {
@@ -112,7 +112,7 @@ fn bounded_hint(endpoint: String, fingerprint_hex: &str) -> DeliveryHint {
 pub(crate) fn sign_local_card<R: Runtime>(
     app: &AppHandle<R>,
     identity: &LocalIdentity,
-) -> Result<SignedCard, PeopleError> {
+) -> Result<SignedCard, ContactsError> {
     let key = identity.signing_key()?;
     let profile = read_profile(app)?;
     let hint = resolve_delivery_hint(app);
@@ -126,13 +126,13 @@ pub(crate) fn sign_local_card<R: Runtime>(
         issued_at_ms: unix_time_ms(),
     };
     sign_card(&card, key)
-        .map_err(|error| PeopleError::Failed(format!("sign contact card: {error}")))
+        .map_err(|error| ContactsError::Failed(format!("sign contact card: {error}")))
 }
 
 pub(crate) fn local_card_view<R: Runtime>(
     app: &AppHandle<R>,
     identity: &LocalIdentity,
-) -> Result<LocalCardView, PeopleError> {
+) -> Result<LocalCardView, ContactsError> {
     if identity.key.is_none() {
         return Ok(LocalCardView {
             identity: identity.view(),
@@ -158,13 +158,13 @@ pub(crate) fn local_card_view<R: Runtime>(
 pub(crate) async fn rotate_card(
     pool: &SqlitePool,
     mut identity: LocalIdentity,
-) -> Result<LocalIdentity, PeopleError> {
+) -> Result<LocalIdentity, ContactsError> {
     let mut card_nonce = [0u8; CARD_NONCE_BYTES];
     random_bytes(&mut card_nonce)
-        .map_err(|error| PeopleError::Failed(format!("generate card nonce: {error}")))?;
-    let now = super::contacts::format_time(super::contacts::now());
+        .map_err(|error| ContactsError::Failed(format!("generate card nonce: {error}")))?;
+    let now = super::store::format_time(super::store::now());
     let revision: i64 = sqlx::query_scalar(
-        "UPDATE people_local_identity
+        "UPDATE contacts_local_identity
          SET card_nonce = ?, card_revision = card_revision + 1, updated_at = ?
          WHERE singleton = 1
          RETURNING card_revision",
@@ -184,10 +184,10 @@ pub(crate) fn decode_card_qr(
     width: usize,
     height: usize,
     luma: &[u8],
-) -> Result<String, PeopleError> {
-    let payload =
-        decode_qr_bytes_luma(width, height, luma, CARD_MAGIC).map_err(PeopleError::InvalidCard)?;
+) -> Result<String, ContactsError> {
+    let payload = decode_qr_bytes_luma(width, height, luma, CARD_MAGIC)
+        .map_err(ContactsError::InvalidCard)?;
     let signed =
-        decode_card(&payload).map_err(|error| PeopleError::InvalidCard(error.to_string()))?;
+        decode_card(&payload).map_err(|error| ContactsError::InvalidCard(error.to_string()))?;
     Ok(signed.text())
 }

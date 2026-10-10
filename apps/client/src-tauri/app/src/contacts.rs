@@ -1,28 +1,28 @@
-//! People: the local person identity, signed contact cards, contacts with trust scopes,
-//! blocked people, and contact requests exchanged over the LAN handoff transport.
+//! Contacts: the local person identity, signed contact cards, contacts with trust scopes,
+//! blocked contacts, and contact requests exchanged over the LAN handoff transport.
 //!
 //! The person's private key never enters the vault; it lives in native credential storage on
 //! desktop and in an app-private file on Android. Everything else is vault SQLite state.
 
 pub(crate) mod card;
-pub(crate) mod contacts;
 pub(crate) mod identity;
 pub(crate) mod requests;
+pub(crate) mod store;
 #[cfg(test)]
 mod tests;
 
 use crate::db::connect_sqlite;
 use crate::vault::handoff::protocol::QrMatrix;
-use contacts::{ContactState, RequestDirection, RequestState};
-use ganbaru_people::TrustKind;
+use ganbaru_contacts::TrustKind;
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
+use store::{ContactState, RequestDirection, RequestState};
 use tauri::{AppHandle, Runtime};
 
-/// Stable People failure codes the frontend branches on.
+/// Stable Contacts failure codes the frontend branches on.
 #[derive(Debug, Serialize)]
 #[serde(tag = "code", content = "message", rename_all = "snake_case")]
-pub enum PeopleError {
+pub enum ContactsError {
     /// No identity exists yet and this device cannot create one.
     IdentityUnavailable(String),
     /// The identity exists but this device holds no copy of the private key.
@@ -42,13 +42,13 @@ pub enum PeopleError {
     Failed(String),
 }
 
-impl From<String> for PeopleError {
+impl From<String> for ContactsError {
     fn from(message: String) -> Self {
         Self::Failed(message)
     }
 }
 
-impl PeopleError {
+impl ContactsError {
     /// The failure message without its code.
     pub(crate) fn into_message(self) -> String {
         match self {
@@ -153,7 +153,7 @@ pub struct ContactRequestView {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct PeopleSnapshot {
+pub struct ContactsSnapshot {
     pub identity: Option<IdentityView>,
     pub contacts: Vec<ContactView>,
     pub requests: Vec<ContactRequestView>,
@@ -198,7 +198,7 @@ pub struct UpdateTrustRequest {
     pub message_trust: TrustKind,
 }
 
-pub(crate) async fn people_pool<R: Runtime>(app: &AppHandle<R>) -> Result<SqlitePool, String> {
+pub(crate) async fn contacts_pool<R: Runtime>(app: &AppHandle<R>) -> Result<SqlitePool, String> {
     connect_sqlite(
         app.clone(),
         format!("sqlite:{}", crate::vault::APP_SQLITE_FILE),
@@ -206,12 +206,12 @@ pub(crate) async fn people_pool<R: Runtime>(app: &AppHandle<R>) -> Result<Sqlite
     .await
 }
 
-fn require_writable<R: Runtime>(app: &AppHandle<R>) -> Result<(), PeopleError> {
+fn require_writable<R: Runtime>(app: &AppHandle<R>) -> Result<(), ContactsError> {
     let status = crate::vault::ownership::active_status(app)?;
     if status.can_write {
         Ok(())
     } else {
-        Err(PeopleError::ReadOnly(
+        Err(ContactsError::ReadOnly(
             "the vault is read-only on this device".to_string(),
         ))
     }
@@ -220,21 +220,21 @@ fn require_writable<R: Runtime>(app: &AppHandle<R>) -> Result<(), PeopleError> {
 async fn snapshot<R: Runtime>(
     app: &AppHandle<R>,
     pool: &SqlitePool,
-) -> Result<PeopleSnapshot, PeopleError> {
+) -> Result<ContactsSnapshot, ContactsError> {
     let identity = identity::load_identity(app, pool)
         .await?
         .map(|identity| identity.view());
-    let contacts = contacts::list_contacts(pool)
+    let contacts = store::list_contacts(pool)
         .await?
         .into_iter()
-        .map(contacts::ContactRow::view)
+        .map(store::ContactRow::view)
         .collect::<Result<Vec<_>, _>>()?;
-    let requests = contacts::list_requests(pool)
+    let requests = store::list_requests(pool)
         .await?
         .iter()
-        .map(contacts::RequestRow::view)
+        .map(store::RequestRow::view)
         .collect::<Result<Vec<_>, _>>()?;
-    Ok(PeopleSnapshot {
+    Ok(ContactsSnapshot {
         identity,
         contacts,
         requests,
@@ -242,43 +242,45 @@ async fn snapshot<R: Runtime>(
 }
 
 #[tauri::command]
-pub async fn people_list<R: Runtime>(app: AppHandle<R>) -> Result<PeopleSnapshot, PeopleError> {
-    let pool = people_pool(&app).await?;
+pub async fn contacts_list<R: Runtime>(
+    app: AppHandle<R>,
+) -> Result<ContactsSnapshot, ContactsError> {
+    let pool = contacts_pool(&app).await?;
     snapshot(&app, &pool).await
 }
 
 #[tauri::command]
-pub async fn people_local_card<R: Runtime>(
+pub async fn contacts_local_card<R: Runtime>(
     app: AppHandle<R>,
-) -> Result<LocalCardView, PeopleError> {
-    let pool = people_pool(&app).await?;
+) -> Result<LocalCardView, ContactsError> {
+    let pool = contacts_pool(&app).await?;
     let identity = identity::ensure_identity(&app, &pool).await?;
     card::local_card_view(&app, &identity)
 }
 
 #[tauri::command]
-pub async fn people_regenerate_card<R: Runtime>(
+pub async fn contacts_regenerate_card<R: Runtime>(
     app: AppHandle<R>,
-) -> Result<LocalCardView, PeopleError> {
+) -> Result<LocalCardView, ContactsError> {
     require_writable(&app)?;
-    let pool = people_pool(&app).await?;
+    let pool = contacts_pool(&app).await?;
     let identity = identity::ensure_identity(&app, &pool).await?;
     let identity = card::rotate_card(&pool, identity).await?;
     card::local_card_view(&app, &identity)
 }
 
 #[tauri::command]
-pub async fn people_parse_card<R: Runtime>(
+pub async fn contacts_parse_card<R: Runtime>(
     app: AppHandle<R>,
     text: String,
-) -> Result<ParsedCardView, PeopleError> {
-    let signed = ganbaru_people::decode_card_text(&text)
-        .map_err(|error| PeopleError::InvalidCard(error.to_string()))?;
-    let pool = people_pool(&app).await?;
+) -> Result<ParsedCardView, ContactsError> {
+    let signed = ganbaru_contacts::decode_card_text(&text)
+        .map_err(|error| ContactsError::InvalidCard(error.to_string()))?;
+    let pool = contacts_pool(&app).await?;
     let identity = identity::load_identity(&app, &pool).await?;
     let public_key = signed.card.public_key.to_text();
-    let existing = contacts::contact_by_key(&pool, &public_key).await?;
-    let pending_sent = contacts::pending_request(&pool, RequestDirection::Sent, &public_key)
+    let existing = store::contact_by_key(&pool, &public_key).await?;
+    let pending_sent = store::pending_request(&pool, RequestDirection::Sent, &public_key)
         .await?
         .is_some();
     Ok(ParsedCardView {
@@ -296,21 +298,21 @@ pub async fn people_parse_card<R: Runtime>(
 }
 
 #[tauri::command]
-pub async fn people_decode_card_qr(
+pub async fn contacts_decode_card_qr(
     width: usize,
     height: usize,
     luma: Vec<u8>,
-) -> Result<String, PeopleError> {
+) -> Result<String, ContactsError> {
     card::decode_card_qr(width, height, &luma)
 }
 
 #[tauri::command]
-pub async fn people_send_request<R: Runtime>(
+pub async fn contacts_send_request<R: Runtime>(
     app: AppHandle<R>,
     request: SendContactRequest,
-) -> Result<PeopleSnapshot, PeopleError> {
+) -> Result<ContactsSnapshot, ContactsError> {
     require_writable(&app)?;
-    let pool = people_pool(&app).await?;
+    let pool = contacts_pool(&app).await?;
     let identity = identity::ensure_identity(&app, &pool).await?;
     requests::send_request(
         &app,
@@ -325,31 +327,31 @@ pub async fn people_send_request<R: Runtime>(
 }
 
 #[tauri::command]
-pub async fn people_accept_request<R: Runtime>(
+pub async fn contacts_accept_request<R: Runtime>(
     app: AppHandle<R>,
     request: AcceptContactRequest,
-) -> Result<PeopleSnapshot, PeopleError> {
+) -> Result<ContactsSnapshot, ContactsError> {
     require_writable(&app)?;
-    let pool = people_pool(&app).await?;
+    let pool = contacts_pool(&app).await?;
     requests::accept_request(
         &pool,
         &request.id,
         request.expected_revision,
         request.invite_trust,
         request.message_trust,
-        contacts::now(),
+        store::now(),
     )
     .await?;
     snapshot(&app, &pool).await
 }
 
 #[tauri::command]
-pub async fn people_decline_request<R: Runtime>(
+pub async fn contacts_decline_request<R: Runtime>(
     app: AppHandle<R>,
     request: RowRevision,
-) -> Result<PeopleSnapshot, PeopleError> {
+) -> Result<ContactsSnapshot, ContactsError> {
     require_writable(&app)?;
-    let pool = people_pool(&app).await?;
+    let pool = contacts_pool(&app).await?;
     requests::close_request(
         &pool,
         &request.id,
@@ -362,12 +364,12 @@ pub async fn people_decline_request<R: Runtime>(
 }
 
 #[tauri::command]
-pub async fn people_cancel_request<R: Runtime>(
+pub async fn contacts_cancel_request<R: Runtime>(
     app: AppHandle<R>,
     request: RowRevision,
-) -> Result<PeopleSnapshot, PeopleError> {
+) -> Result<ContactsSnapshot, ContactsError> {
     require_writable(&app)?;
-    let pool = people_pool(&app).await?;
+    let pool = contacts_pool(&app).await?;
     requests::close_request(
         &pool,
         &request.id,
@@ -380,23 +382,23 @@ pub async fn people_cancel_request<R: Runtime>(
 }
 
 #[tauri::command]
-pub async fn people_block<R: Runtime>(
+pub async fn contacts_block<R: Runtime>(
     app: AppHandle<R>,
     request: BlockPersonRequest,
-) -> Result<PeopleSnapshot, PeopleError> {
+) -> Result<ContactsSnapshot, ContactsError> {
     require_writable(&app)?;
-    let pool = people_pool(&app).await?;
-    requests::block_person(&pool, &request.public_key, contacts::now()).await?;
+    let pool = contacts_pool(&app).await?;
+    requests::block_person(&pool, &request.public_key, store::now()).await?;
     snapshot(&app, &pool).await
 }
 
 #[tauri::command]
-pub async fn people_unblock<R: Runtime>(
+pub async fn contacts_unblock<R: Runtime>(
     app: AppHandle<R>,
     request: RowRevision,
-) -> Result<PeopleSnapshot, PeopleError> {
+) -> Result<ContactsSnapshot, ContactsError> {
     require_writable(&app)?;
-    let pool = people_pool(&app).await?;
+    let pool = contacts_pool(&app).await?;
     remove_contact_in_state(
         &pool,
         &request.id,
@@ -408,12 +410,12 @@ pub async fn people_unblock<R: Runtime>(
 }
 
 #[tauri::command]
-pub async fn people_remove_contact<R: Runtime>(
+pub async fn contacts_remove<R: Runtime>(
     app: AppHandle<R>,
     request: RowRevision,
-) -> Result<PeopleSnapshot, PeopleError> {
+) -> Result<ContactsSnapshot, ContactsError> {
     require_writable(&app)?;
-    let pool = people_pool(&app).await?;
+    let pool = contacts_pool(&app).await?;
     remove_contact_in_state(
         &pool,
         &request.id,
@@ -425,24 +427,24 @@ pub async fn people_remove_contact<R: Runtime>(
 }
 
 #[tauri::command]
-pub async fn people_update_trust<R: Runtime>(
+pub async fn contacts_update_trust<R: Runtime>(
     app: AppHandle<R>,
     request: UpdateTrustRequest,
-) -> Result<PeopleSnapshot, PeopleError> {
+) -> Result<ContactsSnapshot, ContactsError> {
     require_writable(&app)?;
-    let pool = people_pool(&app).await?;
-    let now = contacts::now();
-    let updated = contacts::update_contact_trust(
+    let pool = contacts_pool(&app).await?;
+    let now = store::now();
+    let updated = store::update_contact_trust(
         &pool,
         &request.id,
         request.expected_revision,
-        contacts::TrustGrant::new(request.invite_trust, now),
-        contacts::TrustGrant::new(request.message_trust, now),
+        store::TrustGrant::new(request.invite_trust, now),
+        store::TrustGrant::new(request.message_trust, now),
         now,
     )
     .await?;
     if !updated {
-        return Err(PeopleError::RevisionConflict(
+        return Err(ContactsError::RevisionConflict(
             "the contact changed since it was last read".to_string(),
         ));
     }
@@ -450,10 +452,10 @@ pub async fn people_update_trust<R: Runtime>(
 }
 
 #[tauri::command]
-pub async fn people_sync_requests<R: Runtime>(
+pub async fn contacts_sync_requests<R: Runtime>(
     app: AppHandle<R>,
-) -> Result<PeopleSnapshot, PeopleError> {
-    let pool = people_pool(&app).await?;
+) -> Result<ContactsSnapshot, ContactsError> {
+    let pool = contacts_pool(&app).await?;
     if let Some(identity) = identity::load_identity(&app, &pool).await?
         && identity.key.is_some()
         && crate::vault::ownership::active_status(&app)?.can_write
@@ -466,22 +468,22 @@ pub async fn people_sync_requests<R: Runtime>(
 /// Writes a PNG rendering of the card to a user-selected path. Returns false when cancelled.
 #[cfg(desktop)]
 #[tauri::command]
-pub async fn people_save_card_image(
+pub async fn contacts_save_card_image(
     app: AppHandle,
     title: String,
     file_name: String,
     png_base64: String,
-) -> Result<bool, PeopleError> {
+) -> Result<bool, ContactsError> {
     const MAX_PNG_BYTES: usize = 2 * 1024 * 1024;
     use base64::Engine;
     if png_base64.len() > MAX_PNG_BYTES.div_ceil(3) * 4 {
-        return Err(PeopleError::Failed("card image is too large".to_string()));
+        return Err(ContactsError::Failed("card image is too large".to_string()));
     }
     let bytes = base64::engine::general_purpose::STANDARD
         .decode(png_base64)
-        .map_err(|error| PeopleError::Failed(format!("decode card image: {error}")))?;
+        .map_err(|error| ContactsError::Failed(format!("decode card image: {error}")))?;
     if !bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
-        return Err(PeopleError::Failed("card image is not a PNG".to_string()));
+        return Err(ContactsError::Failed("card image is not a PNG".to_string()));
     }
     let picked = tauri::async_runtime::spawn_blocking(move || {
         crate::vault::pick_save_path(
@@ -494,17 +496,17 @@ pub async fn people_save_card_image(
         )
     })
     .await
-    .map_err(|error| PeopleError::Failed(format!("save dialog: {error}")))??;
+    .map_err(|error| ContactsError::Failed(format!("save dialog: {error}")))??;
     let Some(path) = picked else {
         return Ok(false);
     };
     if path.extension().and_then(|value| value.to_str()) != Some("png") {
-        return Err(PeopleError::Failed(
+        return Err(ContactsError::Failed(
             "card image must be saved as a PNG file".to_string(),
         ));
     }
     std::fs::write(&path, bytes)
-        .map_err(|error| PeopleError::Failed(format!("write card image: {error}")))?;
+        .map_err(|error| ContactsError::Failed(format!("write card image: {error}")))?;
     Ok(true)
 }
 
@@ -513,12 +515,12 @@ async fn remove_contact_in_state(
     id: &str,
     expected_revision: i64,
     state: ContactState,
-) -> Result<(), PeopleError> {
-    let removed = contacts::delete_contact(pool, id, expected_revision, state).await?;
+) -> Result<(), ContactsError> {
+    let removed = store::delete_contact(pool, id, expected_revision, state).await?;
     if removed {
         Ok(())
     } else {
-        Err(PeopleError::RevisionConflict(
+        Err(ContactsError::RevisionConflict(
             "the contact changed since it was last read".to_string(),
         ))
     }

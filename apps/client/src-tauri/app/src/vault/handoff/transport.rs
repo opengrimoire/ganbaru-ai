@@ -473,7 +473,7 @@ pub(crate) async fn exchange_distractions(
     }
 }
 
-/// Sends one People message to a coordinator reached through a contact card hint. The
+/// Sends one Contacts message to a coordinator reached through a contact card hint. The
 /// connection pins the hinted certificate but presents no client identity.
 pub(crate) async fn unauthenticated_exchange(
     endpoint: &str,

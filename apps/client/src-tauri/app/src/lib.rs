@@ -5,6 +5,7 @@
 mod benchmark;
 mod calendar;
 mod chat;
+mod contacts;
 mod db;
 mod distractions;
 #[cfg(all(test, desktop))]
@@ -12,7 +13,6 @@ mod first_use_contracts;
 mod music;
 mod notes;
 mod notifications;
-mod people;
 mod pomodoro;
 mod profile_images;
 mod projects;

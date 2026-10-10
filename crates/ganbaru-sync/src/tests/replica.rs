@@ -3,7 +3,7 @@
 
 use std::sync::OnceLock;
 
-use ganbaru_people::PersonKeyPair;
+use ganbaru_contacts::PersonKeyPair;
 use ganbaru_sync_contracts::{
     SignedCertificate, VersionVector, WriterCertificate, WriterId, WriterKeyPair, sign_certificate,
 };

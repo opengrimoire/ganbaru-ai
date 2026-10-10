@@ -3,7 +3,7 @@
 
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-use ganbaru_people::PersonKeyPair;
+use ganbaru_contacts::PersonKeyPair;
 use ganbaru_sync::local::LocalWriterHead;
 use ganbaru_sync::{Engine, LocalWriter, SequenceReservation, SpaceContext, WriterState};
 use ganbaru_sync_contracts::{

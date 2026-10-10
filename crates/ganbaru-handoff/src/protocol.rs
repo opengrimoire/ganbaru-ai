@@ -31,7 +31,7 @@ const SIGNATURE_TEXT_LENGTH: usize = 86;
 const CARD_NONCE_TEXT_LENGTH: usize = 22;
 /// Upper bound on the pasteable text form of a contact card.
 const MAX_CARD_TEXT_BYTES: usize =
-    ganbaru_people::CARD_TEXT_PREFIX.len() + ganbaru_people::MAX_CARD_BYTES.div_ceil(3) * 4;
+    ganbaru_contacts::CARD_TEXT_PREFIX.len() + ganbaru_contacts::MAX_CARD_BYTES.div_ceil(3) * 4;
 /// Upper bound on a base64url PKCS#8 person key.
 const MAX_PERSON_KEY_TEXT_BYTES: usize = 256;
 /// Tolerated clock skew for signed status requests.
@@ -635,7 +635,7 @@ impl ControlMessage {
                 validate_base64url_text(
                     "requester public key",
                     requester_public_key,
-                    ganbaru_people::PUBLIC_KEY_TEXT_LENGTH,
+                    ganbaru_contacts::PUBLIC_KEY_TEXT_LENGTH,
                 )?;
                 if (unix_time_ms() - *issued_at_ms).abs() > STATUS_REPLAY_WINDOW_MS {
                     return Err("contact request status is outside the replay window".to_string());
@@ -677,7 +677,7 @@ impl ControlMessage {
                 validate_base64url_text(
                     "person public key",
                     public_key,
-                    ganbaru_people::PUBLIC_KEY_TEXT_LENGTH,
+                    ganbaru_contacts::PUBLIC_KEY_TEXT_LENGTH,
                 )?;
                 if private_key_pkcs8.is_empty()
                     || private_key_pkcs8.len() > MAX_PERSON_KEY_TEXT_BYTES
@@ -784,7 +784,7 @@ fn validate_base64url_text(label: &str, value: &str, length: usize) -> Result<()
 }
 
 fn validate_card_text(label: &str, value: &str) -> Result<(), String> {
-    let Some(encoded) = value.strip_prefix(ganbaru_people::CARD_TEXT_PREFIX) else {
+    let Some(encoded) = value.strip_prefix(ganbaru_contacts::CARD_TEXT_PREFIX) else {
         return Err(format!("{label} is invalid"));
     };
     if encoded.is_empty() || value.len() > MAX_CARD_TEXT_BYTES || !is_base64url(encoded) {

@@ -323,7 +323,7 @@ impl<R: Runtime> CoordinatorState<R> {
                 request_id,
                 signature,
             } => {
-                crate::people::requests::receive_request_for_coordinator(
+                crate::contacts::requests::receive_request_for_coordinator(
                     &self.app,
                     recipient_card_nonce,
                     requester_card,
@@ -338,7 +338,7 @@ impl<R: Runtime> CoordinatorState<R> {
                 issued_at_ms,
                 signature,
             } => {
-                crate::people::requests::request_state_for_coordinator(
+                crate::contacts::requests::request_state_for_coordinator(
                     &self.app,
                     request_id,
                     requester_public_key,
@@ -348,7 +348,7 @@ impl<R: Runtime> CoordinatorState<R> {
                 .await
             }
             CoordinatorOperation::ReleasePersonKey => {
-                crate::people::identity::release_key_for_coordinator(&self.app).await
+                crate::contacts::identity::release_key_for_coordinator(&self.app).await
             }
             CoordinatorOperation::Shutdown => unreachable!("shutdown is handled by the run loop"),
         }

@@ -6,14 +6,10 @@ const NONCE: &str = "AAAAAAAAAAAAAAAAAAAAAA";
 const NOW: &str = "2026-10-07T12:00:00.000Z";
 
 #[test]
-fn schema_creates_people_storage_with_a_single_local_identity() {
+fn schema_creates_contacts_storage_with_a_single_local_identity() {
     super::block_on(async {
         let pool = migrated_memory_pool().await;
-        for table in [
-            "people_local_identity",
-            "people_contacts",
-            "people_contact_requests",
-        ] {
+        for table in ["contacts_local_identity", "contacts", "contact_requests"] {
             let exists: i64 =
                 sqlx::query_scalar("SELECT COUNT(*) FROM sqlite_schema WHERE name = ?")
                     .bind(table)
@@ -23,7 +19,7 @@ fn schema_creates_people_storage_with_a_single_local_identity() {
             assert_eq!(exists, 1, "missing {table}");
         }
         sqlx::query(
-            "INSERT INTO people_local_identity (singleton, public_key, card_nonce, created_at, updated_at)
+            "INSERT INTO contacts_local_identity (singleton, public_key, card_nonce, created_at, updated_at)
              VALUES (1, ?, ?, ?, ?)",
         )
         .bind(PUBLIC_KEY)
@@ -34,7 +30,7 @@ fn schema_creates_people_storage_with_a_single_local_identity() {
         .await
         .unwrap();
         let second = sqlx::query(
-            "INSERT INTO people_local_identity (singleton, public_key, card_nonce, created_at, updated_at)
+            "INSERT INTO contacts_local_identity (singleton, public_key, card_nonce, created_at, updated_at)
              VALUES (2, ?, ?, ?, ?)",
         )
         .bind(OTHER_KEY)
@@ -45,7 +41,7 @@ fn schema_creates_people_storage_with_a_single_local_identity() {
         .await;
         assert!(second.is_err(), "identity must stay a singleton");
         let short_key = sqlx::query(
-            "INSERT INTO people_local_identity (singleton, public_key, card_nonce, created_at, updated_at)
+            "INSERT INTO contacts_local_identity (singleton, public_key, card_nonce, created_at, updated_at)
              VALUES (1, 'short', ?, ?, ?)",
         )
         .bind(NONCE)
@@ -62,7 +58,7 @@ fn contacts_enforce_trust_kinds_state_and_revision_bumps() {
     super::block_on(async {
         let pool = migrated_memory_pool().await;
         sqlx::query(
-            "INSERT INTO people_contacts (id, public_key, display_name, created_at, updated_at)
+            "INSERT INTO contacts (id, public_key, display_name, created_at, updated_at)
              VALUES ('person:a', ?, 'Ana', ?, ?)",
         )
         .bind(PUBLIC_KEY)
@@ -71,18 +67,17 @@ fn contacts_enforce_trust_kinds_state_and_revision_bumps() {
         .execute(&pool)
         .await
         .unwrap();
-        let (state, invite, color): (String, String, i64) = sqlx::query_as(
-            "SELECT state, invite_trust, color FROM people_contacts WHERE id = 'person:a'",
-        )
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+        let (state, invite, color): (String, String, i64) =
+            sqlx::query_as("SELECT state, invite_trust, color FROM contacts WHERE id = 'person:a'")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
         assert_eq!(
             (state.as_str(), invite.as_str(), color),
             ("active", "not_allowed", 30)
         );
         let duplicate_key = sqlx::query(
-            "INSERT INTO people_contacts (id, public_key, display_name, created_at, updated_at)
+            "INSERT INTO contacts (id, public_key, display_name, created_at, updated_at)
              VALUES ('person:b', ?, 'Twin', ?, ?)",
         )
         .bind(PUBLIC_KEY)
@@ -91,19 +86,17 @@ fn contacts_enforce_trust_kinds_state_and_revision_bumps() {
         .execute(&pool)
         .await;
         assert!(duplicate_key.is_err(), "one contact per public key");
-        let bad_trust = sqlx::query(
-            "UPDATE people_contacts SET invite_trust = 'forever' WHERE id = 'person:a'",
-        )
-        .execute(&pool)
-        .await;
-        assert!(bad_trust.is_err());
-        let bad_state =
-            sqlx::query("UPDATE people_contacts SET state = 'muted' WHERE id = 'person:a'")
+        let bad_trust =
+            sqlx::query("UPDATE contacts SET invite_trust = 'forever' WHERE id = 'person:a'")
                 .execute(&pool)
                 .await;
+        assert!(bad_trust.is_err());
+        let bad_state = sqlx::query("UPDATE contacts SET state = 'muted' WHERE id = 'person:a'")
+            .execute(&pool)
+            .await;
         assert!(bad_state.is_err());
         sqlx::query(
-            "UPDATE people_contacts SET message_trust = 'seven_days', message_trust_expires_at = ?
+            "UPDATE contacts SET message_trust = 'seven_days', message_trust_expires_at = ?
              WHERE id = 'person:a'",
         )
         .bind(NOW)
@@ -111,7 +104,7 @@ fn contacts_enforce_trust_kinds_state_and_revision_bumps() {
         .await
         .unwrap();
         let revision: i64 =
-            sqlx::query_scalar("SELECT revision FROM people_contacts WHERE id = 'person:a'")
+            sqlx::query_scalar("SELECT revision FROM contacts WHERE id = 'person:a'")
                 .fetch_one(&pool)
                 .await
                 .unwrap();
@@ -125,7 +118,7 @@ fn contact_requests_allow_one_pending_request_per_peer_and_direction() {
         let pool = migrated_memory_pool().await;
         let insert = |id: &'static str, direction: &'static str, key: &'static str| {
             sqlx::query(
-                "INSERT INTO people_contact_requests
+                "INSERT INTO contact_requests
                  (id, direction, public_key, display_name, card, card_digest, expires_at, created_at, updated_at)
                  VALUES (?, ?, ?, 'Ana', 'Y2FyZA', ?, ?, ?, ?)",
             )
@@ -152,7 +145,7 @@ fn contact_requests_allow_one_pending_request_per_peer_and_direction() {
             .execute(&pool)
             .await
             .unwrap();
-        sqlx::query("UPDATE people_contact_requests SET state = 'declined' WHERE id = 'request-1'")
+        sqlx::query("UPDATE contact_requests SET state = 'declined' WHERE id = 'request-1'")
             .execute(&pool)
             .await
             .unwrap();
@@ -161,7 +154,7 @@ fn contact_requests_allow_one_pending_request_per_peer_and_direction() {
             .await
             .unwrap();
         let bad_direction = sqlx::query(
-            "INSERT INTO people_contact_requests
+            "INSERT INTO contact_requests
              (id, direction, public_key, display_name, card, card_digest, expires_at, created_at, updated_at)
              VALUES ('request-5', 'sideways', ?, 'Ana', 'Y2FyZA', ?, ?, ?, ?)",
         )
@@ -174,17 +167,16 @@ fn contact_requests_allow_one_pending_request_per_peer_and_direction() {
         .await;
         assert!(bad_direction.is_err());
         let bad_fingerprint = sqlx::query(
-            "UPDATE people_contact_requests SET coordinator_fingerprint = 'abc' WHERE id = 'request-3'",
+            "UPDATE contact_requests SET coordinator_fingerprint = 'abc' WHERE id = 'request-3'",
         )
         .execute(&pool)
         .await;
         assert!(bad_fingerprint.is_err());
-        let revision: i64 = sqlx::query_scalar(
-            "SELECT revision FROM people_contact_requests WHERE id = 'request-1'",
-        )
-        .fetch_one(&pool)
-        .await
-        .unwrap();
+        let revision: i64 =
+            sqlx::query_scalar("SELECT revision FROM contact_requests WHERE id = 'request-1'")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
         assert_eq!(revision, 2);
     });
 }

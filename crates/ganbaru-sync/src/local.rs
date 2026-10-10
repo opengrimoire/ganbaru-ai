@@ -2,7 +2,7 @@
 //! writer high-water check, snapshot preparation, and carry-forward of operations across a
 //! database replacement.
 
-use ganbaru_people::PersonPublicKey;
+use ganbaru_contacts::PersonPublicKey;
 use ganbaru_sync_contracts::{Envelope, Seq, SpaceId, VersionVector, WriterId, WriterPublicKey};
 use sqlx::{Connection, SqliteConnection};
 
@@ -34,13 +34,13 @@ pub enum LocalWriterHead {
 }
 
 /// The space context of a vault: its personal space anchored at the person key of
-/// `people_local_identity`, or `None` while the vault has no person identity.
+/// `contacts_local_identity`, or `None` while the vault has no person identity.
 pub async fn space_context(
     conn: &mut SqliteConnection,
     vault_id: &str,
 ) -> SyncResult<Option<SpaceContext>> {
     let public_key: Option<String> =
-        sqlx::query_scalar("SELECT public_key FROM people_local_identity WHERE singleton = 1")
+        sqlx::query_scalar("SELECT public_key FROM contacts_local_identity WHERE singleton = 1")
             .fetch_optional(&mut *conn)
             .await?;
     let Some(public_key) = public_key else {

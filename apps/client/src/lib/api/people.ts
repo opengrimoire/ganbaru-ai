@@ -269,28 +269,28 @@ async function invokePeople<T>(command: string, parse: (value: unknown) => T, ar
 
 /** Reads the local identity, contacts, and contact requests. */
 export function listPeople(): Promise<PeopleSnapshot> {
-  return invokePeople("people_list", parsePeopleSnapshot);
+  return invokePeople("contacts_list", parsePeopleSnapshot);
 }
 
 /** Signs the current local card, creating the person identity on first use. */
 export function loadLocalCard(): Promise<PeopleLocalCard> {
-  return invokePeople("people_local_card", parsePeopleLocalCard);
+  return invokePeople("contacts_local_card", parsePeopleLocalCard);
 }
 
 /** Rotates the card nonce so every card issued so far stops being accepted. */
 export function regenerateLocalCard(): Promise<PeopleLocalCard> {
-  return invokePeople("people_regenerate_card", parsePeopleLocalCard);
+  return invokePeople("contacts_regenerate_card", parsePeopleLocalCard);
 }
 
 /** Decodes and verifies pasted card text without writing anything. */
 export function parseContactCard(text: string): Promise<PeopleParsedCard> {
-  return invokePeople("people_parse_card", parsePeopleParsedCard, { text });
+  return invokePeople("contacts_parse_card", parsePeopleParsedCard, { text });
 }
 
 /** Decodes a bounded grayscale camera frame into contact card text. */
 export function decodeContactCardQr(width: number, height: number, luma: Uint8Array): Promise<string> {
   return invokePeople(
-    "people_decode_card_qr",
+    "contacts_decode_card_qr",
     (value) => readString(value, "contact card QR"),
     { width, height, luma: Array.from(luma) },
   );
@@ -298,52 +298,52 @@ export function decodeContactCardQr(width: number, height: number, luma: Uint8Ar
 
 /** Delivers a contact request to the person named by the card. */
 export function sendContactRequest(cardText: string, trust: PeopleTrustChoice): Promise<PeopleSnapshot> {
-  return invokePeople("people_send_request", parsePeopleSnapshot, {
+  return invokePeople("contacts_send_request", parsePeopleSnapshot, {
     request: { cardText, inviteTrust: trust.inviteTrust, messageTrust: trust.messageTrust },
   });
 }
 
 export function acceptContactRequest(row: PeopleRowRevision, trust: PeopleTrustChoice): Promise<PeopleSnapshot> {
-  return invokePeople("people_accept_request", parsePeopleSnapshot, {
+  return invokePeople("contacts_accept_request", parsePeopleSnapshot, {
     request: { ...row, inviteTrust: trust.inviteTrust, messageTrust: trust.messageTrust },
   });
 }
 
 export function declineContactRequest(row: PeopleRowRevision): Promise<PeopleSnapshot> {
-  return invokePeople("people_decline_request", parsePeopleSnapshot, { request: row });
+  return invokePeople("contacts_decline_request", parsePeopleSnapshot, { request: row });
 }
 
 export function cancelContactRequest(row: PeopleRowRevision): Promise<PeopleSnapshot> {
-  return invokePeople("people_cancel_request", parsePeopleSnapshot, { request: row });
+  return invokePeople("contacts_cancel_request", parsePeopleSnapshot, { request: row });
 }
 
 export function blockPerson(publicKey: string): Promise<PeopleSnapshot> {
-  return invokePeople("people_block", parsePeopleSnapshot, { request: { publicKey } });
+  return invokePeople("contacts_block", parsePeopleSnapshot, { request: { publicKey } });
 }
 
 export function unblockPerson(row: PeopleRowRevision): Promise<PeopleSnapshot> {
-  return invokePeople("people_unblock", parsePeopleSnapshot, { request: row });
+  return invokePeople("contacts_unblock", parsePeopleSnapshot, { request: row });
 }
 
 export function removeContact(row: PeopleRowRevision): Promise<PeopleSnapshot> {
-  return invokePeople("people_remove_contact", parsePeopleSnapshot, { request: row });
+  return invokePeople("contacts_remove", parsePeopleSnapshot, { request: row });
 }
 
 export function updateContactTrust(row: PeopleRowRevision, trust: PeopleTrustChoice): Promise<PeopleSnapshot> {
-  return invokePeople("people_update_trust", parsePeopleSnapshot, {
+  return invokePeople("contacts_update_trust", parsePeopleSnapshot, {
     request: { ...row, inviteTrust: trust.inviteTrust, messageTrust: trust.messageTrust },
   });
 }
 
 /** Polls every pending sent request now instead of waiting for the background interval. */
 export function syncContactRequests(): Promise<PeopleSnapshot> {
-  return invokePeople("people_sync_requests", parsePeopleSnapshot);
+  return invokePeople("contacts_sync_requests", parsePeopleSnapshot);
 }
 
 /** Saves a PNG rendering of the card through the desktop save dialog. Resolves false when cancelled. */
 export function saveCardImage(title: string, fileName: string, pngBase64: string): Promise<boolean> {
   return invokePeople(
-    "people_save_card_image",
+    "contacts_save_card_image",
     (value) => readBoolean(value, "save card image"),
     { title, fileName, pngBase64 },
   );

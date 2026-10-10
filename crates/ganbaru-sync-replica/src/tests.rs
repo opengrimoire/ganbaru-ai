@@ -4,8 +4,8 @@ use super::writer::{
     FileKeyStore, RESERVATION_BLOCK, SuccessorPlan, SyncFiles, WriterCheck, WriterKeyStore,
     WriterRecord, check_writer, create_writer, read_record, read_stored_writer, record_matches,
 };
+use ganbaru_contacts::PersonKeyPair;
 use ganbaru_db::{DatabaseAccessMode, DatabasePoolRegistry};
-use ganbaru_people::PersonKeyPair;
 use ganbaru_sync::local::{self, LocalWriterHead};
 use ganbaru_sync::{Engine, SpaceContext, WriterState};
 use sqlx::SqliteConnection;
@@ -74,7 +74,7 @@ fn person() -> PersonKeyPair {
 async fn create_vault(registry: &DatabasePoolRegistry, path: &Path) -> sqlx::SqlitePool {
     let pool = registry.connect_path(path).await.expect("migrate vault");
     sqlx::query(
-        "INSERT INTO people_local_identity
+        "INSERT INTO contacts_local_identity
             (singleton, public_key, card_nonce, created_at, updated_at)
          VALUES (1, ?, 'AAAAAAAAAAAAAAAAAAAAAA', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')",
     )

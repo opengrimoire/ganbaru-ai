@@ -4,7 +4,7 @@ use crate::{
     OperationKind, Revocation, RevokeReason, RowKey, SignedCertificate, SpaceId, TableId, Value,
     WriterCertificate, WriterId, WriterKeyPair, WriterPublicKey, sign_certificate,
 };
-use ganbaru_people::PersonKeyPair;
+use ganbaru_contacts::PersonKeyPair;
 
 pub const PERSON_SEED: [u8; 32] = [0x11; 32];
 pub const WRITER_SEED: [u8; 32] = [0x22; 32];

@@ -1,7 +1,7 @@
--- People: the local person's identity, contacts with trust scopes, and contact requests.
+-- Contacts: the local person's identity, contacts with trust scopes, and contact requests.
 -- Private keys never live here; they stay in native credential storage per device.
 
-CREATE TABLE people_local_identity (
+CREATE TABLE contacts_local_identity (
     singleton INTEGER PRIMARY KEY NOT NULL CHECK (singleton = 1),
     public_key TEXT NOT NULL CHECK (length(public_key) = 43),
     card_nonce TEXT NOT NULL CHECK (length(card_nonce) = 22),
@@ -10,7 +10,7 @@ CREATE TABLE people_local_identity (
     updated_at TEXT NOT NULL CHECK (length(updated_at) >= 20)
 ) STRICT;
 
-CREATE TABLE people_contacts (
+CREATE TABLE contacts (
     id TEXT PRIMARY KEY NOT NULL CHECK (length(id) BETWEEN 1 AND 160),
     public_key TEXT NOT NULL UNIQUE CHECK (length(public_key) = 43),
     display_name TEXT NOT NULL CHECK (length(trim(display_name)) BETWEEN 1 AND 160),
@@ -34,15 +34,15 @@ CREATE TABLE people_contacts (
     created_at TEXT NOT NULL CHECK (length(created_at) >= 20),
     updated_at TEXT NOT NULL CHECK (length(updated_at) >= 20)
 ) STRICT;
-CREATE INDEX idx_people_contacts_state_name ON people_contacts(state, lower(display_name));
-CREATE TRIGGER people_contacts_revision_after_update
-AFTER UPDATE ON people_contacts
+CREATE INDEX idx_contacts_state_name ON contacts(state, lower(display_name));
+CREATE TRIGGER contacts_revision_after_update
+AFTER UPDATE ON contacts
 WHEN NEW.revision = OLD.revision
 BEGIN
-    UPDATE people_contacts SET revision = OLD.revision + 1 WHERE id = NEW.id;
+    UPDATE contacts SET revision = OLD.revision + 1 WHERE id = NEW.id;
 END;
 
-CREATE TABLE people_contact_requests (
+CREATE TABLE contact_requests (
     id TEXT PRIMARY KEY NOT NULL CHECK (length(id) BETWEEN 1 AND 160),
     direction TEXT NOT NULL CHECK (direction IN ('sent', 'received')),
     public_key TEXT NOT NULL CHECK (length(public_key) = 43),
@@ -70,14 +70,14 @@ CREATE TABLE people_contact_requests (
     created_at TEXT NOT NULL CHECK (length(created_at) >= 20),
     updated_at TEXT NOT NULL CHECK (length(updated_at) >= 20)
 ) STRICT;
-CREATE UNIQUE INDEX idx_people_contact_requests_pending_peer
-ON people_contact_requests(direction, public_key)
+CREATE UNIQUE INDEX idx_contact_requests_pending_peer
+ON contact_requests(direction, public_key)
 WHERE state = 'pending';
-CREATE INDEX idx_people_contact_requests_state
-ON people_contact_requests(direction, state, expires_at);
-CREATE TRIGGER people_contact_requests_revision_after_update
-AFTER UPDATE ON people_contact_requests
+CREATE INDEX idx_contact_requests_state
+ON contact_requests(direction, state, expires_at);
+CREATE TRIGGER contact_requests_revision_after_update
+AFTER UPDATE ON contact_requests
 WHEN NEW.revision = OLD.revision
 BEGIN
-    UPDATE people_contact_requests SET revision = OLD.revision + 1 WHERE id = NEW.id;
+    UPDATE contact_requests SET revision = OLD.revision + 1 WHERE id = NEW.id;
 END;

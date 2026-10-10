@@ -596,9 +596,9 @@ async fn create_identity<R: Runtime>(
     app: &AppHandle<R>,
     pool: &SqlitePool,
 ) -> Result<bool, String> {
-    match crate::people::identity::ensure_identity(app, pool).await {
+    match crate::contacts::identity::ensure_identity(app, pool).await {
         Ok(_) => Ok(true),
-        Err(crate::people::PeopleError::IdentityUnavailable(_)) => Ok(false),
+        Err(crate::contacts::ContactsError::IdentityUnavailable(_)) => Ok(false),
         Err(error) => Err(format!("create person identity: {}", error.into_message())),
     }
 }
@@ -837,12 +837,12 @@ impl<'a, R: Runtime> Session<'a, R> {
     /// Creates a successor writer, or returns `None` while the person key is unavailable.
     async fn create_successor(&self, plan: SuccessorPlan) -> Result<Option<ActiveWriter>, String> {
         let person =
-            crate::people::identity::person_key_matching(self.app, &self.ctx.anchor).await?;
+            crate::contacts::identity::person_key_matching(self.app, &self.ctx.anchor).await?;
         let Some(person) = person else {
             if self.key_release == KeyRelease::Request {
                 let app = self.app.clone();
                 tauri::async_runtime::spawn(async move {
-                    crate::people::identity::try_release(&app).await;
+                    crate::contacts::identity::try_release(&app).await;
                 });
             }
             return Ok(None);

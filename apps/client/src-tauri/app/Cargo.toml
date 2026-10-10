@@ -27,7 +27,7 @@ ganbaru-handoff = { workspace = true }
 ganbaru-music = { workspace = true }
 ganbaru-music-library = { workspace = true }
 ganbaru-notes = { workspace = true }
-ganbaru-people = { workspace = true }
+ganbaru-contacts = { workspace = true }
 ganbaru-pomodoro = { workspace = true }
 ganbaru-projects = { workspace = true }
 ganbaru-quick-notes = { workspace = true }
