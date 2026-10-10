@@ -1,9 +1,9 @@
 use super::*;
-use crate::projects::structure_commands::delete_project_group;
+use crate::structure_commands::delete_project_group;
 
 #[test]
 fn built_in_routine_defaults_are_protected_and_repaired() {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         let pool = migrated_memory_pool().await;
 
         assert_eq!(

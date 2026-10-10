@@ -692,7 +692,7 @@ async fn list_column_calculations(
     Ok(result)
 }
 
-pub(super) async fn load_task_view(
+pub async fn load_task_view(
     pool: &sqlx::SqlitePool,
     request: ProjectTaskViewRequest,
 ) -> Result<ProjectTaskViewPage, String> {
@@ -844,7 +844,7 @@ pub(super) async fn load_task_view(
     Ok(page)
 }
 
-pub(super) async fn load_task_detail(
+pub async fn load_task_detail(
     pool: &sqlx::SqlitePool,
     task_id: &str,
 ) -> Result<ProjectTaskDetailData, String> {

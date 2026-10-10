@@ -13,7 +13,7 @@ use super::types::{
 };
 use crate::calendar::reads::native_window::NativeCalendarWindow;
 use crate::calendar::recurrence::canonical::{EditScope, TimingIntent, Window};
-use crate::projects::scheduling::{ScheduleSnapshot, ScheduleTaskSelection, ScheduledTaskWrite};
+use ganbaru_projects::scheduling::{ScheduleSnapshot, ScheduleTaskSelection, ScheduledTaskWrite};
 
 const MAX_DURATION_MINUTES: i64 = 24 * 60;
 const MILLIS_PER_MINUTE: i64 = 60 * 1_000;
@@ -92,7 +92,7 @@ impl ScheduleRequest {
         {
             return Err("Task scheduling exceeds its selection, time or idle limits".into());
         }
-        crate::projects::scheduling::validate_selection(&self.project_id, &self.tasks)
+        ganbaru_projects::scheduling::validate_selection(&self.project_id, &self.tasks)
     }
 
     /// Capture the canonical Project source under the caller's SQLite snapshot.
@@ -101,7 +101,7 @@ impl ScheduleRequest {
         tx: &mut Transaction<'_, Sqlite>,
     ) -> Result<ScheduleSnapshot, String> {
         self.check_limits()?;
-        crate::projects::scheduling::read(tx, &self.project_id, &self.tasks).await
+        ganbaru_projects::scheduling::read(tx, &self.project_id, &self.tasks).await
     }
 
     /// The first civil label resolves through the same native gap and fold rules
@@ -244,7 +244,7 @@ impl ScheduleRequest {
 }
 
 fn focus_config(
-    defaults: &crate::projects::scheduling::ScheduleDefaults,
+    defaults: &ganbaru_projects::scheduling::ScheduleDefaults,
     global_idle: Option<i64>,
     all_day: bool,
 ) -> Result<Option<CalendarPomodoroConfig>, String> {

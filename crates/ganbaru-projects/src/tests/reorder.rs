@@ -1,5 +1,5 @@
 use super::*;
-use crate::projects::reorder::{ProjectReorderRequest, ReorderItem, TaskOrderAxis, reorder_item};
+use crate::reorder::{ProjectReorderRequest, ReorderItem, TaskOrderAxis, reorder_item};
 
 async fn seed(pool: &SqlitePool) {
     insert_project_graph_fixture(pool).await;
@@ -29,7 +29,7 @@ async fn order(pool: &SqlitePool) -> Vec<(String, f64)> {
 
 #[test]
 fn reorder_selects_an_unloaded_sibling_and_preserves_unrelated_native_fields() {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         let pool = migrated_memory_pool().await;
         seed(&pool).await;
         sqlx::query("UPDATE project_tasks SET title = 'Newer title', completed_at = '2026-10-01T10:00:00Z' WHERE id = 'task-b'")
@@ -60,7 +60,7 @@ fn reorder_selects_an_unloaded_sibling_and_preserves_unrelated_native_fields() {
 
 #[test]
 fn reorder_rolls_back_both_ranks_and_receipt_when_the_second_write_fails() {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         let pool = migrated_memory_pool().await;
         seed(&pool).await;
         let before = order(&pool).await;
@@ -79,7 +79,7 @@ fn reorder_rolls_back_both_ranks_and_receipt_when_the_second_write_fails() {
 
 #[test]
 fn reorder_normalizes_tied_ranks_in_complete_sibling_order() {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         let pool = migrated_memory_pool().await;
         seed(&pool).await;
         sqlx::query("UPDATE project_tasks SET section_sort_order = 1000 WHERE id = 'task-c'")
@@ -109,7 +109,7 @@ fn reorder_normalizes_tied_ranks_in_complete_sibling_order() {
 
 #[test]
 fn reorder_rejects_changed_placement_and_never_moves_into_another_parent() {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         let pool = migrated_memory_pool().await;
         seed(&pool).await;
         sqlx::query("UPDATE project_tasks SET parent_task_id = 'task-c' WHERE id = 'task-b'")
@@ -155,7 +155,7 @@ fn reorder_rejects_changed_placement_and_never_moves_into_another_parent() {
 
 #[test]
 fn reorder_subtasks_includes_siblings_in_other_sections() {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         let pool = migrated_memory_pool().await;
         seed(&pool).await;
         sqlx::raw_sql("INSERT INTO project_sections (id, project_id, name, sort_order) VALUES ('section-b', 'project-a', 'Another', 200);
@@ -187,7 +187,7 @@ fn reorder_subtasks_includes_siblings_in_other_sections() {
 
 #[test]
 fn reorder_receipt_recovers_lost_response_without_repeating_the_move() {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         let pool = migrated_memory_pool().await;
         seed(&pool).await;
         let original =
@@ -220,7 +220,7 @@ fn reorder_receipt_recovers_lost_response_without_repeating_the_move() {
 
 #[test]
 fn reorder_fields_and_options_commit_together_and_track_later_renames() {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         let pool = migrated_memory_pool().await;
         seed(&pool).await;
         sqlx::raw_sql("INSERT INTO project_custom_fields (id, project_id, name, field_type, sort_order) VALUES ('field-a', 'project-a', 'A', 'select', 1000), ('field-b', 'project-a', 'B', 'text', 2000);

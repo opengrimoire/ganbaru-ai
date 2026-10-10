@@ -1,6 +1,6 @@
 use super::models::{ProjectTaskRow, ProjectTaskUpdate};
 
-pub(in crate::projects) async fn status_is_terminal(
+pub(crate) async fn status_is_terminal(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     status_id: &str,
 ) -> Result<bool, String> {
@@ -12,7 +12,7 @@ pub(in crate::projects) async fn status_is_terminal(
     Ok(terminal != 0)
 }
 
-pub(in crate::projects) async fn current_timestamp(
+pub(crate) async fn current_timestamp(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
 ) -> Result<String, String> {
     sqlx::query_scalar::<_, String>("SELECT strftime('%Y-%m-%dT%H:%M:%fZ', 'now')")
@@ -73,7 +73,7 @@ async fn optional_task_label(
     }
 }
 
-pub(in crate::projects) async fn insert_task_field_change_event(
+pub(crate) async fn insert_task_field_change_event(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     task_id: &str,
     event_type: &str,
@@ -98,7 +98,7 @@ fn optional_i64_to_string(value: Option<i64>) -> Option<String> {
     value.map(|number| number.to_string())
 }
 
-pub(in crate::projects) fn bool_to_string(value: bool) -> String {
+pub(crate) fn bool_to_string(value: bool) -> String {
     if value {
         "true".to_string()
     } else {
@@ -117,7 +117,7 @@ fn normalized_task_change_reason(value: Option<&str>) -> Option<String> {
     })
 }
 
-pub(in crate::projects) async fn insert_task_update_change_events(
+pub(crate) async fn insert_task_update_change_events(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     previous: &ProjectTaskRow,
     next: &ProjectTaskUpdate,
@@ -340,7 +340,7 @@ pub(in crate::projects) async fn insert_task_update_change_events(
     Ok(())
 }
 
-pub(in crate::projects) async fn insert_task_change_event(
+pub(crate) async fn insert_task_change_event(
     tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     task_id: &str,
     event_type: &str,

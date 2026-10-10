@@ -4,7 +4,7 @@ use std::ffi::{CStr, c_char, c_int, c_uint, c_void};
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::{Arc, Mutex};
 
-use crate::{notes, projects};
+use crate::notes;
 use ganbaru_db::run_migrations;
 
 const SQLITE_OK: c_int = 0;
@@ -325,10 +325,10 @@ async fn traced_projects_workspace(
 ) -> (serde_json::Value, FirstUseContractMetrics, Vec<String>) {
     let trace = SqlTrace::start(pool).await;
     let mut metrics = FirstUseContractMetrics::default();
-    let response = projects::load_projects_workspace_for_first_use_contract(
+    let response = ganbaru_projects::workspace::load_workspace(
         pool,
         preferred_project_id,
-        projects::ProjectViewId::List,
+        ganbaru_projects::ProjectViewId::List,
     )
     .await;
     let trace = trace.finish().await;
@@ -475,10 +475,10 @@ fn project_refresh_does_not_run_built_in_repair() {
             .await
             .expect("remove built-in Reading project");
         let trace = SqlTrace::start(&pool).await;
-        let refresh = projects::refresh_projects_workspace_for_first_use_contract(
+        let refresh = ganbaru_projects::workspace::refresh_workspace(
             &pool,
             Some("project-routine-learning"),
-            projects::ProjectViewId::List,
+            ganbaru_projects::ProjectViewId::List,
         )
         .await;
         let trace = trace.finish().await;

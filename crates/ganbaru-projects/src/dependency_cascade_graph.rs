@@ -3,6 +3,7 @@
 use super::dependency_cascade::{
     CascadeItem, MAX_BYTES, MAX_DEPENDENCIES, MAX_ID_BYTES, MAX_TASKS,
 };
+use ganbaru_db::impl_sqlite_from_row;
 use serde::Serialize;
 use sqlx::{Sqlite, Transaction};
 

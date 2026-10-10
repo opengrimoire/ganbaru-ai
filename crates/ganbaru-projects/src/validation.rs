@@ -40,7 +40,7 @@ fn is_valid_project_icon_asset_path(value: &str) -> bool {
         )
 }
 
-pub(crate) fn validate_project_icon(value: &str) -> Result<(), String> {
+pub fn validate_project_icon(value: &str) -> Result<(), String> {
     let value = value.trim();
     let valid = value == "none"
         || value
@@ -687,7 +687,7 @@ pub(super) fn require_non_empty(value: &str, field: &str) -> Result<(), String> 
     }
 }
 
-pub(in crate::projects) fn validate_date(value: &str, field: &str) -> Result<(), String> {
+pub(crate) fn validate_date(value: &str, field: &str) -> Result<(), String> {
     let trimmed = value.trim();
     if trimmed.len() != 10 {
         return Err(format!("{field} must use YYYY-MM-DD"));

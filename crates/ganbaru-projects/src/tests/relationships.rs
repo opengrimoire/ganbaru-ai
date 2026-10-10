@@ -1,10 +1,10 @@
 use super::*;
-use crate::projects::mutations::{ensure_dependency_has_no_cycle, tag_for_task_tag_link};
-use crate::projects::relationship_commands::link_task_event_with_project_assignment;
+use crate::mutations::{ensure_dependency_has_no_cycle, tag_for_task_tag_link};
+use crate::relationship_commands::link_task_event_with_project_assignment;
 
 #[test]
 fn dependency_cycle_detection_rejects_reverse_chain() {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         let pool = migrated_memory_pool().await;
         insert_project_graph_fixture(&pool).await;
         sqlx::query(
@@ -25,7 +25,7 @@ fn dependency_cycle_detection_rejects_reverse_chain() {
 
 #[test]
 fn dependency_cycle_detection_allows_forward_chain() {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         let pool = migrated_memory_pool().await;
         insert_project_graph_fixture(&pool).await;
         sqlx::query(
@@ -46,7 +46,7 @@ fn dependency_cycle_detection_allows_forward_chain() {
 
 #[test]
 fn task_tag_link_rejects_tags_from_another_project() {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         let pool = migrated_memory_pool().await;
         insert_project_graph_fixture(&pool).await;
         sqlx::query(
@@ -97,7 +97,7 @@ fn task_tag_link_rejects_tags_from_another_project() {
 
 #[test]
 fn task_event_link_assigns_missing_event_project() {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         let pool = migrated_memory_pool().await;
         insert_project_graph_fixture(&pool).await;
         sqlx::query(
@@ -152,7 +152,7 @@ fn task_event_link_assigns_missing_event_project() {
 
 #[test]
 fn task_event_link_rejects_event_from_another_project() {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         let pool = migrated_memory_pool().await;
         insert_project_graph_fixture(&pool).await;
         sqlx::query(

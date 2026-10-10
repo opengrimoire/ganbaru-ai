@@ -1,10 +1,10 @@
 use super::*;
-use crate::projects::mutations::{delete_tag_with_history, delete_unused_status};
-use crate::projects::structure_commands::delete_project_group;
+use crate::mutations::{delete_tag_with_history, delete_unused_status};
+use crate::structure_commands::delete_project_group;
 
 #[test]
 fn delete_group_cascades_projects_and_keeps_calendar_events() {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         let pool = migrated_memory_pool().await;
         insert_project_graph_fixture(&pool).await;
         sqlx::query(
@@ -61,7 +61,7 @@ fn delete_group_cascades_projects_and_keeps_calendar_events() {
 
 #[test]
 fn delete_status_removes_empty_status() {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         let pool = migrated_memory_pool().await;
         insert_project_graph_fixture(&pool).await;
         sqlx::query(
@@ -88,7 +88,7 @@ fn delete_status_removes_empty_status() {
 
 #[test]
 fn delete_status_rejects_status_with_tasks() {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         let pool = migrated_memory_pool().await;
         insert_project_graph_fixture(&pool).await;
         sqlx::query(
@@ -111,7 +111,7 @@ fn delete_status_rejects_status_with_tasks() {
 
 #[test]
 fn delete_status_rejects_last_project_status() {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         let pool = migrated_memory_pool().await;
         sqlx::query(
             "INSERT INTO project_groups (id, name, icon, sort_order)
@@ -147,7 +147,7 @@ fn delete_status_rejects_last_project_status() {
 
 #[test]
 fn delete_tag_removes_links_and_records_task_history() {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         let pool = migrated_memory_pool().await;
         insert_project_graph_fixture(&pool).await;
         sqlx::query(

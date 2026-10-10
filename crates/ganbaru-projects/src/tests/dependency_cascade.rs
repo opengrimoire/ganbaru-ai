@@ -1,5 +1,5 @@
 use super::*;
-use crate::projects::dependency_cascade::{
+use crate::dependency_cascade::{
     DependencyCascadeApply, apply_dependency_cascade, preview_dependency_cascade,
 };
 
@@ -34,7 +34,7 @@ async fn dates(pool: &SqlitePool) -> Vec<(String, Option<String>, Option<String>
 
 #[test]
 fn dependency_cascade_reads_hidden_endpoints_and_commits_the_complete_chain() {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         let pool = migrated_memory_pool().await;
         dated_graph(&pool).await;
         // No rendered tasks or view filters are supplied to the native preview.
@@ -76,7 +76,7 @@ fn dependency_cascade_reads_hidden_endpoints_and_commits_the_complete_chain() {
 
 #[test]
 fn dependency_cascade_preserves_optional_dates_and_handles_leap_day_milestones() {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         let pool = migrated_memory_pool().await;
         dated_graph(&pool).await;
         sqlx::raw_sql("DELETE FROM project_task_dependencies WHERE id = 'edge-b';
@@ -95,7 +95,7 @@ fn dependency_cascade_preserves_optional_dates_and_handles_leap_day_milestones()
 
 #[test]
 fn dependency_cascade_rejects_cycles_without_proposing_repeated_shifts() {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         let pool = migrated_memory_pool().await;
         dated_graph(&pool).await;
         sqlx::query("INSERT INTO project_task_dependencies(id, blocking_task_id, blocked_task_id) VALUES ('edge-cycle', 'task-c', 'task-a')").execute(&pool).await.unwrap();
@@ -124,7 +124,7 @@ fn dependency_cascade_rejects_cycles_without_proposing_repeated_shifts() {
 
 #[test]
 fn dependency_cascade_reports_undated_invalid_and_foreign_endpoints() {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         for (change, reason) in [
             (
                 "UPDATE project_tasks SET start_date = NULL, target_end_date = NULL WHERE id = 'task-b'",
@@ -171,7 +171,7 @@ fn dependency_cascade_reports_undated_invalid_and_foreign_endpoints() {
 
 #[test]
 fn dependency_cascade_protects_archived_completed_and_scheduled_work() {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         for (change, reason) in [
             (
                 "UPDATE project_tasks SET archived_at = '2026-10-02T00:00:00.000Z' WHERE id = 'task-b'",
@@ -218,7 +218,7 @@ fn dependency_cascade_protects_archived_completed_and_scheduled_work() {
 
 #[test]
 fn dependency_cascade_second_write_failure_rolls_back_dates_history_and_receipt() {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         let pool = migrated_memory_pool().await;
         dated_graph(&pool).await;
         let request = request(&pool).await;
@@ -251,7 +251,7 @@ fn dependency_cascade_second_write_failure_rolls_back_dates_history_and_receipt(
 
 #[test]
 fn dependency_cascade_requires_review_after_a_task_or_graph_change() {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         for change in [
             "UPDATE project_tasks SET title = 'Renamed unseen predecessor' WHERE id = 'task-a'",
             "UPDATE project_tasks SET target_end_date = '2026-06-20' WHERE id = 'task-a'",
@@ -277,7 +277,7 @@ fn dependency_cascade_requires_review_after_a_task_or_graph_change() {
 
 #[test]
 fn dependency_cascade_lost_response_replays_after_restart_without_overwriting_later_edits() {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         let nonce = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
@@ -334,7 +334,7 @@ fn dependency_cascade_lost_response_replays_after_restart_without_overwriting_la
 
 #[test]
 fn dependency_cascade_bounds_graph_and_full_result_before_mutation() {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         let pool = migrated_memory_pool().await;
         dated_graph(&pool).await;
         sqlx::query("UPDATE project_tasks SET description = printf('%*s', 6000000, 'x') WHERE id = 'task-b'").execute(&pool).await.unwrap();
@@ -364,7 +364,7 @@ fn dependency_cascade_bounds_graph_and_full_result_before_mutation() {
 
 #[test]
 fn dependency_cascade_rejects_an_excessive_task_count_without_truncation() {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         let pool = migrated_memory_pool().await;
         dated_graph(&pool).await;
         sqlx::query("WITH RECURSIVE items(value) AS (SELECT 1 UNION ALL SELECT value + 1 FROM items WHERE value < 10000)

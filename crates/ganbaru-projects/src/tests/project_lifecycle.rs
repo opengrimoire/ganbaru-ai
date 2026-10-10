@@ -115,7 +115,7 @@ fn valid_project_update() -> ProjectUpdate {
 
 #[test]
 fn project_settings_and_soundtrack_defaults_commit_atomically() {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         let pool = migrated_memory_pool().await;
         sqlx::query(
             "INSERT INTO project_groups (id, name, icon, sort_order)
@@ -139,7 +139,7 @@ fn project_settings_and_soundtrack_defaults_commit_atomically() {
     .await
     .unwrap();
 
-        super::super::project_commands::update_project_in_pool(&pool, valid_project_update())
+        super::super::project_commands::update_project(&pool, valid_project_update())
             .await
             .unwrap();
 
@@ -167,7 +167,7 @@ fn project_settings_and_soundtrack_defaults_commit_atomically() {
             invalid.music_assignments.as_ref().unwrap()[0].clone(),
         ]);
         assert!(
-            super::super::project_commands::update_project_in_pool(&pool, invalid)
+            super::super::project_commands::update_project(&pool, invalid)
                 .await
                 .is_err()
         );

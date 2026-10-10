@@ -63,7 +63,7 @@ fn list_task_view_request(page_size: i64) -> ProjectTaskViewRequest {
 
 #[test]
 fn task_view_column_calculations_cover_filtered_results_before_pagination() {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         let pool = migrated_memory_pool().await;
         insert_project_graph_fixture(&pool).await;
         sqlx::raw_sql("UPDATE project_tasks SET estimate_minutes = CASE id WHEN 'task-a' THEN NULL WHEN 'task-b' THEN 20 ELSE 100 END;
@@ -140,7 +140,7 @@ fn task_view_column_calculations_cover_filtered_results_before_pagination() {
 
 #[test]
 fn task_view_custom_column_sort_keeps_numeric_order_and_resolves_option_names() {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         let pool = migrated_memory_pool().await;
         insert_project_graph_fixture(&pool).await;
         sqlx::raw_sql("INSERT INTO project_custom_fields (id, project_id, name, field_type, sort_order) VALUES ('number', 'project-a', 'Points', 'number', 100), ('choice', 'project-a', 'Phase', 'select', 200);
@@ -166,7 +166,7 @@ fn task_view_custom_column_sort_keeps_numeric_order_and_resolves_option_names() 
 
 #[test]
 fn task_view_list_is_keyset_paginated_and_body_bounded() {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         let pool = migrated_memory_pool().await;
         insert_project_graph_fixture(&pool).await;
         sqlx::query("DELETE FROM project_tasks")
@@ -197,7 +197,7 @@ fn task_view_list_is_keyset_paginated_and_body_bounded() {
         assert_eq!(first.matched_count, 10_000);
         assert_eq!(
             first.tasks.len(),
-            crate::projects::task_views::LIST_RESPONSE_TASK_CAP as usize
+            crate::task_views::LIST_RESPONSE_TASK_CAP as usize
         );
         assert!(serde_json::to_vec(&first).unwrap().len() < 100_000);
         let first_ids: HashSet<_> = first.tasks.iter().map(|task| task.id.as_str()).collect();
@@ -225,7 +225,7 @@ fn task_view_list_is_keyset_paginated_and_body_bounded() {
 
 #[test]
 fn task_view_handles_empty_single_and_exact_page_sizes() {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         for count in [0, 1, 100] {
             let pool = migrated_memory_pool().await;
             insert_project_graph_fixture(&pool).await;
@@ -258,7 +258,7 @@ fn task_view_handles_empty_single_and_exact_page_sizes() {
 
 #[test]
 fn task_view_filters_bodies_without_returning_them_and_detail_hydrates_one_task() {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         let pool = migrated_memory_pool().await;
         insert_project_graph_fixture(&pool).await;
         sqlx::query(
@@ -288,7 +288,7 @@ fn task_view_filters_bodies_without_returning_them_and_detail_hydrates_one_task(
 
 #[test]
 fn kanban_and_dashboard_return_counts_with_bounded_samples() {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         let pool = migrated_memory_pool().await;
         insert_project_graph_fixture(&pool).await;
         let mut kanban = list_task_view_request(100);

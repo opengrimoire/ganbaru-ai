@@ -1,7 +1,5 @@
 use super::*;
-use crate::projects::task_bulk::{
-    TaskBulkChange, TaskBulkRequest, TaskFieldExpectation, apply_task_bulk,
-};
+use crate::task_bulk::{TaskBulkChange, TaskBulkRequest, TaskFieldExpectation, apply_task_bulk};
 
 fn archive_request() -> TaskBulkRequest {
     TaskBulkRequest {
@@ -17,7 +15,7 @@ fn archive_request() -> TaskBulkRequest {
 
 #[test]
 fn archive_and_restore_include_descendants_absent_from_the_selection() {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         let pool = migrated_memory_pool().await;
         insert_project_graph_fixture(&pool).await;
         sqlx::query("UPDATE project_tasks SET parent_task_id = 'task-a' WHERE id = 'task-b'")
@@ -47,7 +45,7 @@ fn archive_and_restore_include_descendants_absent_from_the_selection() {
 
 #[test]
 fn a_late_descendant_failure_rolls_back_rows_history_and_receipt() {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         let pool = migrated_memory_pool().await;
         insert_project_graph_fixture(&pool).await;
         sqlx::raw_sql(
@@ -79,7 +77,7 @@ fn a_late_descendant_failure_rolls_back_rows_history_and_receipt() {
 
 #[test]
 fn retry_recovers_the_original_result_and_rejects_reused_identity() {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         let pool = migrated_memory_pool().await;
         insert_project_graph_fixture(&pool).await;
         let mut request = archive_request();
@@ -112,7 +110,7 @@ fn retry_recovers_the_original_result_and_rejects_reused_identity() {
 
 #[test]
 fn priority_intent_preserves_concurrent_unrelated_fields_and_rejects_stale_priority() {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         let pool = migrated_memory_pool().await;
         insert_project_graph_fixture(&pool).await;
         sqlx::query("UPDATE project_tasks SET title = 'New title', due_date = '2026-10-10' WHERE id = 'task-a'")
@@ -139,7 +137,7 @@ fn priority_intent_preserves_concurrent_unrelated_fields_and_rejects_stale_prior
 
 #[test]
 fn missing_duplicate_and_cross_project_selections_never_partially_apply() {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         let pool = migrated_memory_pool().await;
         insert_project_graph_fixture(&pool).await;
         let mut request = archive_request();
@@ -188,7 +186,7 @@ fn missing_duplicate_and_cross_project_selections_never_partially_apply() {
 
 #[test]
 fn status_changes_assign_native_order_and_preserve_completion_on_noop() {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         let pool = migrated_memory_pool().await;
         insert_project_graph_fixture(&pool).await;
         sqlx::query("INSERT INTO project_statuses (id, project_id, name, category, terminal) VALUES ('done', 'project-a', 'Done', 'done', 1)")
@@ -219,7 +217,7 @@ fn status_changes_assign_native_order_and_preserve_completion_on_noop() {
 
 #[test]
 fn a_committed_receipt_survives_reopening_the_database() {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         let directory = std::env::temp_dir().join(format!(
             "ganbaru-task-bulk-{}-{}",
             std::process::id(),
@@ -260,7 +258,7 @@ fn a_committed_receipt_survives_reopening_the_database() {
 
 #[test]
 fn restoring_a_child_requires_its_archived_parent() {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         let pool = migrated_memory_pool().await;
         insert_project_graph_fixture(&pool).await;
         sqlx::query("UPDATE project_tasks SET parent_task_id = 'task-a' WHERE id = 'task-b'")

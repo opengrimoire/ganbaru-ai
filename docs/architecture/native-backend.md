@@ -17,6 +17,7 @@ The Cargo workspace extracts domains that benefit from Tauri-free contracts and 
 - `ganbaru-pomodoro` owns focus persistence, history, validation, recovery, local activity admission, transactional execution, and adaptive run and phase decisions.
 - `ganbaru-quick-notes` owns Quick notes persistence, search windows, revisioned writes, lifecycle and trash retention, ordering, tags, and resolution of replicated conflicts.
 - `ganbaru-music` owns Music context assignments per Focus phase for projects, Calendar events, and work environments, and the Music library error shape.
+- `ganbaru-projects` owns Projects persistence: groups, projects with their managed working folders, structure, tasks, history, custom fields, relationships, reviewed dependency cascades, reordering, workspace reads, and the task rows Calendar scheduling reads and writes. Icon asset files stay in the app.
 - `ganbaru-notes` owns the Notes graph, persistence, transfers, history, assets, and bounded file operations.
 - `ganbaru-chat-contracts` defines provider-neutral identifiers, commands, events, read models, and errors.
 - `ganbaru-chat-providers` owns provider processes, transports, normalization, cancellation, and registry behavior.

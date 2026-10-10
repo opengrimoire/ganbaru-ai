@@ -100,7 +100,7 @@ pub(crate) struct PreparedCommit {
     receipt: CommitReceipt,
     active: Option<(String, String, String)>,
     historical: Vec<(String, String, String)>,
-    scheduled_tasks: Vec<crate::projects::scheduling::ScheduledTaskWrite>,
+    scheduled_tasks: Vec<ganbaru_projects::scheduling::ScheduledTaskWrite>,
     pub(crate) clock_fence: CommitClockFence,
     pub(crate) completion_window: Option<(i64, i64)>,
     pub(crate) start_occurrence: Option<String>,
@@ -664,7 +664,7 @@ impl PreparedCommit {
             PreparedWrite::Deletion(deletion) => (*deletion).write(tx).await?,
             PreparedWrite::Undo(undo) => undo.write(tx).await?,
         }
-        crate::projects::scheduling::write(tx, self.scheduled_tasks).await?;
+        ganbaru_projects::scheduling::write(tx, self.scheduled_tasks).await?;
         for (run_id, expected, target) in self.historical {
             let changed = sqlx::query("UPDATE pomodoro_runs SET event_id = ?1, current_occurrence_id = ?1 WHERE id = ?2 AND ended_at IS NOT NULL AND COALESCE(current_occurrence_id, original_event_id) = ?3")
                 .bind(target).bind(run_id).bind(expected).execute(&mut **tx).await.map_err(|error| format!("retarget preserved Calendar history: {error}"))?;
@@ -677,7 +677,7 @@ impl PreparedCommit {
 
     pub(super) fn attach_scheduled_tasks(
         &mut self,
-        tasks: Vec<crate::projects::scheduling::ScheduledTaskWrite>,
+        tasks: Vec<ganbaru_projects::scheduling::ScheduledTaskWrite>,
         identities: Vec<super::task_schedule::ScheduledTaskIdentity>,
     ) {
         self.scheduled_tasks = tasks;

@@ -8,54 +8,54 @@ use super::ProjectTaskEventLinkCreate;
 use super::history::insert_task_change_event;
 use super::relationship_commands::link_task_event_with_project_assignment;
 
-pub(crate) const MAX_SCHEDULE_TASKS: usize = 1_000;
+pub const MAX_SCHEDULE_TASKS: usize = 1_000;
 const MAX_SNAPSHOT_BYTES: i64 = 64 * 1024;
 const MAX_TASK_BYTES: i64 = 8 * 1024;
 
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct ScheduleTaskSelection {
-    pub(crate) id: String,
-    pub(crate) revision: i64,
+pub struct ScheduleTaskSelection {
+    pub id: String,
+    pub revision: i64,
 }
 
 #[derive(Deserialize, Serialize)]
-pub(crate) struct ScheduleDefaults {
-    pub(crate) time_mode: String,
-    pub(crate) color: Option<i64>,
-    pub(crate) environment: Option<String>,
-    pub(crate) playlist: Option<String>,
-    pub(crate) pomodoro_mode: String,
-    pub(crate) preset: Option<String>,
-    pub(crate) focus: Option<i64>,
-    pub(crate) short_break: Option<i64>,
-    pub(crate) long_break: Option<i64>,
-    pub(crate) cycle: Option<i64>,
-    pub(crate) idle_source: String,
-    pub(crate) idle_enabled: bool,
-    pub(crate) idle_threshold: i64,
+pub struct ScheduleDefaults {
+    pub time_mode: String,
+    pub color: Option<i64>,
+    pub environment: Option<String>,
+    pub playlist: Option<String>,
+    pub pomodoro_mode: String,
+    pub preset: Option<String>,
+    pub focus: Option<i64>,
+    pub short_break: Option<i64>,
+    pub long_break: Option<i64>,
+    pub cycle: Option<i64>,
+    pub idle_source: String,
+    pub idle_enabled: bool,
+    pub idle_threshold: i64,
 }
 
 #[derive(Deserialize, Serialize)]
-pub(crate) struct ScheduleTask {
-    pub(crate) id: String,
-    pub(crate) revision: i64,
-    pub(crate) title: String,
-    pub(crate) start_date: Option<String>,
-    pub(crate) target_end_date: Option<String>,
-    pub(crate) due_date: Option<String>,
+pub struct ScheduleTask {
+    pub id: String,
+    pub revision: i64,
+    pub title: String,
+    pub start_date: Option<String>,
+    pub target_end_date: Option<String>,
+    pub due_date: Option<String>,
 }
 
 #[derive(Serialize)]
-pub(crate) struct ScheduleSnapshot {
-    pub(crate) project_id: String,
-    pub(crate) defaults: ScheduleDefaults,
-    pub(crate) tasks: Vec<ScheduleTask>,
-    pub(crate) music: Vec<ganbaru_music::assignments::MusicContextAssignmentDraft>,
+pub struct ScheduleSnapshot {
+    pub project_id: String,
+    pub defaults: ScheduleDefaults,
+    pub tasks: Vec<ScheduleTask>,
+    pub music: Vec<ganbaru_music::assignments::MusicContextAssignmentDraft>,
 }
 
 /// Bound canonical selection reads independently of the Calendar command adapter.
-pub(crate) fn validate_selection(
+pub fn validate_selection(
     project_id: &str,
     selected: &[ScheduleTaskSelection],
 ) -> Result<(), String> {
@@ -79,7 +79,7 @@ pub(crate) fn validate_selection(
 }
 
 /// Copy only scheduling inputs, with bounded returned bytes, in one read snapshot.
-pub(crate) async fn read(
+pub async fn read(
     tx: &mut Transaction<'_, Sqlite>,
     project_id: &str,
     selected: &[ScheduleTaskSelection],
@@ -161,14 +161,14 @@ pub(crate) async fn read(
     })
 }
 
-pub(crate) struct ScheduledTaskWrite {
-    pub(crate) task: ScheduleTask,
-    pub(crate) event_id: String,
-    pub(crate) date: String,
+pub struct ScheduledTaskWrite {
+    pub task: ScheduleTask,
+    pub event_id: String,
+    pub date: String,
 }
 
 /// Called inside the same owner transaction as Calendar rows and its receipt.
-pub(crate) async fn write(
+pub async fn write(
     tx: &mut Transaction<'_, Sqlite>,
     tasks: Vec<ScheduledTaskWrite>,
 ) -> Result<(), String> {

@@ -1,9 +1,9 @@
 use super::*;
-use crate::projects::emojis::{delete_project_custom_emoji, insert_project_custom_emoji};
+use crate::emojis::{delete_project_custom_emoji, insert_project_custom_emoji};
 
 #[test]
 fn custom_emoji_create_list_delete_round_trips() {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         let pool = migrated_memory_pool().await;
         let emoji = ProjectCustomEmojiCreate {
             id: " emoji-a ".to_string(),

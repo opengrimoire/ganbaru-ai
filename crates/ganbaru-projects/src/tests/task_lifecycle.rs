@@ -1,10 +1,10 @@
 use super::*;
-use crate::projects::history::{insert_task_change_event, insert_task_update_change_events};
-use crate::projects::mutations::{next_task_sort_order, task_mutation};
+use crate::history::{insert_task_change_event, insert_task_update_change_events};
+use crate::mutations::{next_task_sort_order, task_mutation};
 
 #[test]
 fn next_task_sort_order_handles_empty_project() {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         let pool = migrated_memory_pool().await;
         sqlx::query(
             "INSERT INTO project_groups (id, name, icon, sort_order)
@@ -60,7 +60,7 @@ fn next_task_sort_order_handles_empty_project() {
 
 #[test]
 fn task_update_records_trimmed_change_reason() {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         let pool = migrated_memory_pool().await;
         insert_project_graph_fixture(&pool).await;
         let previous =
@@ -97,7 +97,7 @@ fn task_update_records_trimmed_change_reason() {
 
 #[test]
 fn task_update_rejects_oversized_change_reason() {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         let pool = migrated_memory_pool().await;
         insert_project_graph_fixture(&pool).await;
         let previous =
@@ -117,7 +117,7 @@ fn task_update_rejects_oversized_change_reason() {
 
 #[test]
 fn task_update_validates_task_times() {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         let pool = migrated_memory_pool().await;
         insert_project_graph_fixture(&pool).await;
         let previous =
@@ -147,7 +147,7 @@ fn task_update_validates_task_times() {
 
 #[test]
 fn task_mutation_returns_the_authoritative_row_and_committed_history() {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         let pool = migrated_memory_pool().await;
         insert_project_graph_fixture(&pool).await;
         let mut tx = pool.begin().await.unwrap();

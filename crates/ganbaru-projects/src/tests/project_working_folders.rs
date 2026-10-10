@@ -1,10 +1,10 @@
 use super::*;
-use crate::projects::project_commands::create_project_in_pool;
+use crate::project_commands::create_project;
 use std::fs;
 
 #[test]
 fn project_creation_persists_and_creates_its_managed_working_folder() {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         let pool = migrated_memory_pool().await;
         let vault_root = std::env::temp_dir().join(format!(
             "ganbaru-project-working-folder-{}",
@@ -34,9 +34,7 @@ fn project_creation_persists_and_creates_its_managed_working_folder() {
             default_idle_threshold_minutes: 5,
         };
 
-        create_project_in_pool(&pool, &vault_root, project)
-            .await
-            .unwrap();
+        create_project(&pool, &vault_root, project).await.unwrap();
 
         let folder: (String, String, String, String, Option<String>) = sqlx::query_as(
             "SELECT id, project_id, display_name, kind, managed_relative_path

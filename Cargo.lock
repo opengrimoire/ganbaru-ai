@@ -1913,6 +1913,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "ganbaru-projects"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "ganbaru-db",
+ "ganbaru-music",
+ "serde",
+ "serde_json",
+ "sha2",
+ "sqlx",
+ "tokio",
+]
+
+[[package]]
 name = "ganbaru-quick-notes"
 version = "0.1.0"
 dependencies = [
@@ -1971,6 +1985,7 @@ dependencies = [
  "ganbaru-notes",
  "ganbaru-people",
  "ganbaru-pomodoro",
+ "ganbaru-projects",
  "ganbaru-quick-notes",
  "ganbaru-sync",
  "ganbaru-sync-contracts",

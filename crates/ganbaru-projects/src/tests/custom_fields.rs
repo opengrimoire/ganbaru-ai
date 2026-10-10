@@ -1,11 +1,9 @@
 use super::*;
-use crate::projects::custom_fields::{
-    create_custom_field_in_pool, update_custom_field_value_with_history,
-};
+use crate::custom_fields::{create_custom_field_in_pool, update_custom_field_value_with_history};
 
 #[test]
 fn duplicate_custom_property_copies_option_schema_with_fresh_ids_and_empty_values() {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         let pool = migrated_memory_pool().await;
         insert_project_graph_fixture(&pool).await;
         sqlx::raw_sql("INSERT INTO project_custom_fields (id, project_id, name, field_type, sort_order) VALUES ('source', 'project-a', 'Phase', 'select', 100);
@@ -66,7 +64,7 @@ fn duplicate_custom_property_copies_option_schema_with_fresh_ids_and_empty_value
 
 #[test]
 fn custom_field_value_rejects_fields_from_another_project() {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         let pool = migrated_memory_pool().await;
         insert_project_graph_fixture(&pool).await;
         sqlx::query(
@@ -105,7 +103,7 @@ fn custom_field_value_rejects_fields_from_another_project() {
 
 #[test]
 fn custom_field_value_rejects_options_from_another_field() {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         let pool = migrated_memory_pool().await;
         insert_project_graph_fixture(&pool).await;
         sqlx::query(
@@ -146,7 +144,7 @@ fn custom_field_value_rejects_options_from_another_field() {
 
 #[test]
 fn custom_field_value_records_task_history() {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         let pool = migrated_memory_pool().await;
         insert_project_graph_fixture(&pool).await;
         sqlx::query(

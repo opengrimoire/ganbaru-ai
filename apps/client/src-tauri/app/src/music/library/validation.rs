@@ -181,7 +181,7 @@ pub(crate) fn validate_playlist_playback_mode(
 
 pub(crate) fn validate_icon(icon: &str) -> MusicLibraryResult<()> {
     validate_optional_text(icon, "icon", MAX_ICON_CHARS)?;
-    crate::projects::validation::validate_project_icon(icon)
+    ganbaru_projects::validation::validate_project_icon(icon)
         .map_err(|message| MusicLibraryError::validation("icon", message))
 }
 

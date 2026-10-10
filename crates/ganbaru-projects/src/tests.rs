@@ -1,6 +1,15 @@
 use super::*;
 use ganbaru_db::run_migrations;
 use sqlx::SqlitePool;
+use std::future::Future;
+
+fn block_on<F: Future>(future: F) -> F::Output {
+    tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("create projects test runtime")
+        .block_on(future)
+}
 
 pub(super) async fn migrated_memory_pool() -> SqlitePool {
     let pool = sqlx::sqlite::SqlitePoolOptions::new()
