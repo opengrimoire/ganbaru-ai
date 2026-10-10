@@ -88,6 +88,26 @@ fn pool_registry_close_waits_for_an_in_progress_open() {
 }
 
 #[test]
+fn pool_registry_close_releases_a_connection_returned_during_close() {
+    block_on(async {
+        let directory = registry_test_directory("close-returning");
+        let path = directory.join("ganbaru-ai.sqlite");
+        let registry = crate::DatabasePoolRegistry::default();
+        let pool = registry.connect_path(&path).await.unwrap();
+        drop(pool.acquire().await.unwrap());
+        // Let the returning connection pass the pool's open check before close begins.
+        tokio::task::yield_now().await;
+        registry.close_path(&path).await.unwrap();
+        assert_eq!(pool.size(), 0, "close must not leave a connection open");
+        for suffix in ["-wal", "-shm"] {
+            let sidecar = directory.join(format!("ganbaru-ai.sqlite{suffix}"));
+            assert!(!sidecar.exists(), "{} must be released", sidecar.display());
+        }
+        std::fs::remove_dir_all(directory).unwrap();
+    });
+}
+
+#[test]
 fn pool_registry_failed_initialization_can_be_retried() {
     block_on(async {
         let directory = registry_test_directory("retry-opening");
