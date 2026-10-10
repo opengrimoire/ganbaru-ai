@@ -1,4 +1,13 @@
-use super::*;
+//! Desktop application name normalization, protected-application checks, and foreground and
+//! process rule matching.
+
+use crate::contracts::{
+    DesktopRuleMatcher, DistractionsDesktopAppCandidate, DistractionsDesktopAppRuleInput,
+    DistractionsDesktopRuleIdentity, DistractionsForegroundDesktopAppExpectation,
+    DistractionsForegroundDesktopAppStatus,
+};
+use std::collections::{HashMap, HashSet};
+use std::path::Path;
 
 const PROTECTED_DESKTOP_APP_NAMES: &[&str] = &[
     "Ganbaru AI",
@@ -127,11 +136,11 @@ const PROTECTED_DESKTOP_PROCESS_NAMES: &[&str] = &[
     "zsh",
 ];
 
-pub(super) fn app_name_key(name: &str) -> String {
+pub fn app_name_key(name: &str) -> String {
     name.trim().to_lowercase()
 }
 
-pub(super) fn is_protected_desktop_app_name(name: &str) -> bool {
+pub fn is_protected_desktop_app_name(name: &str) -> bool {
     let key = app_name_key(name);
     PROTECTED_DESKTOP_APP_NAMES
         .iter()
@@ -139,7 +148,7 @@ pub(super) fn is_protected_desktop_app_name(name: &str) -> bool {
         .any(|protected_name| app_name_key(protected_name) == key)
 }
 
-pub(super) fn is_protected_desktop_app_candidate(app: &DistractionsDesktopAppCandidate) -> bool {
+pub fn is_protected_desktop_app_candidate(app: &DistractionsDesktopAppCandidate) -> bool {
     is_protected_desktop_app_name(&app.name)
         || app
             .process_names
@@ -147,7 +156,7 @@ pub(super) fn is_protected_desktop_app_candidate(app: &DistractionsDesktopAppCan
             .any(|name| is_protected_desktop_app_name(name))
 }
 
-pub(super) fn normalize_app_candidate_name(name: &str) -> Option<String> {
+pub fn normalize_app_candidate_name(name: &str) -> Option<String> {
     let name = name.split_whitespace().collect::<Vec<_>>().join(" ");
     if name.is_empty() || name.chars().any(char::is_control) {
         return None;
@@ -155,7 +164,7 @@ pub(super) fn normalize_app_candidate_name(name: &str) -> Option<String> {
     Some(name.chars().take(80).collect())
 }
 
-pub(super) fn normalize_process_match_name(name: &str) -> Option<String> {
+pub fn normalize_process_match_name(name: &str) -> Option<String> {
     let trimmed = name.trim().trim_matches('"').trim_matches('\'');
     let basename = Path::new(trimmed)
         .file_name()
@@ -164,7 +173,7 @@ pub(super) fn normalize_process_match_name(name: &str) -> Option<String> {
     normalize_app_candidate_name(basename)
 }
 
-pub(super) fn normalize_process_match_name_aliases(name: &str) -> Vec<String> {
+pub fn normalize_process_match_name_aliases(name: &str) -> Vec<String> {
     let Some(primary) = normalize_process_match_name(name) else {
         return Vec::new();
     };
@@ -182,7 +191,7 @@ pub(super) fn normalize_process_match_name_aliases(name: &str) -> Vec<String> {
     aliases
 }
 
-pub(super) fn normalize_process_match_names(name: &str, process_names: Vec<String>) -> Vec<String> {
+pub fn normalize_process_match_names(name: &str, process_names: Vec<String>) -> Vec<String> {
     let mut seen = HashSet::new();
     let mut normalized = Vec::new();
     for candidate in std::iter::once(name.to_string()).chain(process_names) {
@@ -198,7 +207,7 @@ pub(super) fn normalize_process_match_names(name: &str, process_names: Vec<Strin
     normalized
 }
 
-pub(super) fn unavailable_foreground_desktop_app_status(
+pub fn unavailable_foreground_desktop_app_status(
     reason: impl Into<String>,
 ) -> DistractionsForegroundDesktopAppStatus {
     DistractionsForegroundDesktopAppStatus {
@@ -212,7 +221,7 @@ pub(super) fn unavailable_foreground_desktop_app_status(
     }
 }
 
-pub(super) fn foreground_status_from_parts(
+pub fn foreground_status_from_parts(
     app_name: impl Into<String>,
     process_name: Option<String>,
     process_id: Option<u32>,
@@ -253,7 +262,7 @@ fn observed_match_names(name: &str, names: Vec<String>) -> Vec<String> {
         .collect()
 }
 
-pub(super) fn foreground_status_match_names(
+pub fn foreground_status_match_names(
     status: &DistractionsForegroundDesktopAppStatus,
 ) -> Vec<String> {
     let mut names = Vec::new();
@@ -267,7 +276,7 @@ pub(super) fn foreground_status_match_names(
     observed_match_names(status.app_name.as_deref().unwrap_or(""), names)
 }
 
-pub(super) fn foreground_expectation_matches(
+pub fn foreground_expectation_matches(
     status: &DistractionsForegroundDesktopAppStatus,
     expected: &DistractionsForegroundDesktopAppExpectation,
 ) -> bool {
@@ -310,7 +319,7 @@ pub(super) fn foreground_expectation_matches(
         .any(|name| status_names.contains(&app_name_key(&name)))
 }
 
-pub(super) fn validate_foreground_status_is_closeable(
+pub fn validate_foreground_status_is_closeable(
     status: &DistractionsForegroundDesktopAppStatus,
 ) -> Result<(), String> {
     let names = foreground_status_match_names(status);
@@ -330,8 +339,7 @@ pub(super) fn validate_foreground_status_is_closeable(
     Ok(())
 }
 
-#[cfg(any(target_os = "linux", test))]
-pub(super) fn desktop_rule_matchers(
+pub fn desktop_rule_matchers(
     apps: Vec<DistractionsDesktopAppRuleInput>,
 ) -> HashMap<String, DesktopRuleMatcher> {
     let mut matchers = HashMap::new();
@@ -373,3 +381,6 @@ pub(super) fn desktop_rule_matchers(
     }
     matchers
 }
+
+#[cfg(test)]
+mod tests;

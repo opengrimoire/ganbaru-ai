@@ -79,7 +79,7 @@ apps/
         src/notes.rs, notes/: Notes command adapters, working-Markdown composition, and asset authorization
         src/pomodoro.rs, pomodoro/: Focus command adapters, native execution runtime, idle probes, and timer overlays with enforcement
         src/projects.rs, projects/: Projects command adapters, icon assets, and working-folder device state
-        src/distractions.rs, distractions/: browser, desktop, Android, and linked-device blocking and usage accounting
+        src/distractions.rs, distractions/: browser, desktop, Android, and linked-device blocking, observation, close authorization, and the usage spool
         src/music.rs, music/: Music library command adapters, local playback, native Music session, media controls, YouTube host, and soundscapes
         src/notifications.rs, notifications/: desktop native notifications and Android notification capabilities
         src/sound_effects.rs, system_command.rs: app sound effects and bounded fixed-command execution
@@ -104,6 +104,7 @@ crates/
   ganbaru-music-library/: Tauri-free Music library persistence, queries, playlists, review, transfer, soundscapes, local media refresh and artwork, and session policy
   ganbaru-projects/: Tauri-free Projects persistence, structure, tasks, history, custom fields, dependency cascades, reordering, Calendar scheduling rows, and validation
   ganbaru-calendar/: Tauri-free Calendar persistence, iCalendar import and export, native reads, scoped edits, deletion and Undo, and recurrence expansion
+  ganbaru-distractions/: Tauri-free distraction blocker contracts, application rules, usage limits, usage normalization, and elapsed accounting
   ganbaru-notes/: Notes domain, persistence, transfers, history, assets, and bounded filesystem operations
   ganbaru-chat-contracts/: provider-neutral Chat IDs, commands, events, DTOs, and errors
   ganbaru-chat-providers/: provider processes, transports, drivers, cancellation, and registry
@@ -194,7 +195,7 @@ Read `docs/testing/README.md` when changing tests, validation scripts, task orde
 - `pnpm -w run editor-check`: editor diagnostics, including Tailwind canonical class checks.
 - `pnpm -w run test`: serialized Rust tests followed by sequential one-worker Vitest shards.
 - `pnpm --dir apps/client exec vitest run path/to/file.test.ts --maxWorkers=1`: focused frontend test file.
-- `cargo test -p ganbaru-chat --lib -j 1 test_name -- --test-threads=1`: focused core crate test (substitute `ganbaru-notes`, `ganbaru-db`, `ganbaru-civil-time`, `ganbaru-chat-contracts`, `ganbaru-chat-providers`, `ganbaru-pomodoro`, `ganbaru-quick-notes`, `ganbaru-music`, `ganbaru-music-library`, `ganbaru-projects`, `ganbaru-calendar`, `ganbaru-working-folders`, `ganbaru-people`, `ganbaru-sync-contracts`, or `ganbaru-sync`).
+- `cargo test -p ganbaru-chat --lib -j 1 test_name -- --test-threads=1`: focused core crate test (substitute `ganbaru-notes`, `ganbaru-db`, `ganbaru-civil-time`, `ganbaru-distractions`, `ganbaru-chat-contracts`, `ganbaru-chat-providers`, `ganbaru-pomodoro`, `ganbaru-quick-notes`, `ganbaru-music`, `ganbaru-music-library`, `ganbaru-projects`, `ganbaru-calendar`, `ganbaru-working-folders`, `ganbaru-people`, `ganbaru-sync-contracts`, or `ganbaru-sync`).
 - `cargo test -p ganbaru-tauri-app --lib -j 1 test_name -- --test-threads=1`: focused Tauri composition or command-adapter test.
 - `cargo test -p ganbaru-native-messaging --bin ganbaru-ai-native-messaging -j 1 test_name -- --test-threads=1`: focused native messaging host test.
 - `cargo check -p ganbaru-ai --bin ganbaru-ai -j 1`: focused desktop composition check.

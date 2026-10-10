@@ -1,6 +1,5 @@
 use super::*;
 use chrono::{DateTime, Utc};
-use sqlx::Row;
 #[cfg(target_os = "linux")]
 use std::collections::VecDeque;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -24,4 +23,3 @@ mod close_authorization;
 mod contract;
 mod rules;
 mod state_files;
-mod usage;

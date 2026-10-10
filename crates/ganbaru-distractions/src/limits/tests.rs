@@ -164,10 +164,9 @@ async fn canonical_sqlite_read_groups_the_complete_window_and_retains_recorded_d
         .execute(&mut *tx).await.unwrap();
     tx.commit().await.unwrap();
     let mut tx = pool.begin().await.unwrap();
-    let rows =
-        crate::distractions::limits::store::read_source_days(&mut tx, "2026-09-28", "2026-10-02")
-            .await
-            .unwrap();
+    let rows = crate::limits::store::read_source_days(&mut tx, "2026-09-28", "2026-10-02")
+        .await
+        .unwrap();
     tx.commit().await.unwrap();
     assert_eq!(rows.len(), 2);
     let result = totals(&parse_config(&root()).unwrap(), &rows, "2026-10-02").unwrap();

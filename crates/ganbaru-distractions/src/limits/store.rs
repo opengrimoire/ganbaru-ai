@@ -4,7 +4,7 @@ use super::{MAX_SOURCE_GROUPS, MAX_WINDOW_SAMPLES, UsageSourceDay};
 use sqlx::{Row, SqliteConnection};
 
 /// Aggregate a bounded, consistent SQLite window without returning raw intervals to the UI.
-pub(crate) async fn read_source_days(
+pub async fn read_source_days(
     connection: &mut SqliteConnection,
     week: &str,
     local_date: &str,

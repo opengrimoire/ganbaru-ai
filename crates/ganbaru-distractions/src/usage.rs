@@ -1,8 +1,41 @@
-use super::*;
+//! Usage sample and desktop block event normalization, and their bounded SQLite writes.
+
+use crate::contracts::{
+    DistractionsDesktopBlockEventInput, DistractionsRuntimeState, DistractionsUsageSampleInput,
+    DistractionsUsageSampleRow, NormalizedDesktopBlockEvent,
+};
+use crate::limits::{is_valid_local_date, normalize_usage_host};
+use crate::rules::{is_protected_desktop_app_name, normalize_app_candidate_name};
+use sha2::{Digest, Sha256};
 use sqlx::SqlitePool;
 
-pub(super) fn normalize_usage_host(input: &str) -> Option<String> {
-    crate::distractions::limits::normalize_usage_host(input)
+fn now_epoch_ms() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_millis().min(i64::MAX as u128) as i64)
+        .unwrap_or(0)
+}
+
+/// Map the active runtime state to the phase recorded on a block event, or none when inactive.
+pub fn block_event_phase_from_runtime(
+    runtime: Option<&DistractionsRuntimeState>,
+) -> Option<String> {
+    let runtime = runtime?;
+    if !runtime.active {
+        return None;
+    }
+    if runtime.paused {
+        return match runtime.pause_reason.as_deref() {
+            Some("idle") => Some("idle_pause".to_string()),
+            Some("suspend") => Some("suspend_pause".to_string()),
+            Some("manual") | None => Some("manual_pause".to_string()),
+            Some(_) => None,
+        };
+    }
+    match runtime.phase.as_str() {
+        "focus" | "short_break" | "long_break" => Some(runtime.phase.clone()),
+        _ => None,
+    }
 }
 
 fn normalize_usage_source_key(source_type: &str, source_key: &str) -> Option<String> {
@@ -26,7 +59,7 @@ fn normalize_usage_display_name(value: Option<String>) -> Option<String> {
     })
 }
 
-pub(super) fn normalize_desktop_block_event(
+pub fn normalize_desktop_block_event(
     input: DistractionsDesktopBlockEventInput,
 ) -> Result<NormalizedDesktopBlockEvent, String> {
     let source_name = input.process_name.as_deref().unwrap_or(&input.app_name);
@@ -42,11 +75,7 @@ pub(super) fn normalize_desktop_block_event(
     })
 }
 
-pub(super) fn is_valid_local_date(value: &str) -> bool {
-    crate::distractions::limits::is_valid_local_date(value)
-}
-
-pub(super) fn normalize_usage_sample(
+pub fn normalize_usage_sample(
     sample: DistractionsUsageSampleInput,
     fallback_id_prefix: &str,
 ) -> Result<DistractionsUsageSampleRow, String> {
@@ -95,7 +124,7 @@ pub(super) fn normalize_usage_sample(
 }
 
 #[cfg(test)]
-pub(super) async fn insert_usage_samples(
+pub async fn insert_usage_samples(
     pool: &SqlitePool,
     samples: Vec<DistractionsUsageSampleRow>,
 ) -> Result<(), String> {
@@ -122,7 +151,7 @@ pub(super) async fn insert_usage_samples(
     Ok(())
 }
 
-pub(super) async fn insert_desktop_block_event(
+pub async fn insert_desktop_block_event(
     pool: &SqlitePool,
     event: NormalizedDesktopBlockEvent,
     runtime: Option<&DistractionsRuntimeState>,
@@ -176,3 +205,6 @@ pub(super) async fn insert_desktop_block_event(
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests;

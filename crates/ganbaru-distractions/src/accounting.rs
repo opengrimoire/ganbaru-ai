@@ -1,20 +1,24 @@
 //! Evidence-bounded elapsed accounting with civil-midnight allocation.
 
-use super::*;
+use crate::contracts::{DistractionsUsageSampleInput, DistractionsUsageSampleRow};
+use crate::usage;
 use jiff::tz::TimeZone;
+use sha2::{Digest, Sha256};
+use std::collections::{HashMap, HashSet};
+use std::time::Instant;
 
 const CLOCK_TOLERANCE_MS: i64 = 1_000;
 const MAX_EVIDENCE_GAP_MS: u64 = 15_000;
 const MAX_SOURCES: usize = 2_000;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(super) struct UsageSource {
+pub struct UsageSource {
     pub key: String,
     pub label: String,
 }
 
 #[derive(Clone)]
-pub(super) struct Observation {
+pub struct Observation {
     pub wall_ms: i64,
     pub monotonic: Instant,
     pub sources: Vec<UsageSource>,
@@ -22,7 +26,7 @@ pub(super) struct Observation {
 }
 
 #[derive(Default)]
-pub(super) struct Accounting {
+pub struct Accounting {
     previous: Option<Observation>,
     fractions: HashMap<(String, String), u64>,
 }
@@ -155,6 +159,8 @@ impl Accounting {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::limits;
+    use std::time::Duration;
 
     fn observation(wall: &str, monotonic: Instant, zone: &str) -> Observation {
         Observation {

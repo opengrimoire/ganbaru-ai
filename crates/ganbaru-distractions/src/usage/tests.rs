@@ -1,4 +1,19 @@
 use super::*;
+use sqlx::Row;
+
+fn state(phase: &str) -> DistractionsRuntimeState {
+    DistractionsRuntimeState {
+        active: phase != "inactive",
+        paused: false,
+        pause_reason: None,
+        phase: phase.to_string(),
+        active_run_id: None,
+        active_occurrence_id: None,
+        remaining_seconds: Some(30),
+        updated_at: "2026-05-26T00:00:00.000Z".to_string(),
+        valid_until_ms: None,
+    }
+}
 
 #[test]
 fn usage_samples_reject_protected_desktop_apps() {
@@ -28,7 +43,7 @@ fn desktop_block_events_reject_protected_apps() {
 
 #[test]
 fn records_desktop_block_event_to_sqlite_without_process_id() {
-    tauri::async_runtime::block_on(async {
+    crate::test_support::block_on(async {
         let pool = sqlx::sqlite::SqlitePoolOptions::new()
             .max_connections(1)
             .connect("sqlite::memory:")
@@ -175,7 +190,7 @@ fn usage_sample_fallback_ids_are_stable_for_exactly_once_batch_retries() {
 
 #[test]
 fn usage_sample_batch_rolls_back_when_a_late_insert_fails() {
-    tauri::async_runtime::block_on(async {
+    crate::test_support::block_on(async {
         let pool = sqlx::sqlite::SqlitePoolOptions::new()
             .max_connections(1)
             .connect("sqlite::memory:")

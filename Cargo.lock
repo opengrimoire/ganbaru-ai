@@ -1831,6 +1831,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "ganbaru-distractions"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "ganbaru-civil-time",
+ "jiff",
+ "serde",
+ "serde_json",
+ "sha2",
+ "sqlx",
+ "tokio",
+]
+
+[[package]]
 name = "ganbaru-mobile-distractions"
 version = "0.1.0"
 dependencies = [
@@ -2013,6 +2027,7 @@ dependencies = [
  "ganbaru-chat-providers",
  "ganbaru-civil-time",
  "ganbaru-db",
+ "ganbaru-distractions",
  "ganbaru-mobile-distractions",
  "ganbaru-mobile-documents",
  "ganbaru-mobile-media",

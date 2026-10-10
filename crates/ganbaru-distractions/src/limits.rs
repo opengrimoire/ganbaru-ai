@@ -3,18 +3,17 @@
 use chrono::{Datelike, Duration, NaiveDate};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-#[cfg(any(desktop, test))]
 use sha2::{Digest, Sha256};
 use std::collections::HashSet;
 
-pub(crate) mod store;
+pub mod store;
 
-pub(super) const MAX_LIMITS: usize = 256;
+pub const MAX_LIMITS: usize = 256;
 const MAX_ENTRIES: usize = 2_000;
 const MAX_MATCH_NAMES: usize = 64;
 const MAX_MATCH_COMPARISONS: usize = 2_000_000;
-pub(crate) const MAX_SOURCE_GROUPS: usize = 10_000;
-pub(crate) const MAX_WINDOW_SAMPLES: i64 = 500_000;
+pub const MAX_SOURCE_GROUPS: usize = 10_000;
+pub const MAX_WINDOW_SAMPLES: i64 = 500_000;
 const MAX_SAFE_SECONDS: i64 = 9_007_199_254_740_991;
 
 fn enabled_default() -> bool {
@@ -23,7 +22,7 @@ fn enabled_default() -> bool {
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(super) struct LimitEntry {
+pub struct LimitEntry {
     pub id: String,
     #[serde(default)]
     pub website_host: Option<String>,
@@ -39,7 +38,7 @@ pub(super) struct LimitEntry {
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(super) struct UsageLimit {
+pub struct UsageLimit {
     pub id: String,
     #[serde(default)]
     pub name: String,
@@ -53,7 +52,7 @@ pub(super) struct UsageLimit {
 }
 
 #[derive(Clone, Debug, Deserialize)]
-pub(super) struct LimitsConfig {
+pub struct LimitsConfig {
     #[serde(default = "enabled_default")]
     pub enabled: bool,
     #[serde(default)]
@@ -62,7 +61,7 @@ pub(super) struct LimitsConfig {
 
 /// Rows retain their recorded date; device timezone changes never relabel history.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct UsageSourceDay {
+pub struct UsageSourceDay {
     pub source_type: String,
     pub source_key: String,
     pub local_date: String,
@@ -71,14 +70,14 @@ pub(crate) struct UsageSourceDay {
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(super) struct EntryTotal {
+pub struct EntryTotal {
     pub entry_id: String,
     pub used_seconds: i64,
 }
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(super) struct BudgetTotal {
+pub struct BudgetTotal {
     pub limit_id: String,
     pub period: &'static str,
     pub window_start_local_date: String,
@@ -100,7 +99,7 @@ fn is_valid_id(id: &str) -> bool {
 }
 
 /// Read selected package identities and manually entered names with bounded matching work.
-pub(super) fn parse_config(root: &Value) -> Result<LimitsConfig, String> {
+pub fn parse_config(root: &Value) -> Result<LimitsConfig, String> {
     let branch = root
         .pointer("/distractions/limits")
         .cloned()
@@ -164,15 +163,14 @@ pub(super) fn parse_config(root: &Value) -> Result<LimitsConfig, String> {
 }
 
 /// Fingerprint the persisted limit branch so edits revoke previously derived exhaustion.
-#[cfg(any(desktop, test))]
-pub(super) fn configuration_digest(root: &Value) -> Result<String, String> {
+pub fn configuration_digest(root: &Value) -> Result<String, String> {
     let bytes = serde_json::to_vec(root.pointer("/distractions/limits").unwrap_or(&Value::Null))
         .map_err(|error| format!("encode usage limit configuration: {error}"))?;
     Ok(format!("{:x}", Sha256::digest(bytes)))
 }
 
 /// Compute the Monday-based week without assuming seven fixed-duration local days.
-pub(super) fn week_start(local_date: &str) -> Result<String, String> {
+pub fn week_start(local_date: &str) -> Result<String, String> {
     if !is_valid_local_date(local_date) {
         return Err("usage local date is invalid".into());
     }
@@ -186,7 +184,7 @@ pub(super) fn week_start(local_date: &str) -> Result<String, String> {
     .ok_or_else(|| "usage week start is outside the supported range".into())
 }
 
-pub(super) fn matches(entry: &LimitEntry, source: &UsageSourceDay) -> bool {
+pub fn matches(entry: &LimitEntry, source: &UsageSourceDay) -> bool {
     match source.source_type.as_str() {
         "website" => entry
             .website_host
@@ -219,7 +217,7 @@ fn add_seconds(left: i64, right: i64) -> Result<i64, String> {
         .ok_or_else(|| "usage total exceeds the supported integer range".into())
 }
 
-pub(crate) fn is_valid_local_date(value: &str) -> bool {
+pub fn is_valid_local_date(value: &str) -> bool {
     let bytes = value.as_bytes();
     bytes.len() == 10
         && bytes[4] == b'-'
@@ -236,7 +234,7 @@ fn app_name_key(name: &str) -> String {
     name.trim().to_lowercase()
 }
 
-pub(crate) fn normalize_usage_host(input: &str) -> Option<String> {
+pub fn normalize_usage_host(input: &str) -> Option<String> {
     let trimmed = input.trim().trim_end_matches('.').to_ascii_lowercase();
     let host = trimmed.strip_prefix("*.").unwrap_or(&trimmed);
     if host.is_empty() || host.contains('*') || host.contains(' ') || host.contains('@') {
@@ -246,7 +244,7 @@ pub(crate) fn normalize_usage_host(input: &str) -> Option<String> {
 }
 
 /// Allocate a source to its first matching entry once per limit, preserving overlap semantics.
-pub(super) fn totals(
+pub fn totals(
     config: &LimitsConfig,
     sources: &[UsageSourceDay],
     local_date: &str,
