@@ -12,13 +12,13 @@ use super::{
 #[cfg(desktop)]
 use super::{RegisteredBundle, StoredIncomingTransfer};
 #[cfg(desktop)]
-use crate::vault::handoff::protocol;
-use crate::vault::handoff::protocol::{BundleMetadata, BundlePurpose, validate_identifier};
+use crate::protocol;
+use crate::protocol::{BundleMetadata, BundlePurpose, validate_identifier};
 use std::fs;
 use std::path::{Path, PathBuf};
 
 impl PairingManager {
-    pub(crate) fn has_pending_transfer(&self) -> Result<bool, String> {
+    pub fn has_pending_transfer(&self) -> Result<bool, String> {
         let inner = self.lock()?;
         let state = initialized_state(&inner)?;
         Ok(state.pending_acknowledgement.is_some()
@@ -27,20 +27,17 @@ impl PairingManager {
             || state.requested_upload.is_some())
     }
 
-    pub(crate) fn replica_ready(&self) -> Result<bool, String> {
+    pub fn replica_ready(&self) -> Result<bool, String> {
         let inner = self.lock()?;
         Ok(initialized_state(&inner)?.replica_ready)
     }
 
-    pub(crate) fn pending_acknowledgement(&self) -> Result<Option<PendingAcknowledgement>, String> {
+    pub fn pending_acknowledgement(&self) -> Result<Option<PendingAcknowledgement>, String> {
         let inner = self.lock()?;
         Ok(initialized_state(&inner)?.pending_acknowledgement.clone())
     }
 
-    pub(crate) fn record_activation(
-        &self,
-        acknowledgement: PendingAcknowledgement,
-    ) -> Result<(), String> {
+    pub fn record_activation(&self, acknowledgement: PendingAcknowledgement) -> Result<(), String> {
         validate_identifier("vault id", &acknowledgement.vault_id)?;
         validate_identifier("device id", &acknowledgement.device_id)?;
         validate_identifier("transfer id", &acknowledgement.transfer_id)?;
@@ -54,7 +51,7 @@ impl PairingManager {
         persist_initialized_state(&inner)
     }
 
-    pub(crate) fn clear_pending_acknowledgement(&self, transfer_id: &str) -> Result<(), String> {
+    pub fn clear_pending_acknowledgement(&self, transfer_id: &str) -> Result<(), String> {
         validate_identifier("transfer id", transfer_id)?;
         let mut inner = self.lock()?;
         let state = initialized_state_mut(&mut inner)?;
@@ -68,10 +65,7 @@ impl PairingManager {
         }
     }
 
-    pub(crate) fn store_outgoing_transfer(
-        &self,
-        transfer: StoredOutgoingTransfer,
-    ) -> Result<(), String> {
+    pub fn store_outgoing_transfer(&self, transfer: StoredOutgoingTransfer) -> Result<(), String> {
         validate_stored_outgoing(&transfer)?;
         let mut inner = self.lock()?;
         let state = initialized_state_mut(&mut inner)?;
@@ -79,12 +73,12 @@ impl PairingManager {
         persist_initialized_state(&inner)
     }
 
-    pub(crate) fn outgoing_transfer(&self) -> Result<Option<StoredOutgoingTransfer>, String> {
+    pub fn outgoing_transfer(&self) -> Result<Option<StoredOutgoingTransfer>, String> {
         let inner = self.lock()?;
         Ok(initialized_state(&inner)?.outgoing_transfer.clone())
     }
 
-    pub(crate) fn mark_outgoing_committed(&self, transfer_id: &str) -> Result<(), String> {
+    pub fn mark_outgoing_committed(&self, transfer_id: &str) -> Result<(), String> {
         validate_identifier("transfer id", transfer_id)?;
         let mut inner = self.lock()?;
         let state = initialized_state_mut(&mut inner)?;
@@ -99,7 +93,7 @@ impl PairingManager {
         persist_initialized_state(&inner)
     }
 
-    pub(crate) fn clear_outgoing_transfer(&self, transfer_id: &str) -> Result<(), String> {
+    pub fn clear_outgoing_transfer(&self, transfer_id: &str) -> Result<(), String> {
         validate_identifier("transfer id", transfer_id)?;
         let mut inner = self.lock()?;
         let state = initialized_state_mut(&mut inner)?;
@@ -114,10 +108,7 @@ impl PairingManager {
     }
 
     #[cfg(desktop)]
-    pub(crate) fn store_incoming_transfer(
-        &self,
-        transfer: StoredIncomingTransfer,
-    ) -> Result<(), String> {
+    pub fn store_incoming_transfer(&self, transfer: StoredIncomingTransfer) -> Result<(), String> {
         validate_stored_incoming(&transfer)?;
         let mut inner = self.lock()?;
         let state = initialized_state_mut(&mut inner)?;
@@ -126,13 +117,13 @@ impl PairingManager {
     }
 
     #[cfg(desktop)]
-    pub(crate) fn incoming_transfer(&self) -> Result<Option<StoredIncomingTransfer>, String> {
+    pub fn incoming_transfer(&self) -> Result<Option<StoredIncomingTransfer>, String> {
         let inner = self.lock()?;
         Ok(initialized_state(&inner)?.incoming_transfer.clone())
     }
 
     #[cfg(desktop)]
-    pub(crate) fn complete_incoming_activation(
+    pub fn complete_incoming_activation(
         &self,
         completed: PendingAcknowledgement,
     ) -> Result<(), String> {
@@ -152,7 +143,7 @@ impl PairingManager {
         persist_initialized_state(&inner)
     }
 
-    pub(crate) fn complete_outgoing_activation(
+    pub fn complete_outgoing_activation(
         &self,
         completed: PendingAcknowledgement,
     ) -> Result<(), String> {
@@ -172,13 +163,13 @@ impl PairingManager {
     }
 
     #[cfg(desktop)]
-    pub(crate) fn completed_activation(&self) -> Result<Option<PendingAcknowledgement>, String> {
+    pub fn completed_activation(&self) -> Result<Option<PendingAcknowledgement>, String> {
         let inner = self.lock()?;
         Ok(initialized_state(&inner)?.completed_activation.clone())
     }
 
     #[cfg(desktop)]
-    pub(crate) fn request_upload(&self, purpose: BundlePurpose) -> Result<(), String> {
+    pub fn request_upload(&self, purpose: BundlePurpose) -> Result<(), String> {
         let mut inner = self.lock()?;
         let state = initialized_state_mut(&mut inner)?;
         if state.requested_upload != Some(BundlePurpose::Ownership) {
@@ -188,7 +179,7 @@ impl PairingManager {
     }
 
     #[cfg(desktop)]
-    pub(crate) fn cancel_requested_upload(&self, purpose: BundlePurpose) -> Result<(), String> {
+    pub fn cancel_requested_upload(&self, purpose: BundlePurpose) -> Result<(), String> {
         let mut inner = self.lock()?;
         let previous = initialized_state(&inner)?.clone();
         let state = initialized_state_mut(&mut inner)?;
@@ -204,13 +195,13 @@ impl PairingManager {
     }
 
     #[cfg(desktop)]
-    pub(crate) fn requested_upload(&self) -> Result<Option<BundlePurpose>, String> {
+    pub fn requested_upload(&self) -> Result<Option<BundlePurpose>, String> {
         let inner = self.lock()?;
         Ok(initialized_state(&inner)?.requested_upload)
     }
 
     #[cfg(desktop)]
-    pub(crate) fn register_outgoing_bundle(
+    pub fn register_outgoing_bundle(
         &self,
         metadata: BundleMetadata,
         path: PathBuf,
@@ -227,7 +218,7 @@ impl PairingManager {
     }
 
     #[cfg(desktop)]
-    pub(crate) fn outgoing_bundle(&self, transfer_id: &str) -> Result<RegisteredBundle, String> {
+    pub fn outgoing_bundle(&self, transfer_id: &str) -> Result<RegisteredBundle, String> {
         validate_identifier("transfer id", transfer_id)?;
         let inner = self.lock()?;
         inner
@@ -238,17 +229,14 @@ impl PairingManager {
     }
 
     #[cfg(desktop)]
-    pub(crate) fn unregister_outgoing_bundle(&self, transfer_id: &str) -> Result<(), String> {
+    pub fn unregister_outgoing_bundle(&self, transfer_id: &str) -> Result<(), String> {
         validate_identifier("transfer id", transfer_id)?;
         let mut inner = self.lock()?;
         inner.outgoing_bundles.remove(transfer_id);
         Ok(())
     }
 
-    pub(crate) fn outgoing_snapshot_paths(
-        &self,
-        transfer_id: &str,
-    ) -> Result<(PathBuf, PathBuf), String> {
+    pub fn outgoing_snapshot_paths(&self, transfer_id: &str) -> Result<(PathBuf, PathBuf), String> {
         validate_identifier("transfer id", transfer_id)?;
         let inner = self.lock()?;
         let root = inner
@@ -261,10 +249,7 @@ impl PairingManager {
         ))
     }
 
-    pub(crate) fn staging_paths(
-        &self,
-        transfer_id: &str,
-    ) -> Result<(PathBuf, PathBuf, PathBuf), String> {
+    pub fn staging_paths(&self, transfer_id: &str) -> Result<(PathBuf, PathBuf, PathBuf), String> {
         validate_identifier("transfer id", transfer_id)?;
         let inner = self.lock()?;
         let root = inner
@@ -278,7 +263,7 @@ impl PairingManager {
         ))
     }
 
-    pub(crate) fn remove_staging(&self, transfer_id: &str) -> Result<(), String> {
+    pub fn remove_staging(&self, transfer_id: &str) -> Result<(), String> {
         let (partial, metadata, complete) = self.staging_paths(transfer_id)?;
         for path in [partial, metadata, complete] {
             let result = if path.is_dir() {
@@ -295,7 +280,7 @@ impl PairingManager {
         Ok(())
     }
 
-    pub(crate) fn write_staging_metadata(
+    pub fn write_staging_metadata(
         &self,
         path: &Path,
         metadata: &BundleMetadata,
@@ -306,10 +291,7 @@ impl PairingManager {
         write_private_file_atomically(path, &json)
     }
 
-    pub(crate) fn read_staging_metadata(
-        &self,
-        path: &Path,
-    ) -> Result<Option<BundleMetadata>, String> {
+    pub fn read_staging_metadata(&self, path: &Path) -> Result<Option<BundleMetadata>, String> {
         match fs::read(path) {
             Ok(json) => {
                 let metadata: BundleMetadata = serde_json::from_slice(&json)

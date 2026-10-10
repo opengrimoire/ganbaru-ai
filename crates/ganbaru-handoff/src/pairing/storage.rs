@@ -5,7 +5,7 @@ use super::{
     PairingStateFile, PendingAcknowledgement, StoredIncomingTransfer, StoredOutgoingTransfer,
     certificate_fingerprint, decode_certificate, decode_identity, initialized_state, random_token,
 };
-use crate::vault::handoff::protocol::{self, BundlePurpose, validate_identifier};
+use crate::protocol::{self, BundlePurpose, validate_identifier};
 use std::fs;
 use std::io::Write;
 use std::path::Path;
@@ -169,7 +169,7 @@ pub(super) fn persist_state(path: &Path, state: &PairingStateFile) -> Result<(),
     write_private_file_atomically(path, &bytes)
 }
 
-pub(crate) fn write_private_file_atomically(path: &Path, bytes: &[u8]) -> Result<(), String> {
+pub fn write_private_file_atomically(path: &Path, bytes: &[u8]) -> Result<(), String> {
     let parent = path
         .parent()
         .ok_or_else(|| "private state path has no parent".to_string())?;

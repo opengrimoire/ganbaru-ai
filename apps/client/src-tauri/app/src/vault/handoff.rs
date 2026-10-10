@@ -6,12 +6,11 @@ pub(crate) mod coordinator;
 mod network_access;
 #[cfg(target_os = "linux")]
 pub(crate) use network_access::run_privileged_helper_if_requested;
-pub(crate) mod pairing;
 pub(crate) mod receiver;
 pub(crate) mod source;
 pub(crate) mod transport;
 
-pub(crate) use ganbaru_handoff::protocol;
+pub(crate) use ganbaru_handoff::{pairing, protocol};
 
 use pairing::PairingManager;
 use protocol::{HandoffCompatibility, decode_invitation, encode_invitation};

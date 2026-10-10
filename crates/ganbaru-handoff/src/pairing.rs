@@ -9,7 +9,7 @@ mod tests;
 mod transfers;
 
 #[cfg(any(target_os = "linux", mobile))]
-pub(crate) use storage::write_private_file_atomically;
+pub use storage::write_private_file_atomically;
 use storage::{
     persist_initialized_state, persist_state, read_state, recover_private_state, validate_state,
 };
@@ -50,7 +50,7 @@ struct StoredIdentity {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct LinkedPeer {
+pub struct LinkedPeer {
     pub device_id: String,
     pub device_label: String,
     #[serde(default)]
@@ -62,7 +62,7 @@ pub(crate) struct LinkedPeer {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct CoordinatorPin {
+pub struct CoordinatorPin {
     pub device_id: String,
     #[serde(default)]
     pub device_label: Option<String>,
@@ -111,7 +111,7 @@ struct PairingStateFile {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct PendingAcknowledgement {
+pub struct PendingAcknowledgement {
     pub vault_id: String,
     pub device_id: String,
     pub transfer_id: String,
@@ -121,7 +121,7 @@ pub(crate) struct PendingAcknowledgement {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct StoredOutgoingTransfer {
+pub struct StoredOutgoingTransfer {
     pub metadata: BundleMetadata,
     pub purpose: BundlePurpose,
     pub committed: bool,
@@ -129,13 +129,13 @@ pub(crate) struct StoredOutgoingTransfer {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct StoredIncomingTransfer {
+pub struct StoredIncomingTransfer {
     pub metadata: BundleMetadata,
     pub source_device_id: String,
     pub purpose: BundlePurpose,
 }
 
-pub(crate) struct TlsIdentity {
+pub struct TlsIdentity {
     pub certificate: CertificateDer<'static>,
     pub private_key: PrivateKeyDer<'static>,
 }
@@ -166,13 +166,13 @@ struct PendingInvitation {
 
 #[derive(Clone, Debug)]
 #[cfg(desktop)]
-pub(crate) struct RegisteredBundle {
+pub struct RegisteredBundle {
     pub metadata: BundleMetadata,
     pub path: PathBuf,
 }
 
 #[cfg(desktop)]
-pub(crate) struct Enrollment<'a> {
+pub struct Enrollment<'a> {
     pub invitation_id: &'a str,
     pub secret: &'a str,
     pub vault_id: &'a str,
@@ -195,16 +195,12 @@ struct PairingManagerInner {
 
 /// Durable membership and transfer progress with process-local invitations and bundles.
 #[derive(Clone, Default)]
-pub(crate) struct PairingManager {
+pub struct PairingManager {
     inner: std::sync::Arc<Mutex<PairingManagerInner>>,
 }
 
 impl PairingManager {
-    pub(crate) fn initialize(
-        &self,
-        app_config_dir: PathBuf,
-        device_id: String,
-    ) -> Result<(), String> {
+    pub fn initialize(&self, app_config_dir: PathBuf, device_id: String) -> Result<(), String> {
         validate_identifier("device id", &device_id)?;
         fs::create_dir_all(&app_config_dir)
             .map_err(|error| format!("create app config directory: {error}"))?;
@@ -251,7 +247,7 @@ impl PairingManager {
         Ok(())
     }
 
-    pub(crate) fn identity(&self) -> Result<(String, TlsIdentity), String> {
+    pub fn identity(&self) -> Result<(String, TlsIdentity), String> {
         let inner = self.lock()?;
         let state = initialized_state(&inner)?;
         Ok((
@@ -260,7 +256,7 @@ impl PairingManager {
         ))
     }
 
-    pub(crate) fn linked_peers(&self) -> Result<Vec<LinkedPeer>, String> {
+    pub fn linked_peers(&self) -> Result<Vec<LinkedPeer>, String> {
         let inner = self.lock()?;
         Ok(initialized_state(&inner)?
             .linked_peers
@@ -269,7 +265,7 @@ impl PairingManager {
             .collect())
     }
 
-    pub(crate) fn linked_peer(&self, device_id: &str) -> Result<Option<LinkedPeer>, String> {
+    pub fn linked_peer(&self, device_id: &str) -> Result<Option<LinkedPeer>, String> {
         validate_identifier("peer device id", device_id)?;
         let inner = self.lock()?;
         Ok(initialized_state(&inner)?
@@ -278,13 +274,13 @@ impl PairingManager {
             .cloned())
     }
 
-    pub(crate) fn coordinator_pin(&self) -> Result<Option<CoordinatorPin>, String> {
+    pub fn coordinator_pin(&self) -> Result<Option<CoordinatorPin>, String> {
         let inner = self.lock()?;
         Ok(initialized_state(&inner)?.coordinator.clone())
     }
 
     /// Whether this device shares `vault_id` with a linked peer or a pinned coordinator.
-    pub(crate) fn is_linked_for(&self, vault_id: &str) -> Result<bool, String> {
+    pub fn is_linked_for(&self, vault_id: &str) -> Result<bool, String> {
         let inner = self.lock()?;
         let state = initialized_state(&inner)?;
         if state.revoked_by_coordinator {
@@ -300,13 +296,13 @@ impl PairingManager {
                 .any(|peer| peer.vault_id == vault_id))
     }
 
-    pub(crate) fn revoked_by_coordinator(&self) -> Result<bool, String> {
+    pub fn revoked_by_coordinator(&self) -> Result<bool, String> {
         let inner = self.lock()?;
         Ok(initialized_state(&inner)?.revoked_by_coordinator)
     }
 
     /// Devices this coordinator unlinked from `vault_id`, whose sync writers it revokes.
-    pub(crate) fn revoked_device_ids(
+    pub fn revoked_device_ids(
         &self,
         vault_id: &str,
     ) -> Result<std::collections::BTreeSet<String>, String> {
@@ -320,7 +316,7 @@ impl PairingManager {
     }
 
     #[cfg(desktop)]
-    pub(crate) fn client_auth_certificates(&self) -> Result<Vec<CertificateDer<'static>>, String> {
+    pub fn client_auth_certificates(&self) -> Result<Vec<CertificateDer<'static>>, String> {
         let inner = self.lock()?;
         let state = initialized_state(&inner)?;
         state
@@ -337,7 +333,7 @@ impl PairingManager {
     }
 
     #[cfg(desktop)]
-    pub(crate) fn is_revoked_certificate(
+    pub fn is_revoked_certificate(
         &self,
         certificate: Option<&CertificateDer<'_>>,
     ) -> Result<bool, String> {
@@ -352,22 +348,19 @@ impl PairingManager {
             .any(|peer| peer.certificate_fingerprint == fingerprint))
     }
 
-    pub(crate) fn ensure_enrollment_target(
-        &self,
-        invitation: &PairingInvitation,
-    ) -> Result<(), String> {
+    pub fn ensure_enrollment_target(&self, invitation: &PairingInvitation) -> Result<(), String> {
         let inner = self.lock()?;
         ensure_enrollment_target(initialized_state(&inner)?, invitation)
     }
 
-    pub(crate) fn ensure_can_unlink(&self) -> Result<(), String> {
+    pub fn ensure_can_unlink(&self) -> Result<(), String> {
         if self.has_pending_transfer()? {
             return Err("finish or retry the active handoff before unlinking".to_string());
         }
         Ok(())
     }
 
-    pub(crate) fn unlink(&self) -> Result<(), String> {
+    pub fn unlink(&self) -> Result<(), String> {
         let mut inner = self.lock()?;
         let previous = initialized_state(&inner)?.clone();
         if previous.pending_acknowledgement.is_some()
@@ -398,7 +391,7 @@ impl PairingManager {
         Ok(())
     }
 
-    pub(crate) fn unlink_device(&self, device_id: &str) -> Result<(), String> {
+    pub fn unlink_device(&self, device_id: &str) -> Result<(), String> {
         validate_identifier("peer device id", device_id)?;
         let mut inner = self.lock()?;
         let previous = initialized_state(&inner)?.clone();
@@ -439,10 +432,7 @@ impl PairingManager {
         Ok(())
     }
 
-    pub(crate) fn accept_coordinator_revocation(
-        &self,
-        expected: &CoordinatorPin,
-    ) -> Result<(), String> {
+    pub fn accept_coordinator_revocation(&self, expected: &CoordinatorPin) -> Result<(), String> {
         let mut inner = self.lock()?;
         let previous = initialized_state(&inner)?.clone();
         let state = initialized_state_mut(&mut inner)?;
@@ -469,7 +459,7 @@ impl PairingManager {
     }
 
     #[cfg(desktop)]
-    pub(crate) fn create_invitation(
+    pub fn create_invitation(
         &self,
         endpoint: std::net::SocketAddr,
         vault_id: String,
@@ -506,7 +496,7 @@ impl PairingManager {
     }
 
     #[cfg(desktop)]
-    pub(crate) fn enroll_peer(
+    pub fn enroll_peer(
         &self,
         enrollment: Enrollment<'_>,
         now_ms: i64,
@@ -581,7 +571,7 @@ impl PairingManager {
         Ok(peer)
     }
 
-    pub(crate) fn record_coordinator(
+    pub fn record_coordinator(
         &self,
         invitation: &PairingInvitation,
         coordinator_certificate: &[u8],
@@ -607,7 +597,7 @@ impl PairingManager {
     }
 
     #[cfg(desktop)]
-    pub(crate) fn verify_authenticated_peer(
+    pub fn verify_authenticated_peer(
         &self,
         device_id: &str,
         certificate: Option<&CertificateDer<'_>>,
@@ -630,7 +620,7 @@ impl PairingManager {
     }
 
     #[cfg(desktop)]
-    pub(crate) fn authenticated_peer(
+    pub fn authenticated_peer(
         &self,
         certificate: Option<&CertificateDer<'_>>,
     ) -> Result<LinkedPeer, String> {
@@ -721,7 +711,7 @@ fn decode_identity(identity: &StoredIdentity) -> Result<TlsIdentity, String> {
     })
 }
 
-pub(crate) fn decode_certificate(encoded: &str) -> Result<CertificateDer<'static>, String> {
+pub fn decode_certificate(encoded: &str) -> Result<CertificateDer<'static>, String> {
     let certificate = base64::engine::general_purpose::STANDARD
         .decode(encoded)
         .map_err(|error| format!("decode device certificate: {error}"))?;
@@ -731,11 +721,11 @@ pub(crate) fn decode_certificate(encoded: &str) -> Result<CertificateDer<'static
     Ok(CertificateDer::from(certificate))
 }
 
-pub(crate) fn encode_certificate(certificate: &CertificateDer<'_>) -> String {
+pub fn encode_certificate(certificate: &CertificateDer<'_>) -> String {
     base64::engine::general_purpose::STANDARD.encode(certificate.as_ref())
 }
 
-pub(crate) fn certificate_fingerprint(certificate: &[u8]) -> String {
+pub fn certificate_fingerprint(certificate: &[u8]) -> String {
     let digest = Sha256::digest(certificate);
     digest.iter().map(|byte| format!("{byte:02x}")).collect()
 }
@@ -750,7 +740,7 @@ fn random_secret() -> Result<String, String> {
     Ok(base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(random))
 }
 
-pub(crate) fn random_token(prefix: &str) -> Result<String, String> {
+pub fn random_token(prefix: &str) -> Result<String, String> {
     let mut random = [0_u8; 16];
     rustls::crypto::ring::default_provider()
         .secure_random

@@ -42,7 +42,7 @@ fn enroll_device(manager: &PairingManager, device_id: &str, device_label: &str, 
             "127.0.0.1:41000".parse().expect("endpoint"),
             "vault-1".to_string(),
             0,
-            crate::vault::handoff::protocol::test_compatibility(),
+            crate::protocol::test_compatibility(),
             now_ms,
         )
         .expect("invitation");
@@ -79,7 +79,7 @@ fn invitation_is_single_use_and_not_restored_after_restart() {
             "127.0.0.1:41000".parse().expect("endpoint"),
             "vault-1".to_string(),
             0,
-            crate::vault::handoff::protocol::test_compatibility(),
+            crate::protocol::test_compatibility(),
             100,
         )
         .expect("invitation");
@@ -122,7 +122,7 @@ fn repeated_enrollment_updates_one_existing_membership() {
                 "127.0.0.1:41000".parse().expect("endpoint"),
                 "vault-1".to_string(),
                 0,
-                crate::vault::handoff::protocol::test_compatibility(),
+                crate::protocol::test_compatibility(),
                 now_ms,
             )
             .expect("invitation");
@@ -149,7 +149,7 @@ fn revoked_peer_is_remembered_across_restart_and_removed_by_reenrollment() {
             "127.0.0.1:41000".parse().expect("endpoint"),
             "vault-1".to_string(),
             0,
-            crate::vault::handoff::protocol::test_compatibility(),
+            crate::protocol::test_compatibility(),
             100,
         )
         .expect("invitation");
@@ -181,7 +181,7 @@ fn revoked_peer_is_remembered_across_restart_and_removed_by_reenrollment() {
             "127.0.0.1:41000".parse().expect("endpoint"),
             "vault-1".to_string(),
             0,
-            crate::vault::handoff::protocol::test_compatibility(),
+            crate::protocol::test_compatibility(),
             200,
         )
         .expect("new invitation");
@@ -214,7 +214,7 @@ fn linked_client_accepts_only_its_existing_coordinator() {
             "127.0.0.1:41000".parse().expect("endpoint"),
             "vault-1".to_string(),
             3,
-            crate::vault::handoff::protocol::test_compatibility(),
+            crate::protocol::test_compatibility(),
             100,
         )
         .expect("first invitation");
@@ -262,7 +262,7 @@ fn linked_client_accepts_only_its_existing_coordinator() {
             "127.0.0.1:43000".parse().expect("endpoint"),
             "vault-1".to_string(),
             4,
-            crate::vault::handoff::protocol::test_compatibility(),
+            crate::protocol::test_compatibility(),
             200,
         )
         .expect("second invitation");
@@ -434,7 +434,7 @@ fn expired_invitation_is_rejected() {
             "127.0.0.1:41000".parse().expect("endpoint"),
             "vault-1".to_string(),
             0,
-            crate::vault::handoff::protocol::test_compatibility(),
+            crate::protocol::test_compatibility(),
             100,
         )
         .expect("invitation");
@@ -459,7 +459,7 @@ fn unlink_clears_the_peer_but_refuses_active_transfer_state() {
             "127.0.0.1:41000".parse().expect("endpoint"),
             "vault-1".to_string(),
             0,
-            crate::vault::handoff::protocol::test_compatibility(),
+            crate::protocol::test_compatibility(),
             100,
         )
         .expect("invitation");
@@ -533,7 +533,7 @@ fn bidirectional_transfer_state_survives_restart() {
         .expect("initialize");
     let metadata = BundleMetadata {
         protocol_version: PROTOCOL_VERSION,
-        compatibility: crate::vault::handoff::protocol::test_compatibility(),
+        compatibility: crate::protocol::test_compatibility(),
         vault_id: "vault-1".to_string(),
         device_id: "device-desktop".to_string(),
         transfer_id: "transfer-return".to_string(),
@@ -612,7 +612,7 @@ fn incoming_transfer_and_completion_survive_restart() {
         .expect("initialize");
     let metadata = BundleMetadata {
         protocol_version: PROTOCOL_VERSION,
-        compatibility: crate::vault::handoff::protocol::test_compatibility(),
+        compatibility: crate::protocol::test_compatibility(),
         vault_id: "vault-1".to_string(),
         device_id: "device-desktop".to_string(),
         transfer_id: "incoming-return".to_string(),

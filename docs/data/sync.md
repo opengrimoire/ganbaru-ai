@@ -8,7 +8,7 @@ Related documents: [Sync engine decision](../architecture/decisions/sync-engine.
 
 ## Implemented local whole-vault handoff
 
-Source: `apps/client/src-tauri/app/src/vault/handoff/`, with the wire protocol in `crates/ganbaru-handoff/`. Whole-vault handoff carries every domain that is not yet replicated, and the full vault including the operation log on refresh and transfer.
+Source: `apps/client/src-tauri/app/src/vault/handoff/`, with the wire protocol and pairing state in `crates/ganbaru-handoff/`. Whole-vault handoff carries every domain that is not yet replicated, and the full vault including the operation log on refresh and transfer.
 
 ### Pairing and transport
 
