@@ -5,8 +5,7 @@ use super::wire::{
     hash_from_wire, hash_to_wire, ops_from_wire, ops_to_wire, vector_from_wire, vector_to_wire,
     writer_from_wire,
 };
-use crate::vault::handoff::pairing::PairingManager;
-use crate::vault::handoff::protocol::{
+use ganbaru_handoff::protocol::{
     ControlMessage, MAX_SYNC_HASHES, PROTOCOL_VERSION, SYNC_PAGE_BYTES, SyncProbe, SyncRefusal,
     SyncRefusalCode,
 };
@@ -19,14 +18,14 @@ use std::future::Future;
 /// Bound on operation bytes moved in one direction of one exchange. Pulled operations wait in
 /// the log until the pass applies them, so the bound also caps that backlog; the service runs
 /// the next pass right away to continue.
-pub(crate) const MAX_EXCHANGE_BYTES: usize = 32 * 1024 * 1024;
+pub const MAX_EXCHANGE_BYTES: usize = 32 * 1024 * 1024;
 
 fn page_bytes(ops: &[Vec<u8>]) -> usize {
     ops.iter().map(Vec::len).sum()
 }
 
 /// Sends one sync request to the hub and returns its answer.
-pub(crate) trait SyncTransport {
+pub trait SyncTransport {
     fn request(
         &self,
         message: ControlMessage,
@@ -35,7 +34,7 @@ pub(crate) trait SyncTransport {
 
 /// The ids every request presents.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct PeerIds {
+pub struct PeerIds {
     pub vault_id: String,
     pub device_id: String,
 }
@@ -43,14 +42,14 @@ pub(crate) struct PeerIds {
 /// A chain of this installation that another copy continued differently. Operations after
 /// `keep_through` are re-sealed by a successor writer.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct ForkPoint {
+pub struct ForkPoint {
     pub writer: WriterId,
     pub keep_through: Seq,
 }
 
 /// Result of an exchange that found no fork.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub(crate) struct Exchanged {
+pub struct Exchanged {
     pub pushed: usize,
     pub pulled: usize,
     /// Local stored vector after the exchange, what a following wait reports as known.
@@ -62,13 +61,13 @@ pub(crate) struct Exchanged {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) enum Exchange {
+pub enum Exchange {
     Done(Exchanged),
     Fork(ForkPoint),
 }
 
 /// One replica's view for an exchange.
-pub(crate) struct ClientSession<'a, T: SyncTransport> {
+pub struct ClientSession<'a, T: SyncTransport> {
     pub transport: &'a T,
     pub ids: &'a PeerIds,
     pub engine: &'a Engine,
@@ -93,7 +92,7 @@ impl<T: SyncTransport> ClientSession<'_, T> {
 
     /// Hello, push, and pull until both sides hold the same operations or a refusal stops one
     /// direction.
-    pub(crate) async fn exchange(&self) -> Result<Exchange, String> {
+    pub async fn exchange(&self) -> Result<Exchange, String> {
         let local = self.stored().await?;
         let probe = self.probe(&local).await?;
         let hello = ControlMessage::SyncHello {
@@ -225,7 +224,7 @@ impl<T: SyncTransport> ClientSession<'_, T> {
             let outcomes = {
                 let mut conn = acquire(self.pool).await?;
                 self.engine
-                    .store_many(&mut conn, self.ctx, &ops, super::service::now_ms()?)
+                    .store_many(&mut conn, self.ctx, &ops, super::now_ms()?)
                     .await
                     .map_err(|error| format!("store sync operations: {error}"))?
             };
@@ -393,7 +392,7 @@ fn describe_refusal(side: &str, refusal: &SyncRefusal) -> String {
 
 /// Long poll: the hub's stored vector once it holds operations past `known`, or after its
 /// bounded wait.
-pub(crate) async fn wait<T: SyncTransport>(
+pub async fn wait<T: SyncTransport>(
     transport: &T,
     ids: &PeerIds,
     known: &VersionVector,
@@ -413,16 +412,6 @@ pub(crate) async fn wait<T: SyncTransport>(
         },
     )?;
     vector_from_wire(&stored)
-}
-
-/// Sends requests to the coordinator this device is paired with.
-#[derive(Clone)]
-pub(crate) struct PairedTransport(pub PairingManager);
-
-impl SyncTransport for PairedTransport {
-    async fn request(&self, message: ControlMessage) -> Result<ControlMessage, String> {
-        crate::vault::handoff::transport::sync_request(&self.0, message).await
-    }
 }
 
 /// Extracts the expected response, or reports the hub's error.

@@ -8,7 +8,7 @@ use tokio::sync::Notify;
 
 /// The hook every writable vault connection runs. Guarded connections get the replica guards
 /// before any statement runs; every writable connection signals `commits` after each commit.
-pub(crate) fn vault_connection_hook(commits: Arc<Notify>) -> ConnectionHook {
+pub fn vault_connection_hook(commits: Arc<Notify>) -> ConnectionHook {
     connection_hook(move |conn, access| {
         let commits = commits.clone();
         Box::pin(async move {

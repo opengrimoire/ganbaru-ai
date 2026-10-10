@@ -20,7 +20,7 @@ pub(super) const RESERVATION_BLOCK: u64 = 256;
 /// Device-local state of the writer this installation seals with.
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct WriterRecord {
+pub struct WriterRecord {
     pub schema_version: u32,
     /// Hex writer id.
     pub writer_id: String,
@@ -37,7 +37,7 @@ pub(crate) struct WriterRecord {
 }
 
 /// Storage of writer signing keys outside the vault.
-pub(crate) trait WriterKeyStore: Send + Sync {
+pub trait WriterKeyStore: Send + Sync {
     fn read(&self, vault_id: &str, writer_id: &str) -> Result<Option<Vec<u8>>, String>;
     fn write(&self, vault_id: &str, writer_id: &str, pkcs8: &[u8]) -> Result<(), String>;
     fn remove(&self, vault_id: &str, writer_id: &str) -> Result<(), String>;
@@ -49,7 +49,7 @@ fn key_reference(vault_id: &str, writer_id: &str) -> String {
 
 /// Desktop key store in the operating-system keyring.
 #[cfg(desktop)]
-pub(crate) struct KeyringStore;
+pub struct KeyringStore;
 
 #[cfg(desktop)]
 impl KeyringStore {
@@ -90,7 +90,7 @@ impl WriterKeyStore for KeyringStore {
 
 /// Key store of one private file per writer, used on Android and in tests.
 #[cfg(any(mobile, test))]
-pub(crate) struct FileKeyStore {
+pub struct FileKeyStore {
     pub directory: PathBuf,
 }
 
@@ -115,7 +115,7 @@ impl WriterKeyStore for FileKeyStore {
     }
 
     fn write(&self, vault_id: &str, writer_id: &str, pkcs8: &[u8]) -> Result<(), String> {
-        crate::vault::handoff::pairing::write_private_file_atomically(
+        ganbaru_handoff::pairing::write_private_file_atomically(
             &self.path(vault_id, writer_id),
             pkcs8,
         )
@@ -132,13 +132,13 @@ impl WriterKeyStore for FileKeyStore {
 
 /// Device-local sync files of one vault under the app config directory.
 #[derive(Clone, Debug)]
-pub(crate) struct SyncFiles {
+pub struct SyncFiles {
     pub directory: PathBuf,
     pub vault_id: String,
 }
 
 impl SyncFiles {
-    pub(crate) fn new(directory: PathBuf, vault_id: &str) -> Result<Self, String> {
+    pub fn new(directory: PathBuf, vault_id: &str) -> Result<Self, String> {
         let valid = !vault_id.is_empty()
             && vault_id.len() <= 128
             && vault_id
@@ -153,16 +153,16 @@ impl SyncFiles {
         })
     }
 
-    pub(crate) fn record_path(&self) -> PathBuf {
+    pub fn record_path(&self) -> PathBuf {
         self.directory.join(format!("{}.json", self.vault_id))
     }
 
-    pub(crate) fn carry_path(&self) -> PathBuf {
+    pub fn carry_path(&self) -> PathBuf {
         self.directory.join(format!("{}.carry", self.vault_id))
     }
 }
 
-pub(crate) fn read_record(path: &Path) -> Result<Option<WriterRecord>, String> {
+pub fn read_record(path: &Path) -> Result<Option<WriterRecord>, String> {
     let bytes = match std::fs::read(path) {
         Ok(bytes) => bytes,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
@@ -179,12 +179,12 @@ pub(crate) fn read_record(path: &Path) -> Result<Option<WriterRecord>, String> {
 fn write_record(path: &Path, record: &WriterRecord) -> Result<(), String> {
     let bytes = serde_json::to_vec_pretty(record)
         .map_err(|error| format!("encode sync writer record: {error}"))?;
-    crate::vault::handoff::pairing::write_private_file_atomically(path, &bytes)
+    ganbaru_handoff::pairing::write_private_file_atomically(path, &bytes)
 }
 
 /// Whether the database still holds the chain the record describes. A copied or restored
 /// database lacks committed sequences or carries a chain past the reservation.
-pub(crate) fn record_matches(record: &WriterRecord, head: LocalWriterHead) -> bool {
+pub fn record_matches(record: &WriterRecord, head: LocalWriterHead) -> bool {
     match head {
         LocalWriterHead::Absent => record.last_committed_seq == 0,
         LocalWriterHead::Genuine {
@@ -196,23 +196,23 @@ pub(crate) fn record_matches(record: &WriterRecord, head: LocalWriterHead) -> bo
 }
 
 /// The writer this installation seals with, with its durable record.
-pub(crate) struct ActiveWriter {
+pub struct ActiveWriter {
     key: WriterKeyPair,
     certificate: SignedCertificate,
     reservation: RecordReservation,
 }
 
 impl ActiveWriter {
-    pub(crate) fn id(&self) -> WriterId {
+    pub fn id(&self) -> WriterId {
         self.certificate.certificate.writer_id()
     }
 
-    pub(crate) fn record(&self) -> &WriterRecord {
+    pub fn record(&self) -> &WriterRecord {
         &self.reservation.record
     }
 
     /// The engine view of this writer with its durable reservation.
-    pub(crate) fn local(&mut self) -> LocalWriter<'_> {
+    pub fn local(&mut self) -> LocalWriter<'_> {
         LocalWriter {
             key: &self.key,
             certificate: &self.certificate,
@@ -221,7 +221,7 @@ impl ActiveWriter {
     }
 
     /// Records the highest committed sequence after a seal commits.
-    pub(crate) fn committed(&mut self, seq: u64) -> Result<(), String> {
+    pub fn committed(&mut self, seq: u64) -> Result<(), String> {
         if seq <= self.reservation.record.last_committed_seq {
             return Ok(());
         }
@@ -232,7 +232,7 @@ impl ActiveWriter {
     }
 
     /// Records whether exchanges are paused on this device.
-    pub(crate) fn set_paused(&mut self, paused: bool) -> Result<(), String> {
+    pub fn set_paused(&mut self, paused: bool) -> Result<(), String> {
         if self.reservation.record.paused == paused {
             return Ok(());
         }
@@ -243,7 +243,7 @@ impl ActiveWriter {
 
     /// Every writer this installation sealed with: the active one and the retired ones whose
     /// keys it still lists.
-    pub(crate) fn own_writers(&self) -> std::collections::BTreeSet<WriterId> {
+    pub fn own_writers(&self) -> std::collections::BTreeSet<WriterId> {
         let record = self.record();
         std::iter::once(self.id())
             .chain(
@@ -257,7 +257,7 @@ impl ActiveWriter {
 }
 
 /// The durable reservation of an active writer record.
-pub(crate) struct RecordReservation {
+pub struct RecordReservation {
     path: PathBuf,
     record: WriterRecord,
 }
@@ -284,14 +284,14 @@ impl SequenceReservation for RecordReservation {
 }
 
 /// The recorded writer with the key copy it names, read before the database check.
-pub(crate) struct StoredWriter {
+pub struct StoredWriter {
     record: WriterRecord,
     key: Option<Vec<u8>>,
 }
 
 /// Reads the writer record and its key. Key stores may block, so callers run this off the
 /// async runtime.
-pub(crate) fn read_stored_writer(
+pub fn read_stored_writer(
     files: &SyncFiles,
     keys: &dyn WriterKeyStore,
 ) -> Result<Option<StoredWriter>, String> {
@@ -304,7 +304,7 @@ pub(crate) fn read_stored_writer(
 
 /// What a successor writer inherits.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub(crate) struct SuccessorPlan {
+pub struct SuccessorPlan {
     predecessor: Option<WriterId>,
     paused: bool,
     retired_keys: Vec<String>,
@@ -325,13 +325,13 @@ impl SuccessorPlan {
     }
 
     /// The plan that replaces a writer the database no longer accepts.
-    pub(crate) fn after(writer: &ActiveWriter) -> Self {
+    pub fn after(writer: &ActiveWriter) -> Self {
         Self::retiring(writer.record())
     }
 }
 
 /// Outcome of the writer check.
-pub(crate) enum WriterCheck {
+pub enum WriterCheck {
     Ready(Box<ActiveWriter>),
     /// The database does not hold the recorded chain, or there is no record.
     Successor(SuccessorPlan),
@@ -339,7 +339,7 @@ pub(crate) enum WriterCheck {
 
 /// Keeps the recorded writer when the database still holds its chain. A copied or restored
 /// database, a lost key, or a writer the space no longer accepts needs a successor.
-pub(crate) async fn check_writer(
+pub async fn check_writer(
     engine: &Engine,
     conn: &mut SqliteConnection,
     ctx: &SpaceContext,
@@ -382,7 +382,7 @@ pub(crate) async fn check_writer(
 
 /// Creates a writer certified by the person key and makes its key and record durable, then
 /// removes the keys it retires. Key stores may block, so callers run this off the async runtime.
-pub(crate) fn create_writer(
+pub fn create_writer(
     files: &SyncFiles,
     keys: &dyn WriterKeyStore,
     plan: SuccessorPlan,
@@ -427,7 +427,7 @@ pub(crate) fn create_writer(
 }
 
 /// Removes keys of retired writers once the record of their successor is durable.
-pub(crate) fn remove_retired_keys(
+pub fn remove_retired_keys(
     writer: &mut ActiveWriter,
     files: &SyncFiles,
     keys: &dyn WriterKeyStore,

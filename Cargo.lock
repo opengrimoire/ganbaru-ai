@@ -2039,6 +2039,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "ganbaru-sync-replica"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "ganbaru-db",
+ "ganbaru-handoff",
+ "ganbaru-people",
+ "ganbaru-quick-notes",
+ "ganbaru-sync",
+ "ganbaru-sync-contracts",
+ "keyring",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "tokio",
+]
+
+[[package]]
 name = "ganbaru-tauri-app"
 version = "0.1.5"
 dependencies = [
@@ -2070,6 +2088,7 @@ dependencies = [
  "ganbaru-quick-notes",
  "ganbaru-sync",
  "ganbaru-sync-contracts",
+ "ganbaru-sync-replica",
  "ganbaru-themes",
  "ganbaru-working-folders",
  "gtk",

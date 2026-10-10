@@ -4,7 +4,7 @@
 use super::wire::{
     hash_to_wire, ops_from_wire, ops_to_wire, vector_from_wire, vector_to_wire, writer_from_wire,
 };
-use crate::vault::handoff::protocol::{ControlMessage, SyncRefusal, SyncRefusalCode};
+use ganbaru_handoff::protocol::{ControlMessage, SyncRefusal, SyncRefusalCode};
 use ganbaru_sync::{Engine, SpaceContext, StoreOutcome, StoreRefusal, local};
 use ganbaru_sync_contracts::{Envelope, Seq, VersionVector, WriterId};
 use sqlx::SqlitePool;
@@ -17,16 +17,16 @@ use tokio::sync::watch;
 
 /// How long a wait is held before the hub answers with its unchanged state. It stays below the
 /// control timeout of the transport.
-pub(crate) const WAIT_TIMEOUT: Duration = Duration::from_secs(12);
+pub const WAIT_TIMEOUT: Duration = Duration::from_secs(12);
 
 /// The vault database the hub serves.
-pub(crate) struct HubVault {
+pub struct HubVault {
     pub pool: SqlitePool,
     pub vault_id: String,
 }
 
 /// Opens the vault the hub serves, or `None` while it cannot replicate.
-pub(crate) type OpenHubVault = Arc<
+pub type OpenHubVault = Arc<
     dyn Fn() -> Pin<Box<dyn Future<Output = Result<Option<HubVault>, String>> + Send>>
         + Send
         + Sync,
@@ -34,7 +34,7 @@ pub(crate) type OpenHubVault = Arc<
 
 /// A failed hub request, answered as a protocol error.
 #[derive(Debug, PartialEq, Eq)]
-pub(crate) struct HubError {
+pub struct HubError {
     pub code: &'static str,
     pub message: String,
     pub retryable: bool,
@@ -68,7 +68,7 @@ impl HubError {
 
 /// The hub handle the coordinator listener routes sync requests to.
 #[derive(Clone)]
-pub(crate) struct SyncHub {
+pub struct SyncHub {
     open: OpenHubVault,
     /// Bumped whenever the hub's log may have grown, by stores here and by its own service.
     changes: watch::Sender<u64>,
@@ -77,7 +77,7 @@ pub(crate) struct SyncHub {
 }
 
 impl SyncHub {
-    pub(crate) fn new(open: OpenHubVault, changes: watch::Sender<u64>) -> Self {
+    pub fn new(open: OpenHubVault, changes: watch::Sender<u64>) -> Self {
         Self {
             open,
             changes,
@@ -86,7 +86,7 @@ impl SyncHub {
     }
 
     /// Answers one sync request of a peer whose identity the listener verified.
-    pub(crate) async fn respond(&self, request: ControlMessage) -> ControlMessage {
+    pub async fn respond(&self, request: ControlMessage) -> ControlMessage {
         match self.respond_inner(request).await {
             Ok(response) => response,
             Err(error) => ControlMessage::Error {
@@ -420,5 +420,5 @@ async fn acquire(pool: &SqlitePool) -> Result<sqlx::pool::PoolConnection<sqlx::S
 }
 
 fn now_ms() -> Result<u64, HubError> {
-    super::service::now_ms().map_err(HubError::failed)
+    super::now_ms().map_err(HubError::failed)
 }

@@ -4,11 +4,12 @@
 
 use super::access::vault_connection_hook;
 use super::carry_forward;
-use super::client::{ClientSession, Exchange, ForkPoint, PairedTransport, PeerIds};
+use super::client::{ClientSession, Exchange, ForkPoint, PeerIds};
 #[cfg(desktop)]
 use super::hub::{HubVault, OpenHubVault, SyncHub};
 use super::recovery::{RecoveryChoice, RecoveryRequest};
 use super::status::{SyncRole, SyncState, SyncStatusView, emit_applied, emit_status};
+use super::transport::PairedTransport;
 use super::writer::{
     ActiveWriter, SuccessorPlan, SyncFiles, WriterCheck, WriterKeyStore, check_writer,
     create_writer, read_stored_writer, remove_retired_keys,
@@ -19,6 +20,7 @@ use ganbaru_db::{DatabaseAccessMode, DatabasePoolRegistry};
 use ganbaru_sync::{Engine, SealReport, SpaceContext, SyncError, WriterState, local};
 use ganbaru_sync_contracts::VersionVector;
 use ganbaru_sync_contracts::op::RevokeReason;
+use ganbaru_sync_replica::now_ms;
 use sqlx::SqlitePool;
 use std::collections::BTreeSet;
 use std::path::PathBuf;
@@ -1110,11 +1112,4 @@ where
     tauri::async_runtime::spawn_blocking(work)
         .await
         .map_err(|error| format!("sync key worker: {error}"))?
-}
-
-pub(crate) fn now_ms() -> Result<u64, String> {
-    let elapsed = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_err(|_| "system clock is before the Unix epoch".to_string())?;
-    u64::try_from(elapsed.as_millis()).map_err(|_| "system clock is out of range".to_string())
 }

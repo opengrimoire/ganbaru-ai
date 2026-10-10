@@ -58,7 +58,7 @@ Whole-vault handoff itself is deliberately not the concurrent synchronization sy
 
 ## Implemented concurrent replication
 
-Source: `crates/ganbaru-sync-contracts/`, `crates/ganbaru-sync/`, and `apps/client/src-tauri/app/src/sync/`. **Status: Implemented** in source for Quick notes and their tags; physical multi-device acceptance is pending. User-facing behavior is owned by [Quick notes](../features/quick-notes.md), and the network surface and key storage by [Network and privacy](security/network-and-privacy.md).
+Source: `crates/ganbaru-sync-contracts/`, `crates/ganbaru-sync/`, `crates/ganbaru-sync-replica/`, and `apps/client/src-tauri/app/src/sync/`. **Status: Implemented** in source for Quick notes and their tags; physical multi-device acceptance is pending. User-facing behavior is owned by [Quick notes](../features/quick-notes.md), and the network surface and key storage by [Network and privacy](security/network-and-privacy.md).
 
 ### Mixed mode
 
@@ -130,7 +130,7 @@ Collaborative text uses Rust Yrs with a compatible Yjs editor adapter. Binary CR
 
 Local network linking works without an account or server. An optional user-hosted Rust relay stores opaque encrypted records for cross-network and asynchronous delivery. Hocuspocus was rejected as the relay because its normal persistence stores server-side Yjs documents, which breaks the encrypted record boundary.
 
-The `ganbaru-sync-contracts` and `ganbaru-sync` crates exist; the optional `ganbaru-sync-relay` binary is planned. Domain adapters keep composite value codecs, intrinsic validation, and projection ownership; the sync engine owns delivery, causality, and merging. Durable replication, live presence, and executable commands are distinct protocols.
+The `ganbaru-sync-contracts`, `ganbaru-sync`, and `ganbaru-sync-replica` crates exist; the optional `ganbaru-sync-relay` binary is planned. Domain adapters keep composite value codecs, intrinsic validation, and projection ownership; the sync engine owns delivery, causality, and merging. Durable replication, live presence, and executable commands are distinct protocols.
 
 ### Topology and authority
 

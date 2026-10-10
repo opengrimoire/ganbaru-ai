@@ -1,12 +1,14 @@
-use super::{NOW_MS, TestDirectory, VAULT_ID, acquire, add_note, context, create_vault, person};
-use crate::sync::client::{
+use super::{
+    NOW_MS, TestDirectory, VAULT_ID, acquire, add_note, block_on, context, create_vault, person,
+};
+use crate::client::{
     ClientSession, Exchange, Exchanged, MAX_EXCHANGE_BYTES, PeerIds, SyncTransport, wait,
 };
-use crate::sync::hub::{HubVault, OpenHubVault, SyncHub};
-use crate::sync::recovery::{RecoveryAction, RecoveryChoice};
-use crate::sync::writer::{ActiveWriter, SuccessorPlan, create_writer};
-use crate::vault::handoff::protocol::ControlMessage;
+use crate::hub::{HubVault, OpenHubVault, SyncHub};
+use crate::recovery::{RecoveryAction, RecoveryChoice};
+use crate::writer::{ActiveWriter, SuccessorPlan, create_writer};
 use ganbaru_db::DatabasePoolRegistry;
+use ganbaru_handoff::protocol::ControlMessage;
 use ganbaru_sync::manifest::vault::quick_notes::NOTES_TABLE;
 use ganbaru_sync::{Engine, SpaceContext};
 use ganbaru_sync_contracts::op::RevokeReason;
@@ -216,7 +218,7 @@ fn copy_database(from: &Path, to: &Path) {
 
 #[test]
 fn exchange_pushes_and_pulls_until_both_replicas_hold_every_operation() {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         let mut hub_replica = Replica::new("hub", HUB_DEVICE).await;
         let mut phone = Replica::new("phone", PHONE_DEVICE).await;
         let (transport, _changes) = hub(&hub_replica.pool);
@@ -256,7 +258,7 @@ fn exchange_pushes_and_pulls_until_both_replicas_hold_every_operation() {
 
 #[test]
 fn an_exchange_stops_at_its_byte_bound_and_the_next_one_continues() {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         let mut hub_replica = Replica::new("hub", HUB_DEVICE).await;
         let mut phone = Replica::new("phone", PHONE_DEVICE).await;
         let (transport, _changes) = hub(&hub_replica.pool);
@@ -304,7 +306,7 @@ fn an_exchange_stops_at_its_byte_bound_and_the_next_one_continues() {
 
 #[test]
 fn wait_returns_once_the_hub_stores_new_operations() {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         let mut hub_replica = Replica::new("hub-wait", HUB_DEVICE).await;
         let phone = Replica::new("phone-wait", PHONE_DEVICE).await;
         let (transport, changes) = hub(&hub_replica.pool);
@@ -333,7 +335,7 @@ fn wait_returns_once_the_hub_stores_new_operations() {
 
 #[test]
 fn hub_refuses_foreign_geneses_unlinked_writers_and_other_vaults() {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         let mut hub_replica = Replica::new("hub-refuse", HUB_DEVICE).await;
         let mut phone = Replica::new("phone-refuse", PHONE_DEVICE).await;
         let (transport, _changes) = hub(&hub_replica.pool);
@@ -418,7 +420,7 @@ fn hub_refuses_foreign_geneses_unlinked_writers_and_other_vaults() {
 
 #[test]
 fn a_cloned_installation_is_found_and_resealed_by_a_successor() {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         let mut hub_replica = Replica::new("hub-fork", HUB_DEVICE).await;
         let mut original = Replica::new("phone-fork", PHONE_DEVICE).await;
         let (transport, _changes) = hub(&hub_replica.pool);
@@ -566,7 +568,7 @@ async fn recovery_titles(replica: &Replica) -> Vec<(String, String)> {
 
 #[test]
 fn a_resolved_title_conflict_closes_on_both_replicas() {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         let mut hub_replica = Replica::new("conflict-hub", HUB_DEVICE).await;
         let mut phone = Replica::new("conflict-phone", PHONE_DEVICE).await;
         let (transport, _changes) = hub(&hub_replica.pool);
@@ -652,7 +654,7 @@ fn a_resolved_title_conflict_closes_on_both_replicas() {
 
 #[test]
 fn restoring_an_edit_that_outlived_a_deletion_closes_the_offer_everywhere() {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         let mut hub_replica = Replica::new("recovery-hub", HUB_DEVICE).await;
         let mut phone = Replica::new("recovery-phone", PHONE_DEVICE).await;
         let (transport, _changes) = hub(&hub_replica.pool);
@@ -676,7 +678,7 @@ fn restoring_an_edit_that_outlived_a_deletion_closes_the_offer_everywhere() {
             assert_eq!(recovery_titles(replica).await, offer);
         }
 
-        let restored = crate::sync::recovery::close(
+        let restored = crate::recovery::close(
             &Engine::vault(),
             &phone.pool,
             &phone.ctx,
@@ -706,7 +708,7 @@ fn restoring_an_edit_that_outlived_a_deletion_closes_the_offer_everywhere() {
 
 #[test]
 fn discarding_a_recovery_offer_keeps_the_deletion() {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         let mut hub_replica = Replica::new("discard-hub", HUB_DEVICE).await;
         let mut phone = Replica::new("discard-phone", PHONE_DEVICE).await;
         let (transport, _changes) = hub(&hub_replica.pool);
@@ -725,7 +727,7 @@ fn discarding_a_recovery_offer_keeps_the_deletion() {
         converge(&mut hub_replica, &mut phone, &transport).await;
         assert_eq!(recovery_titles(&hub_replica).await.len(), 1);
 
-        let restored = crate::sync::recovery::close(
+        let restored = crate::recovery::close(
             &Engine::vault(),
             &hub_replica.pool,
             &hub_replica.ctx,

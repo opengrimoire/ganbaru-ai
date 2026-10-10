@@ -72,7 +72,7 @@ cargo test -p ganbaru-db --lib -j 1 test_name -- --test-threads=1
 cargo test -p ganbaru-tauri-app --lib -j 1 test_name -- --test-threads=1
 ```
 
-Substitute `ganbaru-chat-contracts`, `ganbaru-chat-providers`, `ganbaru-pomodoro`, `ganbaru-working-folders`, `ganbaru-people`, `ganbaru-sync-contracts`, or `ganbaru-sync` when that crate owns the behavior.
+Substitute `ganbaru-chat-contracts`, `ganbaru-chat-providers`, `ganbaru-pomodoro`, `ganbaru-working-folders`, `ganbaru-people`, `ganbaru-sync-contracts`, `ganbaru-sync`, or `ganbaru-sync-replica` when that crate owns the behavior.
 
 ### Focused sync behavior
 
@@ -80,6 +80,7 @@ Substitute `ganbaru-chat-contracts`, `ganbaru-chat-providers`, `ganbaru-pomodoro
 cargo test -p ganbaru-sync-contracts --lib -j 1 -- --test-threads=1
 cargo test -p ganbaru-sync --lib -j 1 conformance -- --test-threads=1
 cargo test -p ganbaru-sync --lib -j 1 sim -- --test-threads=1
+cargo test -p ganbaru-sync-replica --lib -j 1 -- --test-threads=1
 cargo test -p ganbaru-tauri-app --lib -j 1 sync -- --test-threads=1
 ```
 

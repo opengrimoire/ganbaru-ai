@@ -16,7 +16,7 @@ use std::path::Path;
 /// Exports the operations of `current` that `replacement` lacks into the carry bundle of the
 /// vault, after any bundle an interrupted replacement left. Returns how many operations the
 /// bundle holds. Pending captures refuse the export, because they would be lost.
-pub(crate) async fn export(
+pub async fn export(
     engine: &Engine,
     current: &Path,
     replacement: &Path,
@@ -73,13 +73,13 @@ async fn export_with(
     }
     std::fs::create_dir_all(&files.directory)
         .map_err(|error| format!("create sync directory: {error}"))?;
-    crate::vault::handoff::pairing::write_private_file_atomically(&files.carry_path(), &bytes)?;
+    ganbaru_handoff::pairing::write_private_file_atomically(&files.carry_path(), &bytes)?;
     Ok(ops.len())
 }
 
 /// Imports a pending carry bundle into the vault database and deletes it. Returns `None` when
 /// no bundle is pending.
-pub(crate) async fn import_pending(
+pub async fn import_pending(
     engine: &Engine,
     conn: &mut SqliteConnection,
     ctx: &SpaceContext,

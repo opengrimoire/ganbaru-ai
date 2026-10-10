@@ -1,12 +1,12 @@
 //! Conversions between engine values and the sync wire forms of protocol 5.
 
-use crate::vault::handoff::protocol::SyncSeq;
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use ganbaru_handoff::protocol::SyncSeq;
 use ganbaru_sync_contracts::{Digest32, VersionVector, WriterId};
 
 /// Wire entries of a version vector, in writer order.
-pub(crate) fn vector_to_wire(vector: &VersionVector) -> Vec<SyncSeq> {
+pub fn vector_to_wire(vector: &VersionVector) -> Vec<SyncSeq> {
     vector
         .iter()
         .map(|(writer, seq)| SyncSeq {
@@ -17,7 +17,7 @@ pub(crate) fn vector_to_wire(vector: &VersionVector) -> Vec<SyncSeq> {
 }
 
 /// Reads a wire vector. Protocol validation already checked the text forms.
-pub(crate) fn vector_from_wire(entries: &[SyncSeq]) -> Result<VersionVector, String> {
+pub fn vector_from_wire(entries: &[SyncSeq]) -> Result<VersionVector, String> {
     let mut vector = VersionVector::new();
     for entry in entries {
         vector.advance(writer_from_wire(&entry.writer)?, entry.seq);
@@ -25,15 +25,15 @@ pub(crate) fn vector_from_wire(entries: &[SyncSeq]) -> Result<VersionVector, Str
     Ok(vector)
 }
 
-pub(crate) fn writer_from_wire(text: &str) -> Result<WriterId, String> {
+pub fn writer_from_wire(text: &str) -> Result<WriterId, String> {
     WriterId::from_hex(text).ok_or_else(|| "sync writer id is invalid".to_string())
 }
 
-pub(crate) fn hash_to_wire(hash: &Digest32) -> String {
+pub fn hash_to_wire(hash: &Digest32) -> String {
     hash.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
-pub(crate) fn hash_from_wire(text: &str) -> Result<Digest32, String> {
+pub fn hash_from_wire(text: &str) -> Result<Digest32, String> {
     let mut hash = [0u8; 32];
     if text.len() != hash.len() * 2 {
         return Err("sync operation hash is invalid".to_string());
@@ -45,11 +45,11 @@ pub(crate) fn hash_from_wire(text: &str) -> Result<Digest32, String> {
     Ok(hash)
 }
 
-pub(crate) fn ops_to_wire(ops: &[Vec<u8>]) -> Vec<String> {
+pub fn ops_to_wire(ops: &[Vec<u8>]) -> Vec<String> {
     ops.iter().map(|op| URL_SAFE_NO_PAD.encode(op)).collect()
 }
 
-pub(crate) fn ops_from_wire(ops: &[String]) -> Result<Vec<Vec<u8>>, String> {
+pub fn ops_from_wire(ops: &[String]) -> Result<Vec<Vec<u8>>, String> {
     ops.iter()
         .map(|op| {
             URL_SAFE_NO_PAD
