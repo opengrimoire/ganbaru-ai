@@ -101,7 +101,7 @@ crates/
   ganbaru-pomodoro/: Tauri-free Focus persistence, validation, recovery, activity admission, transactional execution, and adaptive policy
   ganbaru-quick-notes/: Tauri-free Quick notes persistence, search, lifecycle and trash retention, ordering, tags, and conflict resolution
   ganbaru-music/: Tauri-free Music context assignments per Focus phase and the Music library error shape
-  ganbaru-music-library/: Tauri-free Music library persistence, queries, playlists, review, transfer, soundscapes, and local media refresh and artwork
+  ganbaru-music-library/: Tauri-free Music library persistence, queries, playlists, review, transfer, soundscapes, local media refresh and artwork, and session policy
   ganbaru-projects/: Tauri-free Projects persistence, structure, tasks, history, custom fields, dependency cascades, reordering, Calendar scheduling rows, and validation
   ganbaru-calendar/: Tauri-free Calendar persistence, iCalendar import and export, native reads, scoped edits, deletion and Undo, and recurrence expansion
   ganbaru-notes/: Notes domain, persistence, transfers, history, assets, and bounded filesystem operations

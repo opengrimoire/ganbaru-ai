@@ -1,6 +1,7 @@
 //! Music library domain independent of Tauri and the WebView: library items and sources,
 //! playlists and memberships, review and snoozes, search, listening history, transfer and
-//! interchange, soundscapes, and desktop local media refresh, relink, repair, and artwork.
+//! interchange, soundscapes, desktop local media refresh, relink, repair, and artwork, and the
+//! deterministic playback session policy.
 //! Callers supply an authorized vault pool and device-local root bindings.
 
 #[cfg(desktop)]
@@ -24,6 +25,7 @@ pub mod queries;
 pub mod relink;
 mod rows;
 pub mod search;
+pub mod session;
 #[cfg(desktop)]
 pub mod soundscape_groups;
 #[cfg(desktop)]

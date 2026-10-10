@@ -1,11 +1,11 @@
 //! Typed application session commands and projections shared by native media adapters.
 
-use ganbaru_music_library::{MusicItemAvailability, MusicRepeatMode, MusicWeight};
+use crate::{MusicItemAvailability, MusicRepeatMode, MusicWeight};
 use serde::{Deserialize, Serialize};
 
-pub(super) const MAX_QUEUE_ENTRIES: usize = 10_000;
-pub(super) const MAX_HISTORY: usize = 512;
-pub(super) const MAX_RECENT: usize = 5;
+pub const MAX_QUEUE_ENTRIES: usize = 10_000;
+pub const MAX_HISTORY: usize = 512;
+pub const MAX_RECENT: usize = 5;
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
@@ -52,7 +52,7 @@ pub enum SessionStatus {
 impl SessionStatus {
     /// Returns the stable transport label shared with operating-system adapters.
     #[cfg(desktop)]
-    pub(crate) fn as_ref(self) -> &'static str {
+    pub fn as_str(self) -> &'static str {
         match self {
             Self::Idle => "idle",
             Self::Loading => "loading",
@@ -299,7 +299,7 @@ pub struct SessionProjection {
 #[cfg(any(target_os = "android", test))]
 #[derive(Clone, Copy, Debug, Deserialize)]
 #[serde(rename_all = "kebab-case")]
-pub(crate) enum AndroidInterruption {
+pub enum AndroidInterruption {
     ServiceStopped,
     SourceAuthorityChanged,
     SourceResolutionTimeout,

@@ -4,16 +4,14 @@ use super::{
     models::*,
     policy::{SessionPolicy, Transition},
 };
-use ganbaru_music_library::{
-    MusicLibraryError, MusicLibraryResult, record_listening_in_transaction,
-};
+use crate::{MusicLibraryError, MusicLibraryResult, record_listening_in_transaction};
 use sha2::{Digest, Sha256};
 use sqlx::{SqliteConnection, SqlitePool};
 
 const MAX_CHECKPOINT_BYTES: usize = 2 * 1024 * 1024;
 
 /// Hashes semantic intent without retaining device paths in the receipt table.
-pub(super) fn request_hash(request: &impl serde::Serialize) -> MusicLibraryResult<String> {
+pub fn request_hash(request: &impl serde::Serialize) -> MusicLibraryResult<String> {
     let bytes = serde_json::to_vec(request)
         .map_err(|error| MusicLibraryError::runtime("encode session request", error))?;
     Ok(format!("{:x}", Sha256::digest(bytes)))
@@ -24,7 +22,7 @@ fn entry_id(entry: &SessionQueueEntry) -> Option<&str> {
 }
 
 /// Checkpoints contain database IDs only. Runtime source paths and raw input are excluded.
-pub(super) fn checkpoint(state: &SessionPolicy) -> SessionCheckpoint {
+pub fn checkpoint(state: &SessionPolicy) -> SessionCheckpoint {
     let portable = state
         .definition
         .as_ref()
@@ -81,7 +79,7 @@ pub(super) fn checkpoint(state: &SessionPolicy) -> SessionCheckpoint {
     }
 }
 
-pub(super) async fn load_checkpoint(
+pub async fn load_checkpoint(
     pool: &SqlitePool,
     device_id: &str,
 ) -> MusicLibraryResult<Option<SessionCheckpoint>> {
@@ -118,11 +116,7 @@ pub(super) async fn load_checkpoint(
 }
 
 /// Rebuilds indices from current canonical rows and always restores paused.
-pub(super) fn restore(
-    state: &mut SessionPolicy,
-    saved: &SessionCheckpoint,
-    now_ms: i64,
-) -> Transition {
+pub fn restore(state: &mut SessionPolicy, saved: &SessionCheckpoint, now_ms: i64) -> Transition {
     let index_of = |id: &str| {
         state
             .queue
@@ -180,7 +174,7 @@ pub(super) fn restore(
     transition
 }
 
-pub(super) async fn receipt(
+pub async fn receipt(
     connection: &mut SqliteConnection,
     device_id: &str,
     action_id: &str,
@@ -204,7 +198,7 @@ pub(super) async fn receipt(
 }
 
 /// Commits resume state, selection counters, and optional idempotency receipt together.
-pub(super) async fn commit(
+pub async fn commit(
     pool: &SqlitePool,
     device_id: &str,
     state: &SessionPolicy,
@@ -233,7 +227,7 @@ pub(super) async fn commit(
 }
 
 /// Saves a transition beside canonical queue reads under the caller's writer transaction.
-pub(super) async fn commit_in_transaction(
+pub async fn commit_in_transaction(
     connection: &mut SqliteConnection,
     device_id: &str,
     state: &SessionPolicy,

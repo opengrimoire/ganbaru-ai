@@ -1,7 +1,7 @@
 //! Deterministic queue, membership-boundary, and observation policy.
 
 use super::models::*;
-use ganbaru_music_library::{
+use crate::{
     MusicItemAvailability, MusicListeningOutcome, MusicListeningUpdate, MusicRepeatMode,
     MusicSelectionKind, MusicWeight,
 };
@@ -11,20 +11,20 @@ use std::sync::Arc;
 /// Activation failures remain visible without pausing unrelated accepted playback.
 #[cfg(desktop)]
 #[derive(Clone, Debug)]
-pub(super) enum ContextFailure {
+pub enum ContextFailure {
     Calendar(String),
     Soundscape(String),
 }
 
 #[derive(Clone, Debug, Default)]
-pub(super) struct Transition {
+pub struct Transition {
     pub effects: Vec<SessionEffect>,
     pub listening: Vec<MusicListeningUpdate>,
     pub changed: bool,
 }
 
 #[derive(Clone, Debug)]
-pub(super) struct SessionPolicy {
+pub struct SessionPolicy {
     pub session_id: String,
     pub revision: u64,
     pub generation: u64,
@@ -722,7 +722,7 @@ impl SessionPolicy {
 
     /// Retains the selected queue and position while revoking observations from a lost decoder.
     #[cfg(any(not(target_os = "ios"), test))]
-    pub(super) fn interrupt_backend(&mut self) -> Transition {
+    pub fn interrupt_backend(&mut self) -> Transition {
         self.generation += 1;
         self.last_sequence = 0;
         self.autoplay_requested = false;
@@ -737,7 +737,7 @@ impl SessionPolicy {
 
     /// Reloads the same selection paused before a separately accepted explicit Play.
     #[cfg(any(not(target_os = "ios"), test))]
-    pub(super) fn reconnect_backend(&mut self) -> Transition {
+    pub fn reconnect_backend(&mut self) -> Transition {
         self.generation += 1;
         self.last_sequence = 0;
         self.error = None;
@@ -880,7 +880,7 @@ impl SessionPolicy {
     }
 
     /// Returns current effective gain and rate without mutating persisted user settings.
-    pub(super) fn settings_effect(&self) -> SessionEffect {
+    pub fn settings_effect(&self) -> SessionEffect {
         SessionEffect::Settings {
             generation: self.generation,
             volume: self.selection_volume.unwrap_or(self.volume),
@@ -891,7 +891,7 @@ impl SessionPolicy {
 }
 
 /// Selects from fixed user weights with a soft penalty for five distinct recent tracks.
-pub(super) fn select_mix(
+pub fn select_mix(
     queue: &[SessionQueueEntry],
     eligible: &[usize],
     recent: &[String],

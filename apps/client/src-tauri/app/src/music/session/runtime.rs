@@ -156,6 +156,19 @@ fn new_policy() -> SessionPolicy {
     )
 }
 
+/// Resolves only native device bindings. These values never enter a checkpoint.
+fn root_bindings(app: &tauri::AppHandle) -> MusicLibraryResult<BTreeMap<String, String>> {
+    let vault_id = crate::vault::active_vault_id(app)
+        .map_err(|error| MusicLibraryError::runtime("resolve music session vault", error))?;
+    let state = crate::vault::read_app_state(app)
+        .map_err(|error| MusicLibraryError::runtime("read music session bindings", error))?;
+    Ok(state
+        .music_root_bindings
+        .get(&vault_id)
+        .cloned()
+        .unwrap_or_default())
+}
+
 /// Uses the same configured host for browser delivery and initial platform bridge capture.
 pub(super) fn primary_window_label<R: Runtime>(app: &tauri::AppHandle<R>) -> String {
     app.config()
@@ -616,7 +629,7 @@ impl Owner {
                     vault_id,
                     status.generation,
                     device_id,
-                    queue::bindings(&app)?,
+                    root_bindings(&app)?,
                 ))
             })
             .await

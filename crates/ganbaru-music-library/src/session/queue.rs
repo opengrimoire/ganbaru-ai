@@ -1,7 +1,7 @@
 //! Bounded canonical queue snapshots and device-local source resolution.
 
 use super::{models::*, policy::SessionPolicy};
-use ganbaru_music_library::{
+use crate::{
     MusicItemAvailability, MusicLibraryError, MusicLibraryResult, MusicRepeatMode, MusicWeight,
 };
 use sqlx::{QueryBuilder, Sqlite, SqliteConnection};
@@ -38,19 +38,6 @@ fn validation(message: impl Into<String>) -> MusicLibraryError {
     MusicLibraryError::validation("queue", message)
 }
 
-/// Resolves only native device bindings. These values never enter a checkpoint.
-pub(super) fn bindings(app: &tauri::AppHandle) -> MusicLibraryResult<BTreeMap<String, String>> {
-    let vault_id = crate::vault::active_vault_id(app)
-        .map_err(|error| MusicLibraryError::runtime("resolve music session vault", error))?;
-    let state = crate::vault::read_app_state(app)
-        .map_err(|error| MusicLibraryError::runtime("read music session bindings", error))?;
-    Ok(state
-        .music_root_bindings
-        .get(&vault_id)
-        .cloned()
-        .unwrap_or_default())
-}
-
 fn bounded_text(value: &str, field: &str) -> MusicLibraryResult<()> {
     if value.is_empty() || value.len() > MAX_SOURCE_TEXT || value.contains('\0') {
         return Err(MusicLibraryError::validation(
@@ -61,7 +48,7 @@ fn bounded_text(value: &str, field: &str) -> MusicLibraryResult<()> {
     Ok(())
 }
 
-pub(super) fn validate_action_id(value: &str) -> MusicLibraryResult<()> {
+pub fn validate_action_id(value: &str) -> MusicLibraryResult<()> {
     if value.is_empty()
         || value.len() > 128
         || !value
@@ -304,7 +291,7 @@ fn row_query<'a>(playlist_id: Option<&'a str>, now_ms: i64) -> QueryBuilder<'a, 
 }
 
 /// Reads each queue from one caller-owned SQLite snapshot, with bounded children.
-pub(super) async fn load_queue(
+pub async fn load_queue(
     connection: &mut SqliteConnection,
     roots: &BTreeMap<String, String>,
     definition: &SessionQueueIntent,

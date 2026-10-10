@@ -1,5 +1,5 @@
-use crate::music::session::{models::*, persistence, policy::*, queue};
-use ganbaru_music_library::{MusicListeningOutcome, MusicListeningUpdate, MusicSelectionKind};
+use crate::session::{models::*, persistence, policy::*, queue};
+use crate::{MusicListeningOutcome, MusicListeningUpdate, MusicSelectionKind};
 use sqlx::SqlitePool;
 use std::collections::BTreeMap;
 

@@ -1,8 +1,6 @@
 use super::models::*;
 use super::policy::*;
-use ganbaru_music_library::{
-    MusicItemAvailability, MusicListeningOutcome, MusicRepeatMode, MusicWeight,
-};
+use crate::{MusicItemAvailability, MusicListeningOutcome, MusicRepeatMode, MusicWeight};
 use std::sync::Arc;
 
 fn entry(index: usize) -> SessionQueueEntry {
@@ -351,7 +349,7 @@ fn native_music_mix_matches_shared_selection_fixtures() {
     }
     let fixtures: Vec<Fixture> = serde_json::from_str(include_str!(concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/../../src/lib/music/music-queue-policy-fixtures.json"
+        "/../../apps/client/src/lib/music/music-queue-policy-fixtures.json"
     )))
     .unwrap();
     for fixture in fixtures {
