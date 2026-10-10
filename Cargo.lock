@@ -2041,6 +2041,7 @@ dependencies = [
  "ganbaru-quick-notes",
  "ganbaru-sync",
  "ganbaru-sync-contracts",
+ "ganbaru-themes",
  "ganbaru-working-folders",
  "gtk",
  "jiff",
@@ -2081,6 +2082,16 @@ dependencies = [
  "windows 0.61.3",
  "x11rb",
  "zip 8.6.0",
+]
+
+[[package]]
+name = "ganbaru-themes"
+version = "0.1.0"
+dependencies = [
+ "ganbaru-db",
+ "serde",
+ "sqlx",
+ "tokio",
 ]
 
 [[package]]

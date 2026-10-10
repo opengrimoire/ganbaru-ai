@@ -32,6 +32,7 @@ ganbaru-projects = { workspace = true }
 ganbaru-quick-notes = { workspace = true }
 ganbaru-sync = { workspace = true }
 ganbaru-sync-contracts = { workspace = true }
+ganbaru-themes = { workspace = true }
 ganbaru-working-folders = { workspace = true }
 jiff = { workspace = true }
 reqwest = { workspace = true }

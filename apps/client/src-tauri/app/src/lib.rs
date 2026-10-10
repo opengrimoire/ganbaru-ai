@@ -1,9 +1,6 @@
 #![deny(clippy::undocumented_unsafe_blocks)]
 #![deny(unsafe_op_in_unsafe_fn)]
 
-#[macro_use]
-extern crate ganbaru_db;
-
 #[cfg(desktop)]
 mod benchmark;
 mod calendar;
