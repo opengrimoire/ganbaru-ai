@@ -37,34 +37,42 @@ fn enrollment<'a>(invitation: &'a PairingInvitation, phone: &'a StoredIdentity) 
 }
 
 fn enroll_device(manager: &PairingManager, device_id: &str, device_label: &str, now_ms: i64) {
+    let identity = create_identity(device_id.to_string()).expect("peer identity");
+    enroll_identity(manager, "vault-1", &identity, device_label, now_ms).expect("enroll device");
+}
+
+fn enroll_identity(
+    manager: &PairingManager,
+    vault_id: &str,
+    identity: &StoredIdentity,
+    device_label: &str,
+    now_ms: i64,
+) -> Result<LinkedPeer, String> {
     let invitation = manager
         .create_invitation(
             "127.0.0.1:41000".parse().expect("endpoint"),
-            "vault-1".to_string(),
+            vault_id.to_string(),
             0,
             crate::protocol::test_compatibility(),
             now_ms,
         )
         .expect("invitation");
-    let identity = create_identity(device_id.to_string()).expect("peer identity");
-    manager
-        .enroll_peer(
-            Enrollment {
-                invitation_id: &invitation.invitation_id,
-                secret: &invitation.secret,
-                vault_id: &invitation.vault_id,
-                device_id,
-                device_label,
-                device_kind: if device_label == "Phone" {
-                    DeviceKind::Phone
-                } else {
-                    DeviceKind::Computer
-                },
-                certificate_b64: &identity.certificate,
+    manager.enroll_peer(
+        Enrollment {
+            invitation_id: &invitation.invitation_id,
+            secret: &invitation.secret,
+            vault_id: &invitation.vault_id,
+            device_id: &identity.device_id,
+            device_label,
+            device_kind: if device_label == "Phone" {
+                DeviceKind::Phone
+            } else {
+                DeviceKind::Computer
             },
-            now_ms + 1,
-        )
-        .expect("enroll device");
+            certificate_b64: &identity.certificate,
+        },
+        now_ms + 1,
+    )
 }
 
 #[test]
@@ -344,6 +352,144 @@ fn several_peers_survive_restart_and_can_be_unlinked_individually() {
             .linked_peer("device-laptop")
             .expect("remaining peer")
             .is_some()
+    );
+}
+
+#[test]
+fn memberships_belong_to_their_vault_and_a_moved_device_replaces_its_old_one() {
+    let temporary = TestDirectory::new("vault-scoped-peers");
+    let manager = PairingManager::default();
+    manager
+        .initialize(temporary.path().to_path_buf(), "device-desktop".to_string())
+        .expect("initialize");
+    let phone = create_identity("device-phone".to_string()).expect("phone identity");
+    let laptop = create_identity("device-laptop".to_string()).expect("laptop identity");
+    enroll_identity(&manager, "vault-old", &phone, "Phone", 100).expect("enroll phone");
+    enroll_identity(&manager, "vault-old", &laptop, "Laptop", 200).expect("enroll laptop");
+
+    assert!(
+        manager
+            .linked_peers_for("vault-new")
+            .expect("new vault peers")
+            .is_empty()
+    );
+    assert!(!manager.is_linked_for("vault-new").expect("new vault link"));
+    assert_eq!(
+        manager
+            .linked_peers_for("vault-old")
+            .expect("old vault peers")
+            .len(),
+        2
+    );
+
+    enroll_identity(&manager, "vault-new", &phone, "Phone", 300).expect("move phone");
+    let new_vault_peers = manager
+        .linked_peers_for("vault-new")
+        .expect("new vault peers");
+    assert_eq!(new_vault_peers.len(), 1);
+    assert_eq!(new_vault_peers[0].device_id, "device-phone");
+    let old_vault_peers = manager
+        .linked_peers_for("vault-old")
+        .expect("old vault peers");
+    assert_eq!(old_vault_peers.len(), 1);
+    assert_eq!(old_vault_peers[0].device_id, "device-laptop");
+    let phone_certificate = decode_certificate(&phone.certificate).expect("phone certificate");
+    assert!(
+        !manager
+            .is_revoked_certificate(Some(&phone_certificate))
+            .expect("moved certificate")
+    );
+}
+
+#[test]
+fn stored_limit_revokes_the_oldest_membership_of_another_vault_first() {
+    let temporary = TestDirectory::new("membership-limit");
+    let manager = PairingManager::default();
+    manager
+        .initialize(temporary.path().to_path_buf(), "device-desktop".to_string())
+        .expect("initialize");
+    let identity =
+        |index: usize| create_identity(format!("device-{index}")).expect("peer identity");
+    let old_vault = (0..MAX_LINKED_PEERS).map(identity).collect::<Vec<_>>();
+    for (index, peer) in old_vault.iter().enumerate() {
+        enroll_identity(
+            &manager,
+            "vault-old",
+            peer,
+            "Phone",
+            100 + index as i64 * 10,
+        )
+        .expect("fill old vault");
+    }
+
+    let first_new = identity(MAX_LINKED_PEERS);
+    enroll_identity(&manager, "vault-new", &first_new, "Phone", 1_000).expect("enroll new");
+    assert!(
+        manager
+            .linked_peer("device-0")
+            .expect("evicted peer")
+            .is_none()
+    );
+    assert!(
+        manager
+            .linked_peer("device-1")
+            .expect("next oldest peer")
+            .is_some()
+    );
+    let evicted_certificate =
+        decode_certificate(&old_vault[0].certificate).expect("evicted certificate");
+    assert!(
+        manager
+            .is_revoked_certificate(Some(&evicted_certificate))
+            .expect("revoked certificate")
+    );
+    assert!(
+        manager
+            .revoked_device_ids("vault-old")
+            .expect("revoked devices")
+            .contains("device-0")
+    );
+
+    for index in MAX_LINKED_PEERS + 1..MAX_LINKED_PEERS * 2 {
+        enroll_identity(
+            &manager,
+            "vault-new",
+            &identity(index),
+            "Phone",
+            1_000 + index as i64,
+        )
+        .expect("replace old vault memberships");
+    }
+    assert!(
+        manager
+            .linked_peers_for("vault-old")
+            .expect("old vault peers")
+            .is_empty()
+    );
+    let error = enroll_identity(
+        &manager,
+        "vault-new",
+        &identity(MAX_LINKED_PEERS * 2),
+        "Phone",
+        5_000,
+    )
+    .expect_err("full vault rejects another device");
+    assert!(error.contains("one vault"), "{error}");
+    assert_eq!(
+        manager
+            .linked_peers_for("vault-new")
+            .expect("new vault peers")
+            .len(),
+        MAX_LINKED_PEERS
+    );
+
+    let restarted = PairingManager::default();
+    restarted
+        .initialize(temporary.path().to_path_buf(), "device-desktop".to_string())
+        .expect("restart at the stored limit");
+    assert_eq!(
+        restarted.linked_peers().expect("linked peers").len(),
+        MAX_LINKED_PEERS
     );
 }
 
