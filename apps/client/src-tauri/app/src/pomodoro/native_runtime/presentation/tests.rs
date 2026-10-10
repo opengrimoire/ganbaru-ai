@@ -236,7 +236,7 @@ fn preferences_preserve_explicit_disabled_options_and_reject_unsupported_values(
 
 #[test]
 fn native_completion_distinguishes_later_commitments_from_day_and_friday_endings() {
-    use crate::calendar::reads::focus_context::FocusPlannedBlock;
+    use ganbaru_calendar::reads::focus_context::FocusPlannedBlock;
     let block = |id: &str, date: &str, start: &str| FocusPlannedBlock {
         event_date: date.into(),
         event_id: id.into(),

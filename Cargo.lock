@@ -1750,6 +1750,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "ganbaru-calendar"
+version = "0.1.0"
+dependencies = [
+ "ammonia",
+ "chrono",
+ "ganbaru-civil-time",
+ "ganbaru-db",
+ "ganbaru-music",
+ "ganbaru-pomodoro",
+ "ganbaru-projects",
+ "jiff",
+ "serde",
+ "serde_json",
+ "sha2",
+ "sqlx",
+ "tokio",
+]
+
+[[package]]
 name = "ganbaru-chat"
 version = "0.1.5"
 dependencies = [
@@ -1965,13 +1984,13 @@ dependencies = [
 name = "ganbaru-tauri-app"
 version = "0.1.5"
 dependencies = [
- "ammonia",
  "axum",
  "base64 0.22.1",
  "block2",
  "cairo-rs",
  "chrono",
  "flate2",
+ "ganbaru-calendar",
  "ganbaru-chat",
  "ganbaru-chat-contracts",
  "ganbaru-chat-providers",

@@ -166,11 +166,11 @@ enum Request {
         delete_command_id: String,
     },
     CalendarEdit {
-        request: Box<crate::calendar::events::commit::CommitRequest>,
+        request: Box<ganbaru_calendar::events::commit::CommitRequest>,
         response: oneshot::Sender<
             Result<
-                crate::calendar::events::commit::CommitReply,
-                crate::calendar::events::commit::CommitFailure,
+                ganbaru_calendar::events::commit::CommitReply,
+                ganbaru_calendar::events::commit::CommitFailure,
             >,
         >,
     },

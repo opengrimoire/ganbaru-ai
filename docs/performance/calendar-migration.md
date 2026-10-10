@@ -39,7 +39,7 @@ Recorded at `2026-10-04T03:20:35.134751598Z` with Rust `1.98.0 (88d9e12ae 2026-0
 
 The native preview costs more CPU than the former TypeScript preview because it performs full protection and metadata preparation that the cached frontend calculation skipped. Compiler profiles and result shapes also differ.
 
-The hashes pin the measured sources at record time, so they are intentionally not refreshed. The surviving modules now live under `apps/client/src-tauri/app/src/calendar/` (`recurrence/` and `events/`, with the diagnostic in `events/tests/migration_measurements.rs`) and have changed since; a rerun produces a new record rather than updating this one.
+The hashes pin the measured sources at record time, so they are intentionally not refreshed. The surviving modules now live under `crates/ganbaru-calendar/src/` (`recurrence/` and `events/`, with the diagnostic in `events/tests/migration_measurements.rs`) and have changed since; a rerun produces a new record rather than updating this one.
 
 | Source at record time under `apps/client/src-tauri/app/src/` | SHA-256 |
 | --- | --- |

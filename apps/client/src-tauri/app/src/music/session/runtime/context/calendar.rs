@@ -1,8 +1,8 @@
 //! Desktop Calendar soundtrack boundaries run independently of mounted views.
 
 use super::*;
-use crate::calendar::reads::native_window::{self, NativeCalendarWindow, WindowPurpose};
-use crate::calendar::recurrence::canonical::Window;
+use ganbaru_calendar::reads::native_window::{self, NativeCalendarWindow, WindowPurpose};
+use ganbaru_calendar::recurrence::canonical::Window;
 use ganbaru_civil_time as civil_time;
 use std::time::Instant;
 
@@ -235,7 +235,7 @@ fn select(
     now: i64,
 ) -> MusicLibraryResult<(Option<ContextActivation>, Option<i64>)> {
     let mut winner: Option<(
-        &crate::calendar::reads::DbCalendarEventRow,
+        &ganbaru_calendar::reads::DbCalendarEventRow,
         &native_window::NativeOccurrence,
         i64,
         i64,

@@ -14,10 +14,10 @@ doctest = false
 workspace = true
 
 [dependencies]
-ammonia = { workspace = true }
 base64 = { workspace = true }
 chrono = { workspace = true }
 flate2 = { workspace = true }
+ganbaru-calendar = { workspace = true }
 ganbaru-chat-contracts = { workspace = true }
 ganbaru-chat = { workspace = true }
 ganbaru-civil-time = { workspace = true }

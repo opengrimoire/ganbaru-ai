@@ -88,7 +88,7 @@ fn resolve(app: &tauri::AppHandle, instants: &[i64]) -> Result<LocalTimeFacts, S
 }
 
 pub(super) fn planned_block(
-    value: crate::calendar::reads::focus_context::FocusPlannedBlock,
+    value: ganbaru_calendar::reads::focus_context::FocusPlannedBlock,
 ) -> PomodoroAdaptivePlannedBlockWrite {
     PomodoroAdaptivePlannedBlockWrite {
         event_date: value.event_date,

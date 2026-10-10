@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use tauri::{AppHandle, Runtime};
 
-use super::events::scope::DeviceDate;
+use ganbaru_calendar::events::scope::DeviceDate;
 
 /// Returns the device-date source for the current platform.
 #[cfg(not(target_os = "android"))]
@@ -48,6 +48,6 @@ impl<R: Runtime> DeviceDate for AndroidDeviceDate<R> {
         if fact.epoch_ms != epoch_ms {
             return Err("Android returned mismatched Calendar device-date facts".into());
         }
-        crate::calendar::recurrence::canonical::parse_date(&fact.date_key)
+        ganbaru_calendar::recurrence::canonical::parse_date(&fact.date_key)
     }
 }

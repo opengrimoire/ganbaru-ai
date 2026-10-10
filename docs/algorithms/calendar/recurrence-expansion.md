@@ -1,6 +1,6 @@
 # Recurrence expansion
 
-**Status: Implemented.** One native Rust engine (`apps/client/src-tauri/app/src/calendar/recurrence/`) is the only expansion authority. Calendar windows, Focus scheduling, Music activation, Android reminder preparation, previews, and scoped mutations all consume it; the frontend caches and filters native occurrences but never generates them.
+**Status: Implemented.** One native Rust engine (`crates/ganbaru-calendar/src/recurrence/`) is the only expansion authority. Calendar windows, Focus scheduling, Music activation, Android reminder preparation, previews, and scoped mutations all consume it; the frontend caches and filters native occurrences but never generates them.
 
 Recurrence expansion converts one normalized template into bounded concrete occurrences for a requested window.
 
