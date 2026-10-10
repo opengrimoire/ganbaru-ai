@@ -63,7 +63,7 @@ jobs:
           COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
         run: |
           corepack enable
-          corepack prepare pnpm@11.1.1 --activate
+          corepack install
 
       - name: install pinned Rust toolchain
         run: rustup show
@@ -133,7 +133,7 @@ jobs:
           COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
         run: |
           corepack enable
-          corepack prepare pnpm@11.1.1 --activate
+          corepack install
 
       - name: install pinned Rust toolchain and Android targets
         run: |
