@@ -58,6 +58,9 @@ pub struct LinkedPeer {
     pub vault_id: String,
     pub certificate: String,
     pub certificate_fingerprint: String,
+    /// Enrollment time; at the stored limit, the oldest memberships of other vaults are revoked first.
+    #[serde(default)]
+    pub linked_at_ms: i64,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
@@ -261,6 +264,17 @@ impl PairingManager {
         Ok(initialized_state(&inner)?
             .linked_peers
             .values()
+            .cloned()
+            .collect())
+    }
+
+    /// Devices linked to `vault_id`. Memberships recorded for other vaults stay stored but inactive.
+    pub fn linked_peers_for(&self, vault_id: &str) -> Result<Vec<LinkedPeer>, String> {
+        let inner = self.lock()?;
+        Ok(initialized_state(&inner)?
+            .linked_peers
+            .values()
+            .filter(|peer| peer.vault_id == vault_id)
             .cloned()
             .collect())
     }
@@ -524,20 +538,22 @@ impl PairingManager {
             vault_id: enrollment.vault_id.to_string(),
             certificate: enrollment.certificate_b64.to_string(),
             certificate_fingerprint: certificate_fingerprint(certificate.as_ref()),
+            linked_at_ms: now_ms,
         };
         let previous = initialized_state(&inner)?.clone();
         let state = initialized_state_mut(&mut inner)?;
         if peer.device_id == state.identity.device_id {
             return Err("a device cannot enroll its coordinator identity".to_string());
         }
-        if let Some(existing) = state.linked_peers.get(&peer.device_id) {
-            if existing.certificate_fingerprint != peer.certificate_fingerprint
-                || existing.vault_id != peer.vault_id
-            {
+        // A device follows one coordinator vault at a time, so enrolling it under another vault
+        // replaces its earlier membership.
+        let evicted_device_id = if let Some(existing) = state.linked_peers.get(&peer.device_id) {
+            if existing.certificate_fingerprint != peer.certificate_fingerprint {
                 return Err(
                     "this device identity conflicts with an existing linked device".to_string(),
                 );
             }
+            None
         } else {
             if state
                 .linked_peers
@@ -547,14 +563,23 @@ impl PairingManager {
                 return Err("this certificate already belongs to another linked device".to_string());
             }
             if state.linked_peers.len() >= MAX_LINKED_PEERS {
-                return Err(format!("at most {MAX_LINKED_PEERS} devices can be linked"));
+                Some(
+                    oldest_membership_outside(state, &peer.vault_id).ok_or_else(|| {
+                        format!("at most {MAX_LINKED_PEERS} devices can be linked to one vault")
+                    })?,
+                )
+            } else {
+                None
             }
-        }
+        };
         if state.revoked_peers.values().any(|revoked| {
             revoked.device_id != peer.device_id
                 && revoked.certificate_fingerprint == peer.certificate_fingerprint
         }) {
             return Err("this certificate belonged to another revoked device".to_string());
+        }
+        if let Some(evicted) = evicted_device_id.and_then(|id| state.linked_peers.remove(&id)) {
+            remember_revoked_peer(state, evicted, now_ms);
         }
         state
             .linked_peers
@@ -762,6 +787,17 @@ fn constant_time_equal(left: &[u8], right: &[u8]) -> bool {
         );
     }
     difference == 0
+}
+
+/// The least recently enrolled device linked to a vault other than `vault_id`.
+#[cfg(desktop)]
+fn oldest_membership_outside(state: &PairingStateFile, vault_id: &str) -> Option<String> {
+    state
+        .linked_peers
+        .values()
+        .filter(|peer| peer.vault_id != vault_id)
+        .min_by_key(|peer| (peer.linked_at_ms, peer.device_id.as_str()))
+        .map(|peer| peer.device_id.clone())
 }
 
 fn remember_revoked_peer(state: &mut PairingStateFile, peer: LinkedPeer, revoked_at_ms: i64) {

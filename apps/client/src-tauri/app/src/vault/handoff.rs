@@ -459,17 +459,12 @@ pub(crate) fn handoff_pairing_status<R: Runtime>(
 ) -> Result<PairingStatus, String> {
     let manager = app.state::<PairingManager>();
     let (device_id, _) = manager.identity()?;
-    let peers = manager.linked_peers()?;
     let coordinator = manager.coordinator_pin()?;
-    let vault_id = peers
-        .first()
-        .map(|peer| peer.vault_id.clone())
-        .or_else(|| {
-            coordinator
-                .as_ref()
-                .map(|coordinator| coordinator.vault_id.clone())
-        })
-        .or_else(|| super::active_vault_id(&app).ok());
+    let vault_id = status_vault_id(coordinator.as_ref(), || super::active_vault_id(&app).ok());
+    let peers = match vault_id.as_deref() {
+        Some(vault_id) => manager.linked_peers_for(vault_id)?,
+        None => Vec::new(),
+    };
     let ownership = vault_id
         .as_deref()
         .map(|vault_id| {
@@ -544,6 +539,17 @@ pub(crate) fn handoff_pairing_status<R: Runtime>(
         #[cfg(target_os = "linux")]
         network_access,
     })
+}
+
+/// Vault whose memberships the pairing status reports: the pinned coordinator's vault on a linked
+/// client, otherwise the active vault. Devices linked to other vaults stay hidden and inactive.
+fn status_vault_id(
+    coordinator: Option<&pairing::CoordinatorPin>,
+    active_vault_id: impl FnOnce() -> Option<String>,
+) -> Option<String> {
+    coordinator
+        .map(|coordinator| coordinator.vault_id.clone())
+        .or_else(active_vault_id)
 }
 
 #[cfg(target_os = "linux")]
@@ -693,6 +699,27 @@ mod tests {
         assert!(!is_lan_address("8.8.8.8".parse().expect("address")));
         assert!(is_lan_address("192.168.10.4".parse().expect("address")));
         assert!(is_lan_address("fd00::1".parse().expect("address")));
+    }
+
+    #[test]
+    fn pairing_status_follows_the_pinned_coordinator_before_the_active_vault() {
+        let coordinator = pairing::CoordinatorPin {
+            device_id: "device-desktop".to_string(),
+            device_label: None,
+            endpoint: "192.168.10.4:43821".to_string(),
+            vault_id: "vault-coordinated".to_string(),
+            generation: 3,
+            certificate_fingerprint: "fingerprint".to_string(),
+        };
+        assert_eq!(
+            status_vault_id(Some(&coordinator), || Some("vault-local".to_string())).as_deref(),
+            Some("vault-coordinated")
+        );
+        assert_eq!(
+            status_vault_id(None, || Some("vault-local".to_string())).as_deref(),
+            Some("vault-local")
+        );
+        assert_eq!(status_vault_id(None, || None), None);
     }
 
     #[test]
