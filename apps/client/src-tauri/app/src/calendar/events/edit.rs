@@ -187,15 +187,15 @@ impl EventDraft {
                     parse_organizer(value)?;
                 }
                 Field::MusicSnapshotAssignments(assignments) => {
-                    crate::music::assignments::validate_drafts(
-                        crate::music::assignments::MusicAssignmentOwnerKind::EventSnapshot,
+                    ganbaru_music::assignments::validate_drafts(
+                        ganbaru_music::assignments::MusicAssignmentOwnerKind::EventSnapshot,
                         assignments,
                     )
                     .map_err(|error| format!("Calendar Music snapshot: {error}"))?;
                 }
                 Field::MusicOverrideAssignments(assignments) => {
-                    crate::music::assignments::validate_drafts(
-                        crate::music::assignments::MusicAssignmentOwnerKind::EventOverride,
+                    ganbaru_music::assignments::validate_drafts(
+                        ganbaru_music::assignments::MusicAssignmentOwnerKind::EventOverride,
                         assignments,
                     )
                     .map_err(|error| format!("Calendar Music override: {error}"))?;

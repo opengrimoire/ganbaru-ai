@@ -98,13 +98,14 @@ fn valid_project_update() -> ProjectUpdate {
         work_environment_id: None,
         blocker_ruleset_id: None,
         music_assignments: Some(vec![
-            crate::music::assignments::MusicContextAssignmentDraft {
-                phase: crate::music::assignments::MusicActivityPhase::Focus,
-                behavior: crate::music::assignments::MusicAssignmentBehavior::PlayAutomatically,
+            ganbaru_music::assignments::MusicContextAssignmentDraft {
+                phase: ganbaru_music::assignments::MusicActivityPhase::Focus,
+                behavior: ganbaru_music::assignments::MusicAssignmentBehavior::PlayAutomatically,
                 playlist_id: Some("playlist-a".to_string()),
                 soundscape_id: None,
-                soundscape_behavior: crate::music::assignments::MusicSoundscapeBehavior::Inherit,
-                provenance_kind: crate::music::assignments::MusicAssignmentProvenanceKind::Explicit,
+                soundscape_behavior: ganbaru_music::assignments::MusicSoundscapeBehavior::Inherit,
+                provenance_kind:
+                    ganbaru_music::assignments::MusicAssignmentProvenanceKind::Explicit,
                 provenance_id: None,
             },
         ]),

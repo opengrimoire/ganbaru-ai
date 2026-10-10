@@ -1,3 +1,5 @@
+//! The error shape shared by Music library commands and context assignments.
+
 use serde::Serialize;
 use std::fmt;
 

@@ -1,11 +1,11 @@
 use serde::{Deserialize, Serialize};
 
 #[cfg(test)]
-pub use crate::music::assignments::{
+pub use ganbaru_music::assignments::{
     MusicActivityPhase, MusicAssignmentBehavior, MusicAssignmentProvenanceKind,
     MusicContextAssignmentDraft, MusicSoundscapeBehavior,
 };
-pub use crate::music::assignments::{
+pub use ganbaru_music::assignments::{
     MusicAssignmentOwnerKind, MusicContextAssignment, MusicContextAssignmentSet,
 };
 

@@ -1120,7 +1120,7 @@ impl Owner {
         .await
         {
             if matches!(definition, SessionQueueIntent::SavedPlaylist { .. })
-                && error.code == crate::music::error::MusicLibraryErrorCode::NotFound
+                && error.code == ganbaru_music::error::MusicLibraryErrorCode::NotFound
             {
                 let detached = SessionQueueIntent::LibraryItems {
                     item_ids: self

@@ -34,7 +34,7 @@ pub(super) async fn prepare(
     behavior: &str,
     soundscape_id: Option<&str>,
 ) -> MusicLibraryResult<PreparedSoundscape> {
-    use crate::music::assignments::MusicSoundscapeBehavior;
+    use ganbaru_music::assignments::MusicSoundscapeBehavior;
     let behavior = MusicSoundscapeBehavior::try_from(behavior)
         .map_err(|error| MusicLibraryError::validation("assignment.soundscapeBehavior", error))?;
     let empty = |missing| PreparedSoundscape {

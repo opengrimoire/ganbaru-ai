@@ -1,5 +1,5 @@
 use super::models::*;
-use crate::music::error::{MusicLibraryError, MusicLibraryResult};
+use ganbaru_music::error::{MusicLibraryError, MusicLibraryResult};
 use std::collections::HashSet;
 #[cfg(desktop)]
 use std::path::{Component, Path};

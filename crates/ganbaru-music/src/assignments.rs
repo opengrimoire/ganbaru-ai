@@ -1,6 +1,6 @@
 //! Portable music-assignment contracts shared by desktop and mobile planning.
 
-use crate::music::error::{MusicLibraryError, MusicLibraryResult};
+use crate::error::{MusicLibraryError, MusicLibraryResult};
 use serde::{Deserialize, Serialize};
 use sqlx::SqlitePool;
 use sqlx::{Sqlite, Transaction};
@@ -102,7 +102,7 @@ pub struct MusicContextAssignmentSet {
 }
 
 /// Canonical assignment fields shared by context reads and bounded transfers.
-pub(crate) type AssignmentRow = (
+pub type AssignmentRow = (
     String,
     String,
     String,
@@ -116,7 +116,8 @@ pub(crate) type AssignmentRow = (
     i64,
 );
 
-pub(crate) async fn load_assignments(
+/// The assignments of one owner, ordered by phase.
+pub async fn load_assignments(
     pool: &SqlitePool,
     owner_kind: MusicAssignmentOwnerKind,
     owner_id: &str,
@@ -138,7 +139,7 @@ pub(crate) async fn load_assignments(
 }
 
 #[cfg(test)]
-pub(crate) async fn replace_assignments(
+async fn replace_assignments(
     pool: &SqlitePool,
     request: MusicContextAssignmentSet,
 ) -> MusicLibraryResult<Vec<MusicContextAssignment>> {
@@ -160,7 +161,9 @@ pub(crate) async fn replace_assignments(
     load_assignments(pool, request.owner_kind, &request.owner_id).await
 }
 
-pub(crate) async fn replace_assignments_in_transaction(
+/// Replaces every phase assignment of one owner inside the caller's transaction, advancing each
+/// phase's version.
+pub async fn replace_assignments_in_transaction(
     transaction: &mut Transaction<'_, Sqlite>,
     owner_kind: MusicAssignmentOwnerKind,
     owner_id: &str,
@@ -222,7 +225,8 @@ pub(crate) async fn replace_assignments_in_transaction(
     Ok(())
 }
 
-pub(crate) fn validate_set(request: &MusicContextAssignmentSet) -> MusicLibraryResult<()> {
+/// Validates an owner, its timestamp, and its phase assignments before a replacement.
+pub fn validate_set(request: &MusicContextAssignmentSet) -> MusicLibraryResult<()> {
     validate_id(&request.owner_id, "ownerId")?;
     if request.updated_at_ms <= 0 {
         return Err(MusicLibraryError::validation(
@@ -234,7 +238,7 @@ pub(crate) fn validate_set(request: &MusicContextAssignmentSet) -> MusicLibraryR
 }
 
 /// Validate portable assignment intent before an owner or timestamp is allocated.
-pub(crate) fn validate_drafts(
+pub fn validate_drafts(
     owner_kind: MusicAssignmentOwnerKind,
     assignments: &[MusicContextAssignmentDraft],
 ) -> MusicLibraryResult<()> {
@@ -301,7 +305,7 @@ fn validate_optional_id(value: &Option<String>, field: &str) -> MusicLibraryResu
 }
 
 /// Decode persisted assignment variants consistently at both native boundaries.
-pub(crate) fn decode(row: AssignmentRow) -> MusicLibraryResult<MusicContextAssignment> {
+pub fn decode(row: AssignmentRow) -> MusicLibraryResult<MusicContextAssignment> {
     Ok(MusicContextAssignment {
         owner_kind: MusicAssignmentOwnerKind::try_from(row.0.as_str())
             .map_err(|message| MusicLibraryError::runtime("decode assignment owner", message))?,
@@ -322,3 +326,6 @@ pub(crate) fn decode(row: AssignmentRow) -> MusicLibraryResult<MusicContextAssig
         version: row.10,
     })
 }
+
+#[cfg(test)]
+mod tests;

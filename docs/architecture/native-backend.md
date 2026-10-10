@@ -16,6 +16,7 @@ The Cargo workspace extracts domains that benefit from Tauri-free contracts and 
 - `ganbaru-civil-time` converts between instants and zoned wall times for Calendar, Focus, Music, and the distraction blocker. Zones are always explicit, explicit times take the earlier fold and the pre-transition offset in a gap, and generated recurrence times skip nonexistent wall times.
 - `ganbaru-pomodoro` owns focus persistence, history, validation, recovery, local activity admission, transactional execution, and adaptive run and phase decisions.
 - `ganbaru-quick-notes` owns Quick notes persistence, search windows, revisioned writes, lifecycle and trash retention, ordering, tags, and resolution of replicated conflicts.
+- `ganbaru-music` owns Music context assignments per Focus phase for projects, Calendar events, and work environments, and the Music library error shape.
 - `ganbaru-notes` owns the Notes graph, persistence, transfers, history, assets, and bounded file operations.
 - `ganbaru-chat-contracts` defines provider-neutral identifiers, commands, events, read models, and errors.
 - `ganbaru-chat-providers` owns provider processes, transports, normalization, cancellation, and registry behavior.

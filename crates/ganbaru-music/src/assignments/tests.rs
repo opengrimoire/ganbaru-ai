@@ -1,5 +1,28 @@
-use super::pool;
 use super::*;
+use sqlx::sqlite::SqlitePoolOptions;
+
+/// Runs persistence tests on a single-thread runtime without platform initialization.
+fn block_on<F: std::future::Future>(future: F) -> F::Output {
+    tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("create music assignments test runtime")
+        .block_on(future)
+}
+
+async fn pool() -> SqlitePool {
+    let pool = SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect("sqlite::memory:")
+        .await
+        .unwrap();
+    sqlx::raw_sql("PRAGMA foreign_keys=ON")
+        .execute(&pool)
+        .await
+        .unwrap();
+    ganbaru_db::run_migrations(&pool).await.unwrap();
+    pool
+}
 
 fn draft(
     phase: MusicActivityPhase,
@@ -18,9 +41,9 @@ fn draft(
 
 #[test]
 fn context_assignments_replace_all_phases_atomically_and_increment_versions() {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         let pool = pool().await;
-        let initial = crate::music::assignments::replace_assignments(
+        let initial = super::replace_assignments(
             &pool,
             MusicContextAssignmentSet {
                 owner_kind: MusicAssignmentOwnerKind::ProjectDefault,
@@ -43,7 +66,7 @@ fn context_assignments_replace_all_phases_atomically_and_increment_versions() {
         assert_eq!(initial.len(), 2);
         assert!(initial.iter().all(|assignment| assignment.version == 1));
 
-        let replaced = crate::music::assignments::replace_assignments(
+        let replaced = super::replace_assignments(
             &pool,
             MusicContextAssignmentSet {
                 owner_kind: MusicAssignmentOwnerKind::ProjectDefault,
@@ -73,14 +96,14 @@ fn context_assignments_replace_all_phases_atomically_and_increment_versions() {
 
 #[test]
 fn context_assignments_enforce_owner_provenance_and_unique_phases() {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         let pool = pool().await;
         let mut snapshot = draft(
             MusicActivityPhase::Focus,
             MusicAssignmentBehavior::PlayAutomatically,
         );
         snapshot.provenance_id = Some("project-1".to_string());
-        let invalid = crate::music::assignments::replace_assignments(
+        let invalid = super::replace_assignments(
             &pool,
             MusicContextAssignmentSet {
                 owner_kind: MusicAssignmentOwnerKind::EventSnapshot,
@@ -93,7 +116,7 @@ fn context_assignments_enforce_owner_provenance_and_unique_phases() {
         .unwrap_err();
         assert_eq!(invalid.field.as_deref(), Some("provenanceKind"));
 
-        let duplicate = crate::music::assignments::replace_assignments(
+        let duplicate = super::replace_assignments(
             &pool,
             MusicContextAssignmentSet {
                 owner_kind: MusicAssignmentOwnerKind::ProjectDefault,
@@ -115,21 +138,17 @@ fn context_assignments_enforce_owner_provenance_and_unique_phases() {
         .unwrap_err();
         assert_eq!(duplicate.field.as_deref(), Some("assignments"));
         assert!(
-            crate::music::assignments::load_assignments(
-                &pool,
-                MusicAssignmentOwnerKind::ProjectDefault,
-                "project-1",
-            )
-            .await
-            .unwrap()
-            .is_empty()
+            super::load_assignments(&pool, MusicAssignmentOwnerKind::ProjectDefault, "project-1",)
+                .await
+                .unwrap()
+                .is_empty()
         );
     });
 }
 
 #[test]
 fn work_environment_contract_round_trips_without_a_settings_surface() {
-    tauri::async_runtime::block_on(async {
+    block_on(async {
         let pool = pool().await;
         let mut environment = draft(
             MusicActivityPhase::Focus,
@@ -137,7 +156,7 @@ fn work_environment_contract_round_trips_without_a_settings_surface() {
         );
         environment.provenance_kind = MusicAssignmentProvenanceKind::WorkEnvironment;
         environment.provenance_id = Some("environment-1".to_string());
-        let saved = crate::music::assignments::replace_assignments(
+        let saved = super::replace_assignments(
             &pool,
             MusicContextAssignmentSet {
                 owner_kind: MusicAssignmentOwnerKind::WorkEnvironment,

@@ -367,7 +367,7 @@ pub async fn music_library_context_assignments(
     let pool = connect_sqlite(app, db_url)
         .await
         .map_err(connection_error)?;
-    crate::music::assignments::load_assignments(&pool, owner_kind, &owner_id).await
+    ganbaru_music::assignments::load_assignments(&pool, owner_kind, &owner_id).await
 }
 
 #[tauri::command]

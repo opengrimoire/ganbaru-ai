@@ -233,9 +233,9 @@ pub(crate) async fn update_project_in_pool(
         project.music_assignments,
         project.music_assignments_updated_at,
     ) {
-        crate::music::assignments::replace_assignments_in_transaction(
+        ganbaru_music::assignments::replace_assignments_in_transaction(
             &mut transaction,
-            crate::music::assignments::MusicAssignmentOwnerKind::ProjectDefault,
+            ganbaru_music::assignments::MusicAssignmentOwnerKind::ProjectDefault,
             &project.id,
             assignments,
             updated_at,

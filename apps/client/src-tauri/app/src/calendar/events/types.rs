@@ -183,9 +183,9 @@ pub(super) enum CalendarEventUpdateField {
     #[serde(rename = "guestPermissions")]
     GuestPermissions(CalendarGuestPermissions),
     #[serde(rename = "musicSnapshotAssignments")]
-    MusicSnapshotAssignments(Vec<crate::music::assignments::MusicContextAssignmentDraft>),
+    MusicSnapshotAssignments(Vec<ganbaru_music::assignments::MusicContextAssignmentDraft>),
     #[serde(rename = "musicOverrideAssignments")]
-    MusicOverrideAssignments(Vec<crate::music::assignments::MusicContextAssignmentDraft>),
+    MusicOverrideAssignments(Vec<ganbaru_music::assignments::MusicContextAssignmentDraft>),
 }
 
 impl CalendarEventUpdateField {

@@ -1,7 +1,6 @@
 use super::*;
 use sqlx::SqlitePool;
 
-mod contexts;
 mod interchange;
 mod playback;
 mod query;
@@ -614,25 +613,25 @@ fn deletion_requires_current_impact_and_repairs_assignments_atomically() {
         .execute(&pool)
         .await
         .unwrap();
-        crate::music::assignments::replace_assignments(
-            &pool,
-            MusicContextAssignmentSet {
-                owner_kind: MusicAssignmentOwnerKind::EventOverride,
-                owner_id: "event-1".to_string(),
-                assignments: vec![MusicContextAssignmentDraft {
-                    phase: MusicActivityPhase::Focus,
-                    behavior: MusicAssignmentBehavior::PlayAutomatically,
-                    playlist_id: Some("playlist-1".to_string()),
-                    soundscape_id: None,
-                    soundscape_behavior: MusicSoundscapeBehavior::Inherit,
-                    provenance_kind: MusicAssignmentProvenanceKind::Explicit,
-                    provenance_id: None,
-                }],
-                updated_at_ms: 1_700_000_000_000,
-            },
+        let mut transaction = pool.begin().await.unwrap();
+        ganbaru_music::assignments::replace_assignments_in_transaction(
+            &mut transaction,
+            MusicAssignmentOwnerKind::EventOverride,
+            "event-1",
+            vec![MusicContextAssignmentDraft {
+                phase: MusicActivityPhase::Focus,
+                behavior: MusicAssignmentBehavior::PlayAutomatically,
+                playlist_id: Some("playlist-1".to_string()),
+                soundscape_id: None,
+                soundscape_behavior: MusicSoundscapeBehavior::Inherit,
+                provenance_kind: MusicAssignmentProvenanceKind::Explicit,
+                provenance_id: None,
+            }],
+            1_700_000_000_000,
         )
         .await
         .unwrap();
+        transaction.commit().await.unwrap();
 
         let impact = super::writes::playlist_delete_impact(&pool, "playlist-1")
             .await

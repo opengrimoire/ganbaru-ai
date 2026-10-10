@@ -1,7 +1,7 @@
 //! Soundtrack activation uses canonical Calendar geometry or a committed Focus effect.
 
 use super::*;
-use crate::music::assignments::{MusicActivityPhase, MusicAssignmentBehavior};
+use ganbaru_music::assignments::{MusicActivityPhase, MusicAssignmentBehavior};
 use ganbaru_pomodoro::CommittedFocusEffect;
 use sqlx::{Sqlite, Transaction};
 
@@ -341,8 +341,8 @@ impl Owner {
                 Err(error)
                     if matches!(
                         error.code,
-                        crate::music::error::MusicLibraryErrorCode::NotFound
-                            | crate::music::error::MusicLibraryErrorCode::Validation
+                        ganbaru_music::error::MusicLibraryErrorCode::NotFound
+                            | ganbaru_music::error::MusicLibraryErrorCode::Validation
                     ) =>
                 {
                     // Queue reads can fail after changing the draft. Retain the actual prior queue.

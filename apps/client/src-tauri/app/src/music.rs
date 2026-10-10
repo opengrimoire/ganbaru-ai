@@ -21,8 +21,6 @@ use tauri_plugin_dialog::{DialogExt, FilePath};
 
 #[cfg(desktop)]
 mod artwork;
-pub(crate) mod assignments;
-pub(crate) mod error;
 #[cfg(not(target_os = "ios"))]
 pub(crate) mod library;
 #[cfg(desktop)]

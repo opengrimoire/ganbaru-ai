@@ -211,11 +211,11 @@ pub(super) fn validate_document(document: &MusicInterchangeDocument) -> MusicLib
         if assignment.version <= 0 {
             return Err(validation("Invalid Music assignment revision"));
         }
-        crate::music::assignments::validate_set(&MusicContextAssignmentSet {
+        ganbaru_music::assignments::validate_set(&MusicContextAssignmentSet {
             owner_kind: assignment.owner_kind,
             owner_id: assignment.owner_id.clone(),
             updated_at_ms: assignment.updated_at_ms,
-            assignments: vec![crate::music::assignments::MusicContextAssignmentDraft {
+            assignments: vec![ganbaru_music::assignments::MusicContextAssignmentDraft {
                 phase: assignment.phase,
                 behavior: assignment.behavior,
                 playlist_id: assignment.playlist_id.clone(),

@@ -32,8 +32,8 @@ mod writes;
 mod youtube;
 
 #[cfg(test)]
-pub use crate::music::error::MusicLibraryErrorCode;
-pub use crate::music::error::{MusicLibraryError, MusicLibraryResult};
+pub use ganbaru_music::error::MusicLibraryErrorCode;
+pub use ganbaru_music::error::{MusicLibraryError, MusicLibraryResult};
 pub use models::*;
 pub(crate) use rows::*;
 pub use transfer::{

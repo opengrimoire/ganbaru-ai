@@ -1,7 +1,7 @@
 //! Music effects admitted from committed Focus execution, with manual-intent supersession.
 
 use super::*;
-use crate::music::assignments::MusicActivityPhase;
+use ganbaru_music::assignments::MusicActivityPhase;
 use ganbaru_pomodoro::{CommittedFocusEffect, FocusMode, FocusPhase};
 use std::time::Instant;
 
