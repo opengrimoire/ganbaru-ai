@@ -7,7 +7,7 @@ use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
-use super::{COORDINATOR_PORT, DEVELOPMENT_COORDINATOR_PORT};
+use crate::protocol::{COORDINATOR_PORT, DEVELOPMENT_COORDINATOR_PORT};
 
 const STATE_FILE: &str = "vault-handoff-network-access.json";
 const STATE_SCHEMA_VERSION: u32 = 2;
@@ -44,7 +44,7 @@ struct StoredNetworkAccess {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) enum NetworkAccessState {
+pub enum NetworkAccessState {
     NotRequired,
     AuthorizationRequired,
     Granted,
@@ -53,11 +53,11 @@ pub(crate) enum NetworkAccessState {
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct NetworkAccessStatus {
+pub struct NetworkAccessStatus {
     state: NetworkAccessState,
 }
 
-pub(crate) fn not_required() -> NetworkAccessStatus {
+pub fn not_required() -> NetworkAccessStatus {
     NetworkAccessStatus {
         state: NetworkAccessState::NotRequired,
     }
@@ -70,7 +70,7 @@ struct LanScope {
     source_network: String,
 }
 
-pub(crate) fn status(config_dir: &Path, local_address: Ipv4Addr, port: u16) -> NetworkAccessStatus {
+pub fn status(config_dir: &Path, local_address: Ipv4Addr, port: u16) -> NetworkAccessStatus {
     let Ok(scope) = current_lan_scope(local_address) else {
         return NetworkAccessStatus {
             state: NetworkAccessState::ManualActionRequired,
@@ -104,7 +104,7 @@ pub(crate) fn status(config_dir: &Path, local_address: Ipv4Addr, port: u16) -> N
     }
 }
 
-pub(crate) fn grant(
+pub fn grant(
     config_dir: &Path,
     local_address: Ipv4Addr,
     port: u16,
@@ -137,7 +137,7 @@ pub(crate) fn grant(
     })
 }
 
-pub(crate) fn revoke(config_dir: &Path) -> Result<NetworkAccessStatus, String> {
+pub fn revoke(config_dir: &Path) -> Result<NetworkAccessStatus, String> {
     let mut stored = read_state(config_dir)?;
     let mut retained = Vec::new();
     let mut first_error = None;

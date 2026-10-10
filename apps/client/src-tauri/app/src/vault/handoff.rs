@@ -2,20 +2,20 @@
 
 #[cfg(desktop)]
 pub(crate) mod coordinator;
-#[cfg(target_os = "linux")]
-mod network_access;
-#[cfg(target_os = "linux")]
-pub(crate) use network_access::run_privileged_helper_if_requested;
 pub(crate) mod receiver;
 pub(crate) mod source;
 pub(crate) mod transport;
 
+#[cfg(target_os = "linux")]
+use ganbaru_handoff::network_access;
+#[cfg(target_os = "linux")]
+pub(crate) use ganbaru_handoff::network_access::run_privileged_helper_if_requested;
 pub(crate) use ganbaru_handoff::{pairing, protocol};
 
 use pairing::PairingManager;
-use protocol::{HandoffCompatibility, decode_invitation, encode_invitation};
 #[cfg(desktop)]
-use protocol::{QrMatrix, invitation_qr_matrix};
+use protocol::{COORDINATOR_PORT, DEVELOPMENT_COORDINATOR_PORT, QrMatrix, invitation_qr_matrix};
+use protocol::{HandoffCompatibility, decode_invitation, encode_invitation};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 #[cfg(desktop)]
@@ -25,11 +25,6 @@ use std::sync::Mutex;
 use tauri::{Manager, Runtime};
 #[cfg(desktop)]
 use tokio::net::TcpListener;
-
-#[cfg(desktop)]
-const COORDINATOR_PORT: u16 = 43_821;
-#[cfg(desktop)]
-const DEVELOPMENT_COORDINATOR_PORT: u16 = 43_822;
 
 pub(crate) use protocol::sha256_file;
 

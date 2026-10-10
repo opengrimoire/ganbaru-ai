@@ -20,6 +20,10 @@ pub const MAX_DEVICE_LABEL_BYTES: usize = 128;
 const MAX_APP_VERSION_BYTES: usize = 64;
 pub const MAX_DISTRACTIONS_SAMPLES: usize = 1_024;
 pub const TRANSFER_CHUNK_BYTES: usize = 64 * 1024;
+/// LAN port the coordinator of a production build listens on.
+pub const COORDINATOR_PORT: u16 = 43_821;
+/// LAN port the coordinator of a development build listens on.
+pub const DEVELOPMENT_COORDINATOR_PORT: u16 = 43_822;
 const PAIRING_QR_MAGIC: &[u8; 4] = b"GBQ\x01";
 /// Base64url text of a 64-byte Ed25519 signature.
 const SIGNATURE_TEXT_LENGTH: usize = 86;
