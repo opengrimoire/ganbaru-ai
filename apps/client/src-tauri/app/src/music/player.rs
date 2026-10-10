@@ -1,21 +1,21 @@
 //! Media inspection and native playback.
 //!
-//! Desktop decodes local files with the native engine. Android delegates inspection to the
-//! platform media plugin, and playback belongs to the native Music session there.
+//! Desktop decodes local files with the native engine in `ganbaru-music-player`. Android
+//! delegates inspection to the platform media plugin, and playback belongs to the native Music
+//! session there.
 
 #[cfg(desktop)]
-mod desktop;
-
-#[cfg(desktop)]
-pub(crate) use desktop::{
+pub(crate) use ganbaru_music_player::{
     MediaPlayerError, MediaPlayerState, PlayerStatus, apply_session_effect, session_snapshot,
 };
 
 /// Inspect a local media file without mutating decoder or session state.
 #[cfg(desktop)]
 #[tauri::command]
-pub(crate) fn media_player_probe(path: String) -> Result<desktop::MediaProbe, MediaPlayerError> {
-    desktop::probe_local_file(&path)
+pub(crate) fn media_player_probe(
+    path: String,
+) -> Result<ganbaru_music_player::MediaProbe, MediaPlayerError> {
+    ganbaru_music_player::probe_local_file(&path)
 }
 
 /// Inspect a selected document without mutating decoder or session state.

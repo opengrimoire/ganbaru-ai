@@ -57,6 +57,7 @@ libc = { workspace = true }
 axum = { workspace = true }
 ganbaru-chat = { workspace = true, features = ["native-runtime"] }
 ganbaru-chat-providers = { workspace = true }
+ganbaru-music-player = { workspace = true }
 keyring = { workspace = true }
 notify = { workspace = true }
 notify-rust = { workspace = true }

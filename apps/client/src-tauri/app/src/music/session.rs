@@ -15,9 +15,4 @@ pub(crate) use runtime::{
 pub(crate) use runtime::dispatch_control;
 
 #[cfg(desktop)]
-pub(crate) use models::{
-    PlaybackOrder, SessionEffect, SessionIntent, SessionProjection, SourceKind,
-};
-
-#[cfg(test)]
-pub(crate) use models::{SessionBackend, SessionSource};
+pub(crate) use models::{PlaybackOrder, SessionIntent, SessionProjection, SourceKind};

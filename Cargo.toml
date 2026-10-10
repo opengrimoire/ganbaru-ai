@@ -16,6 +16,7 @@ members = [
   "crates/ganbaru-mobile-notifications",
   "crates/ganbaru-music",
   "crates/ganbaru-music-library",
+  "crates/ganbaru-music-player",
   "crates/ganbaru-native-messaging",
   "crates/ganbaru-notes",
   "crates/ganbaru-people",
@@ -60,6 +61,7 @@ ganbaru-mobile-media = { path = "crates/ganbaru-mobile-media" }
 ganbaru-mobile-notifications = { path = "crates/ganbaru-mobile-notifications" }
 ganbaru-music = { path = "crates/ganbaru-music" }
 ganbaru-music-library = { path = "crates/ganbaru-music-library" }
+ganbaru-music-player = { path = "crates/ganbaru-music-player" }
 ganbaru-notes = { path = "crates/ganbaru-notes" }
 ganbaru-people = { path = "crates/ganbaru-people" }
 ganbaru-pomodoro = { path = "crates/ganbaru-pomodoro" }

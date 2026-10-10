@@ -1,3 +1,7 @@
+//! Desktop playback of local media files independent of Tauri: file inspection, decoding on a
+//! dedicated worker thread, and execution of committed Music session effects under the
+//! delivery authority supplied by the caller.
+
 use std::{
     fs::File,
     io::{Read, Seek, SeekFrom},
@@ -6,6 +10,7 @@ use std::{
     time::Duration,
 };
 
+use ganbaru_music_library::session::models::SessionEffect;
 use rodio::{Decoder, DeviceSinkBuilder, MixerDeviceSink, Player, SampleRate, Source};
 use serde::{Deserialize, Serialize};
 
@@ -14,7 +19,7 @@ use worker::{DeliveryAuthority, PlaybackController};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
-pub(crate) enum BackendKind {
+pub enum BackendKind {
     None,
     Rodio,
     Webview,
@@ -22,7 +27,7 @@ pub(crate) enum BackendKind {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
-pub(crate) enum MediaKind {
+pub enum MediaKind {
     Audio,
     Video,
     Unknown,
@@ -30,7 +35,7 @@ pub(crate) enum MediaKind {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
-pub(crate) enum PlayerStatus {
+pub enum PlayerStatus {
     Idle,
     Ready,
     Playing,
@@ -41,7 +46,7 @@ pub(crate) enum PlayerStatus {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct LocalMediaSource {
+pub struct LocalMediaSource {
     pub kind: String,
     pub path: String,
     pub identity: String,
@@ -50,7 +55,7 @@ pub(crate) struct LocalMediaSource {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct LoadRequest {
+pub struct LoadRequest {
     pub source: LocalMediaSource,
     pub start_ms: Option<u64>,
     pub volume: Option<f64>,
@@ -59,7 +64,7 @@ pub(crate) struct LoadRequest {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct MediaProbe {
+pub struct MediaProbe {
     pub path: String,
     pub title: String,
     pub file_size_bytes: u64,
@@ -70,7 +75,7 @@ pub(crate) struct MediaProbe {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct PlayerSnapshot {
+pub struct PlayerSnapshot {
     pub status: PlayerStatus,
     pub source_identity: Option<String>,
     pub title: Option<String>,
@@ -106,7 +111,7 @@ impl Default for PlayerSnapshot {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct MediaPlayerError {
+pub struct MediaPlayerError {
     pub code: String,
     pub message: String,
 }
@@ -162,7 +167,7 @@ impl MediaPlayerError {
     }
 
     /// Source failures can advance the queue; transport and device failures cannot.
-    pub(crate) fn is_source_failure(&self) -> bool {
+    pub fn is_source_failure(&self) -> bool {
         matches!(self.code.as_str(), "invalidSource" | "decodeFailed")
     }
 }
@@ -499,7 +504,7 @@ impl PlayerCore {
 
 #[derive(Debug)]
 enum BackendCommand {
-    Session(Box<crate::music::session::SessionEffect>),
+    Session(Box<SessionEffect>),
     #[cfg(test)]
     Load {
         request: Box<LoadRequest>,
@@ -529,14 +534,14 @@ impl BackendCommand {
 }
 
 #[derive(Debug, Default)]
-pub(crate) struct MediaPlayerState {
+pub struct MediaPlayerState {
     controller: PlaybackController,
 }
 
 /// Executes a committed application-session effect on the decoder worker.
-pub(crate) fn apply_session_effect(
+pub fn apply_session_effect(
     state: &MediaPlayerState,
-    effect: &crate::music::session::SessionEffect,
+    effect: &SessionEffect,
     authority: Arc<dyn Fn() -> bool + Send + Sync>,
 ) -> Result<PlayerSnapshot, MediaPlayerError> {
     state
@@ -548,10 +553,9 @@ impl PlayerCore {
     /// Applies one effect on the existing decoder worker, including blocking preparation.
     fn apply_session_effect(
         &mut self,
-        effect: crate::music::session::SessionEffect,
+        effect: SessionEffect,
         authority: &DeliveryAuthority,
     ) -> Result<PlayerSnapshot, MediaPlayerError> {
-        use crate::music::session::SessionEffect;
         match effect {
             SessionEffect::Load {
                 source,
@@ -609,9 +613,7 @@ impl PlayerCore {
 }
 
 /// Samples the decoder from the native session scheduler, independently of the WebView.
-pub(crate) fn session_snapshot(
-    state: &MediaPlayerState,
-) -> Result<PlayerSnapshot, MediaPlayerError> {
+pub fn session_snapshot(state: &MediaPlayerState) -> Result<PlayerSnapshot, MediaPlayerError> {
     state.controller.dispatch(BackendCommand::Snapshot)
 }
 
@@ -629,7 +631,7 @@ fn validate_load_request(request: &LoadRequest) -> Result<(), MediaPlayerError> 
     Ok(())
 }
 
-pub(super) fn probe_local_file(path: &str) -> Result<MediaProbe, MediaPlayerError> {
+pub fn probe_local_file(path: &str) -> Result<MediaProbe, MediaPlayerError> {
     let path = PathBuf::from(path);
     validate_local_file_path(&path)?;
     let metadata = std::fs::metadata(&path).map_err(|e| {
@@ -1261,7 +1263,6 @@ mod tests {
 
     #[test]
     fn committed_settings_apply_together_without_starting_a_paused_decoder() {
-        use crate::music::session::SessionEffect;
         let mut core = loaded_core();
         let result = core
             .handle(BackendCommand::Session(Box::new(SessionEffect::Settings {
@@ -1277,8 +1278,8 @@ mod tests {
         assert_eq!(result.rate, 0.75);
     }
 
-    fn native_load_effect(path: &Path) -> crate::music::session::SessionEffect {
-        use crate::music::session::{SessionBackend, SessionEffect, SessionSource, SourceKind};
+    fn native_load_effect(path: &Path) -> SessionEffect {
+        use ganbaru_music_library::session::models::{SessionBackend, SessionSource, SourceKind};
         SessionEffect::Load {
             session_id: "session".into(),
             generation: 1,
