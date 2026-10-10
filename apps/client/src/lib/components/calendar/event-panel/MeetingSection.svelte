@@ -19,7 +19,7 @@
   import Eye from "@lucide/svelte/icons/eye";
   import { formatList } from "$lib/i18n/formatters";
   import { getLocalization } from "$lib/i18n/translator.svelte";
-  import ParticipantPicker from "$lib/components/people/ParticipantPicker.svelte";
+  import ParticipantPicker from "$lib/components/contacts/ParticipantPicker.svelte";
 
   let {
     enabled,
@@ -468,7 +468,7 @@
   <ParticipantPicker
     anchor={attendeePickerButton}
     title={t("calendar.meeting.pickAttendees")}
-    includePeople
+    includeContacts
     includeTeammates={false}
     space={attendeePickerSpace}
     onClose={() => { attendeePickerOpen = false; }}

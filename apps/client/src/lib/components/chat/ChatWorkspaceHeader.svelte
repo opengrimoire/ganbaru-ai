@@ -19,7 +19,7 @@
   import { getViewport } from "$lib/stores/viewport.svelte";
   import { cn } from "$lib/utils";
   import ChatParticipantAvatar from "$lib/components/chat/identity/ChatParticipantAvatar.svelte";
-  import LocalPersonAvatar from "$lib/components/people/LocalPersonAvatar.svelte";
+  import LocalPersonAvatar from "$lib/components/contacts/LocalPersonAvatar.svelte";
   import ProjectIcon from "$lib/components/projects/ProjectIcon.svelte";
   import ProjectPickerMobileDialog from "$lib/components/projects/pickers/ProjectPickerMobileDialog.svelte";
   import WorkspaceBreadcrumbTerminalIcon from "$lib/components/ui/WorkspaceBreadcrumbTerminalIcon.svelte";

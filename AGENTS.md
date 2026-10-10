@@ -49,13 +49,13 @@ apps/
         calendar/: shared Calendar logic, types, recurrence rules, navigation helpers, and iCalendar parser/serializer
         chat/: Chat contracts, runtime validation of untrusted responses, and interaction models and controllers
         color/: color math and display helpers
+        contacts/: contact trust mapping and presentation helpers
         diagnostics/: memory sampling and report helpers for the performance popover
         distractions/: shared browser and desktop blocking rules
         i18n/: typed localization catalogs, locale resolution, and formatters
         music/: frontend music source and playback helpers
         notes/: Notes contracts, validation, editor operations, databases, and tree helpers
         pomodoro/: Focus command contracts, native projections, and presentation helpers
-        people/: contact trust mapping and presentation helpers
         profile/, projects/, quick-notes/: domain logic for those features
         scheduling/: lifecycle and notification schedulers
         settings/: Settings section identifiers shared by launchers and the Settings modal

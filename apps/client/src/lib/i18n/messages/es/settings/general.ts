@@ -6,7 +6,7 @@ export const general = {
   close: "Cerrar ajustes",
   section: {
     profile: "Perfil",
-    people: "Contactos",
+    contacts: "Contactos",
     appearance: "Apariencia",
     calendars: "Calendario",
     projects: "Proyectos",

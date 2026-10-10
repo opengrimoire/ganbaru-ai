@@ -2,11 +2,11 @@
   import Link2 from "@lucide/svelte/icons/link-2";
   import UserRoundPlus from "@lucide/svelte/icons/user-round-plus";
   import X from "@lucide/svelte/icons/x";
-  import { floatPanel } from "$lib/components/people/float-panel";
-  import LocalPersonAvatar from "$lib/components/people/LocalPersonAvatar.svelte";
-  import ParticipantPicker from "$lib/components/people/ParticipantPicker.svelte";
-  import PeopleMemberRow from "$lib/components/people/PeopleMemberRow.svelte";
-  import PeopleRoleChip from "$lib/components/people/PeopleRoleChip.svelte";
+  import { floatPanel } from "$lib/components/contacts/float-panel";
+  import LocalPersonAvatar from "$lib/components/contacts/LocalPersonAvatar.svelte";
+  import ParticipantPicker from "$lib/components/contacts/ParticipantPicker.svelte";
+  import MemberRow from "$lib/components/contacts/MemberRow.svelte";
+  import MemberRoleChip from "$lib/components/contacts/MemberRoleChip.svelte";
   import ProjectPickerMobileDialog from "$lib/components/projects/pickers/ProjectPickerMobileDialog.svelte";
   import { FLOATING_WIDTH } from "$lib/components/ui/floating-width";
   import Select from "$lib/components/ui/Select.svelte";
@@ -42,8 +42,8 @@
   let pickerOpen = $state(false);
   let scope = $state<ShareScope>("page");
 
-  const localName = $derived(preferences.profileDisplayName.trim() || t("people.you"));
-  const localDetail = $derived(preferences.profileDisplayName.trim() ? t("people.you") : null);
+  const localName = $derived(preferences.profileDisplayName.trim() || t("contacts.you"));
+  const localDetail = $derived(preferences.profileDisplayName.trim() ? t("contacts.you") : null);
   const scopes: readonly { id: ShareScope; label: () => string }[] = [
     { id: "page", label: () => t("notes.shareScopePage") },
     { id: "subtree", label: () => t("notes.shareScopeSubtree") },
@@ -87,10 +87,10 @@
 
     <div class="menu-label -mx-2">{t("notes.peopleWithAccess")}</div>
     <ul class="-mx-2 grid">
-      <PeopleMemberRow name={localName} detail={localDetail}>
+      <MemberRow name={localName} detail={localDetail}>
         {#snippet avatar()}<LocalPersonAvatar size={AVATAR_SIZE} />{/snippet}
-        {#snippet trailing()}<PeopleRoleChip label={t("notes.shareRoleOwner")} />{/snippet}
-      </PeopleMemberRow>
+        {#snippet trailing()}<MemberRoleChip label={t("notes.shareRoleOwner")} />{/snippet}
+      </MemberRow>
     </ul>
     <button bind:this={addButton} type="button" class="menu-item -mx-2" aria-haspopup="dialog" aria-expanded={pickerOpen} onclick={() => { pickerOpen = true; }}>
       <UserRoundPlus class="text-muted-foreground" />
@@ -131,8 +131,8 @@
 {#if pickerOpen}
   <ParticipantPicker
     anchor={addButton}
-    title={t("people.picker.addPeople")}
-    includePeople
+    title={t("contacts.picker.addPeople")}
+    includeContacts
     includeTeammates={false}
     space={{ kind: "page", name: pageTitle }}
     onClose={() => { pickerOpen = false; }}

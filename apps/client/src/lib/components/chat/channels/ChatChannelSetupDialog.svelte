@@ -11,11 +11,11 @@
   import { applyChannelMemberChanges } from "$lib/chat/teammates/channel-member-changes";
   import { summarizeChannelMembers } from "$lib/chat/teammates/channel-members";
   import ChatParticipantAvatar from "$lib/components/chat/identity/ChatParticipantAvatar.svelte";
-  import LocalPersonAvatar from "$lib/components/people/LocalPersonAvatar.svelte";
-  import ParticipantPicker from "$lib/components/people/ParticipantPicker.svelte";
-  import PeopleMemberRow from "$lib/components/people/PeopleMemberRow.svelte";
-  import PeopleRoleChip from "$lib/components/people/PeopleRoleChip.svelte";
-  import PeopleRoleSelect from "$lib/components/people/PeopleRoleSelect.svelte";
+  import LocalPersonAvatar from "$lib/components/contacts/LocalPersonAvatar.svelte";
+  import ParticipantPicker from "$lib/components/contacts/ParticipantPicker.svelte";
+  import MemberRow from "$lib/components/contacts/MemberRow.svelte";
+  import MemberRoleChip from "$lib/components/contacts/MemberRoleChip.svelte";
+  import MemberRoleSelect from "$lib/components/contacts/MemberRoleSelect.svelte";
   import ConfirmDialog from "$lib/components/ui/ConfirmDialog.svelte";
   import Select from "$lib/components/ui/Select.svelte";
   import { getLocalization } from "$lib/i18n/translator.svelte";
@@ -69,8 +69,8 @@
   let removalBusy = $state(false);
 
   const memberTeammates = $derived(chat.teammates.filter((teammate) => selectedTeammateIds.has(teammate.participant.id)));
-  const localName = $derived(preferences.profileDisplayName.trim() || t("people.you"));
-  const localDetail = $derived(preferences.profileDisplayName.trim() ? t("people.you") : null);
+  const localName = $derived(preferences.profileDisplayName.trim() || t("contacts.you"));
+  const localDetail = $derived(preferences.profileDisplayName.trim() ? t("contacts.you") : null);
   const removalParticipant = $derived.by(() => {
     const pending = removal;
     if (!pending) return null;
@@ -222,24 +222,24 @@
         </div>
         <span class="member-group-label">{t("chat.organization.people")}</span>
         <ul class="member-list">
-          <PeopleMemberRow name={localName} detail={localDetail}>
+          <MemberRow name={localName} detail={localDetail}>
             {#snippet avatar()}<LocalPersonAvatar size={MEMBER_AVATAR_SIZE} />{/snippet}
-            {#snippet trailing()}<PeopleRoleChip label={t("people.role.owner")} />{/snippet}
-          </PeopleMemberRow>
+            {#snippet trailing()}<MemberRoleChip label={t("contacts.role.owner")} />{/snippet}
+          </MemberRow>
           {#each currentMembers.people as membership (membership.participant.id)}
-            <PeopleMemberRow name={membership.participant.displayName}>
+            <MemberRow name={membership.participant.displayName}>
               {#snippet avatar()}<ChatParticipantAvatar participant={membership.participant} size={MEMBER_AVATAR_SIZE} />{/snippet}
               {#snippet trailing()}
-                <PeopleRoleSelect ariaLabel={t("people.role.label")} />
+                <MemberRoleSelect ariaLabel={t("contacts.role.label")} />
                 <button type="button" class="dialog-icon-button control-unavailable" aria-label={t("chat.organization.removePerson", membership.participant.displayName)} aria-disabled="true"><X size={14} /></button>
               {/snippet}
-            </PeopleMemberRow>
+            </MemberRow>
           {/each}
         </ul>
         <span class="member-group-label">{t("chat.organization.teammates")}</span>
         <ul class="member-list">
           {#each memberTeammates as teammate (teammate.participant.id)}
-            <PeopleMemberRow name={teammate.participant.displayName} detail={teammate.configurationState === "healthy" ? teammate.role || t("chat.organization.aiTeammate") : t("chat.organization.needsSetup")}>
+            <MemberRow name={teammate.participant.displayName} detail={teammate.configurationState === "healthy" ? teammate.role || t("chat.organization.aiTeammate") : t("chat.organization.needsSetup")}>
               {#snippet avatar()}<ChatParticipantAvatar participant={teammate.participant} {teammate} size={MEMBER_AVATAR_SIZE} />{/snippet}
               {#snippet trailing()}
                 {#if currentTeammateIds.has(teammate.participant.id)}
@@ -247,7 +247,7 @@
                 {/if}
                 <button type="button" class="dialog-icon-button" aria-label={t("chat.organization.removeTeammate", teammate.participant.displayName)} disabled={removalBusy} onclick={() => void removeMember(teammate.participant.id)}><X size={14} /></button>
               {/snippet}
-            </PeopleMemberRow>
+            </MemberRow>
           {/each}
         </ul>
       </div>
@@ -266,7 +266,7 @@
 {#if pickerOpen}
   <ParticipantPicker
     anchor={addMembersButton}
-    title={t("people.picker.title")}
+    title={t("contacts.picker.title")}
     teammates={chat.teammates}
     memberTeammateIds={selectedTeammateIds}
     includeTeammates

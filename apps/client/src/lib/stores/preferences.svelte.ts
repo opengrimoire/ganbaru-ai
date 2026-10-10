@@ -26,7 +26,7 @@ import {
   DEFAULT_PROJECTS_SHOW_PROPERTY_ICONS,
   DEFAULT_TITLE_BAR_VISIBILITY,
   DEFAULT_CALENDAR_VIEW_MODE,
-  DEFAULT_PEOPLE_TRUST_DURATION,
+  DEFAULT_CONTACT_TRUST_DURATION,
   LANGUAGE_PREFERENCES,
   type CalendarTimeFormat,
   type CalendarViewMode,
@@ -35,7 +35,7 @@ import {
   type FocusBreakSoundIntervalSeconds,
   type FocusPauseNotificationIntervalMinutes,
   type LanguagePreference,
-  type PeopleTrustDuration,
+  type ContactTrustDuration,
   type TitleBarControlId,
   type TitleBarVisibility,
   clampFocusIdleThresholdMinutes,
@@ -43,7 +43,7 @@ import {
   getFontFamilyById,
   isCalendarTimeFormat,
   isCalendarViewMode,
-  isPeopleTrustDuration,
+  isContactTrustDuration,
   isProfileColor,
   randomProfileColor,
   isProfileImagePath,
@@ -111,8 +111,8 @@ const NOTES_NOTIFICATION_INCLUDE_CONTENT_CONFIG_KEY =
 const NOTES_SHOW_PROPERTY_ICONS_CONFIG_KEY = "preferences.notesShowPropertyIcons";
 const PROJECTS_SHOW_PROPERTY_ICONS_CONFIG_KEY = "preferences.projectsShowPropertyIcons";
 const TITLE_BAR_VISIBILITY_CONFIG_KEY = "preferences.titleBarVisibility";
-const PEOPLE_INVITE_TRUST_DEFAULT_CONFIG_KEY = "people.trustDefaults.invite";
-const PEOPLE_MESSAGE_TRUST_DEFAULT_CONFIG_KEY = "people.trustDefaults.message";
+const CONTACTS_INVITE_TRUST_DEFAULT_CONFIG_KEY = "contacts.trustDefaults.invite";
+const CONTACTS_MESSAGE_TRUST_DEFAULT_CONFIG_KEY = "contacts.trustDefaults.message";
 
 export type EventTimezoneDisplay = "device" | "homeZone";
 const DEFAULT_EVENT_TIMEZONE_DISPLAY: EventTimezoneDisplay = "device";
@@ -259,9 +259,9 @@ function loadSavedNotesDefaultOpenMode(): NotesPageOpenMode {
   return DEFAULT_NOTES_PAGE_OPEN_MODE;
 }
 
-function loadSavedPeopleTrustDuration(key: string): PeopleTrustDuration {
+function loadSavedContactTrustDuration(key: string): ContactTrustDuration {
   const saved = getConfigKey<unknown>(key, undefined);
-  return isPeopleTrustDuration(saved) ? saved : DEFAULT_PEOPLE_TRUST_DURATION;
+  return isContactTrustDuration(saved) ? saved : DEFAULT_CONTACT_TRUST_DURATION;
 }
 
 function loadSavedTitleBarVisibility(): TitleBarVisibility {
@@ -337,11 +337,11 @@ let projectsShowPropertyIcons = $state<boolean>(
   loadSavedBooleanPreference(PROJECTS_SHOW_PROPERTY_ICONS_CONFIG_KEY, DEFAULT_PROJECTS_SHOW_PROPERTY_ICONS),
 );
 let titleBarVisibility = $state<TitleBarVisibility>(loadSavedTitleBarVisibility());
-let peopleInviteTrustDefault = $state<PeopleTrustDuration>(
-  loadSavedPeopleTrustDuration(PEOPLE_INVITE_TRUST_DEFAULT_CONFIG_KEY),
+let contactsInviteTrustDefault = $state<ContactTrustDuration>(
+  loadSavedContactTrustDuration(CONTACTS_INVITE_TRUST_DEFAULT_CONFIG_KEY),
 );
-let peopleMessageTrustDefault = $state<PeopleTrustDuration>(
-  loadSavedPeopleTrustDuration(PEOPLE_MESSAGE_TRUST_DEFAULT_CONFIG_KEY),
+let contactsMessageTrustDefault = $state<ContactTrustDuration>(
+  loadSavedContactTrustDuration(CONTACTS_MESSAGE_TRUST_DEFAULT_CONFIG_KEY),
 );
 const localization = getLocalization();
 
@@ -431,16 +431,16 @@ function setProfileColor(value: EventColor): boolean {
   return true;
 }
 
-function setPeopleInviteTrustDefault(value: PeopleTrustDuration): void {
-  if (!isPeopleTrustDuration(value)) return;
-  peopleInviteTrustDefault = value;
-  setConfigKey(PEOPLE_INVITE_TRUST_DEFAULT_CONFIG_KEY, value === DEFAULT_PEOPLE_TRUST_DURATION ? undefined : value);
+function setContactsInviteTrustDefault(value: ContactTrustDuration): void {
+  if (!isContactTrustDuration(value)) return;
+  contactsInviteTrustDefault = value;
+  setConfigKey(CONTACTS_INVITE_TRUST_DEFAULT_CONFIG_KEY, value === DEFAULT_CONTACT_TRUST_DURATION ? undefined : value);
 }
 
-function setPeopleMessageTrustDefault(value: PeopleTrustDuration): void {
-  if (!isPeopleTrustDuration(value)) return;
-  peopleMessageTrustDefault = value;
-  setConfigKey(PEOPLE_MESSAGE_TRUST_DEFAULT_CONFIG_KEY, value === DEFAULT_PEOPLE_TRUST_DURATION ? undefined : value);
+function setContactsMessageTrustDefault(value: ContactTrustDuration): void {
+  if (!isContactTrustDuration(value)) return;
+  contactsMessageTrustDefault = value;
+  setConfigKey(CONTACTS_MESSAGE_TRUST_DEFAULT_CONFIG_KEY, value === DEFAULT_CONTACT_TRUST_DURATION ? undefined : value);
 }
 
 function setCalendarTimeFormat(value: CalendarTimeFormat): void {
@@ -690,12 +690,12 @@ export function getPreferences() {
       return titleBarVisibility;
     },
     /** Trust scope every new contact starts with for inviting the local person. */
-    get peopleInviteTrustDefault(): PeopleTrustDuration {
-      return peopleInviteTrustDefault;
+    get contactsInviteTrustDefault(): ContactTrustDuration {
+      return contactsInviteTrustDefault;
     },
     /** Trust scope every new contact starts with for messaging the local person directly. */
-    get peopleMessageTrustDefault(): PeopleTrustDuration {
-      return peopleMessageTrustDefault;
+    get contactsMessageTrustDefault(): ContactTrustDuration {
+      return contactsMessageTrustDefault;
     },
     setFontFamily,
     setFontScale,
@@ -728,8 +728,8 @@ export function getPreferences() {
     setProjectsShowPropertyIcons,
     setTitleBarControlVisible,
     toggleTitleBarControl,
-    setPeopleInviteTrustDefault,
-    setPeopleMessageTrustDefault,
+    setContactsInviteTrustDefault,
+    setContactsMessageTrustDefault,
     resetFontFamily() {
       setFontFamily(DEFAULT_FONT_FAMILY_ID);
     },
