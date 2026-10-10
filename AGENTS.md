@@ -82,7 +82,7 @@ apps/
         src/distractions.rs, distractions/: browser, desktop, Android, and linked-device blocking and usage accounting
         src/music.rs, music/: local playback, native Music session, media controls, YouTube host, and soundscapes
         src/notifications.rs, notifications/: desktop native notifications and Android notification capabilities
-        src/civil_time.rs, sound_effects.rs, system_command.rs: shared civil-time math, app sound effects, and bounded fixed-command execution
+        src/sound_effects.rs, system_command.rs: app sound effects and bounded fixed-command execution
         src/people.rs, people/: person identity storage, contact card assembly, contact and request persistence, and LAN request delivery
         src/sync.rs, sync/: sync service lifecycle, guarded replica access, writer keys and record, carry-forward, LAN hub and client exchange, and sync commands
         src/quick_notes.rs: Quick notes command adapters
@@ -97,6 +97,7 @@ apps/
 crates/
   ganbaru-db/: Tauri-free SQLite pool registry, connection configuration, migrations, and schema tests
     migrations/: embedded SQLx SQLite migrations
+  ganbaru-civil-time/: Tauri-free conversion between instants and zoned wall times, with explicit gap and fold rules
   ganbaru-pomodoro/: Tauri-free Focus persistence, validation, recovery, activity admission, transactional execution, and adaptive policy
   ganbaru-quick-notes/: Tauri-free Quick notes persistence, search, lifecycle and trash retention, ordering, tags, and conflict resolution
   ganbaru-notes/: Notes domain, persistence, transfers, history, assets, and bounded filesystem operations
@@ -189,7 +190,7 @@ Read `docs/testing/README.md` when changing tests, validation scripts, task orde
 - `pnpm -w run editor-check`: editor diagnostics, including Tailwind canonical class checks.
 - `pnpm -w run test`: serialized Rust tests followed by sequential one-worker Vitest shards.
 - `pnpm --dir apps/client exec vitest run path/to/file.test.ts --maxWorkers=1`: focused frontend test file.
-- `cargo test -p ganbaru-chat --lib -j 1 test_name -- --test-threads=1`: focused core crate test (substitute `ganbaru-notes`, `ganbaru-db`, `ganbaru-chat-contracts`, `ganbaru-chat-providers`, `ganbaru-pomodoro`, `ganbaru-quick-notes`, `ganbaru-working-folders`, `ganbaru-people`, `ganbaru-sync-contracts`, or `ganbaru-sync`).
+- `cargo test -p ganbaru-chat --lib -j 1 test_name -- --test-threads=1`: focused core crate test (substitute `ganbaru-notes`, `ganbaru-db`, `ganbaru-civil-time`, `ganbaru-chat-contracts`, `ganbaru-chat-providers`, `ganbaru-pomodoro`, `ganbaru-quick-notes`, `ganbaru-working-folders`, `ganbaru-people`, `ganbaru-sync-contracts`, or `ganbaru-sync`).
 - `cargo test -p ganbaru-tauri-app --lib -j 1 test_name -- --test-threads=1`: focused Tauri composition or command-adapter test.
 - `cargo test -p ganbaru-native-messaging --bin ganbaru-ai-native-messaging -j 1 test_name -- --test-threads=1`: focused native messaging host test.
 - `cargo check -p ganbaru-ai --bin ganbaru-ai -j 1`: focused desktop composition check.

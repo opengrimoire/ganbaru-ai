@@ -39,7 +39,7 @@ fn scheduling_commits_selected_duration_links_dates_history_and_focus_configurat
         let window = Window::new(
             "2099-05-10",
             "2099-05-10",
-            &crate::civil_time::zone("UTC").unwrap(),
+            &ganbaru_civil_time::zone("UTC").unwrap(),
         )
         .unwrap();
         let preview =
@@ -252,7 +252,7 @@ fn scheduling_reviews_project_defaults_and_uses_elapsed_dst_intervals() {
             let window = Window::new(
                 date,
                 date,
-                &crate::civil_time::zone("America/New_York").unwrap(),
+                &ganbaru_civil_time::zone("America/New_York").unwrap(),
             )
             .unwrap();
             let preview =
@@ -284,7 +284,7 @@ fn scheduling_reviews_project_defaults_and_uses_elapsed_dst_intervals() {
         let window = Window::new(
             "2099-05-10",
             "2099-05-10",
-            &crate::civil_time::zone("UTC").unwrap(),
+            &ganbaru_civil_time::zone("UTC").unwrap(),
         )
         .unwrap();
         let before: Value =
@@ -337,7 +337,7 @@ fn scheduling_snapshots_soundtrack_and_custom_idle_and_rejects_changed_review() 
         let window = Window::new(
             "2099-05-10",
             "2099-05-10",
-            &crate::civil_time::zone("UTC").unwrap(),
+            &ganbaru_civil_time::zone("UTC").unwrap(),
         )
         .unwrap();
         let preview = serde_json::to_value(

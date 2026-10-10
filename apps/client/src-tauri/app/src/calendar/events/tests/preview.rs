@@ -16,7 +16,7 @@ fn window() -> Window {
     Window::new(
         "2099-05-08",
         "2099-05-20",
-        &crate::civil_time::zone("UTC").unwrap(),
+        &ganbaru_civil_time::zone("UTC").unwrap(),
     )
     .unwrap()
 }
@@ -270,7 +270,7 @@ fn preview_outside_window_has_no_invisible_contour_or_panel_identity() {
         let window = Window::new(
             "2099-06-01",
             "2099-06-07",
-            &crate::civil_time::zone("UTC").unwrap(),
+            &ganbaru_civil_time::zone("UTC").unwrap(),
         )
         .unwrap();
         let preview =

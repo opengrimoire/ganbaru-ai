@@ -3,7 +3,7 @@
 use super::*;
 use crate::calendar::reads::native_window::{self, NativeCalendarWindow, WindowPurpose};
 use crate::calendar::recurrence::canonical::Window;
-use crate::civil_time;
+use ganbaru_civil_time as civil_time;
 use std::time::Instant;
 
 const CALENDAR_REFRESH_INTERVAL: Duration = Duration::from_secs(5);

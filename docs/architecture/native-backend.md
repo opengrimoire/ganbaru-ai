@@ -13,6 +13,7 @@ The application library has separate desktop and mobile composition roots (`runt
 The Cargo workspace extracts domains that benefit from Tauri-free contracts and tests:
 
 - `ganbaru-db` owns the SQLite pool registry, connection configuration, embedded migrations, and schema tests.
+- `ganbaru-civil-time` converts between instants and zoned wall times for Calendar, Focus, Music, and the distraction blocker. Zones are always explicit, explicit times take the earlier fold and the pre-transition offset in a gap, and generated recurrence times skip nonexistent wall times.
 - `ganbaru-pomodoro` owns focus persistence, history, validation, recovery, local activity admission, transactional execution, and adaptive run and phase decisions.
 - `ganbaru-quick-notes` owns Quick notes persistence, search windows, revisioned writes, lifecycle and trash retention, ordering, tags, and resolution of replicated conflicts.
 - `ganbaru-notes` owns the Notes graph, persistence, transfers, history, assets, and bounded file operations.

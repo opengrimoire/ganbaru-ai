@@ -7,7 +7,7 @@ use jiff::tz::TimeZone;
 
 use super::engine::{ExpansionBudget, Seed, generate};
 use super::rule;
-use crate::civil_time;
+use ganbaru_civil_time as civil_time;
 
 mod scope;
 pub(crate) use scope::{EditScope, ScopeClock, ScopeEvidence, ScopePlan};

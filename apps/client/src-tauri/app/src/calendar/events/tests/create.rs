@@ -33,7 +33,7 @@ fn creation_preview_matches_committed_native_family_with_children_and_overlap() 
         let window = Window::new(
             "2099-05-10",
             "2099-05-12",
-            &crate::civil_time::zone("UTC").unwrap(),
+            &ganbaru_civil_time::zone("UTC").unwrap(),
         )
         .unwrap();
         let now = 4_081_968_000_000;
@@ -43,7 +43,7 @@ fn creation_preview_matches_committed_native_family_with_children_and_overlap() 
         let following_window = Window::new(
             "2099-05-11",
             "2099-05-12",
-            &crate::civil_time::zone("UTC").unwrap(),
+            &ganbaru_civil_time::zone("UTC").unwrap(),
         )
         .unwrap();
         let following = serde_json::to_value(
@@ -309,7 +309,7 @@ fn creation_preserves_authored_gap_explicit_fold_and_floating_dates() {
         let window = Window::new(
             "2026-01-01",
             "2026-12-31",
-            &crate::civil_time::zone("UTC").unwrap(),
+            &ganbaru_civil_time::zone("UTC").unwrap(),
         )
         .unwrap();
         let preview = serde_json::to_value(prepared.project("create-1", &window).unwrap()).unwrap();

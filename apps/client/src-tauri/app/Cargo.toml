@@ -20,6 +20,7 @@ chrono = { workspace = true }
 flate2 = { workspace = true }
 ganbaru-chat-contracts = { workspace = true }
 ganbaru-chat = { workspace = true }
+ganbaru-civil-time = { workspace = true }
 ganbaru-db = { workspace = true }
 ganbaru-notes = { workspace = true }
 ganbaru-people = { workspace = true }

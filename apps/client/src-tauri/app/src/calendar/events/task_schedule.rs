@@ -115,7 +115,7 @@ impl ScheduleRequest {
         self.check_limits()?;
         super::commit::validate_command_id(command_id)?;
         let reviewed_input = revision(&("project-scheduling-v1", command_id, self, &snapshot))?;
-        let zone = crate::civil_time::zone(&self.timezone)?;
+        let zone = ganbaru_civil_time::zone(&self.timezone)?;
         let all_day = match snapshot.defaults.time_mode.as_str() {
             "all_day" => true,
             "timed" => false,
@@ -152,7 +152,7 @@ impl ScheduleRequest {
             let date = if all_day {
                 civil.0.date().to_string()
             } else {
-                crate::civil_time::instant_to_local(start_ms, &zone)?
+                ganbaru_civil_time::instant_to_local(start_ms, &zone)?
                     .date()
                     .to_string()
             };

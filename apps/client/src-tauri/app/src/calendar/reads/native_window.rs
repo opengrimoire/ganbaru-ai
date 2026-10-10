@@ -12,7 +12,7 @@ use super::{DbCalendarEventRow, DbOverrideRow, DbWindowAttendeeRow};
 use crate::calendar::recurrence::canonical::{
     StoredOverride, StoredTemplate, Template, Window, expand_templates,
 };
-use crate::civil_time;
+use ganbaru_civil_time as civil_time;
 
 const MAX_TEMPLATES: usize = 10_000;
 const MAX_ID_BYTES: usize = 1_024;

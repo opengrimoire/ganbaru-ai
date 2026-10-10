@@ -423,7 +423,7 @@ pub(crate) fn device_date<R: Runtime>(
     _app: &AppHandle<R>,
     epoch_ms: i64,
 ) -> Result<NaiveDate, String> {
-    use crate::civil_time;
+    use ganbaru_civil_time as civil_time;
     Ok(civil_time::instant_to_local(epoch_ms, &civil_time::system_zone()?)?.date())
 }
 

@@ -15,7 +15,7 @@ use sqlx::SqliteConnection;
 use super::native_window::{self, NativeCalendarWindow};
 use super::{DbCalendarEventRow, DbOverrideRow};
 use crate::calendar::recurrence::canonical::Window;
-use crate::civil_time;
+use ganbaru_civil_time as civil_time;
 
 const MAX_PLANNED_BLOCKS: usize = 512;
 

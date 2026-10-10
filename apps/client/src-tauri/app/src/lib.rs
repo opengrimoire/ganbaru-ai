@@ -8,7 +8,6 @@ extern crate ganbaru_db;
 mod benchmark;
 mod calendar;
 mod chat;
-mod civil_time;
 mod db;
 mod distractions;
 #[cfg(all(test, desktop))]

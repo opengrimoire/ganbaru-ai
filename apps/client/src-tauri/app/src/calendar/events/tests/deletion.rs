@@ -484,7 +484,7 @@ fn complete_archive_fanout_is_rejected_before_copying_or_writing_any_rows() {
         let window = crate::calendar::recurrence::canonical::Window::new(
             "2099-05-09",
             "2099-05-15",
-            &crate::civil_time::zone("UTC").unwrap(),
+            &ganbaru_civil_time::zone("UTC").unwrap(),
         )
         .unwrap();
         let preview = crate::calendar::events::preview::project_delete(

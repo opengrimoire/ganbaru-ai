@@ -528,7 +528,7 @@ impl Metadata {
         date: &str,
     ) -> Result<(), String> {
         let event = &mut self.events[0];
-        let zone = crate::civil_time::zone(&event.timezone)?;
+        let zone = ganbaru_civil_time::zone(&event.timezone)?;
         let mut selected = None;
         for row in &self.overrides {
             let key = crate::calendar::recurrence::canonical::override_date(

@@ -477,16 +477,16 @@ mod tests {
             .unwrap()
             .and_hms_opt(2, 30, 0)
             .unwrap();
-        let zone = crate::civil_time::zone("America/New_York").unwrap();
+        let zone = ganbaru_civil_time::zone("America/New_York").unwrap();
         let rule = super::super::rule::parse("FREQ=DAILY;COUNT=3").unwrap();
         let seeds = generate(
             &rule,
             anchor,
-            crate::civil_time::explicit_instant(anchor, &zone).unwrap(),
+            ganbaru_civil_time::explicit_instant(anchor, &zone).unwrap(),
             anchor.date(),
             NaiveDate::from_ymd_opt(2024, 3, 20).unwrap(),
             &mut ExpansionBudget::default(),
-            |value| crate::civil_time::generated_instant(value, &zone),
+            |value| ganbaru_civil_time::generated_instant(value, &zone),
         )
         .unwrap();
         assert_eq!(

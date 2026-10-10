@@ -1,16 +1,13 @@
-//! Native civil-time conversion shared by Calendar expansion and Focus decisions.
+//! Civil-time conversion shared by Calendar expansion, Focus decisions, Music context, and
+//! distraction accounting. Zones are explicit; nothing silently falls back to the device zone.
 
 use chrono::{Datelike, NaiveDate, NaiveDateTime, Timelike};
-#[cfg(any(not(target_os = "android"), test))]
-use ganbaru_pomodoro::adaptive::models::{LocalTimeFact, LocalTimeFacts};
 use jiff::{Timestamp, civil::DateTime, tz::TimeZone};
 
-#[cfg(any(not(target_os = "android"), test))]
-const MAX_LOCAL_TIME_FACTS: usize = 4_096;
 const MAX_ZONE_NAME_BYTES: usize = 255;
 
 /// Resolve an explicit home zone without silently substituting the device zone.
-pub(crate) fn zone(name: &str) -> Result<TimeZone, String> {
+pub fn zone(name: &str) -> Result<TimeZone, String> {
     if name.is_empty() || name.len() > MAX_ZONE_NAME_BYTES {
         return Err("Calendar timezone name is empty or exceeds its size limit".into());
     }
@@ -18,7 +15,7 @@ pub(crate) fn zone(name: &str) -> Result<TimeZone, String> {
 }
 
 /// Capture the native device zone once for one decision; detection failure is explicit.
-pub(crate) fn system_zone() -> Result<TimeZone, String> {
+pub fn system_zone() -> Result<TimeZone, String> {
     TimeZone::try_system().map_err(|error| format!("cannot resolve device timezone: {error}"))
 }
 
@@ -36,7 +33,7 @@ fn jiff_civil(value: NaiveDateTime) -> Result<DateTime, String> {
 }
 
 /// Project an instant into a captured zone, retaining millisecond precision.
-pub(crate) fn instant_to_local(epoch_ms: i64, zone: &TimeZone) -> Result<NaiveDateTime, String> {
+pub fn instant_to_local(epoch_ms: i64, zone: &TimeZone) -> Result<NaiveDateTime, String> {
     let instant = Timestamp::from_millisecond(epoch_ms)
         .map_err(|error| format!("Calendar instant is outside the supported range: {error}"))?;
     let value = zone.to_datetime(instant);
@@ -57,7 +54,7 @@ pub(crate) fn instant_to_local(epoch_ms: i64, zone: &TimeZone) -> Result<NaiveDa
 }
 
 /// Resolve an explicit civil DTSTART/RDATE: earlier fold, pre-transition offset in a gap.
-pub(crate) fn explicit_instant(value: NaiveDateTime, zone: &TimeZone) -> Result<i64, String> {
+pub fn explicit_instant(value: NaiveDateTime, zone: &TimeZone) -> Result<i64, String> {
     zone.to_ambiguous_zoned(jiff_civil(value)?)
         .compatible()
         .map(|value| value.timestamp().as_millisecond())
@@ -65,10 +62,7 @@ pub(crate) fn explicit_instant(value: NaiveDateTime, zone: &TimeZone) -> Result<
 }
 
 /// Resolve an RRULE candidate, skipping nonexistent wall times before COUNT is applied.
-pub(crate) fn generated_instant(
-    value: NaiveDateTime,
-    zone: &TimeZone,
-) -> Result<Option<i64>, String> {
+pub fn generated_instant(value: NaiveDateTime, zone: &TimeZone) -> Result<Option<i64>, String> {
     let local = jiff_civil(value)?;
     let resolved = zone
         .to_ambiguous_zoned(local)
@@ -80,33 +74,6 @@ pub(crate) fn generated_instant(
         return Ok(None);
     }
     Ok(Some(resolved.timestamp().as_millisecond()))
-}
-
-/// Map each instant to its local date key, hour, and an English date string in
-/// JavaScript `Date.toDateString` format, used as a seed.
-#[cfg(any(not(target_os = "android"), test))]
-pub(crate) fn local_time_facts(
-    instants: &[i64],
-    zone: &TimeZone,
-) -> Result<LocalTimeFacts, String> {
-    if instants.len() > MAX_LOCAL_TIME_FACTS {
-        return Err("Focus local-time query exceeds 4096 instants".into());
-    }
-    instants
-        .iter()
-        .map(|&epoch_ms| {
-            let local = instant_to_local(epoch_ms, zone)?;
-            Ok((
-                epoch_ms,
-                LocalTimeFact {
-                    epoch_ms,
-                    date_key: local.format("%Y-%m-%d").to_string(),
-                    date_string: local.format("%a %b %d %Y").to_string(),
-                    hour: local.hour() as u8,
-                },
-            ))
-        })
-        .collect()
 }
 
 #[cfg(test)]
@@ -164,20 +131,6 @@ mod tests {
             civil("2024-10-06 02:45:00")
         );
         assert_eq!(generated_instant(missing, &lord_howe).unwrap(), None);
-    }
-
-    #[test]
-    fn adaptive_seed_facts_use_the_selected_local_day_and_english_spelling() {
-        let timestamp = instant("2024-03-10T04:30:00Z");
-        let facts =
-            local_time_facts(&[timestamp, timestamp], &zone("America/New_York").unwrap()).unwrap();
-        assert_eq!(facts.len(), 1);
-        assert_eq!(facts[&timestamp].date_key, "2024-03-09");
-        assert_eq!(facts[&timestamp].date_string, "Sat Mar 09 2024");
-        assert_eq!(facts[&timestamp].hour, 23);
-        assert!(
-            local_time_facts(&vec![timestamp; MAX_LOCAL_TIME_FACTS + 1], &TimeZone::UTC).is_err()
-        );
     }
 
     #[test]
