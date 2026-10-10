@@ -165,7 +165,8 @@ pub async fn calendar_remove_calendar<R: Runtime>(
     if id == BUILTIN_LOCAL_CALENDAR_ID {
         return Err("The built-in local calendar cannot be removed".into());
     }
-    let pool = connect_sqlite(app.clone(), db_url).await?;
+    let device = crate::calendar::device_date::source(&app);
+    let pool = connect_sqlite(app, db_url).await?;
     let epoch_ms = jiff::Timestamp::now().as_millisecond();
     let permit = crate::calendar::events::scope::SCOPE_GATE
         .clone()
@@ -173,7 +174,7 @@ pub async fn calendar_remove_calendar<R: Runtime>(
         .map_err(|_| "A Calendar operation is being reviewed; retry after it finishes")?;
     let worker = tauri::async_runtime::spawn_blocking(move || {
         let _permit = permit;
-        crate::calendar::events::scope::device_date(&app, epoch_ms)
+        device.local_date(epoch_ms)
     });
     let today = tokio::time::timeout(crate::calendar::events::scope::SCOPE_WORKER_TIMEOUT, worker)
         .await

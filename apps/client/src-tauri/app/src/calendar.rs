@@ -2,6 +2,7 @@
 
 pub(crate) mod calendars;
 pub(crate) mod description;
+pub(crate) mod device_date;
 pub(crate) mod events;
 pub(crate) mod import;
 pub(crate) mod reads;

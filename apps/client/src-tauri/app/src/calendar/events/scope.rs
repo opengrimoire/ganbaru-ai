@@ -5,19 +5,26 @@ use std::time::Duration;
 
 use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
-use sqlx::SqliteConnection;
-use tauri::{AppHandle, Runtime};
+use sqlx::{SqliteConnection, SqlitePool};
 
 #[cfg(test)]
 use crate::calendar::recurrence::canonical::ScopePlan;
 use crate::calendar::recurrence::canonical::{EditScope, ScopeClock, ScopeEvidence, parse_date};
-use crate::db::connect_sqlite;
 
 use super::occurrence::{Geometry, ReadBudget, read_geometry};
 
 pub(crate) static SCOPE_GATE: LazyLock<Arc<tokio::sync::Semaphore>> =
     LazyLock::new(|| Arc::new(tokio::sync::Semaphore::new(1)));
 pub(crate) const SCOPE_WORKER_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// The device-local date at an instant, which decides floating all-day protection.
+///
+/// Implementations may block on a platform query, so callers invoke them from a blocking
+/// worker held behind [`SCOPE_GATE`].
+pub(crate) trait DeviceDate: Send + Sync {
+    /// Returns the device's local calendar date at `epoch_ms`.
+    fn local_date(&self, epoch_ms: i64) -> Result<NaiveDate, String>;
+}
 
 /// The selected original identity and requested scope. Clients do not provide
 /// history, active run identity, a clock, or precomputed protection boundaries.
@@ -352,15 +359,14 @@ pub(super) async fn read_snapshot(
 
 /// Release SQLite and the Focus owner before doing preview CPU work. A clock
 /// floor captured from that owner prevents previews moving backwards in time.
-pub(super) async fn prepare_request_with_clock<R, T, F>(
-    app: AppHandle<R>,
-    db_url: String,
+pub(super) async fn prepare_request_with_clock<T, F>(
+    pool: &SqlitePool,
+    device: Arc<dyn DeviceDate>,
     request: ScopeRequest,
     clock_floor_ms: i64,
     prepare: F,
 ) -> Result<T, String>
 where
-    R: Runtime,
     T: Send + 'static,
     F: FnOnce(ScopeSnapshot, NaiveDate, EditScope, ScopeClock) -> Result<T, String>
         + Send
@@ -374,7 +380,6 @@ where
         .clone()
         .try_acquire_owned()
         .map_err(|_| "A Calendar scope is being prepared; retry after it finishes")?;
-    let pool = connect_sqlite(app.clone(), db_url).await?;
     let mut tx = pool
         .begin()
         .await
@@ -397,7 +402,7 @@ where
         // Keep admission closed until CPU work ends, even after waiter cancellation.
         let _permit = permit;
         let floating_today = if snapshot.geometry.source.all_day != 0 {
-            Some(device_date(&app, now_ms)?)
+            Some(device.local_date(now_ms)?)
         } else {
             None
         };
@@ -416,31 +421,4 @@ where
     tokio::time::timeout(SCOPE_WORKER_TIMEOUT, worker)
     .await.map_err(|_| "Calendar scope worker timed out; wait for its native query to finish before retrying")?
     .map_err(|error| format!("Calendar scope planning worker: {error}"))?
-}
-
-#[cfg(not(target_os = "android"))]
-pub(crate) fn device_date<R: Runtime>(
-    _app: &AppHandle<R>,
-    epoch_ms: i64,
-) -> Result<NaiveDate, String> {
-    use ganbaru_civil_time as civil_time;
-    Ok(civil_time::instant_to_local(epoch_ms, &civil_time::system_zone()?)?.date())
-}
-
-#[cfg(target_os = "android")]
-pub(crate) fn device_date<R: Runtime>(
-    app: &AppHandle<R>,
-    epoch_ms: i64,
-) -> Result<NaiveDate, String> {
-    use ganbaru_mobile_notifications::MobileNotificationsExt;
-    let facts = app
-        .mobile_notifications()
-        .device_local_time_facts(&[epoch_ms])?;
-    let [fact] = facts.as_slice() else {
-        return Err("Android returned incomplete Calendar device-date facts".into());
-    };
-    if fact.epoch_ms != epoch_ms {
-        return Err("Android returned mismatched Calendar device-date facts".into());
-    }
-    parse_date(&fact.date_key)
 }

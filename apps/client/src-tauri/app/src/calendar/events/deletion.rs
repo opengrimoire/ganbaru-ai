@@ -1,12 +1,14 @@
 //! Native deletion review over complete metadata and execution evidence.
 
+use std::sync::Arc;
+
 use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
 
 use crate::calendar::recurrence::canonical::{DeletePlan, EditScope, ScopeClock};
 
 use super::metadata::revision;
-use super::scope::{ScopeRequest, ScopeSnapshot};
+use super::scope::{DeviceDate, ScopeRequest, ScopeSnapshot};
 
 mod undo;
 mod write;
@@ -48,7 +50,7 @@ impl DeleteRequest {
 
     pub(super) async fn prepare_commit(
         &self,
-        app: tauri::AppHandle,
+        device: Arc<dyn DeviceDate>,
         tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
         command_id: String,
         review_revision: String,
@@ -69,7 +71,7 @@ impl DeleteRequest {
             let clock = ScopeClock {
                 epoch_ms: now_ms,
                 floating_today: if snapshot.geometry.source.all_day != 0 {
-                    Some(super::scope::device_date(&app, now_ms)?)
+                    Some(device.local_date(now_ms)?)
                 } else {
                     None
                 },

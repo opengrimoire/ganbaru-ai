@@ -3,7 +3,7 @@
 use super::create::CalendarIntent;
 use super::edit::{EditAction, PreparedEdit, prepare_action};
 use super::metadata::{PreparedMutation, revision};
-use super::scope::{SCOPE_GATE, SCOPE_WORKER_TIMEOUT, device_date, read_snapshot};
+use super::scope::{DeviceDate, SCOPE_GATE, SCOPE_WORKER_TIMEOUT, read_snapshot};
 use crate::calendar::recurrence::canonical::{
     ActiveTarget, EditKind, EditScope, ScopeClock, parse_date,
 };
@@ -12,6 +12,7 @@ use ganbaru_pomodoro::{
 };
 use serde::{Deserialize, Serialize};
 use sqlx::{Sqlite, Transaction};
+use std::sync::Arc;
 
 pub(crate) const MAX_RECEIPT_BYTES: usize = 16 * 1024 * 1024;
 
@@ -121,7 +122,11 @@ pub(crate) struct CommitClockFence {
 impl CommitClockFence {
     /// Guard the review against a start boundary or device-date rollover while
     /// worker and SQL work were in flight. A timed source needs no platform call.
-    pub(crate) async fn verify(self, app: tauri::AppHandle, now_ms: i64) -> Result<(), String> {
+    pub(crate) async fn verify(
+        self,
+        device: Arc<dyn DeviceDate>,
+        now_ms: i64,
+    ) -> Result<(), String> {
         if self
             .valid_until_ms
             .is_some_and(|deadline| now_ms >= deadline)
@@ -135,7 +140,7 @@ impl CommitClockFence {
                 .map_err(|_| "Calendar device-date verification is busy; retry Save")?;
             let worker = tauri::async_runtime::spawn_blocking(move || -> Result<(), String> {
                 let _permit = permit;
-                if device_date(&app, now_ms)? != expected {
+                if device.local_date(now_ms)? != expected {
                     return Err("Calendar device date changed during saving; review again".into());
                 }
                 Ok(())
@@ -297,7 +302,7 @@ impl CommitRequest {
 
     pub(crate) async fn prepare(
         &self,
-        app: tauri::AppHandle,
+        device: Arc<dyn DeviceDate>,
         tx: &mut Transaction<'_, Sqlite>,
         now_ms: i64,
     ) -> Result<PreparedCommit, String> {
@@ -325,7 +330,7 @@ impl CommitRequest {
             CalendarIntent::Delete(delete) => {
                 return delete
                     .prepare_commit(
-                        app,
+                        device,
                         tx,
                         self.command_id.clone(),
                         self.review_revision.clone(),
@@ -354,7 +359,7 @@ impl CommitRequest {
         let worker = tauri::async_runtime::spawn_blocking(move || {
             let _permit = permit;
             let floating_today = if snapshot.geometry.source.all_day != 0 {
-                Some(device_date(&app, now_ms)?)
+                Some(device.local_date(now_ms)?)
             } else {
                 None
             };

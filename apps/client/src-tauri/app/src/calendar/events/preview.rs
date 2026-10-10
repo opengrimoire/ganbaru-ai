@@ -242,9 +242,10 @@ pub(crate) async fn calendar_preview_edit(
         CalendarIntent::Delete(delete) => {
             let expected_vault = vault_id.clone();
             let verify_app = app.clone();
+            let pool = crate::db::connect_sqlite(app.clone(), db_url).await?;
             let preview = super::scope::prepare_request_with_clock(
-                app.clone(),
-                db_url,
+                &pool,
+                crate::calendar::device_date::source(&app),
                 delete.selection(),
                 clock_floor_ms,
                 move |snapshot, selected, scope, clock| {
@@ -384,9 +385,10 @@ pub(crate) async fn calendar_preview_edit(
     };
     let expected_vault = vault_id.clone();
     let verify_app = app.clone();
+    let pool = crate::db::connect_sqlite(app.clone(), db_url).await?;
     let preview = super::scope::prepare_request_with_clock(
-        app.clone(),
-        db_url,
+        &pool,
+        crate::calendar::device_date::source(&app),
         edit.selection,
         clock_floor_ms,
         move |snapshot, selected, scope, clock| {

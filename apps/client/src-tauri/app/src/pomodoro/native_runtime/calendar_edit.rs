@@ -473,7 +473,13 @@ impl Owner {
                 .prepare(&request, &mut tx)
                 .await?
         } else {
-            request.prepare(self.app.clone(), &mut tx, now).await?
+            request
+                .prepare(
+                    crate::calendar::device_date::source(&self.app),
+                    &mut tx,
+                    now,
+                )
+                .await?
         };
         let clock_fence = prepared.clock_fence;
         let completion_window = prepared.completion_window;
@@ -489,7 +495,9 @@ impl Owner {
         } else {
             self.logical_now(now_ms().map_err(|error| error.message)?)
         };
-        clock_fence.verify(self.app.clone(), now).await?;
+        clock_fence
+            .verify(crate::calendar::device_date::source(&self.app), now)
+            .await?;
         let mut change = prepared.active_change(&before)?;
         let retarget_expiry = change
             .as_ref()
@@ -593,7 +601,12 @@ impl Owner {
                 "Focus expired during Calendar Save; refresh before changing its reference".into(),
             );
         }
-        clock_fence.verify(self.app.clone(), accepted_now).await?;
+        clock_fence
+            .verify(
+                crate::calendar::device_date::source(&self.app),
+                accepted_now,
+            )
+            .await?;
         self.verify_authority().map_err(|error| error.message)?;
         if self.freeze_requested() {
             return Err("Calendar vault began freezing before commit".into());
