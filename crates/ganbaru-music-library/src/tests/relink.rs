@@ -129,7 +129,7 @@ fn plan_request(folder: &TestDirectory, plan_id: &str) -> MusicRelinkPlanRequest
 
 #[test]
 fn relink_plan_classifies_and_applies_reorganized_partial_roots() {
-    tauri::async_runtime::block_on(async {
+    crate::test_support::block_on(async {
         let pool = pool().await;
         seed_root(&pool).await;
         let old = TestDirectory::new("old");
@@ -234,7 +234,7 @@ fn relink_plan_classifies_and_applies_reorganized_partial_roots() {
 
 #[test]
 fn ambiguous_relink_candidates_remain_visible_until_confirmed() {
-    tauri::async_runtime::block_on(async {
+    crate::test_support::block_on(async {
         let pool = pool().await;
         seed_root(&pool).await;
         let old = TestDirectory::new("ambiguous-old");
@@ -278,7 +278,7 @@ fn ambiguous_relink_candidates_remain_visible_until_confirmed() {
 
 #[test]
 fn cancelling_a_relink_plan_performs_no_location_writes() {
-    tauri::async_runtime::block_on(async {
+    crate::test_support::block_on(async {
         let pool = pool().await;
         seed_root(&pool).await;
         let old = TestDirectory::new("cancel-old");

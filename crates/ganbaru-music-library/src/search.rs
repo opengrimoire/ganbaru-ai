@@ -75,7 +75,7 @@ async fn replace_index_state(
     Ok(())
 }
 
-pub(crate) async fn rebuild(
+pub async fn rebuild(
     pool: &SqlitePool,
     rebuilt_at_ms: i64,
 ) -> MusicLibraryResult<MusicSearchRebuildResult> {

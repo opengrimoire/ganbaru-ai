@@ -681,7 +681,7 @@ mod tests {
     #[test]
     #[ignore = "benchmark fixture contract"]
     fn dense_fixture_is_complete_deterministic_and_repeatable() {
-        tauri::async_runtime::block_on(async {
+        crate::test_support::block_on(async {
             let pool = migrated_pool().await;
             let first = seed_dense_music_fixture(&pool).await.unwrap();
             let second = seed_dense_music_fixture(&pool).await.unwrap();

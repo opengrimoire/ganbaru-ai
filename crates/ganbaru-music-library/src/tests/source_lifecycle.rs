@@ -109,7 +109,7 @@ async fn seed(pool: &SqlitePool) {
 
 #[test]
 fn source_removal_preserves_referenced_items_and_prunes_only_reviewed_orphans() {
-    tauri::async_runtime::block_on(async {
+    crate::test_support::block_on(async {
         let pool = pool().await;
         seed(&pool).await;
         let nonce = SystemTime::now()
@@ -178,7 +178,7 @@ fn source_removal_preserves_referenced_items_and_prunes_only_reviewed_orphans() 
 
 #[test]
 fn source_removal_rejects_stale_impact_without_partial_changes() {
-    tauri::async_runtime::block_on(async {
+    crate::test_support::block_on(async {
         let pool = pool().await;
         seed(&pool).await;
         let impact = source_lifecycle::removal_impact(&pool, "source-1")
@@ -213,7 +213,7 @@ fn source_removal_rejects_stale_impact_without_partial_changes() {
 
 #[test]
 fn source_projection_updates_for_review_health_relink_and_removal() {
-    tauri::async_runtime::block_on(async {
+    crate::test_support::block_on(async {
         let pool = pool().await;
         seed(&pool).await;
         sqlx::query(

@@ -64,23 +64,21 @@ pub struct MusicTransferPreview {
     pub unresolved_local_count: usize,
 }
 
+/// Device-local folder bound to a Music library root, as seen by transfer.
 #[derive(Clone, Debug, Serialize)]
-pub(super) struct TransferBinding {
+pub struct TransferBinding {
     pub root_id: String,
     pub folder_path: String,
     pub available: bool,
     pub windows: bool,
 }
 
-/// Loads device-local bindings from native state; no frontend path is trusted.
-pub(super) fn bindings(app: &tauri::AppHandle) -> MusicLibraryResult<Vec<TransferBinding>> {
-    let vault_id = crate::vault::active_vault_id(app)
-        .map_err(|error| MusicLibraryError::runtime("resolve transfer vault", error))?;
-    let state = crate::vault::read_app_state(app)
-        .map_err(|error| MusicLibraryError::runtime("read music root bindings", error))?;
-    let roots = state.music_root_bindings.get(&vault_id);
+/// Builds transfer bindings from native device-local root bindings; no frontend path is trusted.
+pub fn bindings<'a>(
+    roots: impl IntoIterator<Item = (&'a String, &'a String)>,
+) -> MusicLibraryResult<Vec<TransferBinding>> {
     let mut bindings = Vec::new();
-    for (root_id, path) in roots.into_iter().flatten() {
+    for (root_id, path) in roots {
         if bindings.len() >= codec::MAX_PLAYLISTS {
             return Err(validation("Too many Music root bindings"));
         }
@@ -124,7 +122,7 @@ fn import_request(
 }
 
 /// Prepares a bounded preview without returning the source document or library rows over IPC.
-pub(super) async fn preview(
+pub async fn preview(
     pool: &SqlitePool,
     source: &MusicTransferSource,
     bindings: &[TransferBinding],
@@ -142,7 +140,7 @@ pub(super) async fn preview(
 }
 
 /// Commits only a matching preview and stores its receipt in the same transaction.
-pub(super) async fn commit(
+pub async fn commit(
     pool: &SqlitePool,
     request: MusicTransferCommit,
     bindings: &[TransferBinding],
@@ -194,7 +192,7 @@ pub(super) async fn commit(
 }
 
 /// Finishes the database snapshot before serialization and native output selection.
-pub(super) async fn export(
+pub async fn export(
     pool: &SqlitePool,
     request: &MusicTransferExport,
     bindings: &[TransferBinding],

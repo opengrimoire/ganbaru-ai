@@ -1,3 +1,5 @@
+//! Track artwork discovery from sidecar images and embedded ID3, FLAC, and MP4 cover art.
+
 use std::{
     collections::{HashMap, hash_map::DefaultHasher},
     fs::{self, File},
@@ -10,9 +12,12 @@ const MAX_EMBEDDED_ARTWORK_BYTES: usize = 24 * 1024 * 1024;
 const MAX_TAG_BYTES: usize = 64 * 1024 * 1024;
 const IMAGE_EXTENSIONS: &[&str] = &["avif", "bmp", "gif", "jpeg", "jpg", "png", "webp"];
 
-pub(super) struct EmbeddedArtwork {
-    pub(super) content_type: String,
-    pub(super) bytes: Vec<u8>,
+/// Validated cover art bytes extracted from a media file.
+pub struct EmbeddedArtwork {
+    /// Sniffed image media type.
+    pub content_type: String,
+    /// Raw image bytes within the embedded artwork size limit.
+    pub bytes: Vec<u8>,
 }
 
 type ArtworkScore = (u8, u8, u8, String);
@@ -28,7 +33,9 @@ fn is_supported_image_path(path: &Path) -> bool {
         })
 }
 
-pub(super) fn find_track_artwork(
+/// Finds the best sidecar image for a track in its folder, common artwork subfolders, or parent
+/// folders up to `root`.
+pub fn find_track_artwork(
     track_path: &Path,
     root: &Path,
     artwork_cache: &mut HashMap<PathBuf, Vec<PathBuf>>,
@@ -121,7 +128,7 @@ fn find_directory_artwork_candidates(dir: &Path) -> Vec<PathBuf> {
     candidates
 }
 
-pub(super) fn artwork_rank_for_track(path: &Path, track_stem: &str) -> (u8, String) {
+fn artwork_rank_for_track(path: &Path, track_stem: &str) -> (u8, String) {
     let stem = normalized_artwork_stem(path);
     let file_name = path
         .file_name()
@@ -158,7 +165,8 @@ fn normalized_artwork_stem(path: &Path) -> String {
         .replace([' ', '_', '-', '.'], "")
 }
 
-pub(super) fn embedded_artwork_id(path: &Path, artwork: &EmbeddedArtwork) -> String {
+/// Returns a stable identifier for embedded artwork from its path and bytes.
+pub fn embedded_artwork_id(path: &Path, artwork: &EmbeddedArtwork) -> String {
     let mut hasher = DefaultHasher::new();
     path.hash(&mut hasher);
     artwork.content_type.hash(&mut hasher);
@@ -167,7 +175,8 @@ pub(super) fn embedded_artwork_id(path: &Path, artwork: &EmbeddedArtwork) -> Str
     format!("artwork-{:x}", hasher.finish())
 }
 
-pub(super) fn extract_embedded_artwork(path: &Path) -> Result<Option<EmbeddedArtwork>, String> {
+/// Extracts the preferred embedded cover from an ID3, FLAC, or MP4 file, if any.
+pub fn extract_embedded_artwork(path: &Path) -> Result<Option<EmbeddedArtwork>, String> {
     let mut file =
         File::open(path).map_err(|e| format!("failed to open media file for artwork: {e}"))?;
     let mut header = [0_u8; 12];
@@ -213,7 +222,7 @@ fn extract_id3_artwork(file: &mut File) -> Result<Option<EmbeddedArtwork>, Strin
     parse_id3_frames(version, &tag[frame_start..])
 }
 
-pub(super) fn remove_id3_unsynchronization(bytes: &[u8]) -> Vec<u8> {
+fn remove_id3_unsynchronization(bytes: &[u8]) -> Vec<u8> {
     let mut clean = Vec::with_capacity(bytes.len());
     let mut index = 0;
     while index < bytes.len() {
@@ -316,7 +325,7 @@ fn parse_id3v22_frames(frames: &[u8]) -> Result<Option<EmbeddedArtwork>, String>
     Ok(fallback)
 }
 
-pub(super) fn parse_apic_frame(frame: &[u8]) -> Option<(u8, EmbeddedArtwork)> {
+fn parse_apic_frame(frame: &[u8]) -> Option<(u8, EmbeddedArtwork)> {
     if frame.len() < 5 {
         return None;
     }
@@ -423,7 +432,7 @@ fn extract_flac_artwork(file: &mut File) -> Result<Option<EmbeddedArtwork>, Stri
     Ok(fallback)
 }
 
-pub(super) fn parse_flac_picture_block(block: &[u8]) -> Option<(u32, EmbeddedArtwork)> {
+fn parse_flac_picture_block(block: &[u8]) -> Option<(u32, EmbeddedArtwork)> {
     let mut offset = 0;
     let picture_type = read_be_u32(block, &mut offset)?;
     let mime_len = read_be_u32(block, &mut offset)? as usize;
@@ -651,5 +660,168 @@ fn validate_artwork_bytes(bytes: &[u8]) -> Option<()> {
         None
     } else {
         Some(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    #[test]
+    fn artwork_rank_prefers_common_cover_names() {
+        assert!(
+            artwork_rank_for_track(Path::new("/music/cover.jpg"), "")
+                < artwork_rank_for_track(Path::new("/music/random.png"), "")
+        );
+        assert!(
+            artwork_rank_for_track(Path::new("/music/folder.png"), "")
+                < artwork_rank_for_track(Path::new("/music/front.png"), "")
+        );
+    }
+
+    #[test]
+    fn artwork_lookup_uses_parent_album_front_image() {
+        let root = unique_temporary_dir("ganbaru-ai-artwork-parent");
+        let album_dir = root.join("Anime/Made in Abyss/2017 - Made in Abyss OST");
+        let disc_dir = album_dir.join("CD 1");
+        fs::create_dir_all(&disc_dir).unwrap();
+        let track = disc_dir.join("01 - Made in Abyss.mp3");
+        let artwork = album_dir.join("01-MIA-FRONT.jpg");
+        fs::write(&track, []).unwrap();
+        fs::write(disc_dir.join("booklet-page.jpg"), []).unwrap();
+        fs::write(&artwork, []).unwrap();
+
+        let mut cache = HashMap::new();
+        assert_eq!(find_track_artwork(&track, &root, &mut cache), Some(artwork));
+
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn artwork_lookup_prefers_matching_sidecar_image() {
+        let root = unique_temporary_dir("ganbaru-ai-artwork-sidecar");
+        fs::create_dir_all(&root).unwrap();
+        let track = root.join("02 - Focus.mp3");
+        let sidecar = root.join("02 - Focus.jpg");
+        fs::write(&track, []).unwrap();
+        fs::write(root.join("01 - Intro.jpg"), []).unwrap();
+        fs::write(&sidecar, []).unwrap();
+
+        let mut cache = HashMap::new();
+        assert_eq!(find_track_artwork(&track, &root, &mut cache), Some(sidecar));
+
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn apic_frame_parser_extracts_front_cover() {
+        let mut frame = Vec::new();
+        frame.push(0);
+        frame.extend_from_slice(b"image/jpeg\0");
+        frame.push(3);
+        frame.push(0);
+        frame.extend_from_slice(&[0xff, 0xd8, 0xff, 0xdb]);
+
+        let Some((picture_type, artwork)) = parse_apic_frame(&frame) else {
+            panic!("expected APIC artwork");
+        };
+
+        assert_eq!(picture_type, 3);
+        assert_eq!(artwork.content_type, "image/jpeg");
+        assert_eq!(artwork.bytes, vec![0xff, 0xd8, 0xff, 0xdb]);
+    }
+
+    #[test]
+    fn apic_frame_parser_rejects_oversized_artwork_without_rejecting_the_track() {
+        let mut frame = Vec::new();
+        frame.push(0);
+        frame.extend_from_slice(b"image/jpeg\0");
+        frame.push(3);
+        frame.push(0);
+        frame.extend_from_slice(&[0xff, 0xd8, 0xff]);
+        frame.resize(24 * 1024 * 1024 + 32, 0);
+
+        assert!(parse_apic_frame(&frame).is_none());
+    }
+
+    #[test]
+    fn id3_unsynchronization_removes_inserted_zero_bytes() {
+        assert_eq!(
+            remove_id3_unsynchronization(&[0xff, 0x00, 0xe0, 0x11]),
+            vec![0xff, 0xe0, 0x11]
+        );
+    }
+
+    #[test]
+    fn flac_picture_block_parser_extracts_front_cover() {
+        let mut block = Vec::new();
+        push_be_u32(&mut block, 3);
+        push_be_u32(&mut block, 10);
+        block.extend_from_slice(b"image/jpeg");
+        push_be_u32(&mut block, 0);
+        push_be_u32(&mut block, 1);
+        push_be_u32(&mut block, 1);
+        push_be_u32(&mut block, 24);
+        push_be_u32(&mut block, 0);
+        push_be_u32(&mut block, 4);
+        block.extend_from_slice(&[0xff, 0xd8, 0xff, 0xdb]);
+
+        let Some((picture_type, artwork)) = parse_flac_picture_block(&block) else {
+            panic!("expected FLAC artwork");
+        };
+
+        assert_eq!(picture_type, 3);
+        assert_eq!(artwork.content_type, "image/jpeg");
+        assert_eq!(artwork.bytes, vec![0xff, 0xd8, 0xff, 0xdb]);
+    }
+
+    #[test]
+    fn mp4_cover_atom_parser_extracts_cover_art() {
+        let root = unique_temporary_dir("ganbaru-ai-artwork-mp4");
+        fs::create_dir_all(&root).unwrap();
+        let path = root.join("theme.m4a");
+        let mut data_content = Vec::new();
+        push_be_u32(&mut data_content, 13);
+        push_be_u32(&mut data_content, 0);
+        data_content.extend_from_slice(&[0xff, 0xd8, 0xff, 0xdb]);
+        let data = mp4_atom(*b"data", &data_content);
+        let covr = mp4_atom(*b"covr", &data);
+        let ilst = mp4_atom(*b"ilst", &covr);
+        let mut meta_content = vec![0, 0, 0, 0];
+        meta_content.extend_from_slice(&ilst);
+        let meta = mp4_atom(*b"meta", &meta_content);
+        let udta = mp4_atom(*b"udta", &meta);
+        let moov = mp4_atom(*b"moov", &udta);
+        let ftyp = mp4_atom(*b"ftyp", b"M4A \0\0\0\0M4A ");
+        let mut file = ftyp;
+        file.extend_from_slice(&moov);
+        fs::write(&path, file).unwrap();
+
+        let artwork = extract_embedded_artwork(&path).unwrap().unwrap();
+
+        assert_eq!(artwork.content_type, "image/jpeg");
+        assert_eq!(artwork.bytes, vec![0xff, 0xd8, 0xff, 0xdb]);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    fn push_be_u32(bytes: &mut Vec<u8>, value: u32) {
+        bytes.extend_from_slice(&value.to_be_bytes());
+    }
+
+    fn mp4_atom(name: [u8; 4], content: &[u8]) -> Vec<u8> {
+        let size = u32::try_from(content.len() + 8).unwrap();
+        let mut atom = size.to_be_bytes().to_vec();
+        atom.extend_from_slice(&name);
+        atom.extend_from_slice(content);
+        atom
+    }
+
+    fn unique_temporary_dir(name: &str) -> PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        std::env::temp_dir().join(format!("{name}-{nanos}"))
     }
 }

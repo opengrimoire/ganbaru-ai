@@ -3,7 +3,7 @@ use super::*;
 use sqlx::{Row, SqlitePool};
 use std::path::{Path, PathBuf};
 
-pub(crate) async fn preview(
+pub async fn preview(
     pool: &SqlitePool,
     item_id: &str,
     file_path: &str,
@@ -12,7 +12,7 @@ pub(crate) async fn preview(
         return Err(MusicLibraryError::validation("itemId", "is required"));
     }
     let path = PathBuf::from(file_path);
-    if !path.is_absolute() || !path.is_file() || !crate::music::is_supported_media_path(&path) {
+    if !path.is_absolute() || !path.is_file() || !crate::media::is_supported_media_path(&path) {
         return Err(MusicLibraryError::validation(
             "filePath",
             "must be an existing supported media file",
@@ -99,7 +99,7 @@ pub(crate) async fn preview(
     })
 }
 
-pub(crate) async fn apply(
+pub async fn apply(
     pool: &SqlitePool,
     request: MusicItemRepairApply,
 ) -> MusicLibraryResult<MusicWriteReceipt> {
@@ -168,11 +168,7 @@ fn duration_near(left: Option<i64>, right: Option<i64>) -> bool {
     }
 }
 
-pub(crate) async fn undo(
-    pool: &SqlitePool,
-    location_id: &str,
-    root_id: &str,
-) -> MusicLibraryResult<()> {
+pub async fn undo(pool: &SqlitePool, location_id: &str, root_id: &str) -> MusicLibraryResult<()> {
     if location_id.trim().is_empty() || root_id.trim().is_empty() {
         return Err(MusicLibraryError::validation(
             "locationId",

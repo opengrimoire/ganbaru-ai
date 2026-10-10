@@ -93,12 +93,12 @@ async fn native_music_background_pause_preserves_selection_and_keep_does_not_mut
             .await
             .unwrap();
     assert_eq!(state, (false, id));
-    let persisted = crate::music::library::soundscapes::state(&pool)
+    let persisted = ganbaru_music_library::soundscapes::state(&pool)
         .await
         .unwrap();
-    let manual = crate::music::library::soundscapes::update_state(
+    let manual = ganbaru_music_library::soundscapes::update_state(
         &pool,
-        crate::music::library::MusicSoundscapeStateWrite {
+        ganbaru_music_library::MusicSoundscapeStateWrite {
             active_soundscape_id: persisted.active_soundscape_id,
             active_ids: persisted.active_ids,
             multiple_enabled: persisted.multiple_enabled,

@@ -9,7 +9,7 @@ use super::*;
 
 const MAX_RELINK_DECISIONS: usize = 10_000;
 
-pub(crate) async fn create_plan(
+pub async fn create_plan(
     pool: &SqlitePool,
     request: MusicRelinkPlanRequest,
 ) -> MusicLibraryResult<MusicRelinkPlanSummary> {
@@ -82,7 +82,7 @@ async fn scan_plan(
                 directories.push_back(PathBuf::from(relative_path));
                 continue;
             }
-            if !file_type.is_file() || !crate::music::is_supported_media_path(&entry.path()) {
+            if !file_type.is_file() || !crate::media::is_supported_media_path(&entry.path()) {
                 continue;
             }
             let evidence = inspect_for_relink(replacement, &relative_path, &mut artwork_cache)
@@ -324,7 +324,7 @@ pub(crate) async fn plan_summary(
     })
 }
 
-pub(crate) async fn plan_entries(
+pub async fn plan_entries(
     pool: &SqlitePool,
     plan_id: &str,
     offset: i64,
@@ -382,7 +382,7 @@ pub(crate) async fn plan_entries(
     })
 }
 
-pub(crate) async fn apply_plan(
+pub async fn apply_plan(
     pool: &SqlitePool,
     request: MusicRelinkApplyRequest,
 ) -> MusicLibraryResult<MusicRelinkPlanSummary> {
@@ -583,7 +583,7 @@ fn validate_decision(entry: &ApplyEntry, item_id: &str) -> MusicLibraryResult<()
     Ok(())
 }
 
-pub(crate) async fn cancel_plan(
+pub async fn cancel_plan(
     pool: &SqlitePool,
     plan_id: &str,
     cancelled_at: i64,

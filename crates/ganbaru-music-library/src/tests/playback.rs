@@ -18,7 +18,7 @@ fn update(
 
 #[test]
 fn listening_updates_keep_aggregates_and_recent_selections_separate() {
-    tauri::async_runtime::block_on(async {
+    crate::test_support::block_on(async {
         let pool = pool().await;
         seed_item(&pool, "item-1", "local:item-1").await;
         writes::create_playlist(&pool, playlist("playlist-1"))
@@ -78,7 +78,7 @@ fn listening_updates_keep_aggregates_and_recent_selections_separate() {
 
 #[test]
 fn recent_selections_are_newest_first_and_bounded_per_playlist() {
-    tauri::async_runtime::block_on(async {
+    crate::test_support::block_on(async {
         let pool = pool().await;
         seed_item(&pool, "item-1", "local:item-1").await;
         writes::create_playlist(&pool, playlist("playlist-1"))

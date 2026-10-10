@@ -1,7 +1,7 @@
 use super::*;
 use sqlx::SqlitePool;
 
-pub(crate) async fn groups(pool: &SqlitePool) -> MusicLibraryResult<Vec<MusicSoundscapeGroup>> {
+pub async fn groups(pool: &SqlitePool) -> MusicLibraryResult<Vec<MusicSoundscapeGroup>> {
     let rows = sqlx::query_as::<_, (String, String, String, i64, i64, i64)>(
         "SELECT id, name, icon, created_at_ms, updated_at_ms, version
          FROM music_soundscape_groups ORDER BY lower(name), id",
@@ -22,7 +22,7 @@ pub(crate) async fn groups(pool: &SqlitePool) -> MusicLibraryResult<Vec<MusicSou
         .collect())
 }
 
-pub(crate) async fn upsert(
+pub async fn upsert(
     pool: &SqlitePool,
     request: MusicSoundscapeGroupWrite,
 ) -> MusicLibraryResult<MusicSoundscapeGroup> {
@@ -88,7 +88,7 @@ pub(crate) async fn upsert(
     })
 }
 
-pub(crate) async fn remove(
+pub async fn remove(
     pool: &SqlitePool,
     group_id: &str,
     expected_version: i64,
@@ -111,11 +111,11 @@ pub(crate) async fn remove(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::music::library::tests::pool;
+    use crate::tests::pool;
 
     #[test]
     fn groups_are_versioned_and_removal_ungroups_sounds() {
-        tauri::async_runtime::block_on(async {
+        crate::test_support::block_on(async {
             let pool = pool().await;
             let created = upsert(
                 &pool,

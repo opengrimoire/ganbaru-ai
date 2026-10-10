@@ -90,7 +90,7 @@ pub(super) fn membership(index: usize) -> MusicMembershipWrite {
 
 #[test]
 fn soundscape_selection_preserves_order_and_removal_updates_state() {
-    tauri::async_runtime::block_on(async {
+    crate::test_support::block_on(async {
         let pool = pool().await;
         let initial = super::soundscapes::state(&pool).await.unwrap();
         let selected = super::soundscapes::update_state(
@@ -173,7 +173,7 @@ fn review_selection_accepts_folders_larger_than_the_generic_bulk_limit() {
 
 #[test]
 fn built_in_music_playlists_are_protected_localizable_and_repaired() {
-    tauri::async_runtime::block_on(async {
+    crate::test_support::block_on(async {
         let pool = pool().await;
         let summaries = queries::playlist_summaries(&pool, 1_700_000_000_000, 0, 50)
             .await
@@ -245,7 +245,7 @@ fn built_in_music_playlists_are_protected_localizable_and_repaired() {
 
 #[test]
 fn local_root_creation_is_atomic_and_rejects_duplicate_identity() {
-    tauri::async_runtime::block_on(async {
+    crate::test_support::block_on(async {
         let pool = pool().await;
         let request = MusicLocalRootCreate {
             root_id: "root-soundtracks".to_string(),
@@ -279,7 +279,7 @@ fn local_root_creation_is_atomic_and_rejects_duplicate_identity() {
 
 #[test]
 fn item_location_repair_requires_weak_match_confirmation_and_can_be_undone() {
-    tauri::async_runtime::block_on(async {
+    crate::test_support::block_on(async {
         let pool = pool().await;
         seed_item(&pool, "repair-item", "local:repair-item").await;
         let folder = std::env::temp_dir().join(format!(
@@ -394,7 +394,7 @@ fn row_mapping_rejects_unknown_persisted_enums_with_field_context() {
 
 #[test]
 fn playlist_create_update_and_stale_detection_are_transactional() {
-    tauri::async_runtime::block_on(async {
+    crate::test_support::block_on(async {
         let pool = pool().await;
         let created = super::writes::create_playlist(&pool, playlist("playlist-1"))
             .await
@@ -457,7 +457,7 @@ fn playlist_create_update_and_stale_detection_are_transactional() {
 
 #[test]
 fn mix_mode_round_trips_and_requires_shuffle() {
-    tauri::async_runtime::block_on(async {
+    crate::test_support::block_on(async {
         let pool = pool().await;
         let mut request = playlist("playlist-mix");
         request.mix_enabled = true;
@@ -483,7 +483,7 @@ fn mix_mode_round_trips_and_requires_shuffle() {
 
 #[test]
 fn bulk_membership_failure_rolls_back_earlier_rows() {
-    tauri::async_runtime::block_on(async {
+    crate::test_support::block_on(async {
         let pool = pool().await;
         super::writes::create_playlist(&pool, playlist("playlist-1"))
             .await
@@ -513,7 +513,7 @@ fn bulk_membership_failure_rolls_back_earlier_rows() {
 
 #[test]
 fn duplicate_playlist_preserves_membership_details_and_ranges() {
-    tauri::async_runtime::block_on(async {
+    crate::test_support::block_on(async {
         let pool = pool().await;
         let mut source = playlist("playlist-1");
         source.mix_enabled = true;
@@ -586,7 +586,7 @@ fn duplicate_playlist_preserves_membership_details_and_ranges() {
 
 #[test]
 fn deletion_requires_current_impact_and_repairs_assignments_atomically() {
-    tauri::async_runtime::block_on(async {
+    crate::test_support::block_on(async {
         let pool = pool().await;
         super::writes::create_playlist(&pool, playlist("playlist-1"))
             .await
@@ -692,7 +692,7 @@ fn deletion_requires_current_impact_and_repairs_assignments_atomically() {
 
 #[test]
 fn deferred_review_items_remain_visible_before_and_after_their_optional_date() {
-    tauri::async_runtime::block_on(async {
+    crate::test_support::block_on(async {
         let pool = pool().await;
         seed_item(&pool, "item-1", "local:item-1").await;
         super::writes::set_review_state(
@@ -731,7 +731,7 @@ fn deferred_review_items_remain_visible_before_and_after_their_optional_date() {
 
 #[test]
 fn playlist_item_window_counts_only_snoozes_effective_in_that_playlist() {
-    tauri::async_runtime::block_on(async {
+    crate::test_support::block_on(async {
         let pool = pool().await;
         for id in ["playlist-1", "playlist-2"] {
             super::writes::create_playlist(&pool, playlist(id))
@@ -792,7 +792,7 @@ fn playlist_item_window_counts_only_snoozes_effective_in_that_playlist() {
 
 #[test]
 fn metadata_overrides_preserve_original_values_and_refresh_search() {
-    tauri::async_runtime::block_on(async {
+    crate::test_support::block_on(async {
         let pool = pool().await;
         seed_item(&pool, "item-1", "local:item-1").await;
         let receipt = super::writes::set_metadata_overrides(
@@ -827,7 +827,7 @@ fn metadata_overrides_preserve_original_values_and_refresh_search() {
 
 #[test]
 fn item_signals_replace_in_bulk_and_refresh_search() {
-    tauri::async_runtime::block_on(async {
+    crate::test_support::block_on(async {
         let pool = pool().await;
         seed_item(&pool, "item-1", "local:item-1").await;
         seed_item(&pool, "item-2", "local:item-2").await;
@@ -882,7 +882,7 @@ fn item_signals_replace_in_bulk_and_refresh_search() {
 
 #[test]
 fn advanced_membership_settings_replace_validated_skip_ranges_atomically() {
-    tauri::async_runtime::block_on(async {
+    crate::test_support::block_on(async {
         let pool = pool().await;
         super::writes::create_playlist(&pool, playlist("playlist-1"))
             .await
@@ -939,7 +939,7 @@ fn advanced_membership_settings_replace_validated_skip_ranges_atomically() {
 
 #[test]
 fn bulk_membership_edits_preserve_existing_settings_and_commit_as_one_change() {
-    tauri::async_runtime::block_on(async {
+    crate::test_support::block_on(async {
         let pool = pool().await;
         for index in 1..=3 {
             seed_item(
@@ -1030,7 +1030,7 @@ fn bulk_membership_edits_preserve_existing_settings_and_commit_as_one_change() {
 
 #[test]
 fn playlist_collection_reorder_persists_all_positions_atomically() {
-    tauri::async_runtime::block_on(async {
+    crate::test_support::block_on(async {
         let pool = pool().await;
         super::writes::create_playlist(&pool, playlist("playlist-1"))
             .await
@@ -1111,7 +1111,7 @@ fn playlist_collection_reorder_persists_all_positions_atomically() {
 
 #[test]
 fn playlist_reorder_and_playback_projection_share_canonical_memberships() {
-    tauri::async_runtime::block_on(async {
+    crate::test_support::block_on(async {
         let pool = pool().await;
         super::writes::create_playlist(&pool, playlist("playlist-1"))
             .await
@@ -1222,7 +1222,7 @@ fn playlist_reorder_and_playback_projection_share_canonical_memberships() {
 
 #[test]
 fn bulk_review_and_snooze_updates_are_atomic() {
-    tauri::async_runtime::block_on(async {
+    crate::test_support::block_on(async {
         let pool = pool().await;
         for index in 1..=2 {
             seed_item(
@@ -1283,7 +1283,7 @@ fn bulk_review_and_snooze_updates_are_atomic() {
 
 #[test]
 fn review_selection_applies_memberships_and_review_state_in_one_transaction() {
-    tauri::async_runtime::block_on(async {
+    crate::test_support::block_on(async {
         let pool = pool().await;
         for index in 1..=2 {
             seed_item(
@@ -1337,7 +1337,7 @@ fn review_selection_applies_memberships_and_review_state_in_one_transaction() {
 
 #[test]
 fn stale_review_selection_does_not_apply_partial_memberships() {
-    tauri::async_runtime::block_on(async {
+    crate::test_support::block_on(async {
         let pool = pool().await;
         for index in 1..=2 {
             seed_item(
@@ -1389,7 +1389,7 @@ fn stale_review_selection_does_not_apply_partial_memberships() {
 
 #[test]
 fn review_selection_ignores_unassigned_items_in_one_transaction() {
-    tauri::async_runtime::block_on(async {
+    crate::test_support::block_on(async {
         let pool = pool().await;
         for index in 1..=2 {
             seed_item(
@@ -1438,7 +1438,7 @@ fn review_selection_ignores_unassigned_items_in_one_transaction() {
 
 #[test]
 fn review_selection_rejects_ignoring_items_assigned_to_playlists() {
-    tauri::async_runtime::block_on(async {
+    crate::test_support::block_on(async {
         let pool = pool().await;
         seed_item(&pool, "item-1", "local:item-1").await;
         super::writes::create_playlist(&pool, playlist("playlist-1"))
@@ -1482,7 +1482,7 @@ fn review_selection_rejects_ignoring_items_assigned_to_playlists() {
 
 #[test]
 fn overlapping_snoozes_expire_and_resume_independently() {
-    tauri::async_runtime::block_on(async {
+    crate::test_support::block_on(async {
         let pool = pool().await;
         seed_item(&pool, "item-1", "local:item-1").await;
         super::writes::create_playlist(&pool, playlist("playlist-1"))

@@ -9,7 +9,7 @@ const MAX_YOUTUBE_TITLE_CHARS: usize = 500;
 const MAX_YOUTUBE_CHANNEL_CHARS: usize = 300;
 const MAX_YOUTUBE_ERROR_CHARS: usize = 200;
 
-pub(crate) async fn duplicate_video_count(
+pub async fn duplicate_video_count(
     pool: &SqlitePool,
     video_ids: Vec<String>,
 ) -> MusicLibraryResult<i64> {
@@ -35,7 +35,7 @@ pub(crate) async fn duplicate_video_count(
     .map_err(|error| MusicLibraryError::database("count known YouTube videos", error))
 }
 
-pub(crate) async fn upsert_video(
+pub async fn upsert_video(
     pool: &SqlitePool,
     request: MusicYouTubeVideoWrite,
 ) -> MusicLibraryResult<MusicWriteReceipt> {
@@ -62,7 +62,7 @@ pub(crate) async fn upsert_video(
     })
 }
 
-pub(crate) async fn apply_playlist_snapshot(
+pub async fn apply_playlist_snapshot(
     pool: &SqlitePool,
     request: MusicYouTubePlaylistSnapshotWrite,
 ) -> MusicLibraryResult<MusicYouTubeSnapshotResult> {
@@ -179,7 +179,7 @@ pub(crate) async fn apply_playlist_snapshot(
     })
 }
 
-pub(crate) async fn report_source_failure(
+pub async fn report_source_failure(
     pool: &SqlitePool,
     request: MusicYouTubeSourceFailureWrite,
 ) -> MusicLibraryResult<()> {
@@ -616,7 +616,7 @@ mod tests {
 
     #[test]
     fn duplicate_video_count_deduplicates_preview_ids() {
-        tauri::async_runtime::block_on(async {
+        crate::test_support::block_on(async {
             let pool = pool().await;
             upsert_video(
                 &pool,
@@ -649,7 +649,7 @@ mod tests {
 
     #[test]
     fn direct_video_states_preserve_metadata_and_review_state() {
-        tauri::async_runtime::block_on(async {
+        crate::test_support::block_on(async {
             let pool = pool().await;
             let first = upsert_video(
                 &pool,
@@ -700,7 +700,7 @@ mod tests {
 
     #[test]
     fn playlist_snapshots_deduplicate_reorder_and_preserve_last_success_on_failure() {
-        tauri::async_runtime::block_on(async {
+        crate::test_support::block_on(async {
             let pool = pool().await;
             let first = apply_playlist_snapshot(
                 &pool,
@@ -770,7 +770,7 @@ mod tests {
 
     #[test]
     fn playlist_snapshot_saves_resolved_metadata_as_playable() {
-        tauri::async_runtime::block_on(async {
+        crate::test_support::block_on(async {
             let pool = pool().await;
             let mut request = snapshot(vec!["01L4CFQdrWA", "O4iot2Jy_D0"]);
             request.videos.push(MusicYouTubePlaylistVideoWrite {
@@ -817,7 +817,7 @@ mod tests {
 
     #[test]
     fn confirmed_empty_playlist_snapshot_is_persisted_without_placeholder_items() {
-        tauri::async_runtime::block_on(async {
+        crate::test_support::block_on(async {
             let pool = pool().await;
             let result = apply_playlist_snapshot(&pool, snapshot(vec![]))
                 .await

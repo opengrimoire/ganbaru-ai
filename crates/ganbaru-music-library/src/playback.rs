@@ -20,7 +20,7 @@ pub(crate) async fn record_listening(
 }
 
 /// Records a selection outcome in the same transaction as its session transition.
-pub(crate) async fn record_listening_in_transaction(
+pub async fn record_listening_in_transaction(
     connection: &mut SqliteConnection,
     request: &MusicListeningUpdate,
 ) -> MusicLibraryResult<()> {

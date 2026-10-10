@@ -33,7 +33,7 @@ async fn playlist_exists(
         .map_err(|error| MusicLibraryError::database("check music playlist", error))
 }
 
-pub(crate) async fn create_playlist(
+pub async fn create_playlist(
     pool: &SqlitePool,
     request: MusicPlaylistCreate,
 ) -> MusicLibraryResult<MusicWriteReceipt> {
@@ -75,7 +75,7 @@ pub(crate) async fn create_playlist(
     })
 }
 
-pub(crate) async fn update_playlist(
+pub async fn update_playlist(
     pool: &SqlitePool,
     request: MusicPlaylistUpdate,
 ) -> MusicLibraryResult<MusicWriteReceipt> {
@@ -138,7 +138,7 @@ pub(crate) async fn update_playlist(
     })
 }
 
-pub(crate) async fn duplicate_playlist(
+pub async fn duplicate_playlist(
     pool: &SqlitePool,
     request: MusicPlaylistDuplicate,
 ) -> MusicLibraryResult<MusicWriteReceipt> {
@@ -330,7 +330,7 @@ async fn delete_impact_in_transaction(
     })
 }
 
-pub(crate) async fn playlist_delete_impact(
+pub async fn playlist_delete_impact(
     pool: &SqlitePool,
     playlist_id: &str,
 ) -> MusicLibraryResult<MusicPlaylistDeleteImpact> {
@@ -343,7 +343,7 @@ pub(crate) async fn playlist_delete_impact(
     Ok(impact)
 }
 
-pub(crate) async fn delete_playlist(
+pub async fn delete_playlist(
     pool: &SqlitePool,
     request: MusicPlaylistDelete,
 ) -> MusicLibraryResult<MusicPlaylistDeleteImpact> {
@@ -425,7 +425,7 @@ pub(crate) async fn delete_playlist(
     Ok(actual_impact)
 }
 
-pub(crate) async fn set_review_state(
+pub async fn set_review_state(
     pool: &SqlitePool,
     request: MusicReviewWrite,
 ) -> MusicLibraryResult<MusicWriteReceipt> {
@@ -463,7 +463,7 @@ pub(crate) async fn set_review_state(
     })
 }
 
-pub(crate) async fn set_metadata_overrides(
+pub async fn set_metadata_overrides(
     pool: &SqlitePool,
     request: MusicMetadataOverrideWrite,
 ) -> MusicLibraryResult<MusicWriteReceipt> {
@@ -502,7 +502,7 @@ pub(crate) async fn set_metadata_overrides(
     })
 }
 
-pub(crate) async fn set_item_signals(
+pub async fn set_item_signals(
     pool: &SqlitePool,
     request: MusicItemSignalsWrite,
 ) -> MusicLibraryResult<Vec<MusicWriteReceipt>> {
@@ -649,7 +649,7 @@ async fn upsert_membership_in_transaction(
     })
 }
 
-pub(crate) async fn upsert_memberships(
+pub async fn upsert_memberships(
     pool: &SqlitePool,
     request: MusicBulkMembershipWrite,
 ) -> MusicLibraryResult<Vec<MusicWriteReceipt>> {
@@ -666,7 +666,7 @@ pub(crate) async fn upsert_memberships(
     Ok(receipts)
 }
 
-pub(crate) async fn save_advanced_membership(
+pub async fn save_advanced_membership(
     pool: &SqlitePool,
     request: MusicAdvancedMembershipWrite,
 ) -> MusicLibraryResult<MusicWriteReceipt> {
@@ -700,7 +700,7 @@ pub(crate) async fn save_advanced_membership(
     Ok(receipt)
 }
 
-pub(crate) async fn remove_memberships(
+pub async fn remove_memberships(
     pool: &SqlitePool,
     request: MusicMembershipRemove,
 ) -> MusicLibraryResult<()> {
@@ -735,7 +735,7 @@ pub(crate) async fn remove_memberships(
     commit(transaction, "commit remove playlist memberships").await
 }
 
-pub(crate) async fn remove_snooze(
+pub async fn remove_snooze(
     pool: &SqlitePool,
     request: MusicSnoozeRemove,
 ) -> MusicLibraryResult<()> {
@@ -754,7 +754,7 @@ pub(crate) async fn remove_snooze(
     Ok(())
 }
 
-pub(crate) async fn upsert_source_collection(
+pub async fn upsert_source_collection(
     pool: &SqlitePool,
     request: MusicCollectionWrite,
 ) -> MusicLibraryResult<MusicWriteReceipt> {
@@ -796,7 +796,7 @@ pub(crate) async fn upsert_source_collection(
     })
 }
 
-pub(crate) async fn create_local_root(
+pub async fn create_local_root(
     pool: &SqlitePool,
     request: MusicLocalRootCreate,
 ) -> MusicLibraryResult<MusicWriteReceipt> {

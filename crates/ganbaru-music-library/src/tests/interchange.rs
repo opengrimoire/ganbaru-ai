@@ -69,7 +69,7 @@ pub(super) fn request(conflict: MusicImportPlaylistConflict) -> MusicInterchange
 
 #[test]
 fn interchange_import_commits_full_playlist_state_transactionally() {
-    tauri::async_runtime::block_on(async {
+    crate::test_support::block_on(async {
         let pool = super::pool().await;
         let result = super::super::interchange::import(
             &pool,
@@ -130,7 +130,7 @@ fn interchange_import_commits_full_playlist_state_transactionally() {
 
 #[test]
 fn interchange_import_rejects_unsafe_paths_before_writing() {
-    tauri::async_runtime::block_on(async {
+    crate::test_support::block_on(async {
         let pool = super::pool().await;
         let mut unsafe_request = request(MusicImportPlaylistConflict::ImportCopy);
         for unsafe_path in [
@@ -160,7 +160,7 @@ fn interchange_import_rejects_unsafe_paths_before_writing() {
 
 #[test]
 fn interchange_import_deduplicates_item_wide_snoozes_across_playlists() {
-    tauri::async_runtime::block_on(async {
+    crate::test_support::block_on(async {
         let pool = super::pool().await;
         let mut import_request = request(MusicImportPlaylistConflict::ImportCopy);
         let mut second_playlist = import_request.document.playlists[0].clone();
@@ -186,7 +186,7 @@ fn interchange_import_deduplicates_item_wide_snoozes_across_playlists() {
 
 #[test]
 fn interchange_conflict_policy_never_overwrites_without_replace() {
-    tauri::async_runtime::block_on(async {
+    crate::test_support::block_on(async {
         let pool = super::pool().await;
         super::super::interchange::import(&pool, request(MusicImportPlaylistConflict::ImportCopy))
             .await

@@ -4,6 +4,9 @@ use sqlx::SqlitePool;
 use std::fs::File;
 use std::path::Path;
 
+/// Maximum number of soundscape layers that can play at once.
+pub const MAX_SOUNDSCAPE_LAYERS: usize = 16;
+
 type DefinitionRow = (
     String,
     String,
@@ -19,7 +22,7 @@ type DefinitionRow = (
     i64,
 );
 
-pub(crate) async fn definitions(
+pub async fn definitions(
     pool: &SqlitePool,
     device_id: &str,
 ) -> MusicLibraryResult<Vec<MusicSoundscapeDefinition>> {
@@ -70,7 +73,7 @@ pub(crate) async fn definitions(
     Ok(definitions)
 }
 
-pub(crate) async fn upsert(
+pub async fn upsert(
     pool: &SqlitePool,
     request: MusicSoundscapeWrite,
 ) -> MusicLibraryResult<MusicSoundscapeDefinition> {
@@ -213,7 +216,7 @@ pub(crate) async fn upsert(
     definition(pool, &request.device_id, &request.id).await
 }
 
-pub(crate) async fn remove(
+pub async fn remove(
     pool: &SqlitePool,
     soundscape_id: &str,
     expected_version: i64,
@@ -262,7 +265,7 @@ pub(crate) async fn remove(
     super::writes::commit(transaction, "commit soundscape removal").await
 }
 
-pub(crate) async fn state(pool: &SqlitePool) -> MusicLibraryResult<MusicSoundscapeState> {
+pub async fn state(pool: &SqlitePool) -> MusicLibraryResult<MusicSoundscapeState> {
     let row = sqlx::query_as::<_, (Option<String>, bool, Option<f64>, Option<f64>, bool, f64, i64, i64, bool)>(
         "SELECT active_soundscape_id, multiple_enabled, generated_level, local_level, desired_playing, volume, updated_at_ms, version, automatic_intent
          FROM music_soundscape_state WHERE singleton = 1",
@@ -290,7 +293,7 @@ pub(crate) async fn state(pool: &SqlitePool) -> MusicLibraryResult<MusicSoundsca
     })
 }
 
-pub(crate) async fn update_state(
+pub async fn update_state(
     pool: &SqlitePool,
     request: MusicSoundscapeStateWrite,
 ) -> MusicLibraryResult<MusicSoundscapeState> {
@@ -317,7 +320,7 @@ pub(crate) async fn update_state(
             "must be positive",
         ));
     }
-    if request.active_ids.len() > crate::music::soundscape::MAX_SOUNDSCAPE_LAYERS {
+    if request.active_ids.len() > MAX_SOUNDSCAPE_LAYERS {
         return Err(MusicLibraryError::validation(
             "activeIds",
             "cannot play more than 16 background sounds",
@@ -560,7 +563,7 @@ fn decode_definition(row: DefinitionRow) -> MusicLibraryResult<MusicSoundscapeDe
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::music::library::tests::pool;
+    use crate::tests::pool;
 
     #[test]
     fn local_loop_validation_rejects_non_audio_and_relative_paths() {
@@ -571,7 +574,7 @@ mod tests {
 
     #[test]
     fn soundscape_crud_and_singleton_state_are_versioned() {
-        tauri::async_runtime::block_on(async {
+        crate::test_support::block_on(async {
             let pool = pool().await;
             let generated = definitions(&pool, "device-a").await.unwrap();
             assert_eq!(generated.len(), 3);

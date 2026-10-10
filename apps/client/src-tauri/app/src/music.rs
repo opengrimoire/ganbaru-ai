@@ -19,8 +19,6 @@ use tauri::Manager;
 #[cfg(desktop)]
 use tauri_plugin_dialog::{DialogExt, FilePath};
 
-#[cfg(desktop)]
-mod artwork;
 #[cfg(not(target_os = "ios"))]
 pub(crate) mod library;
 #[cfg(desktop)]
@@ -41,7 +39,9 @@ pub(crate) mod youtube;
 pub(crate) use media_server::setup_youtube_host;
 
 #[cfg(desktop)]
-use artwork::{extract_embedded_artwork, find_track_artwork};
+use ganbaru_music_library::artwork::{extract_embedded_artwork, find_track_artwork};
+#[cfg(desktop)]
+use ganbaru_music_library::media::{MEDIA_EXTENSIONS, is_supported_media_path};
 
 #[cfg(not(target_os = "ios"))]
 const MAX_MEDIA_FOLDER_FILES: usize = 5_000;
@@ -51,11 +51,6 @@ const MAX_ARTWORK_BYTES: u64 = 12 * 1024 * 1024;
 const MAX_INTERCHANGE_BYTES: u64 = 8 * 1024 * 1024;
 #[cfg(desktop)]
 static MEDIA_FOLDER_SCAN_GENERATION: AtomicU64 = AtomicU64::new(0);
-#[cfg(desktop)]
-const MEDIA_EXTENSIONS: &[&str] = &[
-    "aac", "aif", "aiff", "alac", "ape", "avi", "flac", "flv", "m4a", "m4v", "mkv", "mov", "mp3",
-    "mp4", "mpeg", "mpg", "ogg", "ogv", "opus", "wav", "webm", "wma", "wmv",
-];
 #[cfg(desktop)]
 const SOUNDSCAPE_AUDIO_EXTENSIONS: &[&str] = &["flac", "m4a", "mp3", "mp4", "oga", "ogg", "wav"];
 
@@ -744,17 +739,6 @@ where
 }
 
 #[cfg(desktop)]
-fn is_supported_media_path(path: &Path) -> bool {
-    path.extension()
-        .and_then(|value| value.to_str())
-        .is_some_and(|extension| {
-            MEDIA_EXTENSIONS
-                .iter()
-                .any(|allowed| extension.eq_ignore_ascii_case(allowed))
-        })
-}
-
-#[cfg(desktop)]
 fn media_title_from_path(path: &Path) -> String {
     path.file_stem()
         .and_then(|value| value.to_str())
@@ -765,10 +749,6 @@ fn media_title_from_path(path: &Path) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::artwork::{
-        artwork_rank_for_track, find_track_artwork, parse_apic_frame, parse_flac_picture_block,
-        remove_id3_unsynchronization,
-    };
     use super::media_server::{ByteRange, media_content_type, parse_byte_range};
     use super::youtube::player_page::youtube_host_html;
     use super::*;
@@ -806,13 +786,6 @@ mod tests {
         assert!(!host.contains("showinfo"));
         assert!(!host.contains("autohide"));
         assert!(!host.contains("theme"));
-    }
-
-    #[test]
-    fn media_path_support_accepts_audio_and_video_extensions() {
-        assert!(is_supported_media_path(Path::new("/music/focus.flac")));
-        assert!(is_supported_media_path(Path::new("/video/reference.mkv")));
-        assert!(!is_supported_media_path(Path::new("/notes/readme.txt")));
     }
 
     #[test]
@@ -966,18 +939,6 @@ mod tests {
     }
 
     #[test]
-    fn artwork_rank_prefers_common_cover_names() {
-        assert!(
-            artwork_rank_for_track(Path::new("/music/cover.jpg"), "")
-                < artwork_rank_for_track(Path::new("/music/random.png"), "")
-        );
-        assert!(
-            artwork_rank_for_track(Path::new("/music/folder.png"), "")
-                < artwork_rank_for_track(Path::new("/music/front.png"), "")
-        );
-    }
-
-    #[test]
     fn media_content_type_maps_common_image_formats() {
         assert_eq!(
             media_content_type(Path::new("/music/cover.jpg")),
@@ -1000,143 +961,6 @@ mod tests {
             Some("image/jpeg")
         );
         assert_eq!(artwork_content_type(b"not an image"), None);
-    }
-
-    #[test]
-    fn artwork_lookup_uses_parent_album_front_image() {
-        let root = unique_temporary_dir("ganbaru-ai-artwork-parent");
-        let album_dir = root.join("Anime/Made in Abyss/2017 - Made in Abyss OST");
-        let disc_dir = album_dir.join("CD 1");
-        fs::create_dir_all(&disc_dir).unwrap();
-        let track = disc_dir.join("01 - Made in Abyss.mp3");
-        let artwork = album_dir.join("01-MIA-FRONT.jpg");
-        fs::write(&track, []).unwrap();
-        fs::write(disc_dir.join("booklet-page.jpg"), []).unwrap();
-        fs::write(&artwork, []).unwrap();
-
-        let mut cache = HashMap::new();
-        assert_eq!(find_track_artwork(&track, &root, &mut cache), Some(artwork));
-
-        fs::remove_dir_all(root).unwrap();
-    }
-
-    #[test]
-    fn artwork_lookup_prefers_matching_sidecar_image() {
-        let root = unique_temporary_dir("ganbaru-ai-artwork-sidecar");
-        fs::create_dir_all(&root).unwrap();
-        let track = root.join("02 - Focus.mp3");
-        let sidecar = root.join("02 - Focus.jpg");
-        fs::write(&track, []).unwrap();
-        fs::write(root.join("01 - Intro.jpg"), []).unwrap();
-        fs::write(&sidecar, []).unwrap();
-
-        let mut cache = HashMap::new();
-        assert_eq!(find_track_artwork(&track, &root, &mut cache), Some(sidecar));
-
-        fs::remove_dir_all(root).unwrap();
-    }
-
-    #[test]
-    fn apic_frame_parser_extracts_front_cover() {
-        let mut frame = Vec::new();
-        frame.push(0);
-        frame.extend_from_slice(b"image/jpeg\0");
-        frame.push(3);
-        frame.push(0);
-        frame.extend_from_slice(&[0xff, 0xd8, 0xff, 0xdb]);
-
-        let Some((picture_type, artwork)) = parse_apic_frame(&frame) else {
-            panic!("expected APIC artwork");
-        };
-
-        assert_eq!(picture_type, 3);
-        assert_eq!(artwork.content_type, "image/jpeg");
-        assert_eq!(artwork.bytes, vec![0xff, 0xd8, 0xff, 0xdb]);
-    }
-
-    #[test]
-    fn apic_frame_parser_rejects_oversized_artwork_without_rejecting_the_track() {
-        let mut frame = Vec::new();
-        frame.push(0);
-        frame.extend_from_slice(b"image/jpeg\0");
-        frame.push(3);
-        frame.push(0);
-        frame.extend_from_slice(&[0xff, 0xd8, 0xff]);
-        frame.resize(24 * 1024 * 1024 + 32, 0);
-
-        assert!(parse_apic_frame(&frame).is_none());
-    }
-
-    #[test]
-    fn id3_unsynchronization_removes_inserted_zero_bytes() {
-        assert_eq!(
-            remove_id3_unsynchronization(&[0xff, 0x00, 0xe0, 0x11]),
-            vec![0xff, 0xe0, 0x11]
-        );
-    }
-
-    #[test]
-    fn flac_picture_block_parser_extracts_front_cover() {
-        let mut block = Vec::new();
-        push_be_u32(&mut block, 3);
-        push_be_u32(&mut block, 10);
-        block.extend_from_slice(b"image/jpeg");
-        push_be_u32(&mut block, 0);
-        push_be_u32(&mut block, 1);
-        push_be_u32(&mut block, 1);
-        push_be_u32(&mut block, 24);
-        push_be_u32(&mut block, 0);
-        push_be_u32(&mut block, 4);
-        block.extend_from_slice(&[0xff, 0xd8, 0xff, 0xdb]);
-
-        let Some((picture_type, artwork)) = parse_flac_picture_block(&block) else {
-            panic!("expected FLAC artwork");
-        };
-
-        assert_eq!(picture_type, 3);
-        assert_eq!(artwork.content_type, "image/jpeg");
-        assert_eq!(artwork.bytes, vec![0xff, 0xd8, 0xff, 0xdb]);
-    }
-
-    #[test]
-    fn mp4_cover_atom_parser_extracts_cover_art() {
-        let root = unique_temporary_dir("ganbaru-ai-artwork-mp4");
-        fs::create_dir_all(&root).unwrap();
-        let path = root.join("theme.m4a");
-        let mut data_content = Vec::new();
-        push_be_u32(&mut data_content, 13);
-        push_be_u32(&mut data_content, 0);
-        data_content.extend_from_slice(&[0xff, 0xd8, 0xff, 0xdb]);
-        let data = mp4_atom(*b"data", &data_content);
-        let covr = mp4_atom(*b"covr", &data);
-        let ilst = mp4_atom(*b"ilst", &covr);
-        let mut meta_content = vec![0, 0, 0, 0];
-        meta_content.extend_from_slice(&ilst);
-        let meta = mp4_atom(*b"meta", &meta_content);
-        let udta = mp4_atom(*b"udta", &meta);
-        let moov = mp4_atom(*b"moov", &udta);
-        let ftyp = mp4_atom(*b"ftyp", b"M4A \0\0\0\0M4A ");
-        let mut file = ftyp;
-        file.extend_from_slice(&moov);
-        fs::write(&path, file).unwrap();
-
-        let artwork = extract_embedded_artwork(&path).unwrap().unwrap();
-
-        assert_eq!(artwork.content_type, "image/jpeg");
-        assert_eq!(artwork.bytes, vec![0xff, 0xd8, 0xff, 0xdb]);
-        fs::remove_dir_all(root).unwrap();
-    }
-
-    fn push_be_u32(bytes: &mut Vec<u8>, value: u32) {
-        bytes.extend_from_slice(&value.to_be_bytes());
-    }
-
-    fn mp4_atom(name: [u8; 4], content: &[u8]) -> Vec<u8> {
-        let size = u32::try_from(content.len() + 8).unwrap();
-        let mut atom = size.to_be_bytes().to_vec();
-        atom.extend_from_slice(&name);
-        atom.extend_from_slice(content);
-        atom
     }
 
     fn unique_temporary_dir(name: &str) -> PathBuf {

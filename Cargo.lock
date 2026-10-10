@@ -1877,6 +1877,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "ganbaru-music-library"
+version = "0.1.0"
+dependencies = [
+ "ganbaru-db",
+ "ganbaru-music",
+ "ganbaru-projects",
+ "jiff",
+ "rodio",
+ "serde",
+ "serde_json",
+ "sha2",
+ "sqlx",
+ "tokio",
+ "url",
+]
+
+[[package]]
 name = "ganbaru-native-messaging"
 version = "0.1.5"
 dependencies = [
@@ -2001,6 +2018,7 @@ dependencies = [
  "ganbaru-mobile-media",
  "ganbaru-mobile-notifications",
  "ganbaru-music",
+ "ganbaru-music-library",
  "ganbaru-notes",
  "ganbaru-people",
  "ganbaru-pomodoro",

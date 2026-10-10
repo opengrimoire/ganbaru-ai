@@ -8,8 +8,8 @@ use super::{
     queue,
     subscriptions::{SessionFrame, SessionNotice, Subscriptions},
 };
-use crate::music::library::{MusicLibraryError, MusicLibraryResult};
 use crate::vault::runtime_lifecycle::{LifecycleControl, LifecycleIntent};
+use ganbaru_music_library::{MusicLibraryError, MusicLibraryResult};
 use sqlx::SqlitePool;
 use std::{
     collections::BTreeMap,

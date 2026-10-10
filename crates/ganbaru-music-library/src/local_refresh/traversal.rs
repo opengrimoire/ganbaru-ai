@@ -6,7 +6,7 @@ use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 
-use crate::music::artwork::{extract_embedded_artwork, find_track_artwork};
+use crate::artwork::{extract_embedded_artwork, find_track_artwork};
 
 use super::super::MusicMediaKind;
 use super::metadata::{LocalTags, read_container_duration_ms, read_tags};
@@ -15,7 +15,7 @@ pub(super) const DISCOVERY_BATCH_SIZE: usize = 128;
 pub(super) const RECONCILE_BATCH_SIZE: i64 = 256;
 const FINGERPRINT_SAMPLE_BYTES: usize = 64 * 1024;
 
-pub(in crate::music::library) type ArtworkCache = HashMap<PathBuf, Vec<PathBuf>>;
+pub(crate) type ArtworkCache = HashMap<PathBuf, Vec<PathBuf>>;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) enum DiscoveredEntryKind {
@@ -31,7 +31,7 @@ pub(super) struct DiscoveredEntry {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub(in crate::music::library) struct LocalMediaEvidence {
+pub(crate) struct LocalMediaEvidence {
     pub relative_path: String,
     pub title: String,
     pub artist: String,
@@ -71,7 +71,7 @@ pub(super) fn next_discovery_batch(
             DiscoveredEntryKind::Skipped
         } else if file_type.is_dir() {
             DiscoveredEntryKind::Directory
-        } else if file_type.is_file() && crate::music::is_supported_media_path(&path) {
+        } else if file_type.is_file() && crate::media::is_supported_media_path(&path) {
             DiscoveredEntryKind::Media
         } else {
             DiscoveredEntryKind::Skipped
@@ -85,7 +85,7 @@ pub(super) fn next_discovery_batch(
     Ok(entries)
 }
 
-pub(in crate::music::library) fn inspect_media(
+pub(crate) fn inspect_media(
     root: &Path,
     relative_path: &str,
     artwork_cache: &mut ArtworkCache,
@@ -159,7 +159,7 @@ pub(in crate::music::library) fn inspect_media(
     })
 }
 
-pub(in crate::music::library) fn strong_fingerprint(path: &Path) -> Result<String, String> {
+pub(crate) fn strong_fingerprint(path: &Path) -> Result<String, String> {
     let mut file = File::open(path).map_err(|error| format!("cannot open media: {error}"))?;
     let mut hasher = Sha256::new();
     let mut buffer = vec![0_u8; 256 * 1024];

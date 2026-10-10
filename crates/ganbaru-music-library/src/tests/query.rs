@@ -4,7 +4,7 @@ use sqlx::Row;
 
 #[test]
 fn review_window_includes_ignored_items_for_local_visibility_filtering() {
-    tauri::async_runtime::block_on(async {
+    crate::test_support::block_on(async {
         let pool = pool().await;
         for id in ["unreviewed", "reviewed", "ignored", "due", "future"] {
             seed_item(&pool, id, &format!("local:{id}")).await;
@@ -44,7 +44,7 @@ fn review_window_includes_ignored_items_for_local_visibility_filtering() {
 
 #[test]
 fn item_windows_are_bounded_stable_filterable_and_grouped() {
-    tauri::async_runtime::block_on(async {
+    crate::test_support::block_on(async {
         let pool = pool().await;
         let mut transaction = pool.begin().await.unwrap();
         for index in 0..600 {
@@ -157,7 +157,7 @@ fn item_windows_are_bounded_stable_filterable_and_grouped() {
 
 #[test]
 fn playlist_window_uses_manual_order_and_returns_membership_state() {
-    tauri::async_runtime::block_on(async {
+    crate::test_support::block_on(async {
         let pool = pool().await;
         super::writes::create_playlist(&pool, playlist("playlist-1"))
             .await
@@ -231,7 +231,7 @@ fn playlist_window_uses_manual_order_and_returns_membership_state() {
 
 #[test]
 fn source_order_and_artwork_overrides_are_projected_in_library_rows() {
-    tauri::async_runtime::block_on(async {
+    crate::test_support::block_on(async {
         let pool = pool().await;
         for index in 0..3 {
             seed_item(
@@ -295,7 +295,7 @@ fn source_order_and_artwork_overrides_are_projected_in_library_rows() {
 
 #[test]
 fn summaries_issues_and_inspector_return_composed_data_without_row_queries() {
-    tauri::async_runtime::block_on(async {
+    crate::test_support::block_on(async {
         let pool = pool().await;
         super::writes::create_playlist(&pool, playlist("playlist-1"))
             .await
@@ -410,7 +410,7 @@ fn summaries_issues_and_inspector_return_composed_data_without_row_queries() {
 
 #[test]
 fn review_and_membership_queries_use_purpose_built_indexes() {
-    tauri::async_runtime::block_on(async {
+    crate::test_support::block_on(async {
         let pool = pool().await;
         let review_plan = sqlx::query(
             "EXPLAIN QUERY PLAN
@@ -446,7 +446,7 @@ fn review_and_membership_queries_use_purpose_built_indexes() {
 
 #[test]
 fn search_rebuild_repairs_stale_rows_and_incremental_membership_metadata() {
-    tauri::async_runtime::block_on(async {
+    crate::test_support::block_on(async {
         let pool = pool().await;
         sqlx::query(
             "INSERT INTO music_library_items

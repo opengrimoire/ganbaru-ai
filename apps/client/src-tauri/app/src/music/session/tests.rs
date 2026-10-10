@@ -1,6 +1,6 @@
 use super::models::*;
 use super::policy::*;
-use crate::music::library::{
+use ganbaru_music_library::{
     MusicItemAvailability, MusicListeningOutcome, MusicRepeatMode, MusicWeight,
 };
 use std::sync::Arc;

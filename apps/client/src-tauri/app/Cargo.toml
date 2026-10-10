@@ -23,6 +23,7 @@ ganbaru-chat = { workspace = true }
 ganbaru-civil-time = { workspace = true }
 ganbaru-db = { workspace = true }
 ganbaru-music = { workspace = true }
+ganbaru-music-library = { workspace = true }
 ganbaru-notes = { workspace = true }
 ganbaru-people = { workspace = true }
 ganbaru-pomodoro = { workspace = true }

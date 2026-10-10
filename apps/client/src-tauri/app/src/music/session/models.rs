@@ -1,6 +1,6 @@
 //! Typed application session commands and projections shared by native media adapters.
 
-use crate::music::library::{MusicItemAvailability, MusicRepeatMode, MusicWeight};
+use ganbaru_music_library::{MusicItemAvailability, MusicRepeatMode, MusicWeight};
 use serde::{Deserialize, Serialize};
 
 pub(super) const MAX_QUEUE_ENTRIES: usize = 10_000;

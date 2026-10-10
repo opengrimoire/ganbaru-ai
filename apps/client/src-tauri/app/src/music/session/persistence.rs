@@ -4,7 +4,7 @@ use super::{
     models::*,
     policy::{SessionPolicy, Transition},
 };
-use crate::music::library::{
+use ganbaru_music_library::{
     MusicLibraryError, MusicLibraryResult, record_listening_in_transaction,
 };
 use sha2::{Digest, Sha256};

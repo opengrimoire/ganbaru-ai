@@ -1,7 +1,7 @@
 //! Bounded canonical queue snapshots and device-local source resolution.
 
 use super::{models::*, policy::SessionPolicy};
-use crate::music::library::{
+use ganbaru_music_library::{
     MusicItemAvailability, MusicLibraryError, MusicLibraryResult, MusicRepeatMode, MusicWeight,
 };
 use sqlx::{QueryBuilder, Sqlite, SqliteConnection};

@@ -249,7 +249,7 @@ fn youtube_id(value: &str) -> Option<String> {
     } else {
         format!("https://{value}")
     };
-    let url = tauri::Url::parse(&value).ok()?;
+    let url = url::Url::parse(&value).ok()?;
     let candidate = match url.host_str()? {
         "youtu.be" | "www.youtu.be" => url.path_segments()?.next()?.to_string(),
         "youtube.com" | "www.youtube.com" if url.path() == "/watch" => url

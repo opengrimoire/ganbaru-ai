@@ -2,7 +2,7 @@ use super::*;
 use sqlx::{QueryBuilder, Sqlite, SqlitePool};
 use std::collections::HashMap;
 
-pub(crate) async fn membership_matrix(
+pub async fn membership_matrix(
     pool: &SqlitePool,
     item_ids: Vec<String>,
 ) -> MusicLibraryResult<Vec<MusicMembershipMatrixEntry>> {
@@ -33,7 +33,7 @@ pub(crate) async fn membership_matrix(
         .collect()
 }
 
-pub(crate) async fn playlist_playback_entries(
+pub async fn playlist_playback_entries(
     pool: &SqlitePool,
     playlist_id: &str,
     now_ms: i64,
@@ -290,7 +290,7 @@ fn group_expression(group_by: MusicGroupBy) -> Option<&'static str> {
     }
 }
 
-pub(crate) async fn item_window(
+pub async fn item_window(
     pool: &SqlitePool,
     request: MusicItemWindowRequest,
 ) -> MusicLibraryResult<MusicItemWindow> {
@@ -419,7 +419,7 @@ struct PlaylistSummaryRow {
     version: i64,
 }
 
-pub(crate) async fn playlist_summaries(
+pub async fn playlist_summaries(
     pool: &SqlitePool,
     now_ms: i64,
     offset: i64,
@@ -547,7 +547,7 @@ struct SourceSummaryRow {
 
 const SOURCE_STALE_AFTER_MS: i64 = 30 * 24 * 60 * 60 * 1_000;
 
-pub(crate) async fn source_summaries(
+pub async fn source_summaries(
     pool: &SqlitePool,
     now_ms: i64,
     offset: i64,
@@ -662,7 +662,7 @@ fn parse_query_bool(value: i64, field: &str) -> MusicLibraryResult<bool> {
     }
 }
 
-pub(crate) async fn issues(
+pub async fn issues(
     pool: &SqlitePool,
     offset: i64,
     limit: i64,
@@ -753,7 +753,7 @@ pub(crate) async fn issues(
         .collect()
 }
 
-pub(crate) async fn inspector_detail(
+pub async fn inspector_detail(
     pool: &SqlitePool,
     item_id: &str,
 ) -> MusicLibraryResult<MusicInspectorDetail> {
@@ -873,7 +873,7 @@ pub(crate) async fn inspector_detail(
     })
 }
 
-pub(crate) async fn local_roots(
+pub async fn local_roots(
     pool: &SqlitePool,
     offset: i64,
     limit: i64,
@@ -924,7 +924,7 @@ struct SourceCollectionRow {
     removed_at_ms: Option<i64>,
 }
 
-pub(crate) async fn source_collections(
+pub async fn source_collections(
     pool: &SqlitePool,
     offset: i64,
     limit: i64,
@@ -970,7 +970,7 @@ pub(crate) async fn source_collections(
     .collect()
 }
 
-pub(crate) async fn playlist_detail(
+pub async fn playlist_detail(
     pool: &SqlitePool,
     playlist_id: &str,
 ) -> MusicLibraryResult<MusicPlaylist> {

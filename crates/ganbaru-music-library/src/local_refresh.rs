@@ -3,7 +3,7 @@ mod metadata;
 mod persistence;
 mod traversal;
 
-pub(in crate::music::library) use traversal::strong_fingerprint as strong_fingerprint_for_repair;
+pub(crate) use traversal::strong_fingerprint as strong_fingerprint_for_repair;
 pub(super) use traversal::{
     ArtworkCache as RelinkArtworkCache, LocalMediaEvidence as RelinkMediaEvidence,
     inspect_media as inspect_for_relink,
@@ -16,21 +16,21 @@ use super::{
     MusicLibraryError, MusicLibraryResult, MusicLocalRefreshRequest, MusicRefreshJobProgress,
 };
 
-pub(crate) async fn prepare(
+pub async fn prepare(
     pool: &SqlitePool,
     request: &MusicLocalRefreshRequest,
 ) -> MusicLibraryResult<MusicRefreshJobProgress> {
     persistence::prepare(pool, request).await
 }
 
-pub(crate) async fn progress(
+pub async fn progress(
     pool: &SqlitePool,
     job_id: &str,
 ) -> MusicLibraryResult<MusicRefreshJobProgress> {
     persistence::load_progress(pool, job_id).await
 }
 
-pub(crate) async fn cancel(
+pub async fn cancel(
     pool: &SqlitePool,
     job_id: &str,
     cancelled_at: i64,
@@ -38,7 +38,7 @@ pub(crate) async fn cancel(
     persistence::cancel(pool, job_id, cancelled_at).await
 }
 
-pub(crate) async fn run_prepared(
+pub async fn run_prepared(
     pool: &SqlitePool,
     request: MusicLocalRefreshRequest,
 ) -> MusicLibraryResult<MusicRefreshJobProgress> {

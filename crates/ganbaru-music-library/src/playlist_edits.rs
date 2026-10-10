@@ -2,7 +2,7 @@ use super::*;
 use sqlx::SqlitePool;
 use std::collections::HashSet;
 
-pub(crate) async fn bulk_edit_memberships(
+pub async fn bulk_edit_memberships(
     pool: &SqlitePool,
     request: MusicBulkMembershipEdit,
 ) -> MusicLibraryResult<MusicBulkMembershipResult> {
@@ -91,7 +91,7 @@ pub(crate) async fn bulk_edit_memberships(
     Ok(MusicBulkMembershipResult { changed_count })
 }
 
-pub(crate) async fn reorder_playlist(
+pub async fn reorder_playlist(
     pool: &SqlitePool,
     request: MusicPlaylistReorder,
 ) -> MusicLibraryResult<MusicPlaylistReorderResult> {
@@ -144,7 +144,7 @@ pub(crate) async fn reorder_playlist(
     })
 }
 
-pub(crate) async fn reorder_playlists(
+pub async fn reorder_playlists(
     pool: &SqlitePool,
     request: MusicPlaylistsReorder,
 ) -> MusicLibraryResult<Vec<MusicWriteReceipt>> {
@@ -198,7 +198,7 @@ pub(crate) async fn reorder_playlists(
     Ok(receipts)
 }
 
-pub(crate) async fn bulk_set_review_state(
+pub async fn bulk_set_review_state(
     pool: &SqlitePool,
     request: MusicBulkReviewWrite,
 ) -> MusicLibraryResult<MusicBulkMembershipResult> {
@@ -237,7 +237,7 @@ pub(crate) async fn bulk_set_review_state(
     })
 }
 
-pub(crate) async fn apply_review_selection(
+pub async fn apply_review_selection(
     pool: &SqlitePool,
     request: MusicReviewSelectionWrite,
 ) -> MusicLibraryResult<MusicReviewSelectionResult> {
@@ -382,7 +382,7 @@ pub(crate) async fn apply_review_selection(
     })
 }
 
-pub(crate) async fn bulk_snooze(
+pub async fn bulk_snooze(
     pool: &SqlitePool,
     request: MusicBulkSnoozeWrite,
 ) -> MusicLibraryResult<MusicBulkMembershipResult> {

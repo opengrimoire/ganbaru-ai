@@ -2,7 +2,7 @@ use sqlx::{SqliteConnection, SqlitePool, Transaction};
 
 use super::*;
 
-pub(crate) async fn removal_impact(
+pub async fn removal_impact(
     pool: &SqlitePool,
     collection_id: &str,
 ) -> MusicLibraryResult<MusicSourceRemovalImpact> {
@@ -67,7 +67,7 @@ async fn load_impact(
     })
 }
 
-pub(crate) async fn remove_source(
+pub async fn remove_source(
     pool: &SqlitePool,
     request: MusicSourceRemovalRequest,
 ) -> MusicLibraryResult<MusicSourceRemovalImpact> {

@@ -1,7 +1,7 @@
 //! Deterministic queue, membership-boundary, and observation policy.
 
 use super::models::*;
-use crate::music::library::{
+use ganbaru_music_library::{
     MusicItemAvailability, MusicListeningOutcome, MusicListeningUpdate, MusicRepeatMode,
     MusicSelectionKind, MusicWeight,
 };

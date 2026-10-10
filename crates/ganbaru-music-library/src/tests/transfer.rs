@@ -82,7 +82,7 @@ fn music_transfer_json_requires_mix_and_retains_unknown_record_diagnostics() {
 
 #[test]
 fn music_transfer_admits_database_bytes_before_loading_selected_families() {
-    tauri::async_runtime::block_on(async {
+    crate::test_support::block_on(async {
         let oversized = "x".repeat(super::transfer_read::MAX_READ_BYTES / 4);
         for statement in [
             "UPDATE music_local_roots SET name=?",
@@ -136,7 +136,7 @@ fn music_transfer_admits_database_bytes_before_loading_selected_families() {
 
 #[test]
 fn music_transfer_shares_database_allowance_across_items_children_and_conflict_reads() {
-    tauri::async_runtime::block_on(async {
+    crate::test_support::block_on(async {
         let pool = super::pool().await;
         let initial = reviewed(&pool, source(), "initial").await;
         transfer::commit(&pool, initial, &[]).await.unwrap();
@@ -191,7 +191,7 @@ fn music_transfer_shares_database_allowance_across_items_children_and_conflict_r
 
 #[test]
 fn music_transfer_rolls_back_every_write_if_receipt_persistence_fails() {
-    tauri::async_runtime::block_on(async {
+    crate::test_support::block_on(async {
         let pool = super::pool().await;
         let request = reviewed(&pool, source(), "rollback").await;
         sqlx::query("CREATE TRIGGER fail_receipt BEFORE INSERT ON music_transfer_receipts BEGIN SELECT RAISE(ABORT, 'receipt failure'); END").execute(&pool).await.unwrap();
@@ -233,7 +233,7 @@ fn music_transfer_rolls_back_every_write_if_receipt_persistence_fails() {
 
 #[test]
 fn music_transfer_revalidates_child_records_and_bound_roots() {
-    tauri::async_runtime::block_on(async {
+    crate::test_support::block_on(async {
         let pool = super::pool().await;
         let initial = reviewed(&pool, source(), "initial").await;
         transfer::commit(&pool, initial, &[]).await.unwrap();
@@ -269,7 +269,7 @@ fn music_transfer_revalidates_child_records_and_bound_roots() {
 
 #[test]
 fn music_transfer_matches_only_incoming_records_in_a_larger_library() {
-    tauri::async_runtime::block_on(async {
+    crate::test_support::block_on(async {
         let pool = super::pool().await;
         let initial = reviewed(&pool, source(), "initial").await;
         transfer::commit(&pool, initial, &[]).await.unwrap();
@@ -296,7 +296,7 @@ fn music_transfer_matches_only_incoming_records_in_a_larger_library() {
 
 #[test]
 fn music_transfer_matches_windows_case_without_changing_portable_identity() {
-    tauri::async_runtime::block_on(async {
+    crate::test_support::block_on(async {
         let pool = super::pool().await;
         let initial = reviewed(&pool, source(), "initial").await;
         transfer::commit(&pool, initial, &[]).await.unwrap();
@@ -395,7 +395,7 @@ impl Drop for TransferDatabase {
 
 #[test]
 fn music_transfer_retry_after_restart_returns_the_committed_receipt() {
-    tauri::async_runtime::block_on(async {
+    crate::test_support::block_on(async {
         let database = TransferDatabase::new();
         let pool = database.open().await;
         ganbaru_db::run_migrations(&pool).await.unwrap();
@@ -420,7 +420,7 @@ fn music_transfer_retry_after_restart_returns_the_committed_receipt() {
 
 #[test]
 fn music_transfer_snapshot_never_mixes_a_concurrent_edit() {
-    tauri::async_runtime::block_on(async {
+    crate::test_support::block_on(async {
         let database = TransferDatabase::new();
         let pool = database.open().await;
         ganbaru_db::run_migrations(&pool).await.unwrap();

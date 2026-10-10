@@ -66,7 +66,7 @@ fn request(job_id: &str, root: &Path, requested_at_ms: i64) -> MusicLocalRefresh
 
 #[test]
 fn complete_refresh_catalogs_large_file_sets_with_bounded_staging() {
-    tauri::async_runtime::block_on(async {
+    crate::test_support::block_on(async {
         let pool = migrated_pool().await;
         seed_root(&pool).await;
         let root = temporary_root("dense");
@@ -117,7 +117,7 @@ fn complete_refresh_catalogs_large_file_sets_with_bounded_staging() {
 
 #[test]
 fn only_a_complete_current_generation_marks_absent_locations_missing() {
-    tauri::async_runtime::block_on(async {
+    crate::test_support::block_on(async {
         let pool = migrated_pool().await;
         seed_root(&pool).await;
         let root = temporary_root("reconcile");
@@ -184,7 +184,7 @@ fn only_a_complete_current_generation_marks_absent_locations_missing() {
 
 #[test]
 fn tagged_metadata_updates_without_overwriting_user_authored_fields() {
-    tauri::async_runtime::block_on(async {
+    crate::test_support::block_on(async {
         let pool = migrated_pool().await;
         seed_root(&pool).await;
         let root = temporary_root("metadata");
@@ -245,7 +245,7 @@ fn id3_title(title: &str) -> Vec<u8> {
 
 #[test]
 fn local_paths_remain_distinct_even_when_content_matches() {
-    tauri::async_runtime::block_on(async {
+    crate::test_support::block_on(async {
         let pool = migrated_pool().await;
         seed_root(&pool).await;
         seed_extra_root(&pool, "root-2", "collection-2").await;
@@ -391,7 +391,7 @@ fn local_paths_remain_distinct_even_when_content_matches() {
 
 #[test]
 fn refresh_normalizes_cross_platform_separators_without_collapsing_path_case() {
-    tauri::async_runtime::block_on(async {
+    crate::test_support::block_on(async {
         let pool = migrated_pool().await;
         seed_root(&pool).await;
         let root = temporary_root("path-normalization");
@@ -439,7 +439,7 @@ fn refresh_normalizes_cross_platform_separators_without_collapsing_path_case() {
 
 #[test]
 fn unavailable_matching_content_remains_distinct_and_available() {
-    tauri::async_runtime::block_on(async {
+    crate::test_support::block_on(async {
         let pool = migrated_pool().await;
         seed_root(&pool).await;
         seed_extra_root(&pool, "root-2", "collection-2").await;
@@ -486,7 +486,7 @@ fn unavailable_matching_content_remains_distinct_and_available() {
 
 #[test]
 fn inaccessible_refresh_preserves_last_known_availability() {
-    tauri::async_runtime::block_on(async {
+    crate::test_support::block_on(async {
         let pool = migrated_pool().await;
         seed_root(&pool).await;
         let root = temporary_root("inaccessible");
@@ -512,7 +512,7 @@ fn inaccessible_refresh_preserves_last_known_availability() {
 
 #[test]
 fn partial_refresh_keeps_unseen_locations_available_and_reports_uncertainty() {
-    tauri::async_runtime::block_on(async {
+    crate::test_support::block_on(async {
         let pool = migrated_pool().await;
         seed_root(&pool).await;
         let root = temporary_root("partial");
