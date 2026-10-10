@@ -1,23 +1,25 @@
 //! Bounded wire contracts for the local vault handoff service.
 
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
+use sha2::{Digest, Sha256};
+use std::io::Read;
 use std::path::Path;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 mod sync;
 
-pub(crate) use sync::{
+pub use sync::{
     MAX_SYNC_HASHES, SYNC_PAGE_BYTES, SyncProbe, SyncRefusal, SyncRefusalCode, SyncSeq,
 };
 
-pub(crate) const PROTOCOL_VERSION: u16 = 5;
-pub(crate) const MAX_CONTROL_BYTES: usize = 1024 * 1024;
-pub(crate) const MAX_ARCHIVE_BYTES: u64 = 100 * 1024 * 1024 * 1024;
-pub(crate) const MAX_IDENTIFIER_BYTES: usize = 160;
-pub(crate) const MAX_DEVICE_LABEL_BYTES: usize = 128;
+pub const PROTOCOL_VERSION: u16 = 5;
+pub const MAX_CONTROL_BYTES: usize = 1024 * 1024;
+pub const MAX_ARCHIVE_BYTES: u64 = 100 * 1024 * 1024 * 1024;
+pub const MAX_IDENTIFIER_BYTES: usize = 160;
+pub const MAX_DEVICE_LABEL_BYTES: usize = 128;
 const MAX_APP_VERSION_BYTES: usize = 64;
-pub(crate) const MAX_DISTRACTIONS_SAMPLES: usize = 1_024;
-pub(crate) const TRANSFER_CHUNK_BYTES: usize = 64 * 1024;
+pub const MAX_DISTRACTIONS_SAMPLES: usize = 1_024;
+pub const TRANSFER_CHUNK_BYTES: usize = 64 * 1024;
 const PAIRING_QR_MAGIC: &[u8; 4] = b"GBQ\x01";
 /// Base64url text of a 64-byte Ed25519 signature.
 const SIGNATURE_TEXT_LENGTH: usize = 86;
@@ -34,7 +36,7 @@ const STATUS_REPLAY_WINDOW_MS: i64 = 5 * 60 * 1000;
 /// Outcome of a contact request as reported by its recipient.
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) enum ContactRequestOutcome {
+pub enum ContactRequestOutcome {
     Pending,
     Accepted,
     Declined,
@@ -42,7 +44,7 @@ pub(crate) enum ContactRequestOutcome {
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) enum DeviceKind {
+pub enum DeviceKind {
     Computer,
     Phone,
     #[default]
@@ -51,13 +53,13 @@ pub(crate) enum DeviceKind {
 
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct HandoffCompatibility {
+pub struct HandoffCompatibility {
     pub app_version: String,
     pub database_schema_sha256: String,
 }
 
 impl HandoffCompatibility {
-    pub(crate) fn validate(&self) -> Result<(), String> {
+    pub fn validate(&self) -> Result<(), String> {
         if self.app_version.trim().is_empty()
             || self.app_version.len() > MAX_APP_VERSION_BYTES
             || self.app_version.chars().any(char::is_control)
@@ -69,7 +71,7 @@ impl HandoffCompatibility {
     }
 }
 
-pub(crate) fn ensure_compatible(
+pub fn ensure_compatible(
     local: &HandoffCompatibility,
     remote: &HandoffCompatibility,
 ) -> Result<(), String> {
@@ -86,7 +88,7 @@ pub(crate) fn ensure_compatible(
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct PairingInvitation {
+pub struct PairingInvitation {
     pub protocol_version: u16,
     pub compatibility: HandoffCompatibility,
     pub invitation_id: String,
@@ -100,7 +102,7 @@ pub(crate) struct PairingInvitation {
 }
 
 impl PairingInvitation {
-    pub(crate) fn validate(&self, now_ms: i64) -> Result<(), String> {
+    pub fn validate(&self, now_ms: i64) -> Result<(), String> {
         validate_protocol(self.protocol_version)?;
         self.compatibility.validate()?;
         validate_identifier("invitation id", &self.invitation_id)?;
@@ -120,7 +122,7 @@ impl PairingInvitation {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct BundleMetadata {
+pub struct BundleMetadata {
     pub protocol_version: u16,
     pub compatibility: HandoffCompatibility,
     pub vault_id: String,
@@ -133,13 +135,13 @@ pub(crate) struct BundleMetadata {
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) enum BundlePurpose {
+pub enum BundlePurpose {
     Ownership,
     Refresh,
 }
 
 impl BundleMetadata {
-    pub(crate) fn validate(&self) -> Result<(), String> {
+    pub fn validate(&self) -> Result<(), String> {
         validate_protocol(self.protocol_version)?;
         self.compatibility.validate()?;
         validate_identifier("vault id", &self.vault_id)?;
@@ -157,7 +159,7 @@ impl BundleMetadata {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct DistractionsSampleMessage {
+pub struct DistractionsSampleMessage {
     pub sample_id: String,
     pub device_id: String,
     pub source_type: String,
@@ -171,7 +173,7 @@ pub(crate) struct DistractionsSampleMessage {
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase", tag = "kind")]
-pub(crate) enum ControlMessage {
+pub enum ControlMessage {
     Enroll {
         protocol_version: u16,
         invitation_id: String,
@@ -384,7 +386,7 @@ pub(crate) enum ControlMessage {
 impl ControlMessage {
     /// The vault and device a sync request names, or `None` for any other message.
     #[cfg(desktop)]
-    pub(crate) fn sync_peer(&self) -> Option<(&str, &str)> {
+    pub fn sync_peer(&self) -> Option<(&str, &str)> {
         match self {
             Self::SyncHello {
                 vault_id,
@@ -415,7 +417,7 @@ impl ControlMessage {
         }
     }
 
-    pub(crate) fn validate(&self) -> Result<(), String> {
+    pub fn validate(&self) -> Result<(), String> {
         match self {
             Self::Enroll {
                 protocol_version,
@@ -833,7 +835,7 @@ fn is_valid_local_date(value: &str) -> bool {
     chrono::NaiveDate::parse_from_str(value, "%Y-%m-%d").is_ok()
 }
 
-pub(crate) async fn write_control<W>(writer: &mut W, message: &ControlMessage) -> Result<(), String>
+pub async fn write_control<W>(writer: &mut W, message: &ControlMessage) -> Result<(), String>
 where
     W: AsyncWrite + Unpin,
 {
@@ -857,7 +859,7 @@ where
         .map_err(|error| format!("flush handoff message: {error}"))
 }
 
-pub(crate) async fn read_control<R>(reader: &mut R) -> Result<ControlMessage, String>
+pub async fn read_control<R>(reader: &mut R) -> Result<ControlMessage, String>
 where
     R: AsyncRead + Unpin,
 {
@@ -883,7 +885,7 @@ fn decode_bounded_json<T: DeserializeOwned>(encoded: &[u8], label: &str) -> Resu
     serde_json::from_slice(encoded).map_err(|error| format!("decode {label}: {error}"))
 }
 
-pub(crate) fn encode_invitation(invitation: &PairingInvitation) -> Result<String, String> {
+pub fn encode_invitation(invitation: &PairingInvitation) -> Result<String, String> {
     invitation.validate(unix_time_ms().saturating_sub(1))?;
     let json = serde_json::to_vec(invitation)
         .map_err(|error| format!("encode pairing invitation: {error}"))?;
@@ -893,7 +895,7 @@ pub(crate) fn encode_invitation(invitation: &PairingInvitation) -> Result<String
     ))
 }
 
-pub(crate) fn decode_invitation(encoded: &str, now_ms: i64) -> Result<PairingInvitation, String> {
+pub fn decode_invitation(encoded: &str, now_ms: i64) -> Result<PairingInvitation, String> {
     if encoded.is_empty() || encoded.len() > 8 * 1024 {
         return Err("pairing invitation has an invalid size".to_string());
     }
@@ -906,19 +908,19 @@ pub(crate) fn decode_invitation(encoded: &str, now_ms: i64) -> Result<PairingInv
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct QrMatrix {
+pub struct QrMatrix {
     pub width: usize,
     pub modules: Vec<bool>,
 }
 
 #[cfg(desktop)]
-pub(crate) fn invitation_qr_matrix(invitation: &PairingInvitation) -> Result<QrMatrix, String> {
+pub fn invitation_qr_matrix(invitation: &PairingInvitation) -> Result<QrMatrix, String> {
     let payload = encode_pairing_qr_payload(invitation)?;
     qr_matrix_for_bytes(&payload)
 }
 
 /// Renders an opaque binary payload as a QR module matrix.
-pub(crate) fn qr_matrix_for_bytes(payload: &[u8]) -> Result<QrMatrix, String> {
+pub fn qr_matrix_for_bytes(payload: &[u8]) -> Result<QrMatrix, String> {
     let code = qrcode::QrCode::with_error_correction_level(payload, qrcode::EcLevel::M)
         .map_err(|error| format!("create QR code: {error}"))?;
     let width = code.width();
@@ -932,7 +934,7 @@ pub(crate) fn qr_matrix_for_bytes(payload: &[u8]) -> Result<QrMatrix, String> {
 }
 
 /// Finds the first QR code in a grayscale frame whose payload starts with `expected_magic`.
-pub(crate) fn decode_qr_bytes_luma(
+pub fn decode_qr_bytes_luma(
     width: usize,
     height: usize,
     luma: &[u8],
@@ -957,7 +959,7 @@ pub(crate) fn decode_qr_bytes_luma(
     Err("no readable QR code was found".to_string())
 }
 
-pub(crate) fn decode_pairing_qr_luma(
+pub fn decode_pairing_qr_luma(
     width: usize,
     height: usize,
     luma: &[u8],
@@ -1088,7 +1090,7 @@ fn encode_qr_digest(digest: [u8; 32]) -> String {
     digest.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
-pub(crate) fn validate_staging_file(path: &Path, metadata: &BundleMetadata) -> Result<(), String> {
+pub fn validate_staging_file(path: &Path, metadata: &BundleMetadata) -> Result<(), String> {
     metadata.validate()?;
     let actual_bytes = path
         .metadata()
@@ -1097,14 +1099,36 @@ pub(crate) fn validate_staging_file(path: &Path, metadata: &BundleMetadata) -> R
     if actual_bytes != metadata.archive_bytes {
         return Err("staged bundle size does not match metadata".to_string());
     }
-    let digest = super::sha256_file(path)?;
+    let digest = sha256_file(path)?;
     if digest != metadata.archive_sha256 {
         return Err("staged bundle digest does not match metadata".to_string());
     }
     Ok(())
 }
 
-pub(crate) fn validate_identifier(label: &str, value: &str) -> Result<(), String> {
+/// Lowercase hex SHA-256 digest of a file, read in transfer-sized chunks.
+pub fn sha256_file(path: &Path) -> Result<String, String> {
+    let mut file = std::fs::File::open(path)
+        .map_err(|error| format!("open file for SHA-256 digest: {error}"))?;
+    let mut hasher = Sha256::new();
+    let mut buffer = [0_u8; TRANSFER_CHUNK_BYTES];
+    loop {
+        let bytes = file
+            .read(&mut buffer)
+            .map_err(|error| format!("read file for SHA-256 digest: {error}"))?;
+        if bytes == 0 {
+            break;
+        }
+        hasher.update(&buffer[..bytes]);
+    }
+    Ok(hasher
+        .finalize()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect())
+}
+
+pub fn validate_identifier(label: &str, value: &str) -> Result<(), String> {
     if value.is_empty()
         || value.len() > MAX_IDENTIFIER_BYTES
         || !value
@@ -1136,15 +1160,16 @@ fn validate_sha256(value: &str) -> Result<(), String> {
     Ok(())
 }
 
-pub(crate) fn unix_time_ms() -> i64 {
+pub fn unix_time_ms() -> i64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|duration| duration.as_millis().min(i64::MAX as u128) as i64)
         .unwrap_or(0)
 }
 
-#[cfg(test)]
-pub(crate) fn test_compatibility() -> HandoffCompatibility {
+/// Fixed compatibility values for tests that exercise handoff peers.
+#[cfg(any(test, feature = "test-support"))]
+pub fn test_compatibility() -> HandoffCompatibility {
     HandoffCompatibility {
         app_version: "test".to_string(),
         database_schema_sha256: "a".repeat(64),

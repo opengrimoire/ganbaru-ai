@@ -8,13 +8,13 @@ use serde::{Deserialize, Serialize};
 
 /// Raw operation bytes in one push or pull page. Its base64url form plus JSON framing stays
 /// below the control frame limit, and a single operation of the largest size always fits.
-pub(crate) const SYNC_PAGE_BYTES: usize = 600 * 1024;
+pub const SYNC_PAGE_BYTES: usize = 600 * 1024;
 /// Entries of a version vector on the wire.
-pub(crate) const MAX_SYNC_WRITERS: usize = 4_096;
+const MAX_SYNC_WRITERS: usize = 4_096;
 /// Operations in one page; operations are never smaller than their signed header.
-pub(crate) const MAX_SYNC_PAGE_OPS: usize = 8_192;
+const MAX_SYNC_PAGE_OPS: usize = 8_192;
 /// Hashes in one hash list.
-pub(crate) const MAX_SYNC_HASHES: u32 = 1_024;
+pub const MAX_SYNC_HASHES: u32 = 1_024;
 /// Base64url length of the largest operation.
 const MAX_OPERATION_TEXT_BYTES: usize =
     (ganbaru_sync_contracts::bounds::MAX_OPERATION_BYTES * 4).div_ceil(3);
@@ -26,7 +26,7 @@ const HASH_TEXT_LENGTH: usize = 64;
 /// One version vector entry: the highest sequence of a writer.
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct SyncSeq {
+pub struct SyncSeq {
     pub writer: String,
     pub seq: u64,
 }
@@ -35,7 +35,7 @@ pub(crate) struct SyncSeq {
 /// a fork that no push would reveal.
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct SyncProbe {
+pub struct SyncProbe {
     pub writer: String,
     pub seq: u64,
     pub hash: String,
@@ -44,7 +44,7 @@ pub(crate) struct SyncProbe {
 /// Why the hub stopped storing a pushed page.
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
-pub(crate) enum SyncRefusalCode {
+pub enum SyncRefusalCode {
     /// Earlier operations of the writer are missing.
     Gap,
     /// The hub holds a different operation of the writer's chain.
@@ -62,7 +62,7 @@ pub(crate) enum SyncRefusalCode {
 /// A refused push: the code and, when it concerns one writer, where its chain stopped.
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(crate) struct SyncRefusal {
+pub struct SyncRefusal {
     pub code: SyncRefusalCode,
     pub writer: Option<String>,
     pub seq: Option<u64>,

@@ -1845,6 +1845,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "ganbaru-handoff"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "chrono",
+ "ganbaru-people",
+ "ganbaru-sync-contracts",
+ "qrcode",
+ "quircs",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tokio",
+]
+
+[[package]]
 name = "ganbaru-mobile-distractions"
 version = "0.1.0"
 dependencies = [
@@ -2037,6 +2053,7 @@ dependencies = [
  "ganbaru-civil-time",
  "ganbaru-db",
  "ganbaru-distractions",
+ "ganbaru-handoff",
  "ganbaru-mobile-distractions",
  "ganbaru-mobile-documents",
  "ganbaru-mobile-media",
@@ -2065,8 +2082,6 @@ dependencies = [
  "objc2-foundation",
  "objc2-web-kit",
  "portable-pty",
- "qrcode",
- "quircs",
  "rcgen",
  "reqwest",
  "rmcp",

@@ -16,8 +16,6 @@ use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, Server
 use rustls::crypto::{WebPkiSupportedAlgorithms, verify_tls12_signature, verify_tls13_signature};
 use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
 use rustls::{DigitallySignedStruct, SignatureScheme};
-use sha2::{Digest, Sha256};
-use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -742,25 +740,4 @@ async fn timeout_control<T>(
 
 fn fs_rename(source: &Path, target: &Path) -> Result<(), String> {
     std::fs::rename(source, target).map_err(|error| format!("finalize staged transfer: {error}"))
-}
-
-pub(crate) fn sha256_file(path: &Path) -> Result<String, String> {
-    let mut file = std::fs::File::open(path)
-        .map_err(|error| format!("open file for SHA-256 digest: {error}"))?;
-    let mut hasher = Sha256::new();
-    let mut buffer = [0_u8; TRANSFER_CHUNK_BYTES];
-    loop {
-        let bytes = file
-            .read(&mut buffer)
-            .map_err(|error| format!("read file for SHA-256 digest: {error}"))?;
-        if bytes == 0 {
-            break;
-        }
-        hasher.update(&buffer[..bytes]);
-    }
-    Ok(hasher
-        .finalize()
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect())
 }

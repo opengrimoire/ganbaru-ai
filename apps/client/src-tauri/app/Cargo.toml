@@ -23,6 +23,7 @@ ganbaru-chat = { workspace = true }
 ganbaru-civil-time = { workspace = true }
 ganbaru-db = { workspace = true }
 ganbaru-distractions = { workspace = true }
+ganbaru-handoff = { workspace = true }
 ganbaru-music = { workspace = true }
 ganbaru-music-library = { workspace = true }
 ganbaru-notes = { workspace = true }
@@ -38,8 +39,6 @@ jiff = { workspace = true }
 reqwest = { workspace = true }
 rcgen = { workspace = true }
 rustls = { workspace = true }
-qrcode = { workspace = true }
-quircs = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
@@ -102,3 +101,4 @@ objc2-web-kit = { workspace = true }
 
 [dev-dependencies]
 ganbaru-chat = { workspace = true, features = ["test-support"] }
+ganbaru-handoff = { workspace = true, features = ["test-support"] }

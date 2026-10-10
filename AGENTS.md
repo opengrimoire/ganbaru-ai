@@ -112,6 +112,7 @@ crates/
   ganbaru-chat/: Chat persistence, runtime, Git workspaces, checkpoints, review, and application services
   ganbaru-working-folders/: Tauri-free working-folder IDs, bindings, and device-state operations
   ganbaru-people/: Tauri-free person key pairs, signed contact cards, request signatures, and trust kinds
+  ganbaru-handoff/: Tauri-free LAN handoff control protocol, message bounds, compatibility, QR encoding, and staged bundle validation
   ganbaru-sync-contracts/: Tauri-free sync identifiers, clocks, version vectors, writer certificates, order keys, and the signed operation format
   ganbaru-sync/: Tauri-free sync engine with the replication manifest, capture triggers, sealing, apply and merge, conflicts, recovery, and the simulation harness
   ganbaru-themes/: Tauri-free user theme persistence, seed resets, upgrade dismissals, and row validation
@@ -197,7 +198,7 @@ Read `docs/testing/README.md` when changing tests, validation scripts, task orde
 - `pnpm -w run editor-check`: editor diagnostics, including Tailwind canonical class checks.
 - `pnpm -w run test`: serialized Rust tests followed by sequential one-worker Vitest shards.
 - `pnpm --dir apps/client exec vitest run path/to/file.test.ts --maxWorkers=1`: focused frontend test file.
-- `cargo test -p ganbaru-chat --lib -j 1 test_name -- --test-threads=1`: focused core crate test (substitute `ganbaru-notes`, `ganbaru-db`, `ganbaru-civil-time`, `ganbaru-distractions`, `ganbaru-chat-contracts`, `ganbaru-chat-providers`, `ganbaru-pomodoro`, `ganbaru-quick-notes`, `ganbaru-music`, `ganbaru-music-library`, `ganbaru-music-player`, `ganbaru-projects`, `ganbaru-calendar`, `ganbaru-working-folders`, `ganbaru-people`, `ganbaru-sync-contracts`, `ganbaru-sync`, or `ganbaru-themes`).
+- `cargo test -p ganbaru-chat --lib -j 1 test_name -- --test-threads=1`: focused core crate test (substitute `ganbaru-notes`, `ganbaru-db`, `ganbaru-civil-time`, `ganbaru-distractions`, `ganbaru-chat-contracts`, `ganbaru-chat-providers`, `ganbaru-pomodoro`, `ganbaru-quick-notes`, `ganbaru-music`, `ganbaru-music-library`, `ganbaru-music-player`, `ganbaru-projects`, `ganbaru-calendar`, `ganbaru-working-folders`, `ganbaru-people`, `ganbaru-handoff`, `ganbaru-sync-contracts`, `ganbaru-sync`, or `ganbaru-themes`).
 - `cargo test -p ganbaru-tauri-app --lib -j 1 test_name -- --test-threads=1`: focused Tauri composition or command-adapter test.
 - `cargo test -p ganbaru-native-messaging --bin ganbaru-ai-native-messaging -j 1 test_name -- --test-threads=1`: focused native messaging host test.
 - `cargo check -p ganbaru-ai --bin ganbaru-ai -j 1`: focused desktop composition check.

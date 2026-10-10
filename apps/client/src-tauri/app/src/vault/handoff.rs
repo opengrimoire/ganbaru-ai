@@ -7,10 +7,11 @@ mod network_access;
 #[cfg(target_os = "linux")]
 pub(crate) use network_access::run_privileged_helper_if_requested;
 pub(crate) mod pairing;
-pub(crate) mod protocol;
 pub(crate) mod receiver;
 pub(crate) mod source;
 pub(crate) mod transport;
+
+pub(crate) use ganbaru_handoff::protocol;
 
 use pairing::PairingManager;
 use protocol::{HandoffCompatibility, decode_invitation, encode_invitation};
@@ -31,7 +32,7 @@ const COORDINATOR_PORT: u16 = 43_821;
 #[cfg(desktop)]
 const DEVELOPMENT_COORDINATOR_PORT: u16 = 43_822;
 
-pub(crate) use transport::sha256_file;
+pub(crate) use protocol::sha256_file;
 
 pub(crate) fn current_compatibility<R: Runtime>(app: &tauri::AppHandle<R>) -> HandoffCompatibility {
     let schema = Sha256::digest(ganbaru_db::migration_set_identity_material());
