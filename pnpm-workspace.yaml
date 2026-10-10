@@ -1,7 +1,6 @@
 packages:
   - apps/*
 
-managePackageManagerVersions: true
 minimumReleaseAge: 4320
 packageExtensions:
   "@pierre/diffs@1.2.12":
