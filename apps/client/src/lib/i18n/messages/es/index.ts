@@ -11,7 +11,7 @@ import { format } from "./format";
 import { music } from "./music";
 import { mobile } from "./mobile";
 import { notes } from "./notes";
-import { people } from "./people";
+import { contacts } from "./contacts";
 import { projects } from "./projects";
 import { quickNotes } from "./quick-notes";
 import { settings } from "./settings";
@@ -42,7 +42,7 @@ export const es = {
   diagnostics,
   benchmark,
   notes,
-  people,
+  contacts,
   projects,
   quickNotes,
   sync,

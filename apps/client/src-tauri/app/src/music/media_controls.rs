@@ -116,7 +116,7 @@ pub(crate) fn publish_session(
 ) -> Result<(), String> {
     use crate::music::session::{PlaybackOrder, SourceKind};
     update_media_controls(MediaControlsUpdate {
-        status: session.status.as_ref().into(),
+        status: session.status.as_str().into(),
         title: session
             .current_source
             .as_ref()

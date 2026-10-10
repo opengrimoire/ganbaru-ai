@@ -5,7 +5,7 @@ use crate::signing::{CERTIFICATE_DOMAIN, domain_message};
 use crate::{
     CertificateError, SignedCertificate, WriterCertificate, sign_certificate, validate_device_id,
 };
-use ganbaru_people::{PersonKeyPair, verify};
+use ganbaru_contacts::{PersonKeyPair, verify};
 
 #[test]
 fn certificates_roundtrip_with_and_without_predecessor() {

@@ -1,5 +1,7 @@
 //! Distraction blocking. Desktop modules enforce browser and app rules from local state files;
-//! Android drives the native blocker. Budget matching and linked-device accounting are shared.
+//! Android drives the native blocker. Contracts, application rules, budget matching, usage
+//! normalization, and elapsed accounting come from `ganbaru-distractions`; linked-device
+//! accounting is shared.
 
 #[cfg(desktop)]
 use crate::vault;
@@ -30,10 +32,7 @@ pub(crate) mod catalog;
 #[cfg(desktop)]
 pub(crate) mod commands;
 #[cfg(desktop)]
-mod contracts;
-#[cfg(desktop)]
 mod foreground;
-pub(crate) mod limits;
 #[cfg(desktop)]
 pub(crate) mod limits_read;
 pub(crate) mod linked;
@@ -42,16 +41,18 @@ mod process_control;
 #[cfg(desktop)]
 mod processes;
 #[cfg(desktop)]
-mod rules;
-#[cfg(desktop)]
 pub(crate) mod runtime;
 #[cfg(desktop)]
 pub(crate) mod state_files;
-#[cfg(desktop)]
-pub(crate) mod usage;
 
+pub(crate) use ganbaru_distractions::limits;
+#[cfg(desktop)]
+use ganbaru_distractions::{contracts, rules, usage};
+
+#[cfg(desktop)]
+use contracts::DistractionsExtensionConnectionFile;
 #[cfg(all(desktop, any(target_os = "linux", test)))]
-use contracts::{DesktopRuleMatcher, ObservedDesktopProcess};
+use contracts::ObservedDesktopProcess;
 #[cfg(desktop)]
 #[allow(unused_imports)]
 pub use contracts::{
@@ -62,8 +63,6 @@ pub use contracts::{
     DistractionsLimitState, DistractionsLimitStateItem, DistractionsRunningDesktopAppMatch,
     DistractionsRuntimeState, DistractionsUsageSampleInput, DistractionsUsageSampleRow,
 };
-#[cfg(desktop)]
-use contracts::{DistractionsExtensionConnectionFile, NormalizedDesktopBlockEvent};
 
 #[cfg(desktop)]
 use authorization::{load_close_authorization, validate_names_authorized};
@@ -86,23 +85,15 @@ use rules::{
 #[cfg(desktop)]
 pub use state_files::clear_distractions_enforcement_state;
 #[cfg(desktop)]
-use state_files::{
-    block_event_phase_from_runtime, limit_state_path, read_fresh_limit_state,
-    read_fresh_runtime_state, state_path,
-};
+use state_files::{limit_state_path, read_fresh_limit_state, read_fresh_runtime_state, state_path};
+
 #[cfg(desktop)]
-use usage::is_valid_local_date;
+use limits::is_valid_local_date;
 
 #[cfg(all(desktop, test))]
 use state_files::{
     clear_enforcement_state_files, extension_status_from_file_contents, validate_limit_state,
     validate_state, write_text_file_atomically,
-};
-
-#[cfg(all(desktop, test))]
-use usage::{
-    insert_desktop_block_event, insert_usage_samples, normalize_desktop_block_event,
-    normalize_usage_sample,
 };
 
 #[cfg(all(desktop, test))]

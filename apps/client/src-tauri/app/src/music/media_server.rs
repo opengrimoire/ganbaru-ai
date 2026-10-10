@@ -22,10 +22,10 @@ use std::{
 use tauri::{Manager, State};
 
 #[cfg(desktop)]
-use super::artwork::{embedded_artwork_id, extract_embedded_artwork};
-#[cfg(desktop)]
 use super::require_absolute_file;
 use super::youtube::player_page::{youtube_host_content_security_policy, youtube_host_html};
+#[cfg(desktop)]
+use ganbaru_music_library::artwork::{embedded_artwork_id, extract_embedded_artwork};
 
 pub struct MusicHostState {
     pub youtube_url: String,

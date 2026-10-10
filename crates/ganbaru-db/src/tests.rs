@@ -1,12 +1,12 @@
 mod access;
 mod calendar;
 mod chat;
+mod contacts;
 mod core;
 mod distractions;
 mod helpers;
 mod music;
 mod notes;
-mod people;
 mod pomodoro;
 mod projects;
 mod query_plans;
@@ -83,6 +83,26 @@ fn pool_registry_close_waits_for_an_in_progress_open() {
         assert!(!reopened.is_closed());
         crate::validate_current_schema(&reopened).await.unwrap();
         registry.close_all().await.unwrap();
+        std::fs::remove_dir_all(directory).unwrap();
+    });
+}
+
+#[test]
+fn pool_registry_close_releases_a_connection_returned_during_close() {
+    block_on(async {
+        let directory = registry_test_directory("close-returning");
+        let path = directory.join("ganbaru-ai.sqlite");
+        let registry = crate::DatabasePoolRegistry::default();
+        let pool = registry.connect_path(&path).await.unwrap();
+        drop(pool.acquire().await.unwrap());
+        // Let the returning connection pass the pool's open check before close begins.
+        tokio::task::yield_now().await;
+        registry.close_path(&path).await.unwrap();
+        assert_eq!(pool.size(), 0, "close must not leave a connection open");
+        for suffix in ["-wal", "-shm"] {
+            let sidecar = directory.join(format!("ganbaru-ai.sqlite{suffix}"));
+            assert!(!sidecar.exists(), "{} must be released", sidecar.display());
+        }
         std::fs::remove_dir_all(directory).unwrap();
     });
 }

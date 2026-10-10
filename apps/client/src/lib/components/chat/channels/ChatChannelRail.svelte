@@ -47,7 +47,7 @@
     | { kind: "directMessages" };
   type ChatChannelSetupDialogComponent = typeof import("./ChatChannelSetupDialog.svelte").default;
   type ParticipantPickerComponent =
-    typeof import("$lib/components/people/ParticipantPicker.svelte").default;
+    typeof import("$lib/components/contacts/ParticipantPicker.svelte").default;
 
   let {
     presentation = "column",
@@ -331,9 +331,9 @@
     if (section) deleteSectionCandidate = section;
   }
 
-  function openPeopleFromContextMenu(peopleTab: "contacts" | "invitations"): void {
+  function openContactsFromContextMenu(contactsTab: "contacts" | "invitations"): void {
     closeSectionContextMenu();
-    settings.open("people", { peopleTab });
+    settings.open("contacts", { contactsTab });
   }
 
   function moveChannel(channelId: string, sectionId: string | null): void {
@@ -491,7 +491,7 @@
   /** Load the direct message picker only when the rail approaches or opens it. */
   function loadDirectMessagePicker(): Promise<void> {
     if (DirectMessagePicker) return Promise.resolve();
-    directMessagePickerLoad ??= import("$lib/components/people/ParticipantPicker.svelte")
+    directMessagePickerLoad ??= import("$lib/components/contacts/ParticipantPicker.svelte")
       .then((module) => { DirectMessagePicker = module.default; })
       .catch((cause: unknown) => {
         railError = cause instanceof Error ? cause.message : String(cause);
@@ -728,8 +728,8 @@
     {#if sectionContextMenu.target.kind === "channels"}
       <button type="button" role="menuitem" disabled={!projects.selectedProjectId} class="menu-item" onclick={createSectionFromContextMenu}><FolderPlus class="size-4" /><span>{t("chat.channels.newSection")}</span></button>
     {:else if sectionContextMenu.target.kind === "directMessages"}
-      <button type="button" role="menuitem" class="menu-item" onclick={() => openPeopleFromContextMenu("contacts")}><ContactRound class="size-4" /><span>{t("people.tabs.contacts")}</span></button>
-      <button type="button" role="menuitem" class="menu-item" data-chat-invitations onclick={() => openPeopleFromContextMenu("invitations")}><Mail class="size-4" /><span>{t("people.tabs.invitations")}</span></button>
+      <button type="button" role="menuitem" class="menu-item" onclick={() => openContactsFromContextMenu("contacts")}><ContactRound class="size-4" /><span>{t("contacts.tabs.contacts")}</span></button>
+      <button type="button" role="menuitem" class="menu-item" data-chat-invitations onclick={() => openContactsFromContextMenu("invitations")}><Mail class="size-4" /><span>{t("contacts.tabs.invitations")}</span></button>
     {:else}
       <button type="button" role="menuitem" class="menu-item" onclick={renameSectionFromContextMenu}><Pencil class="size-4" /><span>{t("chat.rename")}</span></button>
       <button type="button" role="menuitem" class="menu-item menu-item-destructive" onclick={deleteSectionFromContextMenu}><Trash2 class="size-4" /><span>{t("chat.channels.deleteSectionConfirm")}</span></button>
@@ -806,7 +806,7 @@
   <LoadedDirectMessagePicker
     anchor={directMessageButton}
     title={t("chat.channels.newDirectMessage")}
-    includePeople
+    includeContacts
     includeTeammates={false}
     horizontalAlign="start"
     confirmLabel={t("chat.channels.startDirectMessage")}

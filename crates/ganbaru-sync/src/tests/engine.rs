@@ -1,6 +1,6 @@
 //! Engine entry points across replicas of the vault manifest.
 
-use ganbaru_people::PersonKeyPair;
+use ganbaru_contacts::PersonKeyPair;
 use ganbaru_sync_contracts::{Envelope, Field, GroupMask, RevokeReason, VersionVector};
 
 use super::block_on;

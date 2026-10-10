@@ -39,7 +39,7 @@ fn guarded_set_excludes_replicated_owned_derived_and_engine_tables() {
                 "{excluded} is guarded"
             );
         }
-        for guarded in ["projects", "people_local_identity"] {
+        for guarded in ["projects", "contacts_local_identity"] {
             assert!(
                 tables.iter().any(|table| table == guarded),
                 "{guarded} is not guarded"

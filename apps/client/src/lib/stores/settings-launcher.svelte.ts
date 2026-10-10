@@ -13,11 +13,11 @@
  * `onClosed` to restore its own surface once the modal is gone.
  */
 
-import type { ChatSettingsSubsection, DistractionsSettingsTab, PeopleSettingsTab, SectionId } from "$lib/settings/types";
+import type { ChatSettingsSubsection, DistractionsSettingsTab, ContactsSettingsTab, SectionId } from "$lib/settings/types";
 
 interface SettingsLaunchOptions {
   distractionsTab?: DistractionsSettingsTab;
-  peopleTab?: PeopleSettingsTab;
+  contactsTab?: ContactsSettingsTab;
   chatSubsection?: ChatSettingsSubsection;
   chatTeammateId?: string;
   chatChannelId?: string;
@@ -30,7 +30,7 @@ class SettingsLauncherStore {
   isOpen = $state(false);
   targetSection = $state<SectionId | undefined>(undefined);
   targetDistractionsTab = $state<DistractionsSettingsTab | undefined>(undefined);
-  targetPeopleTab = $state<PeopleSettingsTab | undefined>(undefined);
+  targetContactsTab = $state<ContactsSettingsTab | undefined>(undefined);
   targetChatSubsection = $state<ChatSettingsSubsection | undefined>(undefined);
   targetChatTeammateId = $state<string | undefined>(undefined);
   targetChatChannelId = $state<string | undefined>(undefined);
@@ -47,7 +47,7 @@ class SettingsLauncherStore {
     this.targetDistractionsTab = section === "distractions"
       ? options.distractionsTab
       : undefined;
-    this.targetPeopleTab = section === "people" ? options.peopleTab : undefined;
+    this.targetContactsTab = section === "contacts" ? options.contactsTab : undefined;
     this.targetChatSubsection = section === "chat" ? options.chatSubsection : undefined;
     this.targetChatTeammateId = section === "chat" ? options.chatTeammateId : undefined;
     this.targetChatChannelId = section === "chat" ? options.chatChannelId : undefined;
@@ -62,7 +62,7 @@ class SettingsLauncherStore {
     this.isOpen = false;
     this.targetSection = undefined;
     this.targetDistractionsTab = undefined;
-    this.targetPeopleTab = undefined;
+    this.targetContactsTab = undefined;
     this.targetChatSubsection = undefined;
     this.targetChatTeammateId = undefined;
     this.targetChatChannelId = undefined;

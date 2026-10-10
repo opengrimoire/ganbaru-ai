@@ -1,10 +1,10 @@
 //! Android Storage Access Framework refresh into the shared canonical music library.
 
-use super::{
+use ganbaru_mobile_media::{MobileMediaExt, MobileMediaTreeTrack};
+use ganbaru_music_library::{
     MusicCollectionKind, MusicLibraryError, MusicLibraryResult, MusicLocalRefreshRequest,
     MusicRefreshJobProgress, MusicRefreshJobState,
 };
-use ganbaru_mobile_media::{MobileMediaExt, MobileMediaTreeTrack};
 use sha2::{Digest, Sha256};
 use sqlx::{FromRow, SqlitePool};
 
@@ -231,7 +231,7 @@ pub(super) async fn start(
         .commit()
         .await
         .map_err(|error| MusicLibraryError::database("commit Android music refresh", error))?;
-    super::search::rebuild(pool, request.requested_at_ms).await?;
+    ganbaru_music_library::search::rebuild(pool, request.requested_at_ms).await?;
     progress(pool, &request.job_id).await
 }
 

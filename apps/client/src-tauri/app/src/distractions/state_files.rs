@@ -194,27 +194,6 @@ pub(crate) fn publish_committed_focus(
     })
 }
 
-pub(super) fn block_event_phase_from_runtime(
-    runtime: Option<&DistractionsRuntimeState>,
-) -> Option<String> {
-    let runtime = runtime?;
-    if !runtime.active {
-        return None;
-    }
-    if runtime.paused {
-        return match runtime.pause_reason.as_deref() {
-            Some("idle") => Some("idle_pause".to_string()),
-            Some("suspend") => Some("suspend_pause".to_string()),
-            Some("manual") | None => Some("manual_pause".to_string()),
-            Some(_) => None,
-        };
-    }
-    match runtime.phase.as_str() {
-        "focus" | "short_break" | "long_break" => Some(runtime.phase.clone()),
-        _ => None,
-    }
-}
-
 pub(super) fn validate_limit_state(state: &DistractionsLimitState) -> Result<(), String> {
     if !is_valid_local_date(&state.local_date) {
         return Err("local_date must use yyyy-mm-dd".to_string());

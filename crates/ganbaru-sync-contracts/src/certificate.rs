@@ -10,7 +10,7 @@ use crate::ids::{ID_BYTES, WriterId};
 use crate::signing::{
     CERTIFICATE_DOMAIN, WRITER_PUBLIC_KEY_BYTES, WriterPublicKey, domain_message,
 };
-use ganbaru_people::{PUBLIC_KEY_BYTES, PersonKeyPair, PersonPublicKey, SIGNATURE_BYTES, verify};
+use ganbaru_contacts::{PUBLIC_KEY_BYTES, PersonKeyPair, PersonPublicKey, SIGNATURE_BYTES, verify};
 use std::fmt;
 
 const CERTIFICATE_VERSION: u8 = 1;

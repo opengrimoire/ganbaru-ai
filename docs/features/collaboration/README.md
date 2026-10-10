@@ -1,6 +1,6 @@
-# People and invitations
+# Contacts and invitations
 
-Status: Partial. Implemented: the person identity, the signed contact card, contact requests delivered over the local LAN link, contacts with trust scopes, and blocking. Not implemented: invitations, spaces, direct conversations, contact pictures, relay delivery, consumption of once permissions, and the People group in pickers. Today AI agents are still the only participants in any space. Controls whose behavior is not implemented keep their final appearance and are inert, as described in [Unavailable controls](#unavailable-controls).
+Status: Partial. Implemented: the person identity, the signed contact card, contact requests delivered over the local LAN link, contacts with trust scopes, and blocking. Not implemented: invitations, spaces, direct conversations, contact pictures, relay delivery, consumption of once permissions, and the Contacts group in pickers. Today AI agents are still the only participants in any space. Controls whose behavior is not implemented keep their final appearance and are inert, as described in [Unavailable controls](#unavailable-controls).
 
 This document owns the shared model for human collaboration: identity, contacts, invitations, roles, and the surfaces where people and AI agents appear. Feature documents link here instead of repeating it. Authorization rules are owned by [access control](../../data/access-control.md); delivery, encryption, and conflict handling are owned by [device linking and synchronization](../../data/sync.md).
 
@@ -26,7 +26,7 @@ A person is a key pair generated on their own device, in the same way device lin
 
 The card carries the display name and avatar color from Profile, never the full name or anything else in the vault, and is signed by the person key so a tampered card is rejected. It also carries a delivery hint: today the private LAN address and certificate fingerprint of the vault's coordinator, later a self-hosted relay address, without changing the card format. It is shown in Settings as a QR code for phones and a copyable code for desktops, the same two forms device linking uses; the card needs a complete display name before it exists. Regenerating the card invalidates the previous one for new contact requests; existing contacts are unaffected.
 
-The person key is generated on the first device that can write the vault and follows the person to linked devices through [device linking](../../data/sync.md#people-and-contact-requests). The card is unavailable on a linked device until its key copy arrives.
+The person key is generated on the first device that can write the vault and follows the person to linked devices through [device linking](../../data/sync.md#contacts-and-contact-requests). The card is unavailable on a linked device until its key copy arrives.
 
 What a contact sees of a person is limited to the display identity and to content inside spaces they share. Identity visibility follows the same boundaries as content, so a contact never learns which other spaces, contacts, or devices a person has.
 
@@ -49,7 +49,7 @@ Contacts are the person's own social graph and belong to the portable vault, so 
 
 An invitation names one space, one role, and one history boundary: the entire retained history of the space, or only what happens from the moment the invitation is accepted. The boundary applies to channel history, page content and comments, task history, and event details alike, matching the history choice that [Notes access](../notes/links-and-collaboration.md#access) already requires when prior content would become readable.
 
-Invitations can only be addressed to contacts with the invite permission, so the people picker never offers strangers. Inviting someone who is not yet a contact starts with the contact card exchange.
+Invitations can only be addressed to contacts with the invite permission, so the participant picker never offers strangers. Inviting someone who is not yet a contact starts with the contact card exchange.
 
 An invitation is pending until it is accepted, declined, revoked by the sender, or expires after a bounded period. Pending invitations are visible to both sides: the recipient in the Chat sidebar and Settings, the sender in the member list of the space with a pending marker. Declining sends no reason, and the sender is told only that the invitation was declined.
 
@@ -93,7 +93,7 @@ This mirrors the rule in access control that no layer may widen another. Access 
 
 A person has an identity and access. An agent has an identity, access, a brain (provider, model, instructions, effort), and execution limits (working folders and approval policy). Everything else is shared:
 
-- The same picker lists people and agents and offers to invite a person or create an agent at the end of the list.
+- The same picker lists contacts and agents and offers to invite a person or create an agent at the end of the list.
 - The same access step presents a role preset, a summary line, a history boundary, and a Custom expansion.
 - The same member rows, grouped as People and Agents, with the local person pinned first.
 
@@ -103,7 +103,7 @@ An agent executes only on devices of the person who owns it. Other members of a 
 
 - **Chat channels:** the channel dialog edits name, topic, section, and members together, and the header opens a details panel with the topic and members. Both use the shared picker and access step. See [Conversations](../chat/conversations.md).
 - **Chat sidebar:** a Direct messages section whose more-options menu opens Contacts and Invitations in Settings > Contacts.
-- **Settings > Contacts:** the person's contact card (until pressed, the QR and code show a blurred placeholder that is not derived from the real identity, so a shared screen leaks nothing), contacts with their trust scopes and expiry, pending received and sent invitations, and blocked people. AI agents stay under Settings > Chat while they are only usable in Chat.
+- **Settings > Contacts:** the person's contact card (until pressed, the QR and code show a blurred placeholder that is not derived from the real identity, so a shared screen leaks nothing), contacts with their trust scopes and expiry, pending received and sent invitations, and blocked contacts. AI agents stay under Settings > Chat while they are only usable in Chat.
 - **Projects:** a Members list in project settings with roles, and the shared picker for task assignees and reviewers, limited to project members. Groups have the same Members list. See [Projects](../projects/README.md).
 - **Calendar:** attendees chosen with the shared picker, each with a response chip, next to imported attendees that stay read-only. See [Event editing](../calendar/event-editing.md#meeting-metadata).
 - **Notes:** a Share action on a page and on a database page that uses the shared picker with page or subtree scope and the Notes role names Can view, Can comment, Can edit, and Full access, which map onto the capability set above. See [Links and collaboration](../notes/links-and-collaboration.md#access).

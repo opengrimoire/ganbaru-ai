@@ -9,12 +9,12 @@
   import { applyChannelMemberChanges } from "$lib/chat/teammates/channel-member-changes";
   import { summarizeChannelMembers } from "$lib/chat/teammates/channel-members";
   import ChatParticipantAvatar from "$lib/components/chat/identity/ChatParticipantAvatar.svelte";
-  import { floatPanel } from "$lib/components/people/float-panel";
-  import LocalPersonAvatar from "$lib/components/people/LocalPersonAvatar.svelte";
-  import ParticipantPicker from "$lib/components/people/ParticipantPicker.svelte";
-  import PeopleMemberRow from "$lib/components/people/PeopleMemberRow.svelte";
-  import PeopleRoleChip from "$lib/components/people/PeopleRoleChip.svelte";
-  import PeopleRoleSelect from "$lib/components/people/PeopleRoleSelect.svelte";
+  import { floatPanel } from "$lib/components/contacts/float-panel";
+  import LocalPersonAvatar from "$lib/components/contacts/LocalPersonAvatar.svelte";
+  import ParticipantPicker from "$lib/components/contacts/ParticipantPicker.svelte";
+  import MemberRow from "$lib/components/contacts/MemberRow.svelte";
+  import MemberRoleChip from "$lib/components/contacts/MemberRoleChip.svelte";
+  import MemberRoleSelect from "$lib/components/contacts/MemberRoleSelect.svelte";
   import ProjectPickerMobileDialog from "$lib/components/projects/pickers/ProjectPickerMobileDialog.svelte";
   import { FLOATING_WIDTH } from "$lib/components/ui/floating-width";
   import { getLocalization } from "$lib/i18n/translator.svelte";
@@ -58,8 +58,8 @@
 
   const summary = $derived(summarizeChannelMembers(channel.memberships));
   const teammates = $derived(chat.teammates.filter((teammate) => summary.teammateIds.has(teammate.participant.id)));
-  const localName = $derived(preferences.profileDisplayName.trim() || t("people.you"));
-  const localDetail = $derived(preferences.profileDisplayName.trim() ? t("people.you") : null);
+  const localName = $derived(preferences.profileDisplayName.trim() || t("contacts.you"));
+  const localDetail = $derived(preferences.profileDisplayName.trim() ? t("contacts.you") : null);
 
   /** Footer actions share the Notes navigator layout: equal widths, centered, split by a short divider. */
   function footerActionClass(mobile: boolean): string {
@@ -121,27 +121,27 @@
   <div class="members-body min-h-0 flex-1 overflow-y-auto px-1.5 pb-1" class:capped={!mobile} use:scrollEdgeFadeAction>
     {#if teammates.length > 0}<div class="menu-label">{t("chat.organization.people")}</div>{/if}
     <ul class="grid">
-      <PeopleMemberRow name={localName} detail={localDetail}>
+      <MemberRow name={localName} detail={localDetail}>
         {#snippet avatar()}<LocalPersonAvatar size={AVATAR_SIZE} />{/snippet}
-        {#snippet trailing()}<PeopleRoleChip label={t("people.role.owner")} />{/snippet}
-      </PeopleMemberRow>
+        {#snippet trailing()}<MemberRoleChip label={t("contacts.role.owner")} />{/snippet}
+      </MemberRow>
       {#each summary.people as membership (membership.participant.id)}
-        <PeopleMemberRow name={membership.participant.displayName}>
+        <MemberRow name={membership.participant.displayName}>
           {#snippet avatar()}<ChatParticipantAvatar participant={membership.participant} size={AVATAR_SIZE} />{/snippet}
-          {#snippet trailing()}<PeopleRoleSelect ariaLabel={t("people.role.label")} />{/snippet}
-        </PeopleMemberRow>
+          {#snippet trailing()}<MemberRoleSelect ariaLabel={t("contacts.role.label")} />{/snippet}
+        </MemberRow>
       {/each}
     </ul>
     {#if teammates.length > 0}
       <div class="menu-label">{t("chat.organization.teammates")}</div>
       <ul class="grid">
         {#each teammates as teammate (teammate.participant.id)}
-          <PeopleMemberRow name={teammate.participant.displayName} detail={teammate.configurationState === "healthy" ? teammate.role || t("chat.organization.aiTeammate") : t("chat.organization.needsSetup")}>
+          <MemberRow name={teammate.participant.displayName} detail={teammate.configurationState === "healthy" ? teammate.role || t("chat.organization.aiTeammate") : t("chat.organization.needsSetup")}>
             {#snippet avatar()}<ChatParticipantAvatar participant={teammate.participant} {teammate} size={AVATAR_SIZE} />{/snippet}
             {#snippet trailing()}
               <button type="button" class="members-icon-button" aria-label={t("chat.organization.accessSettings", teammate.participant.displayName)} onclick={() => configureTeammate(teammate.participant.id)}><Settings2 size={14} /></button>
             {/snippet}
-          </PeopleMemberRow>
+          </MemberRow>
         {/each}
       </ul>
     {/if}
@@ -182,7 +182,7 @@
 {#if pickerOpen}
   <ParticipantPicker
     anchor={addButton}
-    title={t("people.picker.title")}
+    title={t("contacts.picker.title")}
     teammates={chat.teammates}
     memberTeammateIds={summary.teammateIds}
     includeTeammates

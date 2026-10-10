@@ -11,7 +11,7 @@
     ProjectTaskType,
   } from "$lib/projects/types";
   import type { Theme } from "$lib/themes";
-  import LocalPersonAvatar from "$lib/components/people/LocalPersonAvatar.svelte";
+  import LocalPersonAvatar from "$lib/components/contacts/LocalPersonAvatar.svelte";
   import PriorityFlagIcon from "$lib/components/projects/PriorityFlagIcon.svelte";
 
   let {
@@ -48,7 +48,7 @@
   const PERSON_AVATAR_SIZE = 16;
   const personOptions = $derived([
     { value: UNASSIGNED_VALUE, label: t("projects.detail.unassigned") },
-    { value: LOCAL_PERSON_VALUE, label: t("people.you") },
+    { value: LOCAL_PERSON_VALUE, label: t("contacts.you") },
   ]);
 </script>
 

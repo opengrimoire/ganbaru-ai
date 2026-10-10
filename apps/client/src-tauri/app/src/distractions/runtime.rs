@@ -1,10 +1,10 @@
 //! One native desktop observation owner, independent of WebView lifecycle.
 
-mod accounting;
 mod policy;
 
 use super::authorization::configured_close_authorization;
 use super::*;
+use ganbaru_distractions::accounting;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tokio::sync::{Notify, mpsc, oneshot};
@@ -443,7 +443,7 @@ impl Owner {
                 wall_ms,
                 monotonic,
                 sources,
-                zone: crate::civil_time::system_zone()?,
+                zone: ganbaru_civil_time::system_zone()?,
             };
             let context = Context {
                 generation,

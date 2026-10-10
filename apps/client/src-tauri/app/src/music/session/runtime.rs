@@ -8,8 +8,8 @@ use super::{
     queue,
     subscriptions::{SessionFrame, SessionNotice, Subscriptions},
 };
-use crate::music::library::{MusicLibraryError, MusicLibraryResult};
 use crate::vault::runtime_lifecycle::{LifecycleControl, LifecycleIntent};
+use ganbaru_music_library::{MusicLibraryError, MusicLibraryResult};
 use sqlx::SqlitePool;
 use std::{
     collections::BTreeMap,
@@ -154,6 +154,19 @@ fn new_policy() -> SessionPolicy {
         format!("music-{now:x}-{nonce:x}"),
         now ^ nonce.wrapping_add(1),
     )
+}
+
+/// Resolves only native device bindings. These values never enter a checkpoint.
+fn root_bindings(app: &tauri::AppHandle) -> MusicLibraryResult<BTreeMap<String, String>> {
+    let vault_id = crate::vault::active_vault_id(app)
+        .map_err(|error| MusicLibraryError::runtime("resolve music session vault", error))?;
+    let state = crate::vault::read_app_state(app)
+        .map_err(|error| MusicLibraryError::runtime("read music session bindings", error))?;
+    Ok(state
+        .music_root_bindings
+        .get(&vault_id)
+        .cloned()
+        .unwrap_or_default())
 }
 
 /// Uses the same configured host for browser delivery and initial platform bridge capture.
@@ -616,7 +629,7 @@ impl Owner {
                     vault_id,
                     status.generation,
                     device_id,
-                    queue::bindings(&app)?,
+                    root_bindings(&app)?,
                 ))
             })
             .await
@@ -1120,7 +1133,7 @@ impl Owner {
         .await
         {
             if matches!(definition, SessionQueueIntent::SavedPlaylist { .. })
-                && error.code == crate::music::error::MusicLibraryErrorCode::NotFound
+                && error.code == ganbaru_music::error::MusicLibraryErrorCode::NotFound
             {
                 let detached = SessionQueueIntent::LibraryItems {
                     item_ids: self

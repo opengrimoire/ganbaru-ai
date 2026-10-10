@@ -253,9 +253,9 @@ pub(super) fn load_close_authorization<R: Runtime>(
     })
     .flatten();
     if let Some(state) = &limit_state {
-        let zone = crate::civil_time::system_zone()?;
+        let zone = ganbaru_civil_time::system_zone()?;
         let current_date =
-            crate::civil_time::instant_to_local(checked_at.timestamp_millis(), &zone)?
+            ganbaru_civil_time::instant_to_local(checked_at.timestamp_millis(), &zone)?
                 .date()
                 .format("%Y-%m-%d")
                 .to_string();

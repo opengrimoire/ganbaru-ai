@@ -7,6 +7,7 @@ use std::{
     time::Duration,
 };
 
+use ganbaru_music_library::soundscapes::MAX_SOUNDSCAPE_LAYERS;
 use rodio::{
     ChannelCount, Decoder, DeviceSinkBuilder, MixerDeviceSink, Player, SampleRate, Source,
 };
@@ -18,7 +19,6 @@ const OUTPUT_CHANNELS: u16 = 2;
 const RAMP_MILLIS: u64 = 40;
 const RAMP_STEPS: u64 = 8;
 const NOISE_AMPLITUDE: f32 = 0.22;
-pub(crate) const MAX_SOUNDSCAPE_LAYERS: usize = 16;
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "kebab-case")]

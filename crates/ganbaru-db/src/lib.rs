@@ -147,7 +147,7 @@ impl DatabasePoolRegistry {
         let mut effective = access;
         let mut pool = self.open(&path, access).await?;
         if access == DatabaseAccessMode::Guarded && validate_current_schema(&pool).await.is_err() {
-            pool.close().await;
+            close_pool(&pool).await?;
             effective = DatabaseAccessMode::ReadOnly;
             pool = self.open(&path, effective).await?;
         }
@@ -217,30 +217,66 @@ impl DatabasePoolRegistry {
         }
         .await;
         if let Err(error) = initialization {
-            pool.close().await;
-            return Err(error);
+            return Err(match close_pool(&pool).await {
+                Ok(()) => error,
+                Err(close) => format!("{error}; {close}"),
+            });
         }
         Ok(pool)
     }
 
     /// Closes and removes the pool registered for a filesystem path.
     pub async fn close_path(&self, path: impl AsRef<Path>) -> Result<(), String> {
+        let path = path.as_ref();
         let mut pools = self.pools.lock().await;
-        let pool = pools.remove(path.as_ref());
+        let pool = pools.remove(path);
         if let Some(registered) = pool {
-            registered.pool.close().await;
+            close_pool(&registered.pool)
+                .await
+                .map_err(|error| format!("{error}: {}", path.display()))?;
         }
         Ok(())
     }
 
-    /// Closes every pool currently held by the registry.
+    /// Closes every pool currently held by the registry. Every pool is closed even when one
+    /// fails, and the first failure is returned.
     pub async fn close_all(&self) -> Result<(), String> {
         let mut pools = self.pools.lock().await;
-        for registered in std::mem::take(&mut *pools).into_values() {
-            registered.pool.close().await;
+        let mut result = Ok(());
+        for (path, registered) in std::mem::take(&mut *pools) {
+            if let Err(error) = close_pool(&registered.pool).await
+                && result.is_ok()
+            {
+                result = Err(format!("{error}: {}", path.display()));
+            }
         }
-        Ok(())
+        result
     }
+}
+
+/// Close passes allowed after the first one before a pool counts as still open.
+const CLOSE_DRAIN_PASSES: usize = 2;
+
+/// Closes a pool and returns once none of its connections holds the database open.
+///
+/// sqlx 0.8 `Pool::close` can return while a connection that began returning to the pool before
+/// the close sits idle. That connection would close later on its worker thread and checkpoint
+/// the WAL after callers had already copied, moved, or replaced the database file. After a
+/// completed close no connection can be checked out, so another pass closes the idle ones.
+pub async fn close_pool(pool: &SqlitePool) -> Result<(), String> {
+    pool.close().await;
+    let mut passes = 0;
+    while pool.size() > 0 {
+        if passes == CLOSE_DRAIN_PASSES {
+            return Err(format!(
+                "close database pool: {} connections remain open",
+                pool.size()
+            ));
+        }
+        pool.close().await;
+        passes += 1;
+    }
+    Ok(())
 }
 
 /// Applies the embedded Ganbaru AI migration chain to a SQLite pool.

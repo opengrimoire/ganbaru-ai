@@ -67,4 +67,4 @@ Destructive, externally visible, credential-related, security-sensitive, or broa
 
 ## Human collaboration (planned)
 
-People join spaces through contacts, invitations, and the roles defined in [People and invitations](../collaboration/README.md), which also fixes how the people and agent flows share one picker, one access step, and one member list. Encryption, key distribution, revocation, historical visibility, offline copies, and conflict resolution belong to the [sync](../../data/sync.md) and permission design.
+People join spaces through contacts, invitations, and the roles defined in [Contacts and invitations](../collaboration/README.md), which also fixes how the people and agent flows share one picker, one access step, and one member list. Encryption, key distribution, revocation, historical visibility, offline copies, and conflict resolution belong to the [sync](../../data/sync.md) and permission design.

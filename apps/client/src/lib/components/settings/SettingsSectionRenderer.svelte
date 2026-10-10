@@ -3,7 +3,7 @@
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import AppearanceSection from "$lib/components/settings/sections/AppearanceSection.svelte";
   import ProfileSection from "$lib/components/settings/sections/ProfileSection.svelte";
-  import PeopleSection from "$lib/components/settings/sections/PeopleSection.svelte";
+  import ContactsSection from "$lib/components/settings/sections/ContactsSection.svelte";
   import CalendarsSection from "$lib/components/settings/sections/CalendarsSection.svelte";
   import ProjectsSection from "$lib/components/settings/sections/ProjectsSection.svelte";
   import NotesSection from "$lib/components/settings/sections/NotesSection.svelte";
@@ -24,7 +24,7 @@
   let {
     activeSection,
     initialDistractionsTab,
-    initialPeopleTab,
+    initialContactsTab,
     activeChatSubsection,
     initialChatTeammateId,
     initialChatChannelId,
@@ -66,8 +66,8 @@
 
 {#if activeSection === "profile"}
   <ProfileSection {onDraftStateChange} />
-{:else if activeSection === "people"}
-  <PeopleSection initialTab={initialPeopleTab} />
+{:else if activeSection === "contacts"}
+  <ContactsSection initialTab={initialContactsTab} />
 {:else if activeSection === "notes"}
   <NotesSection onOpenTransferPanel={onOpenNotesTransferPanel} />
 {:else if activeSection === "distractions"}

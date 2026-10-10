@@ -842,21 +842,21 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             crate::sync::commands::sync_recovery_list,
             crate::sync::commands::sync_recovery_restore,
             crate::sync::commands::sync_recovery_discard,
-            people::people_list,
-            people::people_local_card,
-            people::people_regenerate_card,
-            people::people_parse_card,
-            people::people_decode_card_qr,
-            people::people_send_request,
-            people::people_accept_request,
-            people::people_decline_request,
-            people::people_cancel_request,
-            people::people_block,
-            people::people_unblock,
-            people::people_remove_contact,
-            people::people_update_trust,
-            people::people_sync_requests,
-            people::people_save_card_image,
+            contacts::contacts_list,
+            contacts::contacts_local_card,
+            contacts::contacts_regenerate_card,
+            contacts::contacts_parse_card,
+            contacts::contacts_decode_card_qr,
+            contacts::contacts_send_request,
+            contacts::contacts_accept_request,
+            contacts::contacts_decline_request,
+            contacts::contacts_cancel_request,
+            contacts::contacts_block,
+            contacts::contacts_unblock,
+            contacts::contacts_remove,
+            contacts::contacts_update_trust,
+            contacts::contacts_sync_requests,
+            contacts::contacts_save_card_image,
             profile_images::profile_image_pick_file,
             profile_images::profile_image_save_data_url,
             profile_images::profile_image_asset_data_url,
@@ -899,7 +899,7 @@ pub fn run(context: tauri::Context<tauri::Wry>) {
             }
             tray::setup_tray(app.handle())?;
             pomodoro::setup(app.handle());
-            people::requests::start_request_polling(app.handle().clone());
+            contacts::requests::start_request_polling(app.handle().clone());
             Ok(())
         })
         .build(context)

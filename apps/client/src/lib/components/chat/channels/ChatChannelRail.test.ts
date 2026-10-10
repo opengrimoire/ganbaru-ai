@@ -269,7 +269,7 @@ describe("ChatChannelRail", () => {
     expect(trigger?.getAttribute("aria-expanded")).toBe("true");
     menu?.querySelector<HTMLButtonElement>("[data-chat-invitations]")?.click();
     await tick();
-    expect(open).toHaveBeenCalledWith("people", { peopleTab: "invitations" });
+    expect(open).toHaveBeenCalledWith("contacts", { contactsTab: "invitations" });
     expect(target.querySelector(".section-context-menu")).toBeNull();
   });
 

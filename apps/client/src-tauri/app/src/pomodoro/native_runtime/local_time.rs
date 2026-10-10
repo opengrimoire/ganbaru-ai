@@ -29,9 +29,37 @@ impl FocusLocalTimeResolver for NativeLocalTime {
 }
 
 #[cfg(not(target_os = "android"))]
+const MAX_LOCAL_TIME_FACTS: usize = 4_096;
+
+#[cfg(not(target_os = "android"))]
 fn resolve(_app: &tauri::AppHandle, instants: &[i64]) -> Result<LocalTimeFacts, String> {
-    use crate::civil_time;
-    civil_time::local_time_facts(instants, &civil_time::system_zone()?)
+    local_time_facts(instants, &ganbaru_civil_time::system_zone()?)
+}
+
+/// Map each instant to its local date key, hour, and an English date string in
+/// JavaScript `Date.toDateString` format, used as a seed.
+#[cfg(not(target_os = "android"))]
+fn local_time_facts(instants: &[i64], zone: &jiff::tz::TimeZone) -> Result<LocalTimeFacts, String> {
+    use chrono::Timelike;
+    use ganbaru_pomodoro::adaptive::models::LocalTimeFact;
+    if instants.len() > MAX_LOCAL_TIME_FACTS {
+        return Err("Focus local-time query exceeds 4096 instants".into());
+    }
+    instants
+        .iter()
+        .map(|&epoch_ms| {
+            let local = ganbaru_civil_time::instant_to_local(epoch_ms, zone)?;
+            Ok((
+                epoch_ms,
+                LocalTimeFact {
+                    epoch_ms,
+                    date_key: local.format("%Y-%m-%d").to_string(),
+                    date_string: local.format("%a %b %d %Y").to_string(),
+                    hour: local.hour() as u8,
+                },
+            ))
+        })
+        .collect()
 }
 
 #[cfg(target_os = "android")]
@@ -60,7 +88,7 @@ fn resolve(app: &tauri::AppHandle, instants: &[i64]) -> Result<LocalTimeFacts, S
 }
 
 pub(super) fn planned_block(
-    value: crate::calendar::reads::focus_context::FocusPlannedBlock,
+    value: ganbaru_calendar::reads::focus_context::FocusPlannedBlock,
 ) -> PomodoroAdaptivePlannedBlockWrite {
     PomodoroAdaptivePlannedBlockWrite {
         event_date: value.event_date,
@@ -69,5 +97,31 @@ pub(super) fn planned_block(
         planned_start: value.planned_start,
         planned_end: value.planned_end,
         source_kind: value.source_kind.to_owned(),
+    }
+}
+
+#[cfg(all(test, not(target_os = "android")))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn adaptive_seed_facts_use_the_selected_local_day_and_english_spelling() {
+        let timestamp = "2024-03-10T04:30:00Z"
+            .parse::<jiff::Timestamp>()
+            .unwrap()
+            .as_millisecond();
+        let zone = ganbaru_civil_time::zone("America/New_York").unwrap();
+        let facts = local_time_facts(&[timestamp, timestamp], &zone).unwrap();
+        assert_eq!(facts.len(), 1);
+        assert_eq!(facts[&timestamp].date_key, "2024-03-09");
+        assert_eq!(facts[&timestamp].date_string, "Sat Mar 09 2024");
+        assert_eq!(facts[&timestamp].hour, 23);
+        assert!(
+            local_time_facts(
+                &vec![timestamp; MAX_LOCAL_TIME_FACTS + 1],
+                &jiff::tz::TimeZone::UTC
+            )
+            .is_err()
+        );
     }
 }

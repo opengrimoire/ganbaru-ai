@@ -1,7 +1,7 @@
 //! Bounded, acknowledged WebView projections above the native session owner.
 
 use super::models::{SessionEffect, SessionProjection, SessionQueueEntry};
-use crate::music::library::{MusicLibraryError, MusicLibraryResult};
+use ganbaru_music_library::{MusicLibraryError, MusicLibraryResult};
 use serde::Serialize;
 use std::{collections::BTreeMap, sync::Arc};
 use tauri::ipc::Channel;

@@ -544,7 +544,7 @@ fn classify_completion(
     event_date: &str,
     occurrence_id: &str,
     ended_at_ms: i64,
-    blocks: &[crate::calendar::reads::focus_context::FocusPlannedBlock],
+    blocks: &[ganbaru_calendar::reads::focus_context::FocusPlannedBlock],
 ) -> Result<&'static str, FocusExecutionError> {
     let later = blocks
         .iter()

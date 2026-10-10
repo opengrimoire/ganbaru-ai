@@ -1,6 +1,7 @@
 use super::*;
 use crate::vault::handoff::pairing::random_token;
 use crate::vault::handoff::protocol::{DeviceKind, MAX_ARCHIVE_BYTES, PROTOCOL_VERSION};
+use crate::vault::handoff::sha256_file;
 use base64::Engine;
 use std::fs;
 use tokio::net::TcpListener;
@@ -818,18 +819,18 @@ fn oversized_bundle_metadata_is_rejected_before_network_work() {
     assert!(metadata.validate().unwrap_err().contains("bundle size"));
 }
 
-fn sample_contact_card() -> (ganbaru_people::PersonKeyPair, String) {
-    let (_, key) = ganbaru_people::PersonKeyPair::generate().expect("person key");
-    let card = ganbaru_people::ContactCard {
+fn sample_contact_card() -> (ganbaru_contacts::PersonKeyPair, String) {
+    let (_, key) = ganbaru_contacts::PersonKeyPair::generate().expect("person key");
+    let card = ganbaru_contacts::ContactCard {
         public_key: key.public_key(),
         display_name: "Requester".to_string(),
         color: 3,
-        nonce: [4u8; ganbaru_people::CARD_NONCE_BYTES],
+        nonce: [4u8; ganbaru_contacts::CARD_NONCE_BYTES],
         endpoint_hint: "127.0.0.1:43821".to_string(),
         coordinator_fingerprint: Some([5u8; 32]),
         issued_at_ms: unix_time_ms(),
     };
-    let signed = ganbaru_people::sign_card(&card, &key).expect("sign card");
+    let signed = ganbaru_contacts::sign_card(&card, &key).expect("sign card");
     (key, signed.text())
 }
 
@@ -843,8 +844,8 @@ async fn unauthenticated_contact_request_is_forwarded_to_the_coordinator() {
 
     let (pair, mut requests) = LocalPair::start_with_coordinator().await;
     let (key, card) = sample_contact_card();
-    let recipient_nonce = [7u8; ganbaru_people::CARD_NONCE_BYTES];
-    let signature = key.sign(&ganbaru_people::request_signature_payload(
+    let recipient_nonce = [7u8; ganbaru_contacts::CARD_NONCE_BYTES];
+    let signature = key.sign(&ganbaru_contacts::request_signature_payload(
         &recipient_nonce,
         "contact-one",
     ));
@@ -860,7 +861,7 @@ async fn unauthenticated_contact_request_is_forwarded_to_the_coordinator() {
             } => {
                 assert_eq!(
                     recipient_card_nonce,
-                    ganbaru_people::encode_nonce(&recipient_nonce)
+                    ganbaru_contacts::encode_nonce(&recipient_nonce)
                 );
                 assert_eq!(requester_card, expected_card);
                 assert_eq!(request_id, "contact-one");
@@ -880,7 +881,7 @@ async fn unauthenticated_contact_request_is_forwarded_to_the_coordinator() {
         &pair.invitation.coordinator_fingerprint,
         ControlMessage::ContactRequest {
             protocol_version: PROTOCOL_VERSION,
-            recipient_card_nonce: ganbaru_people::encode_nonce(&recipient_nonce),
+            recipient_card_nonce: ganbaru_contacts::encode_nonce(&recipient_nonce),
             requester_card: card,
             request_id: "contact-one".to_string(),
             signature: base64url(&signature),
@@ -902,7 +903,7 @@ async fn coordinator_rejection_reaches_the_requester_as_a_protocol_error() {
     let (pair, mut requests) = LocalPair::start_with_coordinator().await;
     let (key, _) = sample_contact_card();
     let issued_at_ms = unix_time_ms();
-    let signature = key.sign(&ganbaru_people::status_signature_payload(
+    let signature = key.sign(&ganbaru_contacts::status_signature_payload(
         "contact-one",
         issued_at_ms,
     ));
@@ -964,7 +965,7 @@ async fn person_key_is_released_only_to_an_enrolled_device() {
     );
 
     pair.enroll().await;
-    let (pkcs8, key) = ganbaru_people::PersonKeyPair::generate().expect("person key");
+    let (pkcs8, key) = ganbaru_contacts::PersonKeyPair::generate().expect("person key");
     let public_key = key.public_key().to_text();
     let released_key = public_key.clone();
     let released_pkcs8 = base64url(&pkcs8);

@@ -1,7 +1,7 @@
 //! Calendar Save shares the Focus owner queue, transaction and publication fence.
 
 use super::*;
-use crate::calendar::events::commit::{CommitFailure, CommitReceipt, CommitReply, CommitRequest};
+use ganbaru_calendar::events::commit::{CommitFailure, CommitReceipt, CommitReply, CommitRequest};
 
 const DELETE_UNDO_LIFETIME: Duration = Duration::from_secs(5);
 
@@ -20,7 +20,7 @@ pub(crate) async fn calendar_dismiss_delete_undo(
     app: tauri::AppHandle,
     request: DismissUndoRequest,
 ) -> Result<(), String> {
-    crate::calendar::events::commit::validate_command_id(&request.delete_command_id)?;
+    ganbaru_calendar::events::commit::validate_command_id(&request.delete_command_id)?;
     if request.vault_id.is_empty()
         || request.vault_id.len() > 1_024
         || request.vault_id.chars().any(char::is_control)
@@ -50,7 +50,7 @@ pub(super) struct UndoSlot {
     delete_intent_hash: String,
     expires_at: Instant,
     started_wall_ms: i64,
-    preimage: Arc<crate::calendar::events::deletion::UndoPreimage>,
+    preimage: Arc<ganbaru_calendar::events::deletion::UndoPreimage>,
 }
 
 impl UndoSlot {
@@ -80,7 +80,7 @@ impl UndoSlot {
         &self,
         request: &CommitRequest,
         tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-    ) -> Result<crate::calendar::events::commit::PreparedCommit, String> {
+    ) -> Result<ganbaru_calendar::events::commit::PreparedCommit, String> {
         self.verify(request, Instant::now())?;
         confirm_delete_receipt(
             tx,
@@ -145,7 +145,7 @@ async fn confirm_delete_receipt(
         FROM calendar_edit_receipts WHERE command_id=?1",
     )
     .bind(command_id)
-    .bind(crate::calendar::events::commit::MAX_RECEIPT_BYTES as i64)
+    .bind(ganbaru_calendar::events::commit::MAX_RECEIPT_BYTES as i64)
     .fetch_optional(&mut **tx)
     .await
     .map_err(|error| format!("confirm Calendar deletion before Undo: {error}"))?;
@@ -167,11 +167,13 @@ async fn confirm_delete_receipt(
         serde_json::from_str::<DeleteAcceptance>(&result)
             .map_err(|error| format!("decode Calendar deletion acceptance before Undo: {error}"))
     });
-    let receipt =
-        tokio::time::timeout(crate::calendar::events::scope::SCOPE_WORKER_TIMEOUT, worker)
-            .await
-            .map_err(|_| "Calendar deletion acceptance verification timed out")?
-            .map_err(|error| format!("Calendar deletion acceptance worker: {error}"))??;
+    let receipt = tokio::time::timeout(
+        ganbaru_calendar::events::scope::SCOPE_WORKER_TIMEOUT,
+        worker,
+    )
+    .await
+    .map_err(|_| "Calendar deletion acceptance verification timed out")?
+    .map_err(|error| format!("Calendar deletion acceptance worker: {error}"))??;
     if hash != expected_hash
         || receipt.command_id != command_id
         || receipt.undo_review_revision.as_deref() != Some(review_revision)
@@ -259,7 +261,7 @@ async fn read_only_calendar_retry(
         ));
     }
     let receipt = tokio::time::timeout(
-        crate::calendar::events::scope::SCOPE_WORKER_TIMEOUT,
+        ganbaru_calendar::events::scope::SCOPE_WORKER_TIMEOUT,
         async {
             let permit = receipt_worker_permit()?;
             let pool = crate::db::connect_active_vault_read_only(app, permit)
@@ -301,18 +303,19 @@ async fn receipt_read_authority(
             .map_err(CommitFailure::unknown)?;
         Ok((status.generation, status.can_write))
     });
-    tokio::time::timeout(crate::calendar::events::scope::SCOPE_WORKER_TIMEOUT, worker)
-        .await
-        .map_err(|_| {
-            CommitFailure::unknown("Calendar receipt authority timed out; retry this Save")
-        })?
-        .map_err(|error| {
-            CommitFailure::unknown(format!("Calendar receipt authority worker: {error}"))
-        })?
+    tokio::time::timeout(
+        ganbaru_calendar::events::scope::SCOPE_WORKER_TIMEOUT,
+        worker,
+    )
+    .await
+    .map_err(|_| CommitFailure::unknown("Calendar receipt authority timed out; retry this Save"))?
+    .map_err(|error| {
+        CommitFailure::unknown(format!("Calendar receipt authority worker: {error}"))
+    })?
 }
 
 fn receipt_worker_permit() -> Result<tokio::sync::OwnedSemaphorePermit, CommitFailure> {
-    crate::calendar::events::scope::SCOPE_GATE
+    ganbaru_calendar::events::scope::SCOPE_GATE
         .clone()
         .try_acquire_owned()
         .map_err(|_| {
@@ -473,7 +476,13 @@ impl Owner {
                 .prepare(&request, &mut tx)
                 .await?
         } else {
-            request.prepare(self.app.clone(), &mut tx, now).await?
+            request
+                .prepare(
+                    crate::calendar::device_date::source(&self.app),
+                    &mut tx,
+                    now,
+                )
+                .await?
         };
         let clock_fence = prepared.clock_fence;
         let completion_window = prepared.completion_window;
@@ -489,7 +498,9 @@ impl Owner {
         } else {
             self.logical_now(now_ms().map_err(|error| error.message)?)
         };
-        clock_fence.verify(self.app.clone(), now).await?;
+        clock_fence
+            .verify(crate::calendar::device_date::source(&self.app), now)
+            .await?;
         let mut change = prepared.active_change(&before)?;
         let retarget_expiry = change
             .as_ref()
@@ -593,7 +604,12 @@ impl Owner {
                 "Focus expired during Calendar Save; refresh before changing its reference".into(),
             );
         }
-        clock_fence.verify(self.app.clone(), accepted_now).await?;
+        clock_fence
+            .verify(
+                crate::calendar::device_date::source(&self.app),
+                accepted_now,
+            )
+            .await?;
         self.verify_authority().map_err(|error| error.message)?;
         if self.freeze_requested() {
             return Err("Calendar vault began freezing before commit".into());

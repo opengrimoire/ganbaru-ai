@@ -14,25 +14,31 @@ doctest = false
 workspace = true
 
 [dependencies]
-ammonia = { workspace = true }
 base64 = { workspace = true }
 chrono = { workspace = true }
 flate2 = { workspace = true }
+ganbaru-calendar = { workspace = true }
 ganbaru-chat-contracts = { workspace = true }
 ganbaru-chat = { workspace = true }
+ganbaru-civil-time = { workspace = true }
 ganbaru-db = { workspace = true }
+ganbaru-distractions = { workspace = true }
+ganbaru-handoff = { workspace = true }
+ganbaru-music = { workspace = true }
+ganbaru-music-library = { workspace = true }
 ganbaru-notes = { workspace = true }
-ganbaru-people = { workspace = true }
+ganbaru-contacts = { workspace = true }
 ganbaru-pomodoro = { workspace = true }
+ganbaru-projects = { workspace = true }
+ganbaru-quick-notes = { workspace = true }
 ganbaru-sync = { workspace = true }
 ganbaru-sync-contracts = { workspace = true }
+ganbaru-sync-replica = { workspace = true }
+ganbaru-themes = { workspace = true }
 ganbaru-working-folders = { workspace = true }
 jiff = { workspace = true }
 reqwest = { workspace = true }
-rcgen = { workspace = true }
 rustls = { workspace = true }
-qrcode = { workspace = true }
-quircs = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 sha2 = { workspace = true }
@@ -50,6 +56,7 @@ libc = { workspace = true }
 axum = { workspace = true }
 ganbaru-chat = { workspace = true, features = ["native-runtime"] }
 ganbaru-chat-providers = { workspace = true }
+ganbaru-music-player = { workspace = true }
 keyring = { workspace = true }
 notify = { workspace = true }
 notify-rust = { workspace = true }
@@ -94,3 +101,4 @@ objc2-web-kit = { workspace = true }
 
 [dev-dependencies]
 ganbaru-chat = { workspace = true, features = ["test-support"] }
+ganbaru-handoff = { workspace = true, features = ["test-support"] }

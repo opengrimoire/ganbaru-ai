@@ -3,20 +3,31 @@ resolver = "3"
 members = [
   "apps/client/src-tauri",
   "apps/client/src-tauri/app",
+  "crates/ganbaru-calendar",
   "crates/ganbaru-chat",
   "crates/ganbaru-chat-contracts",
   "crates/ganbaru-chat-providers",
+  "crates/ganbaru-civil-time",
   "crates/ganbaru-db",
+  "crates/ganbaru-distractions",
+  "crates/ganbaru-handoff",
   "crates/ganbaru-mobile-documents",
   "crates/ganbaru-mobile-distractions",
   "crates/ganbaru-mobile-media",
   "crates/ganbaru-mobile-notifications",
+  "crates/ganbaru-music",
+  "crates/ganbaru-music-library",
+  "crates/ganbaru-music-player",
   "crates/ganbaru-native-messaging",
   "crates/ganbaru-notes",
-  "crates/ganbaru-people",
+  "crates/ganbaru-contacts",
   "crates/ganbaru-pomodoro",
+  "crates/ganbaru-projects",
+  "crates/ganbaru-quick-notes",
   "crates/ganbaru-sync",
   "crates/ganbaru-sync-contracts",
+  "crates/ganbaru-sync-replica",
+  "crates/ganbaru-themes",
   "crates/ganbaru-working-folders",
 ]
 
@@ -39,19 +50,30 @@ block2 = "0.6.2"
 cairo-rs = { version = "0.18.5", features = ["png"] }
 chrono = { version = "0.4", default-features = false, features = ["std", "serde"] }
 flate2 = "1.1.9"
+ganbaru-calendar = { path = "crates/ganbaru-calendar" }
 ganbaru-chat = { path = "crates/ganbaru-chat", default-features = false }
 ganbaru-chat-contracts = { path = "crates/ganbaru-chat-contracts" }
 ganbaru-chat-providers = { path = "crates/ganbaru-chat-providers" }
+ganbaru-civil-time = { path = "crates/ganbaru-civil-time" }
 ganbaru-db = { path = "crates/ganbaru-db" }
+ganbaru-distractions = { path = "crates/ganbaru-distractions" }
+ganbaru-handoff = { path = "crates/ganbaru-handoff" }
 ganbaru-mobile-documents = { path = "crates/ganbaru-mobile-documents" }
 ganbaru-mobile-distractions = { path = "crates/ganbaru-mobile-distractions" }
 ganbaru-mobile-media = { path = "crates/ganbaru-mobile-media" }
 ganbaru-mobile-notifications = { path = "crates/ganbaru-mobile-notifications" }
+ganbaru-music = { path = "crates/ganbaru-music" }
+ganbaru-music-library = { path = "crates/ganbaru-music-library" }
+ganbaru-music-player = { path = "crates/ganbaru-music-player" }
 ganbaru-notes = { path = "crates/ganbaru-notes" }
-ganbaru-people = { path = "crates/ganbaru-people" }
+ganbaru-contacts = { path = "crates/ganbaru-contacts" }
 ganbaru-pomodoro = { path = "crates/ganbaru-pomodoro" }
+ganbaru-projects = { path = "crates/ganbaru-projects" }
+ganbaru-quick-notes = { path = "crates/ganbaru-quick-notes" }
 ganbaru-sync = { path = "crates/ganbaru-sync" }
 ganbaru-sync-contracts = { path = "crates/ganbaru-sync-contracts" }
+ganbaru-sync-replica = { path = "crates/ganbaru-sync-replica" }
+ganbaru-themes = { path = "crates/ganbaru-themes" }
 ganbaru-working-folders = { path = "crates/ganbaru-working-folders" }
 gtk = "0.18"
 jiff = { version = "0.2.37", default-features = false, features = [
@@ -129,6 +151,7 @@ tauri-plugin-single-instance = "2.4.2"
 tauri-plugin-updater = "2.10.1"
 tokio = { version = "1.48", default-features = false, features = ["fs", "io-util", "macros", "net", "process", "rt", "sync", "time"] }
 tokio-rustls = { version = "0.26.4", default-features = false, features = ["ring"] }
+url = "2.5.8"
 wayland-client = "0.31.14"
 wayland-protocols-wlr = { version = "0.3.12", features = ["client"] }
 webkit2gtk = "2.0.2"

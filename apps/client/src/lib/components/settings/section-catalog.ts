@@ -30,7 +30,7 @@ export interface SettingsSectionMeta {
 export const SETTINGS_SECTIONS: SettingsSectionMeta[] = [
   { id: "appearance", labelKey: "settings.section.appearance", icon: Palette },
   { id: "profile", labelKey: "settings.section.profile", icon: UserRound },
-  { id: "people", labelKey: "settings.section.people", icon: UsersRound },
+  { id: "contacts", labelKey: "settings.section.contacts", icon: UsersRound },
   { id: "calendars", labelKey: "settings.section.calendars", icon: Calendar },
   { id: "projects", labelKey: "settings.section.projects", icon: Folder },
   { id: "notes", labelKey: "settings.section.notes", icon: Book },

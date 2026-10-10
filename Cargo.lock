@@ -1750,6 +1750,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "ganbaru-calendar"
+version = "0.1.0"
+dependencies = [
+ "ammonia",
+ "chrono",
+ "ganbaru-civil-time",
+ "ganbaru-db",
+ "ganbaru-music",
+ "ganbaru-pomodoro",
+ "ganbaru-projects",
+ "jiff",
+ "serde",
+ "serde_json",
+ "sha2",
+ "sqlx",
+ "tokio",
+]
+
+[[package]]
 name = "ganbaru-chat"
 version = "0.1.5"
 dependencies = [
@@ -1796,10 +1815,62 @@ dependencies = [
 ]
 
 [[package]]
+name = "ganbaru-civil-time"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "jiff",
+]
+
+[[package]]
+name = "ganbaru-contacts"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "chrono",
+ "ring",
+ "serde",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
 name = "ganbaru-db"
 version = "0.1.5"
 dependencies = [
  "sqlx",
+ "tokio",
+]
+
+[[package]]
+name = "ganbaru-distractions"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "ganbaru-civil-time",
+ "jiff",
+ "serde",
+ "serde_json",
+ "sha2",
+ "sqlx",
+ "tokio",
+]
+
+[[package]]
+name = "ganbaru-handoff"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "chrono",
+ "ganbaru-contacts",
+ "ganbaru-sync-contracts",
+ "qrcode",
+ "quircs",
+ "rcgen",
+ "rustls",
+ "serde",
+ "serde_json",
+ "sha2",
  "tokio",
 ]
 
@@ -1840,6 +1911,42 @@ dependencies = [
 ]
 
 [[package]]
+name = "ganbaru-music"
+version = "0.1.0"
+dependencies = [
+ "ganbaru-db",
+ "serde",
+ "sqlx",
+ "tokio",
+]
+
+[[package]]
+name = "ganbaru-music-library"
+version = "0.1.0"
+dependencies = [
+ "ganbaru-db",
+ "ganbaru-music",
+ "ganbaru-projects",
+ "jiff",
+ "rodio",
+ "serde",
+ "serde_json",
+ "sha2",
+ "sqlx",
+ "tokio",
+ "url",
+]
+
+[[package]]
+name = "ganbaru-music-player"
+version = "0.1.0"
+dependencies = [
+ "ganbaru-music-library",
+ "rodio",
+ "serde",
+]
+
+[[package]]
 name = "ganbaru-native-messaging"
 version = "0.1.5"
 dependencies = [
@@ -1872,18 +1979,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ganbaru-people"
-version = "0.1.0"
-dependencies = [
- "base64 0.22.1",
- "chrono",
- "ring",
- "serde",
- "serde_json",
- "sha2",
-]
-
-[[package]]
 name = "ganbaru-pomodoro"
 version = "0.1.5"
 dependencies = [
@@ -1895,12 +1990,41 @@ dependencies = [
 ]
 
 [[package]]
-name = "ganbaru-sync"
+name = "ganbaru-projects"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "ganbaru-db",
+ "ganbaru-music",
+ "serde",
+ "serde_json",
+ "sha2",
+ "sqlx",
+ "tokio",
+]
+
+[[package]]
+name = "ganbaru-quick-notes"
 version = "0.1.0"
 dependencies = [
  "ganbaru-db",
- "ganbaru-people",
+ "ganbaru-sync",
  "ganbaru-sync-contracts",
+ "ring",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "tokio",
+]
+
+[[package]]
+name = "ganbaru-sync"
+version = "0.1.0"
+dependencies = [
+ "ganbaru-contacts",
+ "ganbaru-db",
+ "ganbaru-sync-contracts",
+ "serde",
  "sqlx",
  "tokio",
 ]
@@ -1909,35 +2033,63 @@ dependencies = [
 name = "ganbaru-sync-contracts"
 version = "0.1.0"
 dependencies = [
- "ganbaru-people",
+ "ganbaru-contacts",
  "ring",
  "sha2",
+]
+
+[[package]]
+name = "ganbaru-sync-replica"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "ganbaru-contacts",
+ "ganbaru-db",
+ "ganbaru-handoff",
+ "ganbaru-quick-notes",
+ "ganbaru-sync",
+ "ganbaru-sync-contracts",
+ "keyring",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "tokio",
 ]
 
 [[package]]
 name = "ganbaru-tauri-app"
 version = "0.1.5"
 dependencies = [
- "ammonia",
  "axum",
  "base64 0.22.1",
  "block2",
  "cairo-rs",
  "chrono",
  "flate2",
+ "ganbaru-calendar",
  "ganbaru-chat",
  "ganbaru-chat-contracts",
  "ganbaru-chat-providers",
+ "ganbaru-civil-time",
+ "ganbaru-contacts",
  "ganbaru-db",
+ "ganbaru-distractions",
+ "ganbaru-handoff",
  "ganbaru-mobile-distractions",
  "ganbaru-mobile-documents",
  "ganbaru-mobile-media",
  "ganbaru-mobile-notifications",
+ "ganbaru-music",
+ "ganbaru-music-library",
+ "ganbaru-music-player",
  "ganbaru-notes",
- "ganbaru-people",
  "ganbaru-pomodoro",
+ "ganbaru-projects",
+ "ganbaru-quick-notes",
  "ganbaru-sync",
  "ganbaru-sync-contracts",
+ "ganbaru-sync-replica",
+ "ganbaru-themes",
  "ganbaru-working-folders",
  "gtk",
  "jiff",
@@ -1951,9 +2103,6 @@ dependencies = [
  "objc2-foundation",
  "objc2-web-kit",
  "portable-pty",
- "qrcode",
- "quircs",
- "rcgen",
  "reqwest",
  "rmcp",
  "rodio",
@@ -1978,6 +2127,16 @@ dependencies = [
  "windows 0.61.3",
  "x11rb",
  "zip 8.6.0",
+]
+
+[[package]]
+name = "ganbaru-themes"
+version = "0.1.0"
+dependencies = [
+ "ganbaru-db",
+ "serde",
+ "sqlx",
+ "tokio",
 ]
 
 [[package]]

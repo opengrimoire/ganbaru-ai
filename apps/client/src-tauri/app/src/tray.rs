@@ -752,7 +752,7 @@ pub(crate) fn publish_music_session(
     update_music_tray(
         app.clone(),
         MusicTrayUpdate {
-            status: session.status.as_ref().into(),
+            status: session.status.as_str().into(),
             title: session
                 .current_source
                 .as_ref()

@@ -17,7 +17,7 @@ This document is the normative authorization specification for organizational Ch
 
 ## Principals and scopes
 
-The portable vault owns stable identities for the local owner and configured AI agents. Provider identities are not application principals. Planned human collaborators are principals with their own key-based identity, reachable only through accepted contacts, as specified in [People and invitations](../features/collaboration/README.md).
+The portable vault owns stable identities for the local owner and configured AI agents. Provider identities are not application principals. Planned human collaborators are principals with their own key-based identity, reachable only through accepted contacts, as specified in [Contacts and invitations](../features/collaboration/README.md).
 
 Channel membership answers whether a participant may appear in, read, or contribute to one channel. It never implies access to another channel in the same project. Resource grants answer a separate question: what the participant or assigned run may do with a working folder, scratch generation, terminal, Git repository, attachment, preview, or internal application tool.
 

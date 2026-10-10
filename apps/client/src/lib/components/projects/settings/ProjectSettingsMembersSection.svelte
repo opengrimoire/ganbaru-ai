@@ -1,9 +1,9 @@
 <script lang="ts">
   import MailPlus from "@lucide/svelte/icons/mail-plus";
-  import InvitePersonDialog from "$lib/components/people/InvitePersonDialog.svelte";
-  import LocalPersonAvatar from "$lib/components/people/LocalPersonAvatar.svelte";
-  import PeopleMemberRow from "$lib/components/people/PeopleMemberRow.svelte";
-  import PeopleRoleChip from "$lib/components/people/PeopleRoleChip.svelte";
+  import InvitePersonDialog from "$lib/components/contacts/InvitePersonDialog.svelte";
+  import LocalPersonAvatar from "$lib/components/contacts/LocalPersonAvatar.svelte";
+  import MemberRow from "$lib/components/contacts/MemberRow.svelte";
+  import MemberRoleChip from "$lib/components/contacts/MemberRoleChip.svelte";
   import { getLocalization } from "$lib/i18n/translator.svelte";
   import { getPreferences } from "$lib/stores/preferences.svelte";
   import ProjectSettingsSectionHeading from "./ProjectSettingsSectionHeading.svelte";
@@ -24,8 +24,8 @@
 
   let inviteOpen = $state(false);
 
-  const localName = $derived(preferences.profileDisplayName.trim() || t("people.you"));
-  const localDetail = $derived(preferences.profileDisplayName.trim() ? t("people.you") : null);
+  const localName = $derived(preferences.profileDisplayName.trim() || t("contacts.you"));
+  const localDetail = $derived(preferences.profileDisplayName.trim() ? t("contacts.you") : null);
 </script>
 
 <section class="flex flex-col gap-2">
@@ -44,10 +44,10 @@
   </div>
   <!-- Member rows pad wider than the section's other rows; the negative margin keeps avatars on the same left edge. -->
   <ul class="-mx-0.5 grid">
-    <PeopleMemberRow name={localName} detail={localDetail}>
+    <MemberRow name={localName} detail={localDetail}>
       {#snippet avatar()}<LocalPersonAvatar size={AVATAR_SIZE} />{/snippet}
-      {#snippet trailing()}<PeopleRoleChip label={t("people.role.owner")} />{/snippet}
-    </PeopleMemberRow>
+      {#snippet trailing()}<MemberRoleChip label={t("contacts.role.owner")} />{/snippet}
+    </MemberRow>
   </ul>
 </section>
 

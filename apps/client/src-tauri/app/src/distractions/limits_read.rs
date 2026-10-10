@@ -52,10 +52,10 @@ pub(super) async fn derive_usage_projection<R: Runtime>(
         tauri::async_runtime::spawn_blocking(move || {
             let root = config_at(&path)?;
             let config = parse_config(&root)?;
-            let zone = crate::civil_time::system_zone()?;
+            let zone = ganbaru_civil_time::system_zone()?;
             let checked_at = now_utc();
             let local_date =
-                crate::civil_time::instant_to_local(checked_at.timestamp_millis(), &zone)?
+                ganbaru_civil_time::instant_to_local(checked_at.timestamp_millis(), &zone)?
                     .date()
                     .format("%Y-%m-%d")
                     .to_string();
@@ -117,9 +117,9 @@ pub(super) async fn derive_usage_projection<R: Runtime>(
         {
             return Err("native usage context changed during the read".into());
         }
-        let current_date = crate::civil_time::instant_to_local(
+        let current_date = ganbaru_civil_time::instant_to_local(
             now_epoch_ms(),
-            &crate::civil_time::system_zone()?,
+            &ganbaru_civil_time::system_zone()?,
         )?
         .date()
         .format("%Y-%m-%d")

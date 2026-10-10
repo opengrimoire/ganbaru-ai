@@ -49,13 +49,13 @@ apps/
         calendar/: shared Calendar logic, types, recurrence rules, navigation helpers, and iCalendar parser/serializer
         chat/: Chat contracts, runtime validation of untrusted responses, and interaction models and controllers
         color/: color math and display helpers
+        contacts/: contact trust mapping and presentation helpers
         diagnostics/: memory sampling and report helpers for the performance popover
         distractions/: shared browser and desktop blocking rules
         i18n/: typed localization catalogs, locale resolution, and formatters
         music/: frontend music source and playback helpers
         notes/: Notes contracts, validation, editor operations, databases, and tree helpers
         pomodoro/: Focus command contracts, native projections, and presentation helpers
-        people/: contact trust mapping and presentation helpers
         profile/, projects/, quick-notes/: domain logic for those features
         scheduling/: lifecycle and notification schedulers
         settings/: Settings section identifiers shared by launchers and the Settings modal
@@ -74,18 +74,19 @@ apps/
         src/runtime.rs, runtime/: desktop and mobile composition roots and handler registration tests
         src/db.rs, vault.rs, vault/: active-folder authorization, SQLite adapter boundary, vault config, document transfer, Android backup and restore
         src/vault/handoff/: LAN device linking and single-writer whole-vault handoff
-        src/calendar.rs, calendar/: Calendar persistence, import, reads, scoped edits, deletion and Undo, and native recurrence expansion
+        src/calendar.rs, calendar/: Calendar command adapters and the platform device-date source
         src/chat.rs, chat/: Chat command adapters, coordination, access profiles, internal MCP tools, checkpoints, previews, and provider settings
         src/notes.rs, notes/: Notes command adapters, working-Markdown composition, and asset authorization
         src/pomodoro.rs, pomodoro/: Focus command adapters, native execution runtime, idle probes, and timer overlays with enforcement
-        src/projects.rs, projects/: Projects commands, persistence, history, custom fields, templates, and icons
-        src/distractions.rs, distractions/: browser, desktop, Android, and linked-device blocking and usage accounting
-        src/music.rs, music/: local playback, native Music session, media controls, YouTube host, and soundscapes
+        src/projects.rs, projects/: Projects command adapters, icon assets, and working-folder device state
+        src/distractions.rs, distractions/: browser, desktop, Android, and linked-device blocking, observation, close authorization, and the usage spool
+        src/music.rs, music/: Music library command adapters, Android media inspection, native Music session, media controls, YouTube host, and soundscapes
         src/notifications.rs, notifications/: desktop native notifications and Android notification capabilities
-        src/civil_time.rs, sound_effects.rs, system_command.rs: shared civil-time math, app sound effects, and bounded fixed-command execution
-        src/people.rs, people/: person identity storage, contact card assembly, contact and request persistence, and LAN request delivery
-        src/sync.rs, sync/: sync service lifecycle, guarded replica access, writer keys and record, carry-forward, LAN hub and client exchange, and sync commands
-        src/quick_notes.rs, quick_notes/, tray.rs, themes.rs, updates.rs, profile_images.rs: remaining feature modules
+        src/sound_effects.rs, system_command.rs: app sound effects and bounded fixed-command execution
+        src/contacts.rs, contacts/: person identity storage, contact card assembly, contact and request persistence, and LAN request delivery
+        src/sync.rs, sync/: sync service lifecycle, paired transport, recovery listing, status, and sync commands
+        src/quick_notes.rs: Quick notes command adapters
+        src/tray.rs, themes.rs, updates.rs, profile_images.rs: tray, theme command adapters, updates, and profile images
         src/benchmark.rs, benchmark/, first_use_contracts.rs: benchmark state, seed data, memory reports, and first-use query contracts
       capabilities/: permission declarations (desktop and mobile)
       gen/android/: generated Android project and native platform integration
@@ -96,15 +97,26 @@ apps/
 crates/
   ganbaru-db/: Tauri-free SQLite pool registry, connection configuration, migrations, and schema tests
     migrations/: embedded SQLx SQLite migrations
+  ganbaru-civil-time/: Tauri-free conversion between instants and zoned wall times, with explicit gap and fold rules
   ganbaru-pomodoro/: Tauri-free Focus persistence, validation, recovery, activity admission, transactional execution, and adaptive policy
+  ganbaru-quick-notes/: Tauri-free Quick notes persistence, search, lifecycle and trash retention, ordering, tags, and conflict resolution
+  ganbaru-music/: Tauri-free Music context assignments per Focus phase and the Music library error shape
+  ganbaru-music-library/: Tauri-free Music library persistence, queries, playlists, review, transfer, soundscapes, local media refresh and artwork, and session policy
+  ganbaru-music-player/: Tauri-free desktop local media inspection and decoding worker that executes committed Music session effects
+  ganbaru-projects/: Tauri-free Projects persistence, structure, tasks, history, custom fields, dependency cascades, reordering, Calendar scheduling rows, and validation
+  ganbaru-calendar/: Tauri-free Calendar persistence, iCalendar import and export, native reads, scoped edits, deletion and Undo, and recurrence expansion
+  ganbaru-distractions/: Tauri-free distraction blocker contracts, application rules, usage limits, usage normalization, and elapsed accounting
   ganbaru-notes/: Notes domain, persistence, transfers, history, assets, and bounded filesystem operations
   ganbaru-chat-contracts/: provider-neutral Chat IDs, commands, events, DTOs, and errors
   ganbaru-chat-providers/: provider processes, transports, drivers, cancellation, and registry
   ganbaru-chat/: Chat persistence, runtime, Git workspaces, checkpoints, review, and application services
   ganbaru-working-folders/: Tauri-free working-folder IDs, bindings, and device-state operations
-  ganbaru-people/: Tauri-free person key pairs, signed contact cards, request signatures, and trust kinds
+  ganbaru-contacts/: Tauri-free person key pairs, signed contact cards, request signatures, and trust kinds
+  ganbaru-handoff/: Tauri-free LAN handoff control protocol, message bounds, compatibility, QR encoding, staged bundle validation, device pairing identity, membership, and transfer state, and Linux firewall authorization
   ganbaru-sync-contracts/: Tauri-free sync identifiers, clocks, version vectors, writer certificates, order keys, and the signed operation format
   ganbaru-sync/: Tauri-free sync engine with the replication manifest, capture triggers, sealing, apply and merge, conflicts, recovery, and the simulation harness
+  ganbaru-sync-replica/: Tauri-free replica sync with guarded vault access, installation writer keys and record, carry-forward, recovery offers, and the LAN hub and client exchange
+  ganbaru-themes/: Tauri-free user theme persistence, seed resets, upgrade dismissals, and row validation
   ganbaru-native-messaging/: ganbaru-ai-native-messaging browser host binary
   ganbaru-mobile-*/: Android plugins for documents, the distraction blocker, media, and notifications
 extensions/chromium/: Chromium extension (manifest v3); chromium-dev/ is a generated, ignored dev copy
@@ -187,7 +199,7 @@ Read `docs/testing/README.md` when changing tests, validation scripts, task orde
 - `pnpm -w run editor-check`: editor diagnostics, including Tailwind canonical class checks.
 - `pnpm -w run test`: serialized Rust tests followed by sequential one-worker Vitest shards.
 - `pnpm --dir apps/client exec vitest run path/to/file.test.ts --maxWorkers=1`: focused frontend test file.
-- `cargo test -p ganbaru-chat --lib -j 1 test_name -- --test-threads=1`: focused core crate test (substitute `ganbaru-notes`, `ganbaru-db`, `ganbaru-chat-contracts`, `ganbaru-chat-providers`, `ganbaru-pomodoro`, `ganbaru-working-folders`, or `ganbaru-people`).
+- `cargo test -p ganbaru-chat --lib -j 1 test_name -- --test-threads=1`: focused core crate test (substitute `ganbaru-notes`, `ganbaru-db`, `ganbaru-civil-time`, `ganbaru-distractions`, `ganbaru-chat-contracts`, `ganbaru-chat-providers`, `ganbaru-pomodoro`, `ganbaru-quick-notes`, `ganbaru-music`, `ganbaru-music-library`, `ganbaru-music-player`, `ganbaru-projects`, `ganbaru-calendar`, `ganbaru-working-folders`, `ganbaru-contacts`, `ganbaru-handoff`, `ganbaru-sync-contracts`, `ganbaru-sync`, `ganbaru-sync-replica`, or `ganbaru-themes`).
 - `cargo test -p ganbaru-tauri-app --lib -j 1 test_name -- --test-threads=1`: focused Tauri composition or command-adapter test.
 - `cargo test -p ganbaru-native-messaging --bin ganbaru-ai-native-messaging -j 1 test_name -- --test-threads=1`: focused native messaging host test.
 - `cargo check -p ganbaru-ai --bin ganbaru-ai -j 1`: focused desktop composition check.

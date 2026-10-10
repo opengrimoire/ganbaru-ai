@@ -44,7 +44,7 @@ Panels were restyled one at a time, so radii, shadows, text sizes, input styles,
 
 ## Unavailable controls
 
-- `control-unavailable` marks a control whose behavior is not implemented yet: it keeps its final appearance, shows the not-allowed cursor, carries `aria-disabled="true"`, and has no activation handler. It never dims, badges, or explains; [People and invitations](../features/collaboration/README.md) records why. Do not use `disabled` or muted colors for this purpose, so unavailable controls remain distinguishable from controls that are disabled by state. `menu-item`, `field`, and `Select` (through its `unavailable` prop) keep their normal colors and hover for such controls.
+- `control-unavailable` marks a control whose behavior is not implemented yet: it keeps its final appearance, shows the not-allowed cursor, carries `aria-disabled="true"`, and has no activation handler. It never dims, badges, or explains; [Contacts and invitations](../features/collaboration/README.md) records why. Do not use `disabled` or muted colors for this purpose, so unavailable controls remain distinguishable from controls that are disabled by state. `menu-item`, `field`, and `Select` (through its `unavailable` prop) keep their normal colors and hover for such controls.
 
 ## Widths
 

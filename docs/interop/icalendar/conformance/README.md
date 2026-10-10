@@ -22,10 +22,10 @@ Evidence:
 
 - Parser, serializer, types, and tests: `apps/client/src/lib/calendar/ics/`
 - Rule conversion: `apps/client/src/lib/calendar/rrule.ts`
-- Native recurrence engine: `apps/client/src-tauri/app/src/calendar/recurrence/`
+- Native recurrence engine: `crates/ganbaru-calendar/src/recurrence/`
 - Import and export stores: `apps/client/src/lib/stores/calendar/bulk-import.ts`, `import-export.ts`, `export-snapshot.ts`
-- Native import and preservation: `apps/client/src-tauri/app/src/calendar/import.rs`, `calendar/import/`
-- Native export snapshots: `apps/client/src-tauri/app/src/calendar/reads/`
+- Native import and preservation: `crates/ganbaru-calendar/src/import.rs`, `import/`
+- Native export snapshots: `crates/ganbaru-calendar/src/reads/`
 - Schema: `crates/ganbaru-db/migrations/`
 - Fixtures: `apps/client/test-fixtures/ics/`
 

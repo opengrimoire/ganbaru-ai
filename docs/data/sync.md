@@ -8,7 +8,7 @@ Related documents: [Sync engine decision](../architecture/decisions/sync-engine.
 
 ## Implemented local whole-vault handoff
 
-Source: `apps/client/src-tauri/app/src/vault/handoff/`. Whole-vault handoff carries every domain that is not yet replicated, and the full vault including the operation log on refresh and transfer.
+Source: `apps/client/src-tauri/app/src/vault/handoff/`, with the wire protocol, pairing state, and Linux firewall authorization in `crates/ganbaru-handoff/`. Whole-vault handoff carries every domain that is not yet replicated, and the full vault including the operation log on refresh and transfer.
 
 ### Pairing and transport
 
@@ -58,7 +58,7 @@ Whole-vault handoff itself is deliberately not the concurrent synchronization sy
 
 ## Implemented concurrent replication
 
-Source: `crates/ganbaru-sync-contracts/`, `crates/ganbaru-sync/`, and `apps/client/src-tauri/app/src/sync/`. **Status: Implemented** in source for Quick notes and their tags; physical multi-device acceptance is pending. User-facing behavior is owned by [Quick notes](../features/quick-notes.md), and the network surface and key storage by [Network and privacy](security/network-and-privacy.md).
+Source: `crates/ganbaru-sync-contracts/`, `crates/ganbaru-sync/`, `crates/ganbaru-sync-replica/`, and `apps/client/src-tauri/app/src/sync/`. **Status: Implemented** in source for Quick notes and their tags; physical multi-device acceptance is pending. User-facing behavior is owned by [Quick notes](../features/quick-notes.md), and the network surface and key storage by [Network and privacy](security/network-and-privacy.md).
 
 ### Mixed mode
 
@@ -82,7 +82,7 @@ Source: `crates/ganbaru-sync-contracts/`, `crates/ganbaru-sync/`, and `apps/clie
 - Desktop keeps writer keys in the operating-system credential store. Android keeps them in app-private files excluded from backup and device transfer, the same interim protection as the person key.
 - A device-local writer record holds a sequence reservation made durable before signing and the last committed sequence. At service start and after every database replacement, the record is checked against the operation log. A restored database, a database copied from another installation, or a lost key retires the writer and creates a successor, so one installation never signs a sequence twice.
 - A full-disk clone copies the key itself, so two machines can sign the same sequence. The hub detects the diverging chain as a fork. The device keeps the agreeing prefix, rotates to a successor writer, and re-seals its later operations under it; both histories survive.
-- Sealing waits while the person key is unavailable, status reports waiting for identity, and the key is requested from the coordinator as described in [People and contact requests](#people-and-contact-requests).
+- Sealing waits while the person key is unavailable, status reports waiting for identity, and the key is requested from the coordinator as described in [Contacts and contact requests](#contacts-and-contact-requests).
 - Removing a device makes the hub seal a revocation of that device's writers with a cutoff at the hub's stored sequence. Every replica refuses later operations of a revoked writer. This relies on the single hub; any second delivery path waits for the [anchored authority](#topology-and-authority).
 
 ### Exchange
@@ -130,7 +130,7 @@ Collaborative text uses Rust Yrs with a compatible Yjs editor adapter. Binary CR
 
 Local network linking works without an account or server. An optional user-hosted Rust relay stores opaque encrypted records for cross-network and asynchronous delivery. Hocuspocus was rejected as the relay because its normal persistence stores server-side Yjs documents, which breaks the encrypted record boundary.
 
-The `ganbaru-sync-contracts` and `ganbaru-sync` crates exist; the optional `ganbaru-sync-relay` binary is planned. Domain adapters keep composite value codecs, intrinsic validation, and projection ownership; the sync engine owns delivery, causality, and merging. Durable replication, live presence, and executable commands are distinct protocols.
+The `ganbaru-sync-contracts`, `ganbaru-sync`, and `ganbaru-sync-replica` crates exist; the optional `ganbaru-sync-relay` binary is planned. Domain adapters keep composite value codecs, intrinsic validation, and projection ownership; the sync engine owns delivery, causality, and merging. Durable replication, live presence, and executable commands are distinct protocols.
 
 ### Topology and authority
 
@@ -197,11 +197,11 @@ Both enrolling devices show a verification code, and the existing device confirm
 
 Enrollment and revocation follow the anchor-sequenced authorization log in [Topology and authority](#topology-and-authority). A separate owner recovery identity and recovery kit receive resource-key envelopes. Revocation rotates affected keys and rejects new operations from the removed device; it cannot erase copies that device already holds.
 
-### People and contact requests
+### Contacts and contact requests
 
-The vault's one person identity is an Ed25519 key pair, generated by the first device that can write the vault and has no coordinator pin. That device creates it on the first sync pass after linking or on the first People action that needs it, whichever comes first; other devices receive the row with a vault refresh, so sealing on a replica waits until then. The private key lives in native credential storage on desktop and, as an interim measure until Android Keystore wrapping exists, in an app-private file on Android. A linked device that holds the identity row but not the key asks the coordinator for it over the authenticated mutual TLS link; every linked device therefore holds a copy, and unlinking a device does not erase the copy it already received. Person key rotation is not implemented.
+The vault's one person identity is an Ed25519 key pair, generated by the first device that can write the vault and has no coordinator pin. That device creates it on the first sync pass after linking or on the first Contacts action that needs it, whichever comes first; other devices receive the row with a vault refresh, so sealing on a replica waits until then. The private key lives in native credential storage on desktop and, as an interim measure until Android Keystore wrapping exists, in an app-private file on Android. A linked device that holds the identity row but not the key asks the coordinator for it over the authenticated mutual TLS link; every linked device therefore holds a copy, and unlinking a device does not erase the copy it already received. Person key rotation is not implemented.
 
-Contact requests are the only messages the coordinator accepts without a client certificate. They ride the same listener and protocol as pairing: a request carries the signed requester card, the recipient's current card nonce, and a request signature, and a status poll carries a signed, time-bounded query so only the requester learns the outcome. The coordinator verifies signatures before writing anything, rejects a stale nonce as a revoked card, replaces an earlier pending request from the same key, caps pending received requests, and answers a blocked requester exactly as it answers an accepted write. Received requests persist only while the coordinator can write the vault. The bounds are recorded in [Network and privacy](security/network-and-privacy.md#current-network-surfaces); the user-facing behavior is owned by [People and invitations](../features/collaboration/README.md).
+Contact requests are the only messages the coordinator accepts without a client certificate. They ride the same listener and protocol as pairing: a request carries the signed requester card, the recipient's current card nonce, and a request signature, and a status poll carries a signed, time-bounded query so only the requester learns the outcome. The coordinator verifies signatures before writing anything, rejects a stale nonce as a revoked card, replaces an earlier pending request from the same key, caps pending received requests, and answers a blocked requester exactly as it answers an accepted write. Received requests persist only while the coordinator can write the vault. The bounds are recorded in [Network and privacy](security/network-and-privacy.md#current-network-surfaces); the user-facing behavior is owned by [Contacts and invitations](../features/collaboration/README.md).
 
 ### Bootstrap, assets, backup, and compaction
 
@@ -227,7 +227,7 @@ Android uses WorkManager for deferred sync and a visible, user-enabled connected
 | Durable mutation and storage boundaries | Partial | Scoped preferences and capture coverage for the remaining domains |
 | Local whole-vault handoff | Partial | Physical multi-device acceptance |
 | Concurrent replication of Quick notes | Implemented | Physical multi-device acceptance |
-| Concurrent replication of other domains | Planned | Preferences, People, Projects, distraction rules and usage counters, Calendar, Focus history, Music library, Chat organizational content, Notes text and tree merging, managed assets, and retiring whole-vault handoff |
+| Concurrent replication of other domains | Planned | Preferences, Contacts, Projects, distraction rules and usage counters, Calendar, Focus history, Music library, Chat organizational content, Notes text and tree merging, managed assets, and retiring whole-vault handoff |
 | Concurrent secure local linking | Planned | Anchored authority with admin keys and late changes, LAN peer exchange, operation encryption, key lifecycle, typed bootstrap, and compaction |
 | Delivery beyond the LAN and Android sync | Planned | Encrypted relay or always-on anchor, native background runtime, encrypted backup, measurements, and physical acceptance |
 
